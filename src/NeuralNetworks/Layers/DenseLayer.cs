@@ -1,0 +1,1950 @@
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Extensions;
+using AiDotNet.Initialization;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a fully connected (dense) layer in a neural network.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A dense layer connects every input neuron to every output neuron, with each connection having
+/// a learnable weight. This is the most basic and widely used type of neural network layer.
+/// Dense layers are capable of learning complex patterns by adjusting these weights during training.
+/// </para>
+/// <para><b>For Beginners:</b> A dense layer is like a voting system where every input gets to vote on every output.
+///
+/// Think of it like this:
+/// - Each input sends information to every output
+/// - Each connection has a different "importance" (weight)
+/// - The layer learns which connections should be strong and which should be weak
+///
+/// For example, in an image recognition task:
+/// - One input might detect a curved edge
+/// - Another might detect a straight line
+/// - The dense layer combines these features to recognize higher-level patterns
+///
+/// Dense layers are the building blocks of many neural networks because they can learn
+/// almost any relationship between inputs and outputs, given enough neurons and training data.
+/// </para>
+/// <para>
+/// <b>Thread Safety:</b> This layer is not thread-safe. Each layer instance maintains internal state
+/// during forward and backward passes. If you need concurrent execution, use separate layer instances
+/// per thread or synchronize access to shared instances.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8")]
+public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+{
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Weight regularization adds a penalty based on the magnitude of the weights to prevent overfitting.
+    /// This helps the network generalize better to unseen data by discouraging overly complex models.
+    /// </para>
+    /// <para><b>For Beginners:</b> Weight regularization is like encouraging simplicity in your model.
+    ///
+    /// Why use regularization:
+    /// - Prevents the network from memorizing training data (overfitting)
+    /// - Encourages the network to learn general patterns instead of specific details
+    /// - Makes the model work better on new, unseen data
+    ///
+    /// Think of it like learning to recognize cats:
+    /// - Without regularization: "This cat has exactly 157 whiskers" (too specific)
+    /// - With regularization: "Cats have fur, whiskers, and pointy ears" (general pattern)
+    ///
+    /// Regularization is especially helpful when you have limited training data.
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the regularization auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much the regularization penalty contributes to the total loss.
+    /// The total loss is: main_loss + (auxiliary_weight * regularization_loss).
+    /// Typical values range from 0.0001 to 0.1.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much the network should prefer simple models.
+    ///
+    /// The weight determines the balance between:
+    /// - Fitting the training data well (main loss)
+    /// - Keeping the model simple (regularization loss)
+    ///
+    /// Common values:
+    /// - 0.01 (default): Moderate regularization
+    /// - 0.001-0.005: Light regularization
+    /// - 0.05-0.1: Strong regularization
+    ///
+    /// Higher values make the network simpler but might underfit the data.
+    /// Lower values allow more complexity but might overfit.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Gets or sets the type of regularization to apply.
+    /// </summary>
+    public RegularizationType Regularization { get; set; } = RegularizationType.None;
+
+    /// <summary>
+    /// Gets or sets the L1 regularization strength (used when Regularization is L1 or L1L2).
+    /// </summary>
+    public T L1Strength { get; set; }
+
+    /// <summary>
+    /// Gets or sets the L2 regularization strength (used when Regularization is L2 or L1L2).
+    /// </summary>
+    public T L2Strength { get; set; }
+
+    private T _lastRegularizationLoss;
+
+    /// <summary>
+    /// Tracks whether lazy initialization has been completed.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <inheritdoc />
+    public override bool IsInitialized => _isInitialized;
+
+    /// <summary>
+    /// The weight matrix that connects input neurons to output neurons.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This matrix represents the strength of connections between input and output neurons.
+    /// Shape: [inputSize, outputSize] (industry standard convention).
+    /// Each row corresponds to an input neuron, and each column corresponds to an output neuron.
+    /// The value at position [i, j] is the weight of the connection from input i to output j.
+    /// </para>
+    /// <para><b>For Beginners:</b> The weights matrix is like a table of importance scores.
+    ///
+    /// Imagine a table where:
+    /// - Each row represents one input neuron
+    /// - Each column represents one output neuron
+    /// - Each cell contains a number (weight) showing how strongly that input affects that output
+    ///
+    /// During training, these numbers change to help the network make better predictions.
+    /// Positive weights strengthen connections, negative weights create inhibitory connections,
+    /// and weights close to zero mean the connection is weak or unimportant.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _weights;
+
+    /// <summary>
+    /// The bias values added to each output neuron.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor contains a bias value for each output neuron. Biases allow the network to shift
+    /// the activation function, enabling it to fit the data better. Each bias is added to the weighted
+    /// sum of inputs before applying the activation function.
+    /// </para>
+    /// <para><b>For Beginners:</b> Biases are like default values or thresholds for each output.
+    ///
+    /// Think of biases as:
+    /// - A starting point or base value for each output
+    /// - A way to adjust how easily an output neuron can "activate" or "fire"
+    /// - Added after all the weighted inputs are summed up
+    ///
+    /// For example, a high bias might make an output neuron activate even with weak input signals,
+    /// while a negative bias would require stronger input signals to activate.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _biases;
+
+    /// <summary>
+    /// fp16-resident copy of the weight matrix, used only when <see cref="LayerBase{T}.LowPrecisionResident"/>
+    /// is set (foundation-scale inference). When present it is the SOURCE OF TRUTH for the weights and
+    /// <see cref="_weights"/> is a freed placeholder; each forward upcasts this to fp32 transiently for the
+    /// matmul. Halves resident weight memory. Null in the normal full-precision path.
+    /// </summary>
+    private Tensor<Half>? _weightsHalf;
+
+    // The fp16-resident upcast machinery (downcast-once + reused SIMD upcast buffer) lives in
+    // LayerBase.UpcastResidentWeight so DenseLayer and SelfAttentionLayer share one thread-static
+    // shape-keyed scratch pool (same weight shapes → fewer resident buffers).
+
+    /// <summary>
+    /// Temporary storage for weight gradients during backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// During the backward pass (training), this matrix stores the calculated gradients for the weights.
+    /// These gradients indicate how much and in which direction each weight should be adjusted to reduce
+    /// the network's error.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the "improvement directions" for all the weights.
+    /// 
+    /// When training the network:
+    /// - The layer calculates how each weight should change
+    /// - These changes are stored here temporarily
+    /// - They're applied to the actual weights during the update step
+    /// 
+    /// It's like having a notepad where you write down all the adjustments you need to make
+    /// before actually making them.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _weightsGradient;
+
+    /// <summary>
+    /// Temporary storage for bias gradients during backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// During the backward pass (training), this tensor stores the calculated gradients for the biases.
+    /// These gradients indicate how much and in which direction each bias should be adjusted to reduce
+    /// the network's error.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the "improvement directions" for all the biases.
+    ///
+    /// When training the network:
+    /// - The layer calculates how each bias should change
+    /// - These changes are stored here temporarily
+    /// - They're applied to the actual biases during the update step
+    ///
+    /// It works together with the weight gradients to update all the layer's parameters.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _biasesGradient;
+
+    /// <summary>
+    /// Stored input data from the most recent forward pass, used for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// During the backward pass (training), the layer needs access to the input data from the forward
+    /// pass to calculate the gradients for the weights. This tensor stores that input data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the network's "short-term memory" of what it just processed.
+    /// 
+    /// The layer remembers:
+    /// - The last batch of data it saw
+    /// - So it can calculate exactly how to improve
+    /// 
+    /// Without this stored input, the layer wouldn't know which inputs contributed to
+    /// errors in the output, making learning impossible.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
+
+    /// <summary>
+    /// Reusable per-layer scratch for the fused-linear OUTPUT ([batchDim, outputSize]),
+    /// used only on the #1672 <see cref="ForwardScratchGate"/> inference path
+    /// (<c>ForwardScratchGate.FusedLinear</c>). The fused matmul output is the dominant
+    /// residual per-call allocation in a DiT block; reusing this buffer across denoising
+    /// steps of the same token count removes it from the per-step allocation churn.
+    /// Reallocated whenever the required shape changes. Never aliased by any other live
+    /// tensor: <c>Engine.FusedLinearInto</c> fully overwrites every element each call, and
+    /// this layer instance is called once per forward with its result fully consumed
+    /// before the next call (sequential denoise steps), so per-INSTANCE reuse is safe.
+    /// NOT used while a gradient tape is active or in training (those need the recorded
+    /// allocating op).
+    /// </summary>
+    private Tensor<T>? _fusedLinearScratch;
+
+    // Q8_0 quantized weight (llama.cpp / ggml native layout: weight kept int8 [out,in] with one fp32
+    // scale per 32-element block along the contraction dim). Populated for frozen GGUF inference weights
+    // via SetQuantizedWeightsQ8_0; when present (and running float inference off the tape) Forward runs the
+    // block-Q8_0 GEMM instead of expanding to fp32 — ~3.76× less weight memory + int8 dot throughput.
+    private sbyte[]? _weightsQ8;
+    private float[]? _weightScalesQ8;
+    private int _q8In;
+    private int _q8Out;
+
+    // The quantized forward is only faster than the fp32 BLAS when the CPU can do the int8 dot in one VNNI
+    // instruction (vpdpbusd). Detected once at startup; false on AVX2-only CPUs, net8 (where AvxVnni is
+    // still marked as a preview API), and net471 (no intrinsics), where the fp32 path is used instead.
+#if NET9_0_OR_GREATER
+    private static readonly bool Q8SpeedFavorable =
+        System.Runtime.Intrinsics.X86.AvxVnni.IsSupported
+        || System.Runtime.Intrinsics.X86.Avx512BW.IsSupported;
+#else
+    private const bool Q8SpeedFavorable = false;
+#endif
+
+    /// <summary>
+    /// Installs a frozen Q8_0 quantized weight for inference. <paramref name="qs"/> is the native ggml
+    /// Q8_0 int8 payload for a weight logically shaped [outFeatures, inFeatures] (blocks of 32 contiguous
+    /// along inFeatures); <paramref name="scales"/> holds one fp32 scale per block. inFeatures must be a
+    /// multiple of 32. The fp32 <c>_weights</c> stay as the training/serialization source of truth; the
+    /// quantized copy is used only on the float inference forward path.
+    /// </summary>
+    public void SetQuantizedWeightsQ8_0(sbyte[] qs, float[] scales, int inFeatures, int outFeatures)
+    {
+        if (qs is null) throw new ArgumentNullException(nameof(qs));
+        if (scales is null) throw new ArgumentNullException(nameof(scales));
+        if (inFeatures <= 0 || (inFeatures % 32) != 0)
+            throw new ArgumentException($"inFeatures ({inFeatures}) must be a positive multiple of 32 for Q8_0.", nameof(inFeatures));
+        if (qs.Length != (long)inFeatures * outFeatures)
+            throw new ArgumentException($"qs length {qs.Length} != inFeatures*outFeatures {(long)inFeatures * outFeatures}.");
+        if (scales.Length != (long)outFeatures * (inFeatures / 32))
+            throw new ArgumentException($"scales length {scales.Length} != outFeatures*(inFeatures/32) {(long)outFeatures * (inFeatures / 32)}.");
+        _weightsQ8 = qs;
+        _weightScalesQ8 = scales;
+        _q8In = inFeatures;
+        _q8Out = outFeatures;
+    }
+
+    // GPU-resident cached tensors for GPU training pipeline
+    private Tensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
+    private Tensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
+    private int[]? _gpuOriginalInputShape;
+
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the layer.
+    /// </summary>
+    /// <value>
+    /// The sum of the number of weights and biases in the layer.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property returns the total number of trainable parameters in the layer, which is the sum
+    /// of the number of elements in the weights matrix and the biases vector. This is useful for
+    /// understanding the complexity of the layer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many individual numbers the layer can adjust during training.
+    ///
+    /// The parameter count:
+    /// - Equals (number of inputs × number of outputs) + number of outputs
+    /// - First part counts the weights, second part counts the biases
+    /// - Higher numbers mean more flexibility but also more risk of overfitting
+    ///
+    /// For example, a dense layer with 100 inputs and 50 outputs would have
+    /// 100 × 50 = 5,000 weights plus 50 biases, for a total of 5,050 parameters.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            // For lazy initialization, compute from InputShape/OutputShape if not yet initialized
+            if (!_isInitialized)
+            {
+                return (InputShape[0] * OutputShape[0]) + OutputShape[0];
+            }
+            // Half-resident: _weights is a freed placeholder, _weightsHalf holds the real shape.
+            if (_weightsHalf is not null)
+                return (_weightsHalf.Shape[0] * _weightsHalf.Shape[1]) + _biases.Shape[0];
+            return (_weights.Shape[0] * _weights.Shape[1]) + _biases.Shape[0];
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training through backpropagation.
+    /// </summary>
+    /// <value>
+    /// Always returns <c>true</c> for dense layers, as they contain trainable parameters.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer can be trained through backpropagation. Dense
+    /// layers have trainable parameters (weights and biases), so they support training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
+    /// 
+    /// For dense layers:
+    /// - The value is always true
+    /// - This means the layer can adjust its weights and biases during training
+    /// - It will improve its performance as it sees more examples
+    /// 
+    /// Some other layer types might not have trainable parameters and would return false here.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DenseLayer{T}"/> class with the specified 
+    /// input and output sizes and a scalar activation function.
+    /// </summary>
+    /// <param name="inputSize">The number of input neurons.</param>
+    /// <param name="outputSize">The number of output neurons.</param>
+    /// <param name="activationFunction">The activation function to apply. Defaults to a LINEAR
+    /// (identity) projection when not specified, matching PyTorch's <c>nn.Linear</c> and Keras'
+    /// <c>Dense</c> — a bare dense layer emits raw pre-activations. Pass an explicit activation
+    /// (e.g. <see cref="ReLUActivation{T}"/>) for a nonlinear hidden layer. (Previously defaulted
+    /// to ReLU, which silently clamped output/logit heads to zero on negative pre-activations.)</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a dense layer with the specified number of input and output neurons.
+    /// The weights are initialized using Xavier/Glorot initialization, which scales the random values
+    /// based on the number of input and output neurons. The biases are initialized to zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setup method creates a new dense layer with specific dimensions.
+    /// 
+    /// When creating the layer, you specify:
+    /// - How many inputs it will receive (inputSize)
+    /// - How many outputs it will produce (outputSize)
+    /// - What mathematical function to apply to the results (activation)
+    /// 
+    /// For example, a layer with inputSize=784 and outputSize=10 could connect the flattened
+    /// pixels of a 28×28 image to 10 output neurons (one for each digit 0-9).
+    /// 
+    /// The layer automatically initializes all the weights and biases with carefully chosen
+    /// starting values that help with training.
+    /// </para>
+    /// </remarks>
+    public DenseLayer(int outputSize, IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
+    {
+        if (outputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
+        }
+
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        L1Strength = NumOps.FromDouble(0.01);
+        L2Strength = NumOps.FromDouble(0.01);
+        _lastRegularizationLoss = NumOps.Zero;
+
+        InitializationStrategy = initializationStrategy;
+
+        // Always lazy: input feature size is resolved on first forward.
+        _weights = new Tensor<T>([0, 0]);
+        _biases = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Resolves input feature size from input.Shape[^1] on first forward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"DenseLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputSize = input.Shape[rank - 1];
+        int outputSize = OutputShape[0];
+        ResolveShapes(new[] { inputSize }, new[] { outputSize });
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DenseLayer{T}"/> class with the specified
+    /// input and output sizes and a vector activation function.
+    /// </summary>
+    /// <param name="inputSize">The number of input neurons.</param>
+    /// <param name="outputSize">The number of output neurons.</param>
+    /// <param name="vectorActivation">The vector activation function to apply (required to disambiguate from IActivationFunction overload).</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a dense layer with the specified number of input and output neurons
+    /// and a vector activation function. Vector activation functions operate on entire vectors at once,
+    /// which can be more efficient for certain operations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setup method is similar to the previous one, but uses a different type of
+    /// activation function.
+    ///
+    /// A vector activation function:
+    /// - Works on all outputs at once instead of one at a time
+    /// - Can be more efficient for certain calculations
+    /// - Might capture relationships between different outputs
+    ///
+    /// Most of the time, you'll use the standard constructor, but this one gives you
+    /// flexibility if you need special activation functions that work on the entire
+    /// output vector at once.
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> If your activation function implements both IActivationFunction and IVectorActivationFunction,
+    /// use <see cref="WithActivation"/> or <see cref="WithVectorActivation"/> factory methods to avoid ambiguity.
+    /// </para>
+    /// </remarks>
+    public DenseLayer(int outputSize, IVectorActivationFunction<T> vectorActivation,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base(new[] { -1 }, new[] { outputSize }, vectorActivation)
+    {
+        if (outputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
+        }
+
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        L1Strength = NumOps.FromDouble(0.01);
+        L2Strength = NumOps.FromDouble(0.01);
+        _lastRegularizationLoss = NumOps.Zero;
+
+        InitializationStrategy = initializationStrategy;
+
+        _weights = new Tensor<T>([0, 0]);
+        _biases = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Ensures that weights are allocated and initialized for lazy initialization.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+
+            int inputSize = InputShape[0];
+            int outputSize = OutputShape[0];
+
+            // Lazy InputShape carries the -1 sentinel until either
+            // OnFirstForward resolves it from a real input tensor, or the
+            // parent network's ResolveLazyLayerShapes propagates the
+            // architecture's input shape down the chain. Callers that hit
+            // EnsureInitialized BEFORE either of those runs (the
+            // Serialize → EnsureInitialized → Rent path on a freshly-
+            // constructed DQN's target network is the canonical example —
+            // it has never been forwarded so InputShape[0] is still -1)
+            // would otherwise try to allocate a `[-1, outputSize]` weight
+            // tensor and trigger `OverflowException: Arithmetic operation
+            // resulted in an overflow` from inside the checked(int * int)
+            // dim-product loop in TensorAllocator.Rent. Defer allocation
+            // until the input shape is actually known — Serialize and
+            // Clone safely write zero-length placeholder weights for the
+            // unresolved case, and the first real Forward will retry
+            // EnsureInitialized with a resolved InputShape.
+            if (inputSize < 0)
+                return;
+
+            // Streaming-aware allocation: when the parent network has
+            // engaged streaming, route through WeightRegistry.AllocateStreaming
+            // so the pool can pre-evict competing weights to disk before this
+            // allocation hits the GC heap. Otherwise allocate on the plain GC
+            // heap (AllocateLazyWeight's default `new Tensor<T>(shape)`).
+            //
+            // These weights are long-lived model parameters, but lazy
+            // materialization can run inside an active TensorArena (the first
+            // forward of a training step OR a diffusion denoise loop). Two
+            // earlier attempts routed weights through the arena and were both
+            // incomplete: TensorAllocator.Rent handed out scratch that the
+            // per-step Reset() reissued as transient activations (#1643), then
+            // TensorAllocator.RentPinned moved them to the pinned tier that
+            // survives Reset(). But RentPinned does NOT survive the arena's
+            // DISPOSE: across two separate Predict calls, each Generate creates
+            // and disposes its OWN denoise arena, the disposed arena's pinned
+            // buffers return to the shared pool, and the next Predict's arena
+            // reissues them as scratch — aliasing these still-referenced weights
+            // and corrupting them (#1711: eval Predict was non-deterministic —
+            // first call sane, second call garbage; HiDream/SD3-class MMDiT and
+            // any lazy DenseLayer in a per-step-Reset denoise loop). GC-heap
+            // weights are owned by the layer and never recycled by any arena, so
+            // they are correct by construction and survive both Reset AND
+            // Dispose. This matches AttentionLayer's Q/K/V/O weights, which
+            // already use the plain (no-arena-factory) AllocateLazyWeight.
+            int[] wShape = [inputSize, outputSize];
+            int[] bShape = [outputSize];
+            // fp16-resident eval: allocate the fp32 weights on the plain GC heap so that, immediately
+            // after this forward downcasts them to _weightsHalf, dropping the fp32 reference actually
+            // lets the GC reclaim it (AllocateLazyWeight would still GC-allocate when streaming is off,
+            // but bypass it here so the fp32 master is never registered with the streaming pool).
+            if (LowPrecisionResident)
+            {
+                _weights = new Tensor<T>(wShape);
+            }
+            else
+            {
+                _weights = AllocateLazyWeight(wShape);
+            }
+            _biases = AllocateLazyWeight(bShape);
+
+            // Initialize using strategy or default. Skip strategies that only
+            // advertise the LAZY deferral contract (IsLazy): their InitializeWeights
+            // does a generic, NON-seeded Xavier fill that ignores this layer's
+            // RandomSeed, so a lazy-strategy DenseLayer initialized off the shared
+            // RNG instead of the architecture seed — order-dependent weights (the
+            // VITS input-projection layer is the canonical case). Fall through to
+            // InitializeParameters, which honours RandomSeed. Mirrors
+            // MultiHeadAttentionLayer's `&& !InitializationStrategy.IsLazy` guard.
+            if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
+            {
+                InitializationStrategy.InitializeWeights(_weights, inputSize, outputSize);
+                InitializationStrategy.InitializeBiases(_biases);
+            }
+            else
+            {
+                InitializeParameters();
+            }
+
+            // Register trainable parameters with the engine for GPU persistence
+            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
+        }
+    }
+
+    /// <summary>
+    /// Initializes the weights and biases with appropriate values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method initializes the weights using Xavier/Glorot initialization, which scales the random
+    /// values based on the number of input and output neurons. This helps prevent the vanishing or
+    /// exploding gradient problem during training. The biases are initialized to zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets up the starting values for all connections in the layer.
+    /// 
+    /// When initializing:
+    /// - Weights are set to small random values (not all zero)
+    /// - The range of these random values is carefully chosen
+    /// - Biases start at zero
+    /// 
+    /// Good initialization is important because:
+    /// - It helps the network learn faster
+    /// - It prevents training problems (like vanishing or exploding gradients)
+    /// - It gives each neuron a different starting point
+    /// 
+    /// This uses a technique called "Xavier/Glorot initialization" which works well
+    /// for most neural networks.
+    /// </para>
+    /// </remarks>
+    private void InitializeParameters()
+    {
+        // Activation-aware default init.
+        //   ReLU / LeakyReLU / PReLU / ELU / GELU / Swish / SiLU / Mish /
+        //     HardSwish                                       → He init (He et al. 2015 §2.2,
+        //                                                       "Delving Deep into Rectifiers")
+        //   SELU                                              → LeCun init (Klambauer et al. 2017
+        //                                                       §3 "Self-Normalizing Neural
+        //                                                       Networks", paper-prescribed
+        //                                                       variance 1/fan_in for the SNN
+        //                                                       fixed-point)
+        //   Sigmoid / Tanh / Softmax / Identity / linear      → Xavier (LayerBase default,
+        //                                                       Glorot & Bengio 2010)
+        // Caller (EnsureInitialized line 443-446) already gated on
+        // `InitializationStrategy is null`, so the inner null-check that
+        // used to wrap this block was redundant. Activation-driven init
+        // still applies here unconditionally.
+        // Honour the layer-level deterministic seed: when
+        // LayerBase<T>.RandomSeed is set, the strategy's internal RNG
+        // is seeded from it so the He / LeCun fallback fills are
+        // reproducible. Closes review-comment #1270 (layer-level seed
+        // industry-standard pattern).
+        Random? seededRng = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : null;
+
+        switch (ResolveDefaultInitKind())
+        {
+            case DefaultInitKind.LeCun:
+            {
+                var lecun = seededRng is not null
+                    ? new Initialization.LeCunInitializationStrategy<T>(seededRng)
+                    : new Initialization.LeCunInitializationStrategy<T>();
+                lecun.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
+                lecun.InitializeBiases(_biases);
+                return;
+            }
+            case DefaultInitKind.He:
+            {
+                var heInit = seededRng is not null
+                    ? new Initialization.HeInitializationStrategy<T>(seededRng)
+                    : new Initialization.HeInitializationStrategy<T>();
+                heInit.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
+                heInit.InitializeBiases(_biases);
+                return;
+            }
+            default:
+                InitializeLayerWeights(_weights, InputShape[0], OutputShape[0]);
+                InitializeLayerBiases(_biases);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Default-init policy for an activation family.
+    /// </summary>
+    private enum DefaultInitKind
+    {
+        /// <summary>Xavier (Glorot &amp; Bengio 2010) — used for Tanh / Sigmoid / Softmax / Identity / no activation.</summary>
+        Xavier,
+        /// <summary>He (He et al. 2015) — used for ReLU and ReLU-family (LeakyReLU, PReLU, ELU, GELU, Swish/SiLU, HardSwish, Mish).</summary>
+        He,
+        /// <summary>LeCun (Klambauer et al. 2017) — used for SELU's self-normalizing fixed-point variance.</summary>
+        LeCun,
+    }
+
+    /// <summary>
+    /// Single resolver that maps the layer's current activation function to
+    /// the appropriate init strategy family. Centralizes the activation-name
+    /// pattern matching that previously lived split across IsSeluActivation
+    /// / IsReluFamilyActivation, so adding a new ReLU-style activation only
+    /// requires touching one switch arm here.
+    /// </summary>
+    private DefaultInitKind ResolveDefaultInitKind()
+    {
+        var act = ScalarActivation ?? (object?)VectorActivation;
+        if (act is null) return DefaultInitKind.Xavier;
+        var name = act.GetType().Name;
+        if (string.IsNullOrEmpty(name)) return DefaultInitKind.Xavier;
+
+        // Test SELU FIRST — its name starts with "SELU" which contains "ELU"
+        // as a substring; checking ReLU family first would mis-route SELU
+        // to He init. Order matters here.
+        if (name.StartsWith("SELU", StringComparison.Ordinal))
+            return DefaultInitKind.LeCun;
+
+        if (name.StartsWith("ReLU", StringComparison.Ordinal)
+            || name.StartsWith("LeakyReLU", StringComparison.Ordinal)
+            || name.StartsWith("PReLU", StringComparison.Ordinal)
+            || name.StartsWith("ELU", StringComparison.Ordinal)
+            || name.StartsWith("GELU", StringComparison.Ordinal)
+            || name.StartsWith("Swish", StringComparison.Ordinal)
+            || name.StartsWith("SiLU", StringComparison.Ordinal)
+            || name.StartsWith("HardSwish", StringComparison.Ordinal)
+            || name.StartsWith("Mish", StringComparison.Ordinal))
+        {
+            return DefaultInitKind.He;
+        }
+
+        return DefaultInitKind.Xavier;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for weight regularization (L1, L2, or both).
+    /// </summary>
+    /// <returns>The computed regularization auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the regularization loss based on the magnitude of the weights.
+    /// L1 regularization computes the sum of absolute values of weights.
+    /// L2 regularization computes the sum of squared values of weights.
+    /// L1L2 combines both penalties.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how "complex" the layer's weights are.
+    ///
+    /// Different regularization types:
+    /// 1. L1 (Lasso): Σ|weight|
+    ///    - Encourages many weights to become exactly zero
+    ///    - Creates sparse networks (many connections turned off)
+    ///    - Good for feature selection
+    ///
+    /// 2. L2 (Ridge): Σ(weight²)
+    ///    - Encourages all weights to be small
+    ///    - Prevents any single weight from dominating
+    ///    - Smooths the network's behavior
+    ///
+    /// 3. L1L2 (Elastic Net): Combines both
+    ///    - Gets benefits of both L1 and L2
+    ///    - More flexible regularization
+    ///
+    /// The loss is added to the main loss during training to discourage large weights.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || Regularization == RegularizationType.None)
+        {
+            _lastRegularizationLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Ensure weights are initialized (supports lazy initialization)
+        EnsureInitialized();
+
+        T regularizationLoss = NumOps.Zero;
+
+        // === Vectorized L1 Regularization: Σ|w| (Phase B: US-GPU-015) ===
+        if (Regularization == RegularizationType.L1 || Regularization == RegularizationType.ElasticNet)
+        {
+            // Use vectorized abs and sum operations
+            var absWeights = Engine.TensorAbs(_weights);
+            T l1Loss = Engine.TensorSum(absWeights);
+            l1Loss = NumOps.Multiply(L1Strength, l1Loss);
+            regularizationLoss = NumOps.Add(regularizationLoss, l1Loss);
+        }
+
+        // === Vectorized L2 Regularization: Σ(w²) (Phase B: US-GPU-015) ===
+        if (Regularization == RegularizationType.L2 || Regularization == RegularizationType.ElasticNet)
+        {
+            // Use vectorized element-wise multiply and sum operations
+            var weightsSquared = Engine.TensorMultiply(_weights, _weights);
+            T l2Loss = Engine.TensorSum(weightsSquared);
+            // L2 regularization is typically 0.5 * lambda * Σ(w²)
+            l2Loss = NumOps.Multiply(L2Strength, l2Loss);
+            l2Loss = NumOps.Multiply(NumOps.FromDouble(0.5), l2Loss);
+            regularizationLoss = NumOps.Add(regularizationLoss, l2Loss);
+        }
+
+        _lastRegularizationLoss = regularizationLoss;
+        return regularizationLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the weight regularization auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about regularization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about the weight regularization, including
+    /// the computed regularization loss, type of regularization, strengths, and whether it's enabled.
+    /// This information is useful for monitoring training progress and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how regularization is affecting the layer.
+    ///
+    /// The diagnostics include:
+    /// - Total regularization loss (penalty for large weights)
+    /// - Type of regularization being used (L1, L2, L1L2, or None)
+    /// - Strength parameters for L1 and L2
+    /// - Weight applied to the regularization loss
+    /// - Whether regularization is enabled
+    ///
+    /// This helps you:
+    /// - Monitor if regularization is helping prevent overfitting
+    /// - Debug issues with model complexity
+    /// - Understand the impact of different regularization settings
+    ///
+    /// You can use this information to adjust regularization parameters for better results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalRegularizationLoss", _lastRegularizationLoss?.ToString() ?? "0" },
+            { "RegularizationType", Regularization.ToString() },
+            { "L1Strength", L1Strength?.ToString() ?? "0.01" },
+            { "L2Strength", L2Strength?.ToString() ?? "0.01" },
+            { "RegularizationWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
+            { "UseRegularization", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Sets the weights of the layer to specified values.
+    /// </summary>
+    /// <param name="weights">The weight matrix to set.</param>
+    /// <exception cref="ArgumentNullException">Thrown when the weights parameter is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the weights matrix has incorrect dimensions.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method allows direct setting of the weight matrix, which can be useful for transfer learning,
+    /// weight initialization with custom algorithms, or loading pre-trained models. The dimensions of the
+    /// provided matrix must match the layer's input and output dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you directly set all connection strengths at once.
+    ///
+    /// You might use this to:
+    /// - Load pre-trained weights from another model
+    /// - Test the layer with specific weight values
+    /// - Implement custom initialization strategies
+    ///
+    /// The weight matrix must have exactly the right dimensions:
+    /// - Rows equal to the number of inputs (inputSize)
+    /// - Columns equal to the number of outputs (outputSize)
+    ///
+    /// If the dimensions don't match, the method will throw an error.
+    /// </para>
+    /// </remarks>
+    protected override void SetWeights(Tensor<T> weights)
+    {
+        if (weights == null)
+        {
+            throw new ArgumentNullException(nameof(weights));
+        }
+
+        // Ensure weights are initialized before validation (supports lazy initialization)
+        EnsureInitialized();
+
+        // Validate dimensions against current weights: [inputSize, outputSize]
+        if (weights.Shape[0] != _weights.Shape[0] || weights.Shape[1] != _weights.Shape[1])
+        {
+            throw new ArgumentException(
+                $"Weight tensor dimensions must be {_weights.Shape[0]}x{_weights.Shape[1]}, but got {weights.Shape[0]}x{weights.Shape[1]}");
+        }
+
+        // Set the weights directly
+        _weights = weights;
+
+        // Update input shape if needed - Shape[0] is inputSize in new convention
+        if (InputShape.Length == 0 || InputShape[0] != weights.Shape[0])
+        {
+            UpdateInputShape([weights.Shape[0]]);
+        }
+
+        // Notify engine that weights have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
+    }
+
+    /// <summary>
+    /// Gets the weights tensor of the layer.
+    /// </summary>
+    /// <returns>The weight tensor connecting input neurons to output neurons.</returns>
+    public override Tensor<T> GetWeights()
+    {
+        // Ensure weights are initialized (supports lazy initialization)
+        EnsureInitialized();
+        // Half-resident: upcast the fp16 master back to fp32 on demand.
+        if (_weightsHalf is not null) return _weightsHalf.Cast<T>();
+        return _weights;
+    }
+
+    /// <summary>
+    /// Gets the biases tensor of the layer.
+    /// </summary>
+    /// <returns>The bias values added to each output neuron.</returns>
+    public override Tensor<T> GetBiases()
+    {
+        // Ensure biases are initialized (supports lazy initialization)
+        EnsureInitialized();
+        return _biases;
+    }
+
+    /// <summary>
+    /// The original shape of the input tensor, used to restore shape after forward pass.
+    /// </summary>
+    private int[] _originalInputShape = [];
+
+    /// <summary>
+    /// Processes the input data through the dense layer.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after applying the dense layer transformation and activation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs the forward pass of the dense layer. It multiplies the input by the weights,
+    /// adds the biases, and applies the activation function. The result is a tensor where each element
+    /// represents the activation of an output neuron.
+    /// </para>
+    /// <para>
+    /// <b>Industry Standard:</b> Like PyTorch's nn.Linear, this layer supports any-rank input tensors.
+    /// The transformation is applied to the last dimension, preserving all batch/sequence dimensions.
+    /// For example, input [..., inputSize] produces output [..., outputSize].
+    /// </para>
+    /// <para><b>For Beginners:</b> This method transforms input data into output data.
+    ///
+    /// During the forward pass:
+    /// - The input values are multiplied by their corresponding weights
+    /// - All weighted inputs for each output neuron are added together
+    /// - The bias is added to each sum
+    /// - The activation function is applied to each result
+    ///
+    /// For example, if your inputs represent image features, the outputs might represent
+    /// the probability of the image belonging to different categories.
+    ///
+    /// This is where the actual "thinking" happens in the neural network.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Dense maps only the last axis (to the output size) and preserves all leading
+    /// batch/sequence dims, so the shape-inference placeholder is the input shape with
+    /// its last dimension replaced by the output size.
+    /// </summary>
+    protected override Tensor<T> ShapeInferenceOutput(Tensor<T> input)
+    {
+        if (!IsShapeResolved)
+        {
+            OnFirstForward(input);
+        }
+        int rank = input.Shape.Length;
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++) shape[i] = input.Shape[i];
+        shape[rank - 1] = OutputShape[OutputShape.Length - 1];
+        return new Tensor<T>(shape);
+    }
+
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Shape-inference mode: resolve dims + return a placeholder, no weight allocation.
+        if (IsInferringShapes) return ShapeInferenceOutput(input);
+
+        // Lazy layers must run shape resolution (OnFirstForward) BEFORE
+        // EnsureInitialized — calling EnsureInitialized() directly on a
+        // lazily-constructed DenseLayer reads InputShape[0]/OutputShape[0]
+        // while they still hold the -1 sentinel and TensorAllocator.Rent
+        // overflows int on the resulting negative dimension product.
+        // EnsureInitializedFromInput is the correct lazy entry per
+        // LayerBase docs.
+        EnsureInitializedFromInput(input);
+
+        // Low-precision-resident inference (foundation-scale, eval): the fp16 copy is the SOURCE OF
+        // TRUTH; upcast it back to the compute type T just for this forward's matmul, then drop the
+        // upcast (below) so only the fp16 copy stays resident. Halves resident weight memory while
+        // compute stays at full T precision. Done before the _weights.Shape reads below so the shape
+        // checks see the real dims. Generic over T — Cast routes through INumericOperations, so it is
+        // correct for any T (and a no-op saving when T is already <= 16-bit).
+        bool lowPrecResident = false;
+        if (LowPrecisionResident && _isInitialized)
+        {
+            // Downcast-once to the fp16 master (freeing the fp32 copy) + SIMD-upcast into a shared reused
+            // scratch for this forward's matmul. _weights now points at the transient scratch; it is reset
+            // to a freed placeholder after the matmul below so only the fp16 master stays resident.
+            _weights = UpcastResidentWeight(ref _weights, ref _weightsHalf);
+            lowPrecResident = true;
+        }
+
+        // _lastInput / _lastOutput are layer-side activation retention for
+        // a backward path that's never reached when training goes through
+        // the autodiff tape (the tape holds its own intermediate refs
+        // already). When a tape is active, skip the assignment so this
+        // field doesn't double-root the activation; null it so the
+        // previous step's tensor is eligible for GC. At VGG paper scale
+        // FC1 takes a [1, 25088] input × 4 B = 100 KB per call, but the
+        // 4096-wide intermediate `preActivation` is the larger cost — 16
+        // KB at fp32 / 32 KB at fp64, and that's the value we'd otherwise
+        // pin into _lastOutput.
+        // Retain the manual-backward activation caches only when an eager Backward will
+        // read them. A plain "no tape" test still cached during inference, which pinned the
+        // activation set and — inside the denoise-loop arena — aliased scratch recycled by
+        // the per-step Reset (issue #1668). ShouldCacheForBackward is additionally false in
+        // eval mode and inside an InferenceMode scope.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
+        _originalInputShape = input._shape;
+
+        // Industry standard: Support any-rank input tensors [..., inputSize]
+        // Transformation is applied to the last dimension
+        // Output shape: [..., outputSize]
+
+        int actualInputSize = input.Shape[^1]; // Last dimension
+        int expectedInputSize = _weights.Shape[0]; // Weights are [inputSize, outputSize]
+
+        // Dynamic input size adaptation: resize weights if input size doesn't match
+        if (actualInputSize != expectedInputSize)
+        {
+            EnsureWeightShapeForInput(actualInputSize);
+        }
+
+        int inputSize = actualInputSize;
+
+        Tensor<T> flattenedInput;
+        int batchDim;
+
+        if (input.Rank == 1)
+        {
+            // 1D input [features]: reshape to [1, features]
+            flattenedInput = Engine.Reshape(input, [1, inputSize]);
+            batchDim = 1;
+        }
+        else if (input.Rank == 2)
+        {
+            // 2D input [batch, features]: use directly
+            flattenedInput = input;
+            batchDim = flattenedInput.Shape[0];
+        }
+        else
+        {
+            // ND input [..., features]: flatten batch dimensions
+            // E.g., [batch, seq, features] -> [batch*seq, features]
+            batchDim = 1;
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                batchDim *= input.Shape[i];
+            }
+            flattenedInput = Engine.Reshape(input, [batchDim, inputSize]);
+        }
+
+        // Forward: output = Activation(input @ weights + biases)
+        // input: [batchDim, inputSize]
+        // weights: [inputSize, outputSize] (industry standard - no transpose needed)
+        // result: [batchDim, outputSize]
+
+        // Get the fused activation type for the engine
+        var fusedActivation = GetFusedActivationType();
+
+        Tensor<T> result;
+
+        // Q8_0 quantized-weight inference fast path: run the block-Q8_0 GEMM directly on the int8 weight
+        // (llama.cpp / ggml_vec_dot_q8_0_q8_0), never expanding it to fp32. Float inference only, off the
+        // gradient tape — training/serialization still use the fp32 _weights.
+        // The block-Q8_0 kernel's int8 dot needs a 1-instruction VNNI multiply-accumulate (vpdpbusd) to beat
+        // the mature fp32 BLAS: on AVX-VNNI / AVX-512-VNNI hardware it wins on both compute AND weight
+        // bandwidth; on AVX2-only CPUs the 3-instruction int8 dot is no faster than fp32 FMA, so the fp32 BLAS
+        // wins and the quantized path is skipped (no regression). Also gated to small M — even on VNNI the
+        // large-M prefill path favors the fp32 BLAS's 2D register tiling until the int8 GEMM is 2D-tiled.
+        const int q8MaxRowsForNaiveKernel = 16;
+        if (_weightsQ8 is not null && _weightScalesQ8 is not null
+            && Q8SpeedFavorable
+            && !IsTrainingMode && !DeterministicForward
+            && typeof(T) == typeof(float)
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+            && _q8In == inputSize
+            && batchDim <= q8MaxRowsForNaiveKernel)
+        {
+            int mM = batchDim, kK = _q8In, nN = _q8Out;
+            var inF = (float[])(object)flattenedInput.ToArray();
+            var outArr = new float[mM * nN];
+            AiDotNet.Tensors.Engines.Simd.Q8BlockGemm.MatMul(inF, _weightsQ8, _weightScalesQ8, outArr, mM, kK, nN);
+            var linear = (Tensor<T>)(object)new Tensor<float>(outArr, [mM, nN]);
+            // Bias + activation epilogue (matches the unfused training path's math).
+            var biased = Engine.TensorBroadcastAdd(linear, Engine.Reshape(_biases, [1, nN]));
+            result = ApplyActivation(biased);
+        }
+        else if (fusedActivation != FusedActivationType.None && !IsTrainingMode && !DeterministicForward)
+        {
+            // Inference: use fused activation for maximum performance (no tape needed). This whole
+            // fast block is gated above on !DeterministicForward, so when DeterministicForward is set
+            // the eval forward falls through to the unfused training path below and stays bit-identical
+            // to it (fusion reorders the matmul+activation rounding by ~1e-8/element otherwise).
+            //
+            // #1672 destination-buffer fast path: when the scratch gate is ON and we are
+            // NOT recording a gradient tape (inference), compute the fused linear straight
+            // into a reused per-layer buffer instead of allocating [batchDim, outputSize]
+            // each call. Bit-identical math (same GEMM + bias/activation epilogue); the
+            // scratch is per-INSTANCE, fully overwritten, and consumed before the next call
+            // to this same layer, so reuse is safe across the denoise loop.
+            // Skip the reused scratch when a gradient tape is recording (e.g. classifier-guided
+            // diffusion runs a tape in eval mode): the tape holds this output for backward, so reusing
+            // the per-instance buffer on the next call to this layer would corrupt it. cacheBwd is false
+            // under eval mode regardless of the tape, so it can't gate this — check the tape directly.
+            if (ForwardScratchGate.FusedLinear && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+            {
+                int outputSize = _weights.Shape[1];
+                if (_fusedLinearScratch == null
+                    || _fusedLinearScratch.Shape.Length != 2
+                    || _fusedLinearScratch.Shape[0] != batchDim
+                    || _fusedLinearScratch.Shape[1] != outputSize)
+                {
+                    _fusedLinearScratch = new Tensor<T>([batchDim, outputSize]);
+                }
+                Engine.FusedLinearInto(_fusedLinearScratch, flattenedInput, _weights, _biases, fusedActivation);
+                result = _fusedLinearScratch;
+            }
+            else
+            {
+                // Inference: use fused activation for maximum performance (no tape needed)
+                result = Engine.FusedLinear(flattenedInput, _weights, _biases, fusedActivation);
+            }
+        }
+        else
+        {
+            // Training (or unsupported activation): single FusedLinear call without activation,
+            // then apply activation separately. This ensures the tape records exactly one
+            // FusedLinear entry per forward pass (calling FusedLinear twice corrupts tape
+            // entries via RemoveLastNTapeEntries).
+            var preActivation = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
+            _lastOutput = cacheBwd ? preActivation : null;
+            result = ApplyActivation(preActivation);
+        }
+
+        if (lowPrecResident)
+        {
+            // Drop the transient fp32 upcast now the matmul has consumed it; only the fp16 master
+            // (_weightsHalf) stays resident. Without this the fp32 copy would persist per layer and
+            // defeat the half-memory goal.
+            _weights = new Tensor<T>([0, 0]);
+        }
+
+        // Reshape back to original shape with outputSize as last dimension
+        // E.g., [batch*seq, outputSize] -> [batch, seq, outputSize]
+        if (input.Rank == 1)
+        {
+            // 1D input: return 1D output [outputSize]
+            result = Engine.Reshape(result, [OutputShape[0]]);
+        }
+        else if (input.Rank > 2)
+        {
+            // ND input: restore original batch dimensions with new last dim
+            var outputShape = new int[input.Rank];
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                outputShape[i] = _originalInputShape[i];
+            }
+            outputShape[^1] = OutputShape[0];
+            result = Engine.Reshape(result, outputShape);
+        }
+        // 2D input: result is already [batch, outputSize]
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass, keeping tensors on GPU.
+    /// Use this for chained layer execution to avoid CPU round-trips.
+    /// Supports any-rank tensor input (1D, 2D, or ND), matching CPU Forward behavior.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensors (uses first input). Last dimension is features.</param>
+    /// <returns>GPU-resident output tensor with same batch dimensions, outputSize as last dim.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        EnsureInitialized();
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var input = inputs[0];
+
+        // Store for potential backward pass
+        _originalInputShape = input._shape;
+
+        int actualInputSize = input.Shape[^1]; // Last dimension is always features
+        int expectedInputSize = _weights.Shape[0];
+
+        // Dynamic input size adaptation
+        if (actualInputSize != expectedInputSize)
+        {
+            EnsureWeightShapeForInput(actualInputSize);
+        }
+
+        int outputSize = OutputShape[0];
+
+        // Determine if reshape is needed and compute the effective batch dimension
+        int batchDim;
+        bool needsReshape = false;
+        int[] originalBatchDims = Array.Empty<int>();
+
+        if (input.Shape.Length == 1)
+        {
+            // 1D input [features] -> treat as single sample
+            batchDim = 1;
+            needsReshape = true;
+        }
+        else if (input.Shape.Length == 2)
+        {
+            // 2D input [batch, features] -> standard case, no reshape needed
+            batchDim = input.Shape[0];
+            needsReshape = false;
+        }
+        else
+        {
+            // ND input [dim0, dim1, ..., features] -> flatten batch dims, then reshape back
+            needsReshape = true;
+            originalBatchDims = new int[input.Shape.Length - 1];
+            batchDim = 1;
+            for (int i = 0; i < input.Shape.Length - 1; i++)
+            {
+                originalBatchDims[i] = input.Shape[i];
+                batchDim *= input.Shape[i];
+            }
+        }
+
+        // Reshape ND input to 2D [totalBatch, features] for matrix multiply
+        Tensor<T> input2D = input;
+        if (needsReshape && input.Shape.Length > 2)
+        {
+            input2D = Engine.Reshape(input, [batchDim, actualInputSize]);
+        }
+        else if (needsReshape && input.Shape.Length == 1)
+        {
+            input2D = Engine.Reshape(input, [1, actualInputSize]);
+        }
+
+        // Get the fused activation type
+        var fusedActivation = GetFusedActivationType();
+
+        // Use GPU-resident FusedLinear - NO CPU round-trip
+        // Result is [batchDim, outputSize]
+        var result = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, fusedActivation);
+
+        // Cache state for backward pass only during training - KEEP ON GPU for GPU-resident training
+        if (IsTrainingMode)
+        {
+            // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
+            _lastInputGpu = input2D;
+            _gpuOriginalInputShape = input._shape.ToArray();
+
+            // For fused activations, we need pre-activation for gradient computation
+            if (fusedActivation != FusedActivationType.None)
+            {
+                _lastPreActivationGpu = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, FusedActivationType.None);
+                _lastOutputGpu = result; // Post-activation for sigmoid/tanh backward
+            }
+            else
+            {
+                _lastPreActivationGpu = result;
+                _lastOutputGpu = result;
+            }
+
+            // Also download to CPU for hybrid CPU/GPU backward compatibility
+            _lastInput = input;
+            _lastOutput = _lastPreActivationGpu;
+        }
+
+        // Reshape output back to original batch dimensions if needed
+        if (input.Shape.Length == 1)
+        {
+            // 1D input -> 1D output [outputSize]
+            result = Engine.Reshape(result, [outputSize]);
+        }
+        else if (input.Shape.Length > 2)
+        {
+            // ND input -> ND output [dim0, dim1, ..., outputSize]
+            int[] outputShape = new int[originalBatchDims.Length + 1];
+            for (int i = 0; i < originalBatchDims.Length; i++)
+            {
+                outputShape[i] = originalBatchDims[i];
+            }
+            outputShape[^1] = outputSize;
+            result = Engine.Reshape(result, outputShape);
+        }
+        // 2D input: result is already [batch, outputSize]
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes activation gradient using GPU-resident backward operations.
+    /// </summary>
+    private Tensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput)
+    {
+        // Determine activation type and apply appropriate backward
+        var fusedActivation = GetFusedActivationType();
+
+        return fusedActivation switch
+        {
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!, 0.01f),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.None => gradOutput, // Identity activation - gradient passes through unchanged
+            _ => gradOutput // Fallback for unsupported activations
+        };
+    }
+
+    private void EnsureWeightShapeForInput(int actualInputSize)
+    {
+        // Weights are [inputSize, outputSize]
+        if (_weights.Shape[0] == actualInputSize)
+        {
+            return;
+        }
+
+        int existingInputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+        // GC-heap, NOT TensorAllocator.Rent (#1711): the resized tensor is assigned to _weights
+        // below — it is the layer's persistent parameter, not transient scratch. A lazily-sized
+        // Dense whose first forward widens its input (e.g. MMDiT's _timeEmbed1, declared at
+        // _hiddenSize but fed a TimeEmbeddingDim-wide sinusoidal embedding) lands here on the first
+        // forward. The first forward of a diffusion denoise loop runs inside the per-step TensorArena,
+        // so an arena-rented resize would be reissued as scratch on the next Reset()/Dispose and
+        // corrupt the weights — eval Predict became non-deterministic (call #1 sane, call #2 garbage).
+        // Mirrors the EnsureInitialized GC-heap allocation; arena recycling must never own weights.
+        var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
+
+        int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
+        for (int i = 0; i < sharedInputSize; i++)
+        {
+            for (int o = 0; o < outputSize; o++)
+            {
+                resizedWeights[i, o] = _weights[i, o];
+            }
+        }
+
+        if (actualInputSize > sharedInputSize)
+        {
+            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
+            // #1643: reproducible weight resize. A lazily-sized DenseLayer that is materialized at
+            // one input width and then forwarded at a larger width (e.g. NTM's controller Dense:
+            // GetParameters() resolves it before ForwardTape feeds it the wider concat) lands here
+            // to append new weight columns. Seeding from the layer's wired RandomSeed makes that
+            // append DETERMINISTIC — the previous unseeded CreateSecureRandom re-randomized the
+            // appended columns on every forward, so two identically-seeded models produced
+            // different forward outputs (and hence different gradients) run-to-run, the root cause
+            // of NTM's M-N shard training-invariant flake. Falls back to a secure RNG in production
+            // (no wired seed), matching the seeded/fallback contract used by every other initializer.
+            var random = RandomSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+                : RandomHelper.CreateSecureRandom();
+            for (int i = sharedInputSize; i < actualInputSize; i++)
+            {
+                for (int o = 0; o < outputSize; o++)
+                {
+                    resizedWeights[i, o] = NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1));
+                }
+            }
+        }
+
+        _weights = resizedWeights;
+        _weightsGradient = null;
+        UpdateInputShape([actualInputSize]);
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        }
+        else
+        {
+            // For unsupported activations, return input unchanged
+            // This is a limitation of autodiff - not all activations are implemented yet
+            return input;
+        }
+    }
+
+    private Tensor<T>? _weightsVelocity;
+    private Tensor<T>? _biasesVelocity;
+
+    /// <summary>
+    /// Updates the layer's parameters (weights and biases) using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the update.</param>
+    /// <exception cref="InvalidOperationException">Thrown when update is called before backward.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates the layer's parameters (weights and biases) based on the gradients
+    /// calculated during the backward pass. The learning rate controls the step size of the update.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies the lessons learned during training.
+    /// 
+    /// When updating parameters:
+    /// - The learning rate controls how big each adjustment is
+    /// - Small learning rate = small, careful changes
+    /// - Large learning rate = big, faster changes (but might overshoot)
+    /// 
+    /// The weights and biases are adjusted by subtracting the gradient multiplied by the learning rate.
+    /// This moves them in the direction that reduces the error the most.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_weightsGradient == null || _biasesGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
+
+            // Initialize velocity tensors if needed (lazily)
+            if (_weightsVelocity == null)
+            {
+                _weightsVelocity = new Tensor<T>(_weights._shape);
+                _weightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
+            }
+            if (_biasesVelocity == null)
+            {
+                _biasesVelocity = new Tensor<T>(_biases._shape);
+                _biasesVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            // Perform GPU-resident SGD update
+            gpuEngine.SgdMomentumUpdateGpu(_weights, _weightsGradient, _weightsVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            // In-place update to preserve tensor identity (cached references, tape tracking)
+            var scaledWeightGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
+            Engine.TensorSubtractInPlace(_weights, scaledWeightGrad);
+            var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+            Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
+
+            // Notify engine that weights/biases have changed (for GPU cache invalidation)
+            Engine.InvalidatePersistentTensor(_weights);
+            Engine.InvalidatePersistentTensor(_biases);
+        }
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all weights and biases.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method extracts all trainable parameters (weights and biases) from the layer
+    /// and returns them as a single vector. This is useful for optimization algorithms that operate
+    /// on all parameters at once, or for saving and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method gathers all the learned values from the layer.
+    ///
+    /// The parameters include:
+    /// - All weight values (connections between inputs and outputs)
+    /// - All bias values (base values for each output)
+    ///
+    /// These are combined into a single long list (vector), which can be used for:
+    /// - Saving the model
+    /// - Sharing parameters between layers
+    /// - Advanced optimization techniques
+    ///
+    /// This provides access to all the "knowledge" the layer has learned.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Deferred-shape layers that haven't seen their first Forward
+        // (e.g., a conditioning branch only activated by text embeddings)
+        // have InputShape[0] == -1 and EnsureInitialized would overflow on
+        // TensorAllocator.Rent. Return an empty vector — Clone /
+        // SetParameters / ParameterCount semantically have nothing to copy
+        // and pick up the real values once the first Forward materialises
+        // them.
+        if (!IsShapeResolved) return new Vector<T>(0);
+
+        EnsureInitialized();
+        // fp16-resident (#1764): _weights is a transient shared upcast scratch (overwritten every forward,
+        // and shared across same-shape layers), not the authoritative store. Read the resident half master
+        // — GetWeights() upcasts it — so the round-trip returns THIS layer's weights rather than whatever
+        // last occupied the scratch. Otherwise clone/serialize silently copies wrong (or another layer's)
+        // values at foundation scale.
+        var weightsView = _weightsHalf is not null ? GetWeights() : _weights;
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(weightsView.Data),
+            Vector<T>.FromMemory(_biases.Data));
+    }
+
+    /// <summary>
+    /// Gets the gradients of all trainable parameters in this layer.
+    /// </summary>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightsGradient == null || _biasesGradient == null)
+        {
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        }
+
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(_weightsGradient.Data),
+            Vector<T>.FromMemory(_biasesGradient.Data));
+    }
+
+    /// <summary>
+    /// Sets all trainable parameters of the layer from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets all trainable parameters (weights and biases) of the layer from a single
+    /// vector. The vector must have the exact length required for all parameters of the layer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the layer's learned values at once.
+    ///
+    /// When setting parameters:
+    /// - The vector must have exactly the right number of values
+    /// - The values are assigned to the weights and biases in a specific order
+    ///
+    /// This is useful for:
+    /// - Loading a previously saved model
+    /// - Copying parameters from another model
+    /// - Setting parameters that were optimized externally
+    ///
+    /// It's like replacing all the "knowledge" in the layer with new information.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Round-trip from saved parameters when the layer is still in lazy
+        // placeholder state (Clone / DeepCopy / Save+Load before first Forward).
+        // The parameter vector's length + the known outputSize uniquely determines
+        // inputSize for the (inputSize × outputSize + outputSize) layout, so we
+        // can resolve from the parameter vector alone — fixes #1221's "trained
+        // weights silently dropped on serialize/deserialize round-trip".
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int outputSize = OutputShape[0];
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on a deferred-shape DenseLayer before " +
+                    "outputSize is known.");
+            int candidateInput = (parameters.Length - outputSize) / outputSize;
+            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputSize for DenseLayer from {parameters.Length} parameters " +
+                    $"and outputSize={outputSize}: not consistent with weights[{candidateInput},{outputSize}] + biases[{outputSize}].");
+            ResolveFromShape(new[] { candidateInput });
+        }
+
+        EnsureInitialized();
+
+        // fp16-resident path (#1764): when LowPrecisionResident engaged, _weightsHalf is the authoritative
+        // weight store and _weights is a transient, shared upcast scratch that every forward overwrites
+        // from _weightsHalf. Writing the incoming weights into _weights would therefore be silently
+        // discarded on the next forward (the clone/deserialize would keep whatever the resident master
+        // held — e.g. a clone's random probe-init — diverging from the source). Downcast the incoming
+        // weights straight into the resident half master instead. Biases stay full precision.
+        if (_weightsHalf is not null)
+        {
+            int wLenHalf = _weightsHalf.Length;
+            int expectedHalf = wLenHalf + _biases.Length;
+            if (parameters.Length != expectedHalf)
+            {
+                throw new ArgumentException($"Expected {expectedHalf} parameters, but got {parameters.Length}");
+            }
+            NumOps.ToHalfSpan(parameters.AsSpan().Slice(0, wLenHalf), _weightsHalf.AsWritableSpan());
+            parameters.AsSpan().Slice(wLenHalf, _biases.Length).CopyTo(_biases.Data.Span);
+            Engine.InvalidatePersistentTensor(_biases);
+            return;
+        }
+
+        int expected = _weights.Length + _biases.Length;
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
+        }
+
+        // Bulk copy via Span to preserve engine's persistent tensor references
+        parameters.AsSpan().Slice(0, _weights.Length).CopyTo(_weights.Data.Span);
+        parameters.AsSpan().Slice(_weights.Length, _biases.Length).CopyTo(_biases.Data.Span);
+
+        // Notify engine that data changed (for GPU re-upload)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    public override void Serialize(BinaryWriter writer)
+    {
+        EnsureInitialized();
+        // Write weights
+        writer.Write(_weights.Length);
+        var wSpan = _weights.Data.Span;
+        for (int i = 0; i < _weights.Length; i++)
+            writer.Write(Convert.ToDouble(wSpan[i]));
+        // Write biases
+        writer.Write(_biases.Length);
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < _biases.Length; i++)
+            writer.Write(Convert.ToDouble(bSpan[i]));
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        // Lazy ctor: if shape isn't resolved, recover inputSize from the
+        // saved weights length (= wLen / outputSize) and resolve before
+        // EnsureInitialized tries to allocate with a -1 sentinel. We
+        // simply read wLen first, then resolve, then read the weight
+        // values — no rewinding needed since wLen is the first int we
+        // consume from the layer's blob.
+        int wLen = reader.ReadInt32();
+        if (!IsShapeResolved)
+        {
+            int outputSize = OutputShape[0];
+            if (outputSize > 0 && wLen > 0 && wLen % outputSize == 0)
+            {
+                int inferredInput = wLen / outputSize;
+                ResolveFromShape(new[] { inferredInput });
+            }
+        }
+        EnsureInitialized();
+        // Read weights IN PLACE to preserve engine's persistent tensor reference
+        var wSpan = _weights.Data.Span;
+        for (int i = 0; i < Math.Min(wLen, _weights.Length); i++)
+            wSpan[i] = NumOps.FromDouble(reader.ReadDouble());
+        // Skip any extra values if serialized layer was bigger
+        for (int i = _weights.Length; i < wLen; i++)
+            reader.ReadDouble();
+
+        // Read biases IN PLACE
+        int bLen = reader.ReadInt32();
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < Math.Min(bLen, _biases.Length); i++)
+            bSpan[i] = NumOps.FromDouble(reader.ReadDouble());
+        for (int i = _biases.Length; i < bLen; i++)
+            reader.ReadDouble();
+
+        // Notify engine that data changed (for GPU re-upload)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    /// <summary>
+    /// Clears stored gradients for weights and biases.
+    /// </summary>
+    public override void ClearGradients()
+    {
+        if (_weightsGradient != null)
+        {
+            _weightsGradient.Fill(NumOps.Zero);
+        }
+
+        if (_biasesGradient != null)
+        {
+            _biasesGradient.Fill(NumOps.Zero);
+        }
+
+        base.ClearGradients();
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears the cached input values from the most recent forward pass and the gradients
+    /// calculated during the backward pass. This is useful when starting to process a new batch or
+    /// when implementing stateful recurrent networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - The layer forgets the last input it processed
+    /// - It clears any calculated gradients
+    /// 
+    /// This is useful for:
+    /// - Processing a new, unrelated set of data
+    /// - Preventing information from one batch affecting another
+    /// - Starting a new training episode
+    /// 
+    /// Think of it like wiping a whiteboard clean before starting a new calculation.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes (CPU)
+        _lastInput = null;
+        _lastOutput = null;
+        _weightsGradient = null;
+        _biasesGradient = null;
+
+        // Clear GPU-resident cached tensors
+        _lastInputGpu = null;
+        _lastPreActivationGpu = null;
+        _lastOutputGpu = null;
+        _gpuOriginalInputShape = null;
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the layer with the same configuration and parameters.
+    /// </summary>
+    /// <returns>A new instance of the <see cref="DenseLayer{T}"/> class with the same configuration and parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a deep copy of the dense layer, including its configuration and parameters.
+    /// This is useful when you need multiple instances of the same layer, such as in ensemble methods or
+    /// when implementing layer factories.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an exact duplicate of the layer.
+    /// 
+    /// The copy:
+    /// - Has the same input and output dimensions
+    /// - Has the same weights and biases
+    /// - Is completely independent from the original
+    /// 
+    /// This is useful for:
+    /// - Creating multiple similar layers
+    /// - Experimenting with variations of a layer
+    /// - Implementing certain advanced techniques
+    /// 
+    /// Think of it like making a perfect clone that starts exactly where the original is.
+    /// </para>
+    /// </remarks>
+    public override LayerBase<T> Clone()
+    {
+        DenseLayer<T> copy;
+
+        if (UsingVectorActivation && VectorActivation is not null)
+        {
+            copy = new DenseLayer<T>(OutputShape[0], VectorActivation);
+        }
+        else
+        {
+            copy = new DenseLayer<T>(OutputShape[0], ScalarActivation);
+        }
+
+        copy.SetParameters(GetParameters());
+        return copy;
+    }
+
+    /// <summary>
+    /// Releases resources used by this layer, including GPU tensor handles.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    /// <remarks>
+    /// <para>
+    /// This method releases GPU memory allocated for persistent weight tensors.
+    /// It is called by the base class Dispose() method.
+    /// </para>
+    /// <para><b>For Beginners:</b> GPU memory is limited and precious.
+    ///
+    /// When you're done with a layer:
+    /// - Call Dispose() or use a 'using' statement
+    /// - This frees up GPU memory for other operations
+    /// - Failing to dispose can cause memory leaks on the GPU
+    ///
+    /// Example:
+    /// <code>
+    /// using var layer = new DenseLayer&lt;float&gt;(784, 128);
+    /// // ... use layer ...
+    /// // Automatically disposed when out of scope
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // Release GPU handles. base.Dispose Unregisters _registeredTensors;
+            // Invalidate additionally evicts the GPU cache so the next
+            // re-allocated layer gets a clean slate.
+            Engine.InvalidatePersistentTensor(_weights);
+            Engine.InvalidatePersistentTensor(_biases);
+
+            // Trainable-parameter pool returns (_weights, _biases) are now
+            // handled by the auto-generated ReturnPooledParameters hook
+            // invoked from LayerBase.Dispose(bool) — issue #1136 plan part 3.
+
+            // Clear other managed resources (CPU)
+            _weightsGradient = null;
+            _biasesGradient = null;
+            _lastInput = null;
+            _lastOutput = null;
+
+            // Clear GPU-resident cached tensors
+            _lastInputGpu = null;
+            _lastPreActivationGpu = null;
+            _lastOutputGpu = null;
+            _gpuOriginalInputShape = null;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    #region ONNX Export
+
+    /// <summary>
+    /// Emits this Dense layer as an ONNX <c>Gemm</c> node (Y = A·B + C) with the
+    /// layer's weights and biases as initializers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Throws <see cref="AiDotNet.Onnx.OnnxExportUnsupportedException"/> if this
+    /// layer has a non-Identity embedded activation function. For ONNX export,
+    /// use a separate <c>ActivationLayer</c> after the Dense layer so the
+    /// per-layer-to-per-ONNX-op mapping stays clean.
+    /// </para>
+    /// <para>v0.1 supports float32 element type only. Weights and biases are
+    /// down-converted via <c>NumOps.ToDouble</c> → <c>(float)</c>.</para>
+    /// </remarks>
+    public override AiDotNet.Onnx.OnnxLayerOutputs ConvertToOnnx(
+        AiDotNet.Onnx.OnnxGraphBuilder builder,
+        AiDotNet.Onnx.OnnxLayerInputs inputs)
+    {
+        if (builder is null) throw new ArgumentNullException(nameof(builder));
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+
+        // Determine the activation op to emit AFTER the Gemm. AiDotNet's
+        // DenseLayer defaults to ReLU when no activation is passed, so the
+        // common case requires us to emit BOTH Gemm and the activation node.
+        // If the activation isn't one v0.1 supports, throw with a clear message.
+        string? activationOp = null;
+        if (ScalarActivation is not null)
+        {
+            var actName = ScalarActivation.GetType().Name;
+            // Strip the generic arity suffix (`1`) for cleaner matching.
+            int tickIndex = actName.IndexOf('`');
+            if (tickIndex > 0) actName = actName.Substring(0, tickIndex);
+
+            activationOp = actName switch
+            {
+                "IdentityActivation" => null,
+                "ReLUActivation" or "RELUActivation" => "Relu",
+                "SigmoidActivation" => "Sigmoid",
+                "TanhActivation" => "Tanh",
+                "SoftmaxActivation" => "Softmax",
+                _ => throw new AiDotNet.Onnx.OnnxExportUnsupportedException(
+                    $"DenseLayer (embedded {actName})",
+                    $"v0.1 ONNX export supports embedded activations: Identity, ReLU, Sigmoid, Tanh, Softmax. " +
+                    $"Got '{actName}'. Add an ActivationLayer override or remove the embedded activation."),
+            };
+        }
+
+        int inputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+
+        // ONNX Gemm with default attributes computes Y = A·B + C.
+        // A = [batch, inputSize], B = [inputSize, outputSize], C = [outputSize] (broadcast).
+        // AiDotNet stores weights as [inputSize, outputSize] — same layout as B,
+        // so no transpose is needed.
+        var weightsFlat = new float[inputSize * outputSize];
+        for (int i = 0; i < inputSize; i++)
+        {
+            for (int j = 0; j < outputSize; j++)
+            {
+                weightsFlat[i * outputSize + j] = (float)NumOps.ToDouble(_weights[i, j]);
+            }
+        }
+
+        var biasFlat = new float[outputSize];
+        for (int j = 0; j < outputSize; j++)
+        {
+            biasFlat[j] = (float)NumOps.ToDouble(_biases[j]);
+        }
+
+        var weightsName = builder.AddFloatInitializer(
+            "dense_W", weightsFlat, new[] { inputSize, outputSize });
+        var biasName = builder.AddFloatInitializer(
+            "dense_B", biasFlat, new[] { outputSize });
+
+        var gemmOut = builder.NextTensorName(activationOp is null ? "dense_out" : "dense_pre_act");
+        builder.AddOp("Gemm",
+            inputs: new[] { inputs.Primary, weightsName, biasName },
+            outputs: new[] { gemmOut });
+
+        if (activationOp is null)
+        {
+            return new AiDotNet.Onnx.OnnxLayerOutputs(gemmOut);
+        }
+
+        // Chain the activation op directly after the Gemm.
+        var actOut = builder.NextTensorName("dense_out");
+        builder.AddOp(activationOp,
+            inputs: new[] { gemmOut },
+            outputs: new[] { actOut });
+        return new AiDotNet.Onnx.OnnxLayerOutputs(actOut);
+    }
+
+    #endregion
+}

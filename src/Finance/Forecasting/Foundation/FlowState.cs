@@ -1,0 +1,579 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Finance.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+using AiDotNet.Finance.Base;
+namespace AiDotNet.Finance.Forecasting.Foundation;
+
+/// <summary>
+/// FlowState — IBM's SSM-based Time Series Foundation Model (9.1M parameters).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// FlowState is IBM's State-Space Model based time series foundation model. Despite having
+/// only 9.1M parameters (smallest in GIFT-Eval top 10), it outperforms models 20x its size
+/// and generalizes to unseen timescales. It uses structured state spaces for linear-time
+/// processing of long sequences.
+/// </para>
+/// <para><b>For Beginners:</b> FlowState is a compact forecasting model from IBM that punches
+/// well above its weight. With only 9.1 million parameters (tiny by modern standards), it
+/// outperforms models 20 times its size. It uses state-space models, which process data
+/// like a conveyor belt rather than looking at everything at once, making it very efficient
+/// with long sequences of data like years of daily stock prices.</para>
+/// <para>
+/// <b>Reference:</b> IBM Research, "SSM Time Series Model", 2025.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a FlowState SSM-based foundation model (IBM, only 9.1M params)
+/// // Uses structured state spaces for linear-time processing of long sequences
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with state-space model layers
+/// var model = new FlowState&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new FlowState&lt;double&gt;(architecture, "flowstate.onnx");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ResearchPaper("Flow-Based Generative Models for Financial Time Series", "https://arxiv.org/abs/2312.01236")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+public class FlowState<T> : TimeSeriesFoundationModelBase<T>
+{
+    #region Fields
+
+    private readonly bool _useNativeMode;
+    private readonly List<ILayer<T>> _ssmLayers = [];
+    private ILayer<T>? _inputProjection;
+    private ILayer<T>? _outputProjection;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly FlowStateOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _stateDimension;
+    private int _hiddenDimension;
+    private int _numLayers;
+    private double _dropout;
+    private int _ssmRank;
+    private bool _useDiscretization;
+    private FoundationModelSize _modelSize;
+
+    // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
+    // FlowState normalizes each input series before the SSM; without restoring
+    // the level the forecast ignores the input's magnitude.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
+
+    #endregion
+
+    #region Properties
+
+    /// <inheritdoc/>
+    public override int SequenceLength => _contextLength;
+    /// <inheritdoc/>
+    public override int PredictionHorizon => _forecastHorizon;
+    /// <inheritdoc/>
+    public override int NumFeatures => 1;
+    /// <inheritdoc/>
+    public override int PatchSize => 1;
+    /// <inheritdoc/>
+    public override int Stride => 1;
+    /// <inheritdoc/>
+    public override bool IsChannelIndependent => true;
+    /// <inheritdoc/>
+    public override bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc/>
+    public override FoundationModelSize ModelSize => _modelSize;
+    /// <inheritdoc/>
+    public override int MaxContextLength => _contextLength;
+    /// <inheritdoc/>
+    public override int MaxPredictionHorizon => _forecastHorizon;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates a FlowState model using a pretrained ONNX model.
+    /// </summary>
+    public FlowState(
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
+        FlowStateOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
+
+        options ??= new FlowStateOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = false;
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        CopyOptionsToFields(options);
+    }
+
+    /// <summary>
+    /// Creates a FlowState model in native mode.
+    /// </summary>
+    public FlowState(
+        NeuralNetworkArchitecture<T> architecture,
+        FlowStateOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        options ??= new FlowStateOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = true;
+        OnnxSession = null;
+        OnnxModelPath = null;
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        CopyOptionsToFields(options);
+        InitializeLayers();
+    }
+
+    private void CopyOptionsToFields(FlowStateOptions<T> options)
+    {
+        _contextLength = options.ContextLength;
+        _forecastHorizon = options.ForecastHorizon;
+        _stateDimension = options.StateDimension;
+        _hiddenDimension = options.HiddenDimension;
+        _numLayers = options.NumLayers;
+        _dropout = options.DropoutRate;
+        _ssmRank = options.SSMRank;
+        _useDiscretization = options.UseDiscretization;
+        _modelSize = options.ModelSize;
+    }
+
+    #endregion
+
+    #region Initialization
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ExtractLayerReferences();
+        }
+        else if (_useNativeMode)
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultFlowStateLayers(
+                Architecture, _contextLength, _forecastHorizon,
+                _stateDimension, _hiddenDimension, _numLayers, _dropout,
+                _ssmRank, _useDiscretization));
+            ExtractLayerReferences();
+        }
+    }
+
+    private void ExtractLayerReferences()
+    {
+        int idx = 0;
+
+        if (idx < Layers.Count)
+            _inputProjection = Layers[idx++];
+
+        _ssmLayers.Clear();
+        int layersPerBlock = _dropout > 0 ? 5 : 4;
+        int totalSSMLayers = _numLayers * layersPerBlock;
+
+        for (int i = 0; i < totalSSMLayers && idx < Layers.Count; i++)
+            _ssmLayers.Add(Layers[idx++]);
+
+        if (idx < Layers.Count)
+            _outputProjection = Layers[idx++];
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Overrides
+
+    /// <inheritdoc/>
+    public override bool SupportsTraining => _useNativeMode;
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in Train()
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NetworkType", "FlowState" },
+                { "ContextLength", _contextLength },
+                { "ForecastHorizon", _forecastHorizon },
+                { "StateDimension", _stateDimension },
+                { "HiddenDimension", _hiddenDimension },
+                { "NumLayers", _numLayers },
+                { "ModelSize", _modelSize.ToString() },
+                { "UseNativeMode", _useNativeMode },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new FlowState<T>(Architecture, new FlowStateOptions<T>
+        {
+            ContextLength = _contextLength,
+            ForecastHorizon = _forecastHorizon,
+            StateDimension = _stateDimension,
+            HiddenDimension = _hiddenDimension,
+            NumLayers = _numLayers,
+            DropoutRate = _dropout,
+            SSMRank = _ssmRank,
+            UseDiscretization = _useDiscretization,
+            ModelSize = _modelSize
+        });
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_contextLength);
+        writer.Write(_forecastHorizon);
+        writer.Write(_stateDimension);
+        writer.Write(_hiddenDimension);
+        writer.Write(_numLayers);
+        writer.Write(_dropout);
+        writer.Write(_ssmRank);
+        writer.Write(_useDiscretization);
+        writer.Write((int)_modelSize);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _stateDimension = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _ssmRank = reader.ReadInt32();
+        _useDiscretization = reader.ReadBoolean();
+        _modelSize = (FoundationModelSize)reader.ReadInt32();
+
+        // The base deserializer has already recreated every layer in Layers with
+        // the copied weights before reaching this point. Re-point the cached
+        // _inputProjection / _ssmLayers / _outputProjection references at those
+        // freshly deserialized layer objects; otherwise they keep pointing at the
+        // stale random-initialized layers created by CreateNewInstance, and the
+        // clone's forward diverges from the original at the very first layer.
+        ExtractLayerReferences();
+    }
+
+    #endregion
+
+    #region IForecastingModel Implementation
+
+    /// <inheritdoc/>
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("FlowState does not support quantile forecasting. Pass null for point forecasts.");
+
+        return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    {
+        var predictions = new List<Tensor<T>>();
+        var currentInput = input;
+        int stepsRemaining = steps;
+        while (stepsRemaining > 0)
+        {
+            var prediction = Forecast(currentInput, null);
+            predictions.Add(prediction);
+            int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining);
+            stepsRemaining -= stepsUsed;
+            if (stepsRemaining > 0)
+                currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed);
+        }
+        return ConcatenatePredictions(predictions, steps);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    {
+        T mse = NumOps.Zero, mae = NumOps.Zero;
+        int count = 0;
+        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
+        {
+            var diff = NumOps.Subtract(predictions[i], actuals[i]);
+            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
+            mae = NumOps.Add(mae, NumOps.Abs(diff));
+            count++;
+        }
+        if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); }
+        return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) };
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    {
+        // RevIN forward (Kim et al. 2022). A rank-1 input is a single instance
+        // (the old code read Shape[0] as the batch size, which for a bare
+        // [contextLength] vector was the sequence length); compute stats over
+        // every non-batch element of each row instead.
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
+        if (instanceSize <= 0)
+            return input;
+
+        var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int start = b * instanceSize;
+
+            T mean = NumOps.Zero;
+            for (int t = 0; t < instanceSize; t++)
+                mean = NumOps.Add(mean, input[start + t]);
+            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
+
+            T variance = NumOps.Zero;
+            for (int t = 0; t < instanceSize; t++)
+            {
+                var diff = NumOps.Subtract(input[start + t], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            }
+            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
+            for (int t = 0; t < instanceSize; t++)
+                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the
+    /// forecast so it is expressed on the input's original scale. The multiply/add go
+    /// through the Engine so the forecast stays on the autodiff tape.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
+
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetFinancialMetrics()
+    {
+        T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
+        return new Dictionary<string, T>
+        {
+            ["ContextLength"] = NumOps.FromDouble(_contextLength),
+            ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon),
+            ["StateDimension"] = NumOps.FromDouble(_stateDimension),
+            ["HiddenDimension"] = NumOps.FromDouble(_hiddenDimension),
+            ["LastLoss"] = lastLoss
+        };
+    }
+
+    #endregion
+
+    #region Forward/Backward
+
+    private Tensor<T> ForwardNative(Tensor<T> input)
+    {
+        var current = ApplyInstanceNormalization(input);
+        bool addedBatchDim = false;
+        if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
+
+        if (_inputProjection is not null)
+            current = _inputProjection.Forward(current);
+
+        foreach (var layer in _ssmLayers)
+            current = layer.Forward(current);
+
+        if (_outputProjection is not null)
+            current = _outputProjection.Forward(current);
+
+        // RevIN reverse: restore the input's per-instance level/scale so distinct
+        // input levels yield distinct forecasts (the SSM sees only the normalized series).
+        current = DenormalizeForecast(current);
+
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
+        return current;
+    }
+
+    /// <summary>
+    /// Training-mode forward. Routes through <see cref="ForwardNative"/> so training
+    /// uses the same RevIN normalize/denormalize as inference and keeps training mode
+    /// (dropout) active, instead of the base default that flips to inference.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return ForwardNative(input);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Mirrors <see cref="ForwardNative"/>'s preprocessing so the captured activations match
+    /// the real forward pass: a bare rank-1 context is RevIN-normalized and given a leading
+    /// batch axis before it reaches the input projection.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+        return activations;
+    }
+
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
+    {
+        if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized.");
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
+        var inputData = new float[batchSize * seqLen * features];
+        for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]);
+        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features });
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("input", inputTensor) };
+        using var results = OnnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var output = new Tensor<T>(outputShape);
+        int totalElements = 1;
+        foreach (var dim in outputShape) totalElements *= dim;
+        for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        return output;
+    }
+
+    #endregion
+
+    #region Parameter Estimation
+
+    private new int GetParameterCount()
+    {
+        // Input projection
+        long total = (long)_contextLength * _hiddenDimension + _hiddenDimension;
+
+        // SSM layers: each has A, B, C, D matrices + norm
+        long perLayer = (long)_stateDimension * _stateDimension; // A
+        perLayer += (long)_stateDimension * _hiddenDimension; // B
+        perLayer += (long)_hiddenDimension * _stateDimension; // C
+        perLayer += _hiddenDimension; // D
+        perLayer += 2L * _hiddenDimension; // norm
+        total += perLayer * _numLayers;
+
+        // Output projection
+        total += (long)_hiddenDimension * _forecastHorizon + _forecastHorizon;
+
+        return (int)Math.Min(total, int.MaxValue);
+    }
+
+    #endregion
+}

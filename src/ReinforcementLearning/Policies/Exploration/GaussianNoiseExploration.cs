@@ -1,0 +1,74 @@
+using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.ReinforcementLearning.Policies.Exploration
+{
+    /// <summary>
+    /// Gaussian noise exploration for continuous action spaces.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create Gaussian noise exploration for continuous action spaces
+    /// var exploration = new GaussianNoiseExploration&lt;double&gt;(initialStdDev: 0.1, noiseDecay: 0.995);
+    ///
+    /// // Add Gaussian noise to the policy action for exploration
+    /// var policyAction = new Vector&lt;double&gt;(new double[] { 0.5, -0.3 });
+    /// var noisyAction = exploration.GetExplorationAction(state, policyAction, actionSpaceSize: 2, random);
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.Low)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("Reinforcement Learning: An Introduction",
+        "https://incompleteideas.net/book/the-book-2nd.html",
+        Year = 2018,
+        Authors = "Sutton, R. S. & Barto, A. G.")]
+    public class GaussianNoiseExploration<T> : ExplorationStrategyBase<T>
+    {
+        private double _noiseStdDev;
+        private readonly double _noiseDecay;
+        private readonly double _minNoise;
+
+        public GaussianNoiseExploration(double initialStdDev = 0.1, double noiseDecay = 0.995, double minNoise = 0.01)
+        {
+            _noiseStdDev = initialStdDev;
+            _noiseDecay = noiseDecay;
+            _minNoise = minNoise;
+        }
+
+        public override Vector<T> GetExplorationAction(Vector<T> state, Vector<T> policyAction, int actionSpaceSize, Random random)
+        {
+            var noisyAction = new Vector<T>(actionSpaceSize);
+
+            for (int i = 0; i < actionSpaceSize; i++)
+            {
+                // Use BoxMullerSample from base class
+                double noise = NumOps.ToDouble(BoxMullerSample(random)) * _noiseStdDev;
+
+                double actionValue = NumOps.ToDouble(policyAction[i]) + noise;
+                noisyAction[i] = NumOps.FromDouble(actionValue);
+            }
+
+            // Use ClampAction from base class (net462-compatible)
+            return ClampAction(noisyAction);
+        }
+
+        public override void Update()
+        {
+            _noiseStdDev = Math.Max(_minNoise, _noiseStdDev * _noiseDecay);
+        }
+
+        public override void Reset()
+        {
+            // Noise doesn't typically reset between episodes
+        }
+
+        public double CurrentNoiseStdDev => _noiseStdDev;
+    }
+}

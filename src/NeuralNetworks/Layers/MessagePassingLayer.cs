@@ -1,0 +1,1438 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Defines the message function type for message passing neural networks.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <param name="sourceFeatures">Features from the source node.</param>
+/// <param name="targetFeatures">Features from the target node.</param>
+/// <param name="edgeFeatures">Features from the edge (may be null).</param>
+/// <returns>The computed message.</returns>
+public delegate Vector<T> MessageFunction<T>(Vector<T> sourceFeatures, Vector<T> targetFeatures, Vector<T>? edgeFeatures);
+
+/// <summary>
+/// Defines the aggregation function type for combining messages.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <param name="messages">Collection of messages to aggregate.</param>
+/// <returns>The aggregated message.</returns>
+public delegate Vector<T> AggregationFunction<T>(IEnumerable<Vector<T>> messages);
+
+/// <summary>
+/// Defines the update function type for updating node features.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <param name="nodeFeatures">Current node features.</param>
+/// <param name="aggregatedMessage">Aggregated message from neighbors.</param>
+/// <returns>Updated node features.</returns>
+public delegate Vector<T> UpdateFunction<T>(Vector<T> nodeFeatures, Vector<T> aggregatedMessage);
+
+/// <summary>
+/// Implements a general Message Passing Neural Network (MPNN) layer.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Message Passing Neural Networks provide a general framework for graph neural networks.
+/// The framework consists of three key functions:
+/// 1. Message: Computes messages from neighbors
+/// 2. Aggregate: Combines messages from all neighbors
+/// 3. Update: Updates node representations using aggregated messages
+/// </para>
+/// <para>
+/// The layer performs the following computation for each node v:
+/// - m_v = AGGREGATE({MESSAGE(h_u, h_v, e_uv) : u ∈ N(v)})
+/// - h_v' = UPDATE(h_v, m_v)
+///
+/// where h_v are node features, e_uv are edge features, and N(v) is the neighborhood of v.
+/// </para>
+/// <para><b>For Beginners:</b> Think of message passing like spreading information through a network.
+///
+/// Imagine a social network where:
+/// 1. **Message**: Each friend sends you a message (combining their info with yours)
+/// 2. **Aggregate**: You collect and summarize all messages from friends
+/// 3. **Update**: You update your own status based on the summary
+///
+/// This happens for all people simultaneously, allowing information to flow through the network.
+///
+/// Use cases:
+/// - Molecule analysis: Atoms sharing information about chemical bonds
+/// - Social networks: Users influenced by their connections
+/// - Citation networks: Papers learning from papers they cite
+/// - Recommendation systems: Items learning from similar items
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+{
+    private readonly int _inputFeatures;
+    private readonly int _outputFeatures;
+    private readonly int _messageFeatures;
+    private readonly bool _useEdgeFeatures;
+    private readonly Random _random;
+
+    /// <summary>
+    /// Message computation network (MLP).
+    /// Shape: [messageInputDim, messageFeatures] and [messageFeatures, messageFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _messageWeights1;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _messageWeights2;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _messageBias1;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _messageBias2;
+
+    /// <summary>
+    /// Update computation network (GRU-style update).
+    /// Shape: [inputFeatures, outputFeatures] and [messageFeatures, outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _updateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _updateMessageWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _updateBias;
+
+    /// <summary>
+    /// Reset gate weights (GRU-style).
+    /// Shape: [inputFeatures, outputFeatures] and [messageFeatures, outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _resetWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _resetMessageWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _resetBias;
+
+    /// <summary>
+    /// Edge feature transformation weights (optional).
+    /// Shape: [edgeFeatureDim, messageFeatures]
+    /// </summary>
+    private Tensor<T>? _edgeWeights;
+
+    /// <summary>
+    /// The adjacency matrix defining graph structure.
+    /// </summary>
+    private Tensor<T>? _adjacencyMatrix;
+
+    /// <summary>
+    /// Edge features tensor (optional).
+    /// </summary>
+    private Tensor<T>? _edgeFeatures;
+
+    /// <summary>
+    /// Edge source node indices for sparse graph representation.
+    /// </summary>
+    private Tensor<int>? _edgeSourceIndices;
+
+    /// <summary>
+    /// Edge target node indices for sparse graph representation.
+    /// </summary>
+    private Tensor<int>? _edgeTargetIndices;
+
+    /// <summary>
+    /// Indicates whether to use sparse (edge-based) or dense (adjacency matrix) aggregation.
+    /// </summary>
+    private bool _useSparseAggregation = false;
+
+    /// <summary>
+    /// Cached input from forward pass.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Cached output from forward pass.
+    /// </summary>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// Cached messages for backward pass.
+    /// </summary>
+    private Tensor<T>? _lastMessages;
+
+    /// <summary>
+    /// Cached aggregated messages.
+    /// </summary>
+    private Tensor<T>? _lastAggregated;
+
+    /// <summary>
+    /// Cached hidden activations from message MLP layer 1.
+    /// </summary>
+    private Tensor<T>? _lastMessageHidden;
+
+    /// <summary>
+    /// Cached reset gates.
+    /// </summary>
+    private Tensor<T>? _lastResetGate;
+
+    /// <summary>
+    /// Cached update gates.
+    /// </summary>
+    private Tensor<T>? _lastUpdateGate;
+
+    /// <summary>
+    /// Gradients for parameters.
+    /// </summary>
+    private Tensor<T>? _messageWeights1Gradient;
+
+    /// <summary>
+    /// Helper to get adjacency value - supports both 2D [nodes, nodes] and 3D [batch, nodes, nodes].
+    /// </summary>
+    private T GetAdjacency(int b, int i, int j)
+    {
+        if (_adjacencyMatrix == null)
+            throw new InvalidOperationException("Adjacency matrix is not set.");
+        return _adjacencyMatrix.Shape.Length == 3 ? _adjacencyMatrix[b, i, j] : _adjacencyMatrix[i, j];
+    }
+    private Tensor<T>? _messageWeights2Gradient;
+    private Tensor<T>? _messageBias1Gradient;
+    private Tensor<T>? _messageBias2Gradient;
+    private Tensor<T>? _updateWeightsGradient;
+    private Tensor<T>? _updateMessageWeightsGradient;
+    private Tensor<T>? _updateBiasGradient;
+    private Tensor<T>? _resetWeightsGradient;
+    private Tensor<T>? _resetMessageWeightsGradient;
+    private Tensor<T>? _resetBiasGradient;
+#pragma warning disable CS0169 // Field is never used - reserved for future edge weight gradient computation
+    private Tensor<T>? _edgeWeightsGradient;
+#pragma warning restore CS0169
+
+    // GPU cache fields for backward pass
+    private Tensor<T>? _gpuLastInput;
+    private IGpuBuffer? _gpuEdgeSrcIndices;
+    private IGpuBuffer? _gpuEdgeTgtIndices;
+    private IGpuBuffer? _gpuEdgeConcatCache;
+    private IGpuBuffer? _gpuMsgHiddenCache;
+    private IGpuBuffer? _gpuMsgCache;
+    private IGpuBuffer? _gpuAggregatedCache;
+    private IGpuBuffer? _gpuResetGateCache;
+    private IGpuBuffer? _gpuUpdateGateCache;
+    private IGpuBuffer? _gpuPreActivationCache;
+    private int _gpuNumEdges;
+    private int _gpuNumNodes;
+    private int _gpuBatchSize;
+
+    // GPU gradient fields
+    private IGpuBuffer? _gpuMsgWeights1Gradient;
+    private IGpuBuffer? _gpuMsgWeights2Gradient;
+    private IGpuBuffer? _gpuMsgBias1Gradient;
+    private IGpuBuffer? _gpuMsgBias2Gradient;
+    private IGpuBuffer? _gpuUpdateWeightsGradient;
+    private IGpuBuffer? _gpuUpdateMsgWeightsGradient;
+    private IGpuBuffer? _gpuUpdateBiasGradient;
+    private IGpuBuffer? _gpuResetWeightsGradient;
+    private IGpuBuffer? _gpuResetMsgWeightsGradient;
+    private IGpuBuffer? _gpuResetBiasGradient;
+
+    /// <inheritdoc/>
+    public override long ParameterCount => GetParameters().Length;
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets whether this layer supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// MessagePassingLayer supports GPU execution with efficient message computation,
+    /// sum aggregation, and GRU-style update on GPU.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public int InputFeatures => _inputFeatures;
+
+    /// <inheritdoc/>
+    public int OutputFeatures => _outputFeatures;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MessagePassingLayer{T}"/> class.
+    /// </summary>
+    /// <param name="inputFeatures">Number of input features per node.</param>
+    /// <param name="outputFeatures">Number of output features per node.</param>
+    /// <param name="messageFeatures">Hidden dimension for message computation (default: same as outputFeatures).</param>
+    /// <param name="useEdgeFeatures">Whether to incorporate edge features (default: false).</param>
+    /// <param name="edgeFeatureDim">Dimension of edge features if used.</param>
+    /// <param name="activationFunction">Activation function to apply.</param>
+    /// <remarks>
+    /// <para>
+    /// Creates a message passing layer with learnable message, aggregate, and update functions.
+    /// The message function is implemented as a 2-layer MLP, aggregation uses sum,
+    /// and update uses a GRU-style gated mechanism.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new message passing layer.
+    ///
+    /// Key parameters:
+    /// - messageFeatures: Size of the messages exchanged between nodes
+    /// - useEdgeFeatures: Whether connections (edges) have their own information
+    ///   * true: Use edge properties (like "strength of friendship" in social networks)
+    ///   * false: All connections are treated equally
+    ///
+    /// The layer learns three things:
+    /// 1. How to create messages from node pairs
+    /// 2. How to combine multiple messages
+    /// 3. How to update nodes based on received messages
+    /// </para>
+    /// </remarks>
+    public MessagePassingLayer(
+        int inputFeatures,
+        int outputFeatures,
+        int messageFeatures = -1,
+        bool useEdgeFeatures = false,
+        int edgeFeatureDim = 0,
+        IActivationFunction<T>? activationFunction = null)
+        : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
+    {
+        _inputFeatures = inputFeatures;
+        _outputFeatures = outputFeatures;
+        _messageFeatures = messageFeatures > 0 ? messageFeatures : outputFeatures;
+        _useEdgeFeatures = useEdgeFeatures;
+        _random = RandomHelper.CreateSecureRandom();
+
+        // Message network: takes concatenated node features (and optionally edge features)
+        int messageInputDim = 2 * inputFeatures; // source + target features
+        if (useEdgeFeatures && edgeFeatureDim > 0)
+        {
+            messageInputDim += edgeFeatureDim;
+        }
+
+        _messageWeights1 = new Tensor<T>([messageInputDim, _messageFeatures]);
+        _messageWeights2 = new Tensor<T>([_messageFeatures, _messageFeatures]);
+        _messageBias1 = new Tensor<T>([_messageFeatures]);
+        _messageBias2 = new Tensor<T>([_messageFeatures]);
+
+        // Update network (GRU-style)
+        _updateWeights = new Tensor<T>([inputFeatures, outputFeatures]);
+        _updateMessageWeights = new Tensor<T>([_messageFeatures, outputFeatures]);
+        _updateBias = new Tensor<T>([outputFeatures]);
+
+        // Reset gate
+        _resetWeights = new Tensor<T>([inputFeatures, outputFeatures]);
+        _resetMessageWeights = new Tensor<T>([_messageFeatures, outputFeatures]);
+        _resetBias = new Tensor<T>([outputFeatures]);
+
+        // Edge feature transformation
+        if (useEdgeFeatures && edgeFeatureDim > 0)
+        {
+            _edgeWeights = new Tensor<T>([edgeFeatureDim, _messageFeatures]);
+        }
+
+        InitializeParameters();
+
+        // Register after initialization so tensor references are final
+        RegisterTrainableParameter(_messageWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_messageWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_messageBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_messageBias2, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_updateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_updateMessageWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_updateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_resetWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_resetMessageWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_resetBias, PersistentTensorRole.Biases);
+        if (_edgeWeights is not null) RegisterTrainableParameter(_edgeWeights, PersistentTensorRole.Weights);
+    }
+
+    /// <summary>
+    /// Initializes layer parameters using Xavier initialization.
+    /// </summary>
+    private void InitializeParameters()
+    {
+        // Initialize message weights
+        T scaleMsg1 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_messageWeights1.Shape[0] + _messageWeights1.Shape[1])));
+        InitializeTensor(_messageWeights1, scaleMsg1);
+
+        T scaleMsg2 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_messageWeights2.Shape[0] + _messageWeights2.Shape[1])));
+        InitializeTensor(_messageWeights2, scaleMsg2);
+
+        // Initialize update weights
+        T scaleUpd = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputFeatures + _outputFeatures)));
+        InitializeTensor(_updateWeights, scaleUpd);
+        InitializeTensor(_updateMessageWeights, scaleUpd);
+
+        // Initialize reset weights
+        InitializeTensor(_resetWeights, scaleUpd);
+        InitializeTensor(_resetMessageWeights, scaleUpd);
+
+        // Initialize edge weights if used
+        if (_edgeWeights != null)
+        {
+            T scaleEdge = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_edgeWeights.Shape[0] + _edgeWeights.Shape[1])));
+            InitializeTensor(_edgeWeights, scaleEdge);
+        }
+
+        // Initialize biases to zero
+        _messageBias1.Fill(NumOps.Zero);
+        _messageBias2.Fill(NumOps.Zero);
+        _updateBias.Fill(NumOps.Zero);
+        _resetBias.Fill(NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Initializes a tensor with scaled random values.
+    /// </summary>
+    /// <param name="tensor">The tensor to initialize.</param>
+    /// <param name="scale">The scale factor for the random values.</param>
+    private void InitializeTensor(Tensor<T> tensor, T scale)
+    {
+        // Create random tensor using Engine operations
+        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
+
+        // Shift to [-0.5, 0.5] range: randomTensor - 0.5
+        var halfTensor = new Tensor<T>(tensor._shape);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+
+        // Scale by the scale factor
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+
+        // Copy to tensor
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = scaled.GetFlat(i);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
+    {
+        _adjacencyMatrix = adjacencyMatrix;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T>? GetAdjacencyMatrix()
+    {
+        return _adjacencyMatrix;
+    }
+
+    /// <summary>
+    /// Sets the edge list representation of the graph structure for sparse aggregation.
+    /// </summary>
+    /// <param name="sourceIndices">Tensor containing source node indices for each edge. Shape: [numEdges].</param>
+    /// <param name="targetIndices">Tensor containing target node indices for each edge. Shape: [numEdges].</param>
+    /// <remarks>
+    /// <para>
+    /// This method provides an edge-list representation of the graph, enabling memory-efficient
+    /// sparse message passing using scatter operations.
+    /// </para>
+    /// </remarks>
+    public void SetEdges(Tensor<int> sourceIndices, Tensor<int> targetIndices)
+    {
+        if (sourceIndices == null)
+            throw new ArgumentNullException(nameof(sourceIndices));
+
+        if (targetIndices == null)
+            throw new ArgumentNullException(nameof(targetIndices));
+
+        if (sourceIndices.Length != targetIndices.Length)
+            throw new ArgumentException($"Source and target index tensors must have the same length. Got {sourceIndices.Length} and {targetIndices.Length}.");
+
+        _edgeSourceIndices = sourceIndices;
+        _edgeTargetIndices = targetIndices;
+        _useSparseAggregation = true;
+    }
+
+    /// <summary>
+    /// Gets whether sparse (edge-based) aggregation is currently enabled.
+    /// </summary>
+    public bool UsesSparseAggregation => _useSparseAggregation;
+
+    /// <summary>
+    /// Clears the edge list and switches back to dense adjacency matrix aggregation.
+    /// </summary>
+    public void ClearEdges()
+    {
+        _edgeSourceIndices = null;
+        _edgeTargetIndices = null;
+        _useSparseAggregation = false;
+    }
+
+    /// <summary>
+    /// Sets the edge features tensor.
+    /// </summary>
+    /// <param name="edgeFeatures">Tensor of edge features with shape [batch, numNodes * numNodes, edgeFeatureDim].
+    /// Edge features are indexed by flattened source-target node indices: edgeIdx = sourceNode * numNodes + targetNode.</param>
+    /// <remarks>
+    /// <para><b>Shape Contract:</b> The tensor must have shape [batch, numNodes * numNodes, edgeFeatureDim]
+    /// where numNodes is the number of nodes in the graph. Edge (i, j) is accessed at index i * numNodes + j.
+    /// This dense representation includes slots for all possible edges; non-existent edges are ignored
+    /// based on the adjacency matrix during forward computation.</para>
+    /// <para><b>Design Note:</b> Dense edge feature storage is used for efficient random access during
+    /// message computation. For sparse graphs, consider using attention-based layers (GAT) instead,
+    /// which do not require explicit edge features.</para>
+    /// </remarks>
+    public void SetEdgeFeatures(Tensor<T> edgeFeatures)
+    {
+        if (!_useEdgeFeatures)
+        {
+            throw new InvalidOperationException("Layer was not configured to use edge features.");
+        }
+        if (edgeFeatures.Shape.Length != 3)
+        {
+            throw new ArgumentException(
+                $"Edge features must be a 3D tensor [batch, numEdgeSlots, edgeFeatureDim], but got shape [{string.Join(", ", edgeFeatures._shape)}].");
+        }
+        _edgeFeatures = edgeFeatures;
+    }
+
+    private T ReLU(T x)
+    {
+        return NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero;
+    }
+
+    private T Sigmoid(T x)
+    {
+        return NumOps.Divide(NumOps.FromDouble(1.0),
+            NumOps.Add(NumOps.FromDouble(1.0), NumOps.Exp(NumOps.Negate(x))));
+    }
+
+    /// <summary>
+    /// Resizes the last axis of a 2D <c>[rows, fromWidth]</c> tensor to
+    /// <c>toWidth</c>: slices when toWidth &lt; fromWidth, zero-pads when
+    /// toWidth &gt; fromWidth, returns the input unchanged when equal.
+    /// Mirrors the conditional <c>f &lt; inputFeatures ? input[f] : 0</c>
+    /// guard in the original GRU output combiner without scalar dispatch.
+    /// </summary>
+    private Tensor<T> PadOrSliceLastAxis(Tensor<T> tensor2D, int fromWidth, int toWidth)
+    {
+        if (toWidth == fromWidth) return tensor2D;
+        int rows = tensor2D.Shape[0];
+        if (toWidth < fromWidth)
+        {
+            // Slice down: take the first toWidth columns.
+            return Engine.TensorSlice(tensor2D, [0, 0], [rows, toWidth]);
+        }
+        // Pad up: concat a zero block of the missing width along the column axis.
+        var zeros = TensorAllocator.Rent<T>([rows, toWidth - fromWidth]);
+        zeros.Fill(NumOps.Zero);
+        var result = Engine.TensorConcatenate(new[] { tensor2D, zeros }, axis: 1);
+        TensorAllocator.Return(zeros); // Return the rented padding tensor to the pool.
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Check that adjacency matrix is set
+        // NOTE: Sparse aggregation via edge indices is not yet implemented for MessagePassingLayer
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Forward. " +
+                "Sparse edge-based aggregation is not yet implemented for MessagePassingLayer.");
+        }
+
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: need at least 2D for [nodes, features] or 3D for [batch, nodes, features]
+        Tensor<T> processInput;
+        int batchSize;
+        int numNodes;
+
+        if (rank == 2)
+        {
+            // 2D: [nodes, features] - single unbatched graph
+            batchSize = 1;
+            numNodes = input.Shape[0];
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
+        }
+        else
+        {
+            // 3D+: [batch, nodes, features] or [..., nodes, features]
+            batchSize = input.Shape[0];
+            numNodes = input.Shape[1];
+            processInput = input;
+            if (rank > 3)
+            {
+                // Flatten extra dimensions into batch
+                int flatBatch = 1;
+                for (int d = 0; d < rank - 2; d++)
+                    flatBatch *= input.Shape[d];
+                batchSize = flatBatch;
+                numNodes = input.Shape[rank - 2];
+                processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+            }
+        }
+
+        _lastInput = processInput;
+
+        // Steps 1+2 (message MLP + masked aggregation), bulk-vectorized.
+        // ----------------------------------------------------------------
+        // Original implementation walked every (b, i, j) edge in scalar:
+        // built a per-edge messageInput vector, ran a 2-layer MLP on it, then
+        // gated by adjacency before summing. That was
+        //   O(B · N² · (2·F + edgeF) · M)   per MLP-layer-1 NumOps.Add chain
+        //   + O(B · N² · M²) for layer 2 + O(B · N² · M) for aggregation
+        // of virtual NumOps dispatches — JIT can't inline through INumericOps.
+        //
+        // Pytorch / torch_geometric handles this as bulk tensor ops:
+        //   1. broadcast src/tgt features into [B, N, N, F] tiles
+        //   2. concat with edge features along the feature axis
+        //   3. flatten (B·N·N) edges into a 2D matrix and run the MLP
+        //      via two TensorMatMul + bias + ReLU steps
+        //   4. mask non-adjacent edges by multiplying by adjacency
+        //   5. sum-aggregate over the j axis with ReduceSum
+        // This keeps the layer's externally visible behavior identical
+        // (skipped-edge messages stay zero post-mask) while replacing
+        // ~10⁹ scalar dispatches with ~10 Engine ops on a typical graph.
+
+        // Tile node features for source (j) and target (i) sides:
+        //   src[B, i, j, F] = processInput[B, j, F]   (rows of i broadcast)
+        //   tgt[B, i, j, F] = processInput[B, i, F]   (cols of j broadcast)
+        var srcExpanded = Engine.Reshape(processInput, [batchSize, 1, numNodes, _inputFeatures]);
+        var srcTile = Engine.TensorTile(srcExpanded, [1, numNodes, 1, 1]);
+        var tgtExpanded = Engine.Reshape(processInput, [batchSize, numNodes, 1, _inputFeatures]);
+        var tgtTile = Engine.TensorTile(tgtExpanded, [1, 1, numNodes, 1]);
+
+        // Concat src + tgt (+ edge) along the feature axis to form per-edge input.
+        Tensor<T> messageInput;
+        if (_useEdgeFeatures && _edgeFeatures != null && _edgeFeatures.Shape[1] >= numNodes * numNodes)
+        {
+            int edgeFeatDim = _edgeFeatures.Shape[2];
+            // _edgeFeatures is stored as [batch, numNodes*numNodes, edgeFeatDim]
+            // — reshape to [batch, numNodes, numNodes, edgeFeatDim] so it concats
+            // cleanly with the [B, N, N, F] node tiles.
+            var edgeTile = Engine.Reshape(_edgeFeatures, [batchSize, numNodes, numNodes, edgeFeatDim]);
+            messageInput = Engine.TensorConcatenate(new[] { srcTile, tgtTile, edgeTile }, axis: 3);
+        }
+        else
+        {
+            messageInput = Engine.TensorConcatenate(new[] { srcTile, tgtTile }, axis: 3);
+        }
+
+        // Flatten (B, N, N) edges into 2D for the MLP: [B*N*N, MessageInputDim].
+        int messageInputDim = messageInput.Shape[3];
+        int totalEdges = batchSize * numNodes * numNodes;
+        var inputFlat = Engine.Reshape(messageInput, [totalEdges, messageInputDim]);
+
+        // Layer 1: input @ W1 + b1, ReLU.
+        var bias1Broadcast = Engine.Reshape(_messageBias1, [1, _messageFeatures]);
+        var hidden = Engine.TensorMatMul(inputFlat, _messageWeights1);
+        hidden = Engine.TensorBroadcastAdd(hidden, bias1Broadcast);
+        hidden = Engine.ReLU(hidden);
+        _lastMessageHidden = Engine.Reshape(hidden, [batchSize, numNodes, numNodes, _messageFeatures]);
+
+        // Layer 2: hidden @ W2 + b2.
+        var bias2Broadcast = Engine.Reshape(_messageBias2, [1, _messageFeatures]);
+        var messagesFlat = Engine.TensorMatMul(hidden, _messageWeights2);
+        messagesFlat = Engine.TensorBroadcastAdd(messagesFlat, bias2Broadcast);
+
+        // Mask non-adjacent edges by multiplying by adjacency. Reshape adjacency
+        // to [B, N, N, 1] so it broadcasts across the message-feature axis. For
+        // 2D adjacency, prepend a singleton batch dim.
+        var messages4D = Engine.Reshape(messagesFlat, [batchSize, numNodes, numNodes, _messageFeatures]);
+        var adjShape = _adjacencyMatrix.Shape.Length == 2
+            ? new[] { 1, numNodes, numNodes, 1 }
+            : new[] { batchSize, numNodes, numNodes, 1 };
+        var adjBroadcastable = Engine.Reshape(_adjacencyMatrix, adjShape);
+        _lastMessages = Engine.TensorMultiply(messages4D, adjBroadcastable);
+
+        // Step 2: aggregate by summing over the j axis (axis=2 of [B, N(i), N(j), M]).
+        _lastAggregated = Engine.ReduceSum(_lastMessages, new[] { 2 }, keepDims: false);
+
+        // Step 3: Update node features (GRU-style update), bulk-vectorized.
+        // ----------------------------------------------------------------
+        // Original implementation walked every (b, i, f) cell in scalar to compute
+        // reset = σ(b_r + input·W_r + agg·W_mr), update = σ(b_u + input·W_u + agg·W_mu),
+        // and out = (1-update) * pad(input) + update * pad(agg). Each cell did
+        // (inputFeatures + messageFeatures) NumOps.Multiply/Add dispatches —
+        // (B·N·outputFeatures) cells per gate.
+        //
+        // The matmul / sigmoid / add chain is expressible as bulk Engine ops on
+        // the full [B, N, *] tensors; the only complication is the conditional
+        // slice/pad in the final output combiner when outputFeatures doesn't
+        // match inputFeatures or messageFeatures.
+
+        // Flatten [B, N, *] to [B·N, *] so the projection matmuls work on 2D
+        // operands and the broadcast-add on biases stays simple.
+        int bn = batchSize * numNodes;
+        var inputFlatBN = Engine.Reshape(processInput, [bn, _inputFeatures]);
+        var aggFlatBN = Engine.Reshape(_lastAggregated, [bn, _messageFeatures]);
+
+        // Reset gate: σ(input @ W_r + agg @ W_mr + b_r)
+        var resetBiasBcast = Engine.Reshape(_resetBias, [1, _outputFeatures]);
+        var resetLogitsFlat = Engine.TensorMatMul(inputFlatBN, _resetWeights);
+        resetLogitsFlat = Engine.TensorAdd(resetLogitsFlat, Engine.TensorMatMul(aggFlatBN, _resetMessageWeights));
+        resetLogitsFlat = Engine.TensorBroadcastAdd(resetLogitsFlat, resetBiasBcast);
+        var resetFlat = Engine.Sigmoid(resetLogitsFlat);
+        _lastResetGate = Engine.Reshape(resetFlat, [batchSize, numNodes, _outputFeatures]);
+
+        // Update gate: σ(input @ W_u + agg @ W_mu + b_u)
+        var updateBiasBcast = Engine.Reshape(_updateBias, [1, _outputFeatures]);
+        var updateLogitsFlat = Engine.TensorMatMul(inputFlatBN, _updateWeights);
+        updateLogitsFlat = Engine.TensorAdd(updateLogitsFlat, Engine.TensorMatMul(aggFlatBN, _updateMessageWeights));
+        updateLogitsFlat = Engine.TensorBroadcastAdd(updateLogitsFlat, updateBiasBcast);
+        var updateFlat = Engine.Sigmoid(updateLogitsFlat);
+        _lastUpdateGate = Engine.Reshape(updateFlat, [batchSize, numNodes, _outputFeatures]);
+
+        // Output combiner: (1 - update) * input_padded + update * agg_padded.
+        // The original conditional `f < inputFeatures ? processInput : 0` zeros
+        // any feature-axis index that exceeds the input/message feature width.
+        // Build padded versions explicitly so the elementwise multiply works on
+        // matching [B·N, outputFeatures] tensors.
+        var inputPaddedFlat = PadOrSliceLastAxis(inputFlatBN, _inputFeatures, _outputFeatures);
+        var aggPaddedFlat = PadOrSliceLastAxis(aggFlatBN, _messageFeatures, _outputFeatures);
+
+        // out = (1 - update) * inputPadded + update * aggPadded
+        var oneMinusUpdate = Engine.ScalarMinusTensor(NumOps.One, updateFlat);
+        var oldContribution = Engine.TensorMultiply(oneMinusUpdate, inputPaddedFlat);
+        var newContribution = Engine.TensorMultiply(updateFlat, aggPaddedFlat);
+        var outputFlat = Engine.TensorAdd(oldContribution, newContribution);
+        var output = Engine.Reshape(outputFlat, [batchSize, numNodes, _outputFeatures]);
+
+        var result = ApplyActivation(output);
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_messageWeights1Gradient == null || _messageWeights2Gradient == null ||
+            _updateWeightsGradient == null || _updateMessageWeightsGradient == null ||
+            _resetWeightsGradient == null || _resetMessageWeightsGradient == null ||
+            _messageBias1Gradient == null || _messageBias2Gradient == null ||
+            _updateBiasGradient == null || _resetBiasGradient == null)
+        {
+            throw new InvalidOperationException("Backward must be called before UpdateParameters.");
+        }
+
+        // Update all weights using Engine operations
+        var scaledGrad = Engine.TensorMultiplyScalar(_messageWeights1Gradient, learningRate);
+        _messageWeights1 = Engine.TensorSubtract(_messageWeights1, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_messageWeights2Gradient, learningRate);
+        _messageWeights2 = Engine.TensorSubtract(_messageWeights2, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_updateWeightsGradient, learningRate);
+        _updateWeights = Engine.TensorSubtract(_updateWeights, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_updateMessageWeightsGradient, learningRate);
+        _updateMessageWeights = Engine.TensorSubtract(_updateMessageWeights, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_resetWeightsGradient, learningRate);
+        _resetWeights = Engine.TensorSubtract(_resetWeights, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_resetMessageWeightsGradient, learningRate);
+        _resetMessageWeights = Engine.TensorSubtract(_resetMessageWeights, scaledGrad);
+
+        // Update biases
+        scaledGrad = Engine.TensorMultiplyScalar(_messageBias1Gradient, learningRate);
+        _messageBias1 = Engine.TensorSubtract(_messageBias1, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_messageBias2Gradient, learningRate);
+        _messageBias2 = Engine.TensorSubtract(_messageBias2, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_updateBiasGradient, learningRate);
+        _updateBias = Engine.TensorSubtract(_updateBias, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_resetBiasGradient, learningRate);
+        _resetBias = Engine.TensorSubtract(_resetBias, scaledGrad);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters as a list of tensors.
+    /// </summary>
+    /// <returns>A list containing all trainable parameter tensors.</returns>
+    public List<Tensor<T>> GetParameterTensors()
+    {
+        var parameters = new List<Tensor<T>>
+        {
+            _messageWeights1,
+            _messageWeights2,
+            _messageBias1,
+            _messageBias2,
+            _updateWeights,
+            _updateMessageWeights,
+            _updateBias,
+            _resetWeights,
+            _resetMessageWeights,
+            _resetBias
+        };
+
+        if (_edgeWeights != null)
+        {
+            parameters.Add(_edgeWeights);
+        }
+
+        return parameters;
+    }
+
+    /// <summary>
+    /// Sets all trainable parameters from a list of tensors.
+    /// </summary>
+    /// <param name="parameters">The list of parameter tensors to set.</param>
+    public void SetParameterTensors(List<Tensor<T>> parameters)
+    {
+        int expectedCount = _edgeWeights != null ? 11 : 10;
+        if (parameters.Count != expectedCount)
+        {
+            throw new ArgumentException($"Expected {expectedCount} parameter tensors, but got {parameters.Count}");
+        }
+
+        int idx = 0;
+        _messageWeights1 = parameters[idx++];
+        _messageWeights2 = parameters[idx++];
+        _messageBias1 = parameters[idx++];
+        _messageBias2 = parameters[idx++];
+        _updateWeights = parameters[idx++];
+        _updateMessageWeights = parameters[idx++];
+        _updateBias = parameters[idx++];
+        _resetWeights = parameters[idx++];
+        _resetMessageWeights = parameters[idx++];
+        _resetBias = parameters[idx++];
+
+        if (_edgeWeights != null && idx < parameters.Count)
+        {
+            _edgeWeights = parameters[idx++];
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var tensors = GetParameterTensors();
+        var arrays = tensors.Select(t => t.ToArray()).ToList();
+        int totalLength = arrays.Sum(a => a.Length);
+
+        var result = new Vector<T>(totalLength);
+        int index = 0;
+
+        foreach (var array in arrays)
+        {
+            for (int i = 0; i < array.Length; i++)
+            {
+                result[index++] = array[i];
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gMsgWeights1 = _messageWeights1Gradient != null ? new Vector<T>(_messageWeights1Gradient.ToArray()) : new Vector<T>(_messageWeights1.Length);
+        var gMsgWeights2 = _messageWeights2Gradient != null ? new Vector<T>(_messageWeights2Gradient.ToArray()) : new Vector<T>(_messageWeights2.Length);
+        var gMsgBias1 = _messageBias1Gradient != null ? new Vector<T>(_messageBias1Gradient.ToArray()) : new Vector<T>(_messageBias1.Length);
+        var gMsgBias2 = _messageBias2Gradient != null ? new Vector<T>(_messageBias2Gradient.ToArray()) : new Vector<T>(_messageBias2.Length);
+        var gUpdateWeights = _updateWeightsGradient != null ? new Vector<T>(_updateWeightsGradient.ToArray()) : new Vector<T>(_updateWeights.Length);
+        var gUpdateMsgWeights = _updateMessageWeightsGradient != null ? new Vector<T>(_updateMessageWeightsGradient.ToArray()) : new Vector<T>(_updateMessageWeights.Length);
+        var gUpdateBias = _updateBiasGradient != null ? new Vector<T>(_updateBiasGradient.ToArray()) : new Vector<T>(_updateBias.Length);
+        var gResetWeights = _resetWeightsGradient != null ? new Vector<T>(_resetWeightsGradient.ToArray()) : new Vector<T>(_resetWeights.Length);
+        var gResetMsgWeights = _resetMessageWeightsGradient != null ? new Vector<T>(_resetMessageWeightsGradient.ToArray()) : new Vector<T>(_resetMessageWeights.Length);
+        var gResetBias = _resetBiasGradient != null ? new Vector<T>(_resetBiasGradient.ToArray()) : new Vector<T>(_resetBias.Length);
+
+        var parts = new List<Vector<T>> { gMsgWeights1, gMsgWeights2, gMsgBias1, gMsgBias2, gUpdateWeights, gUpdateMsgWeights, gUpdateBias, gResetWeights, gResetMsgWeights, gResetBias };
+
+        if (_edgeWeights != null)
+        {
+            parts.Add(_edgeWeightsGradient != null ? new Vector<T>(_edgeWeightsGradient.ToArray()) : new Vector<T>(_edgeWeights.Length));
+        }
+
+        return Vector<T>.Concatenate(parts.ToArray());
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        _messageWeights1Gradient = null;
+        _messageWeights2Gradient = null;
+        _messageBias1Gradient = null;
+        _messageBias2Gradient = null;
+        _updateWeightsGradient = null;
+        _updateMessageWeightsGradient = null;
+        _updateBiasGradient = null;
+        _resetWeightsGradient = null;
+        _resetMessageWeightsGradient = null;
+        _resetBiasGradient = null;
+        _edgeWeightsGradient = null;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var tensors = GetParameterTensors();
+        int totalLength = tensors.Sum(t => t.Length);
+
+        if (parameters.Length != totalLength)
+        {
+            throw new ArgumentException($"Expected {totalLength} parameters, but got {parameters.Length}");
+        }
+
+        int index = 0;
+        var updatedTensors = new List<Tensor<T>>();
+
+        foreach (var tensor in tensors)
+        {
+            var array = new T[tensor.Length];
+            for (int i = 0; i < array.Length; i++)
+            {
+                array[i] = parameters[index++];
+            }
+
+            var newTensor = new Tensor<T>(tensor._shape);
+            for (int i = 0; i < array.Length; i++)
+            {
+                newTensor[i] = array[i];
+            }
+            updatedTensors.Add(newTensor);
+        }
+
+        SetParameterTensors(updatedTensors);
+    }
+
+    /// <inheritdoc/>
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastOutput = null;
+        _lastMessages = null;
+        _lastAggregated = null;
+        _lastMessageHidden = null;
+        _lastResetGate = null;
+        _lastUpdateGate = null;
+        _messageWeights1Gradient = null;
+        _messageWeights2Gradient = null;
+        _messageBias1Gradient = null;
+        _messageBias2Gradient = null;
+        _updateWeightsGradient = null;
+        _updateMessageWeightsGradient = null;
+        _updateBiasGradient = null;
+        _resetWeightsGradient = null;
+        _resetMessageWeightsGradient = null;
+        _resetBiasGradient = null;
+
+        // Clear GPU cache
+        ClearGpuCache();
+    }
+
+    /// <summary>
+    /// Clears GPU cache tensors and gradients.
+    /// </summary>
+    private void ClearGpuCache()
+    {
+        _gpuLastInput = null;
+        _gpuEdgeSrcIndices?.Dispose();
+        _gpuEdgeSrcIndices = null;
+        _gpuEdgeTgtIndices?.Dispose();
+        _gpuEdgeTgtIndices = null;
+        _gpuEdgeConcatCache?.Dispose();
+        _gpuEdgeConcatCache = null;
+        _gpuMsgHiddenCache?.Dispose();
+        _gpuMsgHiddenCache = null;
+        _gpuMsgCache?.Dispose();
+        _gpuMsgCache = null;
+        _gpuAggregatedCache?.Dispose();
+        _gpuAggregatedCache = null;
+        _gpuResetGateCache?.Dispose();
+        _gpuResetGateCache = null;
+        _gpuUpdateGateCache?.Dispose();
+        _gpuUpdateGateCache = null;
+        _gpuPreActivationCache?.Dispose();
+        _gpuPreActivationCache = null;
+
+        _gpuMsgWeights1Gradient?.Dispose();
+        _gpuMsgWeights1Gradient = null;
+        _gpuMsgWeights2Gradient?.Dispose();
+        _gpuMsgWeights2Gradient = null;
+        _gpuMsgBias1Gradient?.Dispose();
+        _gpuMsgBias1Gradient = null;
+        _gpuMsgBias2Gradient?.Dispose();
+        _gpuMsgBias2Gradient = null;
+        _gpuUpdateWeightsGradient?.Dispose();
+        _gpuUpdateWeightsGradient = null;
+        _gpuUpdateMsgWeightsGradient?.Dispose();
+        _gpuUpdateMsgWeightsGradient = null;
+        _gpuUpdateBiasGradient?.Dispose();
+        _gpuUpdateBiasGradient = null;
+        _gpuResetWeightsGradient?.Dispose();
+        _gpuResetWeightsGradient = null;
+        _gpuResetMsgWeightsGradient?.Dispose();
+        _gpuResetMsgWeightsGradient = null;
+        _gpuResetBiasGradient?.Dispose();
+        _gpuResetBiasGradient = null;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for Message Passing Neural Network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Implements the actual MPNN algorithm on GPU:
+    /// 1. For each edge (i→j), gather source and target features
+    /// 2. Compute per-edge message: m_ij = MLP(concat(h_source, h_target))
+    /// 3. Scatter-add to aggregate messages per target node: m_i = Σ_{j∈N(i)} m_ji
+    /// 4. GRU-style update: h'_i = (1-z)*h_i + z*m_i
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+        if (input._shape == null || input.Shape.Length < 2)
+            throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
+
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling ForwardGpu.");
+        }
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("No GPU backend available.");
+
+        int rank = input.Shape.Length;
+        int batchSize, numNodes, inputFeatures;
+
+        if (rank == 2)
+        {
+            batchSize = 1;
+            numNodes = input.Shape[0];
+            inputFeatures = input.Shape[1];
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            numNodes = input.Shape[rank - 2];
+            inputFeatures = input.Shape[rank - 1];
+        }
+
+        if (inputFeatures != _inputFeatures)
+            throw new ArgumentException($"Input features ({inputFeatures}) doesn't match layer input features ({_inputFeatures}).");
+
+        // Extract edge list from adjacency matrix
+        bool adj2D = _adjacencyMatrix.Shape.Length == 2;
+        var edgeSourceList = new List<int>();
+        var edgeTargetList = new List<int>();
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                T adjVal = adj2D ? _adjacencyMatrix[i, j] : _adjacencyMatrix[0, i, j];
+                if (!NumOps.Equals(adjVal, NumOps.Zero))
+                {
+                    edgeSourceList.Add(j);  // Source node
+                    edgeTargetList.Add(i);  // Target node (edge j→i)
+                }
+            }
+        }
+
+        int numEdges = edgeSourceList.Count;
+        if (numEdges == 0)
+        {
+            throw new InvalidOperationException("Graph has no edges. Cannot perform message passing.");
+        }
+
+        var edgeSources = edgeSourceList.ToArray();
+        var edgeTargets = edgeTargetList.ToArray();
+
+        // Upload edge indices to GPU
+        var srcIdxBuffer = backend.AllocateIntBuffer(edgeSources);
+        var tgtIdxBuffer = backend.AllocateIntBuffer(edgeTargets);
+
+        // Upload message MLP weights to GPU
+        int messageInputDim = 2 * _inputFeatures;
+        var msgW1Data = new float[messageInputDim * _messageFeatures];
+        for (int i = 0; i < messageInputDim; i++)
+        {
+            for (int j = 0; j < _messageFeatures; j++)
+            {
+                msgW1Data[i * _messageFeatures + j] = (float)NumOps.ToDouble(_messageWeights1[i, j]);
+            }
+        }
+        var msgW1Buffer = backend.AllocateBuffer(msgW1Data);
+
+        var msgW2Data = new float[_messageFeatures * _messageFeatures];
+        for (int i = 0; i < _messageFeatures; i++)
+        {
+            for (int j = 0; j < _messageFeatures; j++)
+            {
+                msgW2Data[i * _messageFeatures + j] = (float)NumOps.ToDouble(_messageWeights2[i, j]);
+            }
+        }
+        var msgW2Buffer = backend.AllocateBuffer(msgW2Data);
+
+        var msgB1Data = new float[_messageFeatures];
+        var msgB2Data = new float[_messageFeatures];
+        for (int i = 0; i < _messageFeatures; i++)
+        {
+            msgB1Data[i] = (float)NumOps.ToDouble(_messageBias1[i]);
+            msgB2Data[i] = (float)NumOps.ToDouble(_messageBias2[i]);
+        }
+        var msgB1Buffer = backend.AllocateBuffer(msgB1Data);
+        var msgB2Buffer = backend.AllocateBuffer(msgB2Data);
+
+        // Upload GRU weights
+        var updateWData = new float[_inputFeatures * _outputFeatures];
+        var updateMsgWData = new float[_messageFeatures * _outputFeatures];
+        for (int i = 0; i < _inputFeatures; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                updateWData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_updateWeights[i, j]);
+            }
+        }
+        for (int i = 0; i < _messageFeatures; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                updateMsgWData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_updateMessageWeights[i, j]);
+            }
+        }
+        var updateWBuffer = backend.AllocateBuffer(updateWData);
+        var updateMsgWBuffer = backend.AllocateBuffer(updateMsgWData);
+
+        var updateBData = new float[_outputFeatures];
+        for (int i = 0; i < _outputFeatures; i++)
+            updateBData[i] = (float)NumOps.ToDouble(_updateBias[i]);
+        var updateBBuffer = backend.AllocateBuffer(updateBData);
+
+        var resetWData = new float[_inputFeatures * _outputFeatures];
+        var resetMsgWData = new float[_messageFeatures * _outputFeatures];
+        for (int i = 0; i < _inputFeatures; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                resetWData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_resetWeights[i, j]);
+            }
+        }
+        for (int i = 0; i < _messageFeatures; i++)
+        {
+            for (int j = 0; j < _outputFeatures; j++)
+            {
+                resetMsgWData[i * _outputFeatures + j] = (float)NumOps.ToDouble(_resetMessageWeights[i, j]);
+            }
+        }
+        var resetWBuffer = backend.AllocateBuffer(resetWData);
+        var resetMsgWBuffer = backend.AllocateBuffer(resetMsgWData);
+
+        var resetBData = new float[_outputFeatures];
+        for (int i = 0; i < _outputFeatures; i++)
+            resetBData[i] = (float)NumOps.ToDouble(_resetBias[i]);
+        var resetBBuffer = backend.AllocateBuffer(resetBData);
+
+        // Allocate output buffer
+        int outputSize = batchSize * numNodes * _outputFeatures;
+        var outputBuffer = backend.AllocateBuffer(new float[outputSize]);
+
+        // Allocate per-edge and per-node buffers (temporary work buffers)
+        var edgeSrcFeatBuffer = backend.AllocateBuffer(new float[numEdges * _inputFeatures]);
+        var edgeTgtFeatBuffer = backend.AllocateBuffer(new float[numEdges * _inputFeatures]);
+        var edgeConcatBuffer = backend.AllocateBuffer(new float[numEdges * messageInputDim]);
+        var edgeMsgHiddenBuffer = backend.AllocateBuffer(new float[numEdges * _messageFeatures]);
+        var edgeMsgBuffer = backend.AllocateBuffer(new float[numEdges * _messageFeatures]);
+        var aggregatedBuffer = backend.AllocateBuffer(new float[numNodes * _messageFeatures]);
+        var resetGateBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+        var updateGateBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+        var tempBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+        var nodeOutputBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
+
+        // Pre-allocate per-batch cache buffers for training mode (before batch loop)
+        IGpuBuffer? batchedEdgeConcatCache = null;
+        IGpuBuffer? batchedMsgHiddenCache = null;
+        IGpuBuffer? batchedMsgCache = null;
+        IGpuBuffer? batchedAggregatedCache = null;
+        IGpuBuffer? batchedResetGateCache = null;
+        IGpuBuffer? batchedUpdateGateCache = null;
+
+        if (IsTrainingMode)
+        {
+            ClearGpuCache();
+            _gpuLastInput = input;
+            _gpuNumEdges = numEdges;
+            _gpuNumNodes = numNodes;
+            _gpuBatchSize = batchSize;
+            _gpuEdgeSrcIndices = srcIdxBuffer;
+            _gpuEdgeTgtIndices = tgtIdxBuffer;
+
+            // Allocate batch-sized cache buffers
+            batchedEdgeConcatCache = backend.AllocateBuffer(batchSize * numEdges * messageInputDim);
+            batchedMsgHiddenCache = backend.AllocateBuffer(batchSize * numEdges * _messageFeatures);
+            batchedMsgCache = backend.AllocateBuffer(batchSize * numEdges * _messageFeatures);
+            batchedAggregatedCache = backend.AllocateBuffer(batchSize * numNodes * _messageFeatures);
+            batchedResetGateCache = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+            batchedUpdateGateCache = backend.AllocateBuffer(batchSize * numNodes * _outputFeatures);
+        }
+
+        // Allocate temporary buffers for GRU computation
+        var onesBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        backend.Fill(onesBuffer, 1.0f, numNodes * _outputFeatures);
+        var oneMinusZBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        var hiddenTermBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+        var msgTermBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+
+        // Process each batch
+        for (int b = 0; b < batchSize; b++)
+        {
+            // For single batch, use input directly; for multi-batch, extract slice
+            IGpuBuffer batchInputBuffer;
+            bool ownsBatchBuffer = false;
+            if (batchSize == 1)
+            {
+                batchInputBuffer = input.Buffer;
+            }
+            else
+            {
+                // Multi-batch: need to extract slice (TODO: optimize with GPU slice view)
+                int batchOffset = b * numNodes * inputFeatures;
+                var fullData = backend.DownloadBuffer(input.Buffer);
+                var batchData = new float[numNodes * inputFeatures];
+                Array.Copy(fullData, batchOffset, batchData, 0, numNodes * inputFeatures);
+                batchInputBuffer = backend.AllocateBuffer(batchData);
+                ownsBatchBuffer = true;
+            }
+
+            // Step 1: Gather source and target features for each edge using GPU
+            backend.Gather(batchInputBuffer, srcIdxBuffer, edgeSrcFeatBuffer, numEdges, _inputFeatures);
+            backend.Gather(batchInputBuffer, tgtIdxBuffer, edgeTgtFeatBuffer, numEdges, _inputFeatures);
+
+            // Step 2: Concatenate source and target features
+            // Copy source features to first half, target features to second half
+            backend.Copy(edgeSrcFeatBuffer, edgeConcatBuffer, numEdges * _inputFeatures);
+            // For second half, need to copy with offset - use ScatterAdd pattern
+            var concatOffsetIndices = new int[numEdges * _inputFeatures];
+            for (int e = 0; e < numEdges; e++)
+            {
+                for (int f = 0; f < _inputFeatures; f++)
+                {
+                    concatOffsetIndices[e * _inputFeatures + f] = e * messageInputDim + _inputFeatures + f;
+                }
+            }
+            using var concatIdxBuffer = backend.AllocateIntBuffer(concatOffsetIndices);
+            backend.ScatterAdd(edgeTgtFeatBuffer, concatIdxBuffer, edgeConcatBuffer, numEdges * _inputFeatures, numEdges * messageInputDim);
+
+            // Step 3: Per-edge message MLP - Layer 1 with ReLU (fused GPU operation)
+            var msgHiddenResult = backend.GemmBiasRelu(edgeConcatBuffer, msgW1Buffer, msgB1Buffer, numEdges, _messageFeatures, messageInputDim);
+            backend.Copy(msgHiddenResult, edgeMsgHiddenBuffer, numEdges * _messageFeatures);
+            msgHiddenResult.Dispose();
+
+            // Step 4: Per-edge message MLP - Layer 2 (fused GPU operation)
+            var msgResult = backend.GemmBias(edgeMsgHiddenBuffer, msgW2Buffer, msgB2Buffer, numEdges, _messageFeatures, _messageFeatures);
+            backend.Copy(msgResult, edgeMsgBuffer, numEdges * _messageFeatures);
+            msgResult.Dispose();
+
+            // Step 5: Scatter-add messages to aggregate per target node using GPU
+            backend.Fill(aggregatedBuffer, 0.0f, numNodes * _messageFeatures);
+            backend.ScatterAddEdges(edgeMsgBuffer, srcIdxBuffer, tgtIdxBuffer, null, aggregatedBuffer, numNodes, numEdges, _messageFeatures);
+
+            // Step 6: Compute reset gate: r = sigmoid(h @ W_r + m @ W_rm + b_r)
+            backend.Gemm(batchInputBuffer, resetWBuffer, resetGateBuffer, numNodes, _outputFeatures, _inputFeatures);
+            backend.Gemm(aggregatedBuffer, resetMsgWBuffer, tempBuffer, numNodes, _outputFeatures, _messageFeatures);
+            backend.Add(resetGateBuffer, tempBuffer, resetGateBuffer, numNodes * _outputFeatures);
+            backend.BiasAdd(resetGateBuffer, resetBBuffer, resetGateBuffer, numNodes, _outputFeatures);
+            backend.Sigmoid(resetGateBuffer, resetGateBuffer, numNodes * _outputFeatures);
+
+            // Step 7: Compute update gate: z = sigmoid(h @ W_z + m @ W_zm + b_z)
+            backend.Gemm(batchInputBuffer, updateWBuffer, updateGateBuffer, numNodes, _outputFeatures, _inputFeatures);
+            backend.Gemm(aggregatedBuffer, updateMsgWBuffer, tempBuffer, numNodes, _outputFeatures, _messageFeatures);
+            backend.Add(updateGateBuffer, tempBuffer, updateGateBuffer, numNodes * _outputFeatures);
+            backend.BiasAdd(updateGateBuffer, updateBBuffer, updateGateBuffer, numNodes, _outputFeatures);
+            backend.Sigmoid(updateGateBuffer, updateGateBuffer, numNodes * _outputFeatures);
+
+            // Step 8: GRU-style update on GPU: h' = (1 - z) * h + z * m
+            // oneMinusZ = 1 - z
+            backend.Subtract(onesBuffer, updateGateBuffer, oneMinusZBuffer, numNodes * _outputFeatures);
+            // hiddenTerm = (1 - z) * h (use first _outputFeatures of input if dimensions match)
+            int effectiveHiddenSize = Math.Min(_inputFeatures, _outputFeatures);
+            if (_inputFeatures == _outputFeatures)
+            {
+                backend.Multiply(oneMinusZBuffer, batchInputBuffer, hiddenTermBuffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                // Need to handle dimension mismatch - project input first
+                backend.Fill(hiddenTermBuffer, 0.0f, numNodes * _outputFeatures);
+            }
+            // msgTerm = z * m
+            int effectiveMsgSize = Math.Min(_messageFeatures, _outputFeatures);
+            if (_messageFeatures >= _outputFeatures)
+            {
+                backend.Multiply(updateGateBuffer, aggregatedBuffer, msgTermBuffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                backend.Fill(msgTermBuffer, 0.0f, numNodes * _outputFeatures);
+            }
+            // output = hiddenTerm + msgTerm
+            backend.Add(hiddenTermBuffer, msgTermBuffer, nodeOutputBuffer, numNodes * _outputFeatures);
+
+            // Copy to output buffer at correct batch offset
+            if (batchSize == 1)
+            {
+                backend.Copy(nodeOutputBuffer, outputBuffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                // Multi-batch: need to write to offset (download, modify, upload)
+                int outputOffset = b * numNodes * _outputFeatures;
+                var outputData = backend.DownloadBuffer(outputBuffer);
+                var nodeData = backend.DownloadBuffer(nodeOutputBuffer);
+                Array.Copy(nodeData, 0, outputData, outputOffset, numNodes * _outputFeatures);
+                using var tempOut = backend.AllocateBuffer(outputData);
+                backend.Copy(tempOut, outputBuffer, outputSize);
+            }
+
+            // Cache per-batch results for backward pass
+            if (IsTrainingMode && batchedEdgeConcatCache != null)
+            {
+                int edgeConcatSize = numEdges * messageInputDim;
+                int msgSize = numEdges * _messageFeatures;
+                int aggSize = numNodes * _messageFeatures;
+                int gateSize = numNodes * _outputFeatures;
+
+                // Copy this batch's results to the batched cache at the correct offset
+                backend.Copy2DStrided(edgeConcatBuffer, batchedEdgeConcatCache,
+                    1, edgeConcatSize, batchSize * edgeConcatSize, b * edgeConcatSize);
+                backend.Copy2DStrided(edgeMsgHiddenBuffer, batchedMsgHiddenCache!,
+                    1, msgSize, batchSize * msgSize, b * msgSize);
+                backend.Copy2DStrided(edgeMsgBuffer, batchedMsgCache!,
+                    1, msgSize, batchSize * msgSize, b * msgSize);
+                backend.Copy2DStrided(aggregatedBuffer, batchedAggregatedCache!,
+                    1, aggSize, batchSize * aggSize, b * aggSize);
+                backend.Copy2DStrided(resetGateBuffer, batchedResetGateCache!,
+                    1, gateSize, batchSize * gateSize, b * gateSize);
+                backend.Copy2DStrided(updateGateBuffer, batchedUpdateGateCache!,
+                    1, gateSize, batchSize * gateSize, b * gateSize);
+            }
+
+            if (ownsBatchBuffer)
+            {
+                batchInputBuffer.Dispose();
+            }
+        }
+
+        // Clean up GRU buffers (always dispose - not needed for backward)
+        onesBuffer.Dispose();
+        oneMinusZBuffer.Dispose();
+        hiddenTermBuffer.Dispose();
+        msgTermBuffer.Dispose();
+
+        // Apply activation using base class GPU activation method
+        var activationType = GetFusedActivationType();
+        if (activationType != FusedActivationType.None)
+        {
+            // Cache pre-activation for backward pass (needed for activation derivative)
+            if (IsTrainingMode)
+            {
+                _gpuPreActivationCache?.Dispose();
+                _gpuPreActivationCache = backend.AllocateBuffer(outputSize);
+                backend.Copy(outputBuffer, _gpuPreActivationCache, outputSize);
+            }
+            ApplyGpuActivation(backend, outputBuffer, outputBuffer, outputSize, activationType);
+        }
+
+        // Cache or clean up based on training mode
+        if (IsTrainingMode)
+        {
+            // Store batched caches (already populated during batch loop)
+            // Note: ClearGpuCache was already called before the batch loop
+            _gpuEdgeConcatCache = batchedEdgeConcatCache;
+            _gpuMsgHiddenCache = batchedMsgHiddenCache;
+            _gpuMsgCache = batchedMsgCache;
+            _gpuAggregatedCache = batchedAggregatedCache;
+            _gpuResetGateCache = batchedResetGateCache;
+            _gpuUpdateGateCache = batchedUpdateGateCache;
+
+            // Dispose per-iteration work buffers (no longer needed)
+            edgeConcatBuffer.Dispose();
+            edgeMsgHiddenBuffer.Dispose();
+            edgeMsgBuffer.Dispose();
+            aggregatedBuffer.Dispose();
+            resetGateBuffer.Dispose();
+            updateGateBuffer.Dispose();
+
+            // Dispose weight buffers not needed for backward
+            msgW1Buffer.Dispose();
+            msgW2Buffer.Dispose();
+            msgB1Buffer.Dispose();
+            msgB2Buffer.Dispose();
+            updateWBuffer.Dispose();
+            updateMsgWBuffer.Dispose();
+            updateBBuffer.Dispose();
+            resetWBuffer.Dispose();
+            resetMsgWBuffer.Dispose();
+            resetBBuffer.Dispose();
+            edgeSrcFeatBuffer.Dispose();
+            edgeTgtFeatBuffer.Dispose();
+            tempBuffer.Dispose();
+            nodeOutputBuffer.Dispose();
+        }
+        else
+        {
+            // Clean up all buffers (inference mode)
+            srcIdxBuffer.Dispose();
+            tgtIdxBuffer.Dispose();
+            msgW1Buffer.Dispose();
+            msgW2Buffer.Dispose();
+            msgB1Buffer.Dispose();
+            msgB2Buffer.Dispose();
+            updateWBuffer.Dispose();
+            updateMsgWBuffer.Dispose();
+            updateBBuffer.Dispose();
+            resetWBuffer.Dispose();
+            resetMsgWBuffer.Dispose();
+            resetBBuffer.Dispose();
+            edgeSrcFeatBuffer.Dispose();
+            edgeTgtFeatBuffer.Dispose();
+            edgeConcatBuffer.Dispose();
+            edgeMsgHiddenBuffer.Dispose();
+            edgeMsgBuffer.Dispose();
+            aggregatedBuffer.Dispose();
+            resetGateBuffer.Dispose();
+            updateGateBuffer.Dispose();
+            tempBuffer.Dispose();
+            nodeOutputBuffer.Dispose();
+        }
+
+        int[] outputShape = rank == 2
+            ? [numNodes, _outputFeatures]
+            : [batchSize, numNodes, _outputFeatures];
+
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+}

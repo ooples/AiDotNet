@@ -1,0 +1,839 @@
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.NeuralNetworks;
+
+/// <summary>
+/// Shared dispatcher for memory-bounded chunked Predict / Train calls.
+/// Centralises the "chunk along axis 0 when the model is a tensor neural
+/// network and the input is large; pass through unchanged for everything
+/// else" decision that surfaces at every full-batch site audited in #1296
+/// (optimizer evaluator, cross-validators, AutoML trial loop, NAS supernet
+/// warmup, diffusion AutoML).
+///
+/// <para>
+/// Exposes four capabilities beyond the basic per-call chunking that
+/// closed the #1296 OOM family. PyTorch / TensorFlow ship none of these
+/// out of the box (1, 3, 4 are user-rolled patterns; 2 is unique):
+/// </para>
+/// <list type="number">
+///   <item><b>Adaptive OOM recovery</b> (<see cref="PredictAdaptive{T,TInput,TOutput}"/>,
+///     <see cref="TrainAdaptive{T,TInput,TOutput}"/>) — catches
+///     <see cref="OutOfMemoryException"/>, halves the chunk size, retries.
+///     Auto-grows back up on successive successes via a per-model ratchet
+///     held in a weak-reference table.</item>
+///   <item><b>Stream-aggregation</b> (<see cref="PredictAndReduce{T,TInput,TOutput,TAccumulator}"/>) —
+///     per-chunk reducer callback that never materialises the full
+///     predictions tensor. Available for callers (e.g. user-defined
+///     metric paths) that only need a scalar aggregate over predictions
+///     and want to skip the concat 2× peak the plain
+///     <see cref="NeuralNetworkBase{T}.PredictInBatches"/> incurs.
+///     The <see cref="OptimizerBase{T,TInput,TOutput}"/> R² / SS<sub>res</sub>
+///     path currently routes through <see cref="PredictMaybeBatched{T,TInput,TOutput}"/>
+///     because its downstream consumers (PredictionStats, alignment
+///     helpers) need the materialised prediction tensor; wiring R² to
+///     this reducer is a follow-up tracked separately.</item>
+///   <item><b>True gradient accumulation</b> (<see cref="GradientAccumulationMode.Accumulate"/>) —
+///     delegates to <see cref="NeuralNetworkBase{T}.TrainWithGradientAccumulation"/>
+///     so the optimizer fires exactly once with averaged chunk gradients,
+///     preserving full-batch direction AND keeping Adam's m/v cadence at
+///     one update per logical batch.</item>
+///   <item><b>Memory-budget API</b> (<see cref="PredictWithMemoryBudget{T,TInput,TOutput}"/>,
+///     <see cref="EstimateChunkSize{T}"/>) — caller specifies a budget
+///     in bytes; the helper probes per-sample cost with a B=1 forward
+///     and picks the chunk size that fits with safety margin.</item>
+/// </list>
+///
+/// <para>
+/// <b>Note on compile routing:</b> Earlier drafts of this PR routed
+/// per-chunk forwards through <see cref="NeuralNetworkBase{T}.PredictCompiled"/>
+/// when <see cref="AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions"/>
+/// has compilation enabled, but that interacted with the optimizer's
+/// epoch-loop tape allocations and exhausted the unmanaged-commit limit.
+/// The current implementation deliberately stays on the eager
+/// <see cref="NeuralNetworkBase{T}.Predict"/> path; the companion
+/// <see cref="CompiledModelHost{T}.Predict"/> SetInputs-rebind fix in
+/// this PR still benefits any caller that explicitly invokes
+/// <c>PredictCompiled</c>.
+/// </para>
+/// </summary>
+internal static class NeuralBatchHelper
+{
+    /// <summary>
+    /// Default chunk size used when callers don't specify one.
+    /// </summary>
+    public const int DefaultBatchSize = 256;
+
+    /// <summary>Lower bound the adaptive paths clamp to before rethrowing.</summary>
+    public const int MinAdaptiveBatchSize = 1;
+
+    private const int SuccessesBeforeGrow = 4;
+
+    /// <summary>
+    /// Fraction of the user's stated memory budget that
+    /// <see cref="EstimateChunkSize{T}"/> actually targets. 70 % leaves
+    /// headroom for transient autodiff allocations the B=1 probe doesn't
+    /// capture.
+    /// </summary>
+    public const double MemoryBudgetSafetyFactor = 0.7;
+
+    /// <summary>
+    /// Correction applied to the empirical per-sample slope in
+    /// <see cref="EstimateChunkSize{T}"/> to account for the batched execution
+    /// path holding SEVERAL of a single forward's footprint concurrently.
+    /// </summary>
+    /// <remarks>
+    /// The probes measure the retained/allocated bytes of ONE forward, but the
+    /// budgeted path (<see cref="NeuralNetworkBase{T}.PredictInBatches"/>) runs each
+    /// chunk while concurrently holding the growing concatenated output, the tensor
+    /// arena's retained high-water buffer, AND the next chunk's inputs — so the
+    /// process-retained heap is a MULTIPLE of a lone forward's delta. Measured on the
+    /// MemoryBudget guard (50 000 samples, 1 GB budget): the uncorrected estimate chose
+    /// a chunk whose actual retained heap was 1506 MB — 2.1× the 0.7×-budget (717 MB)
+    /// target, i.e. 1.47× the budget itself. Scaling the per-sample slope by 2.5×
+    /// (covering the observed 2.1× with margin) sizes the chunk so the ACTUAL retained
+    /// footprint honors the budget with headroom instead of overshooting it.
+    /// </remarks>
+    public const double BatchedRetentionFactor = 2.5;
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, AdaptiveState> _adaptiveStates
+        = new();
+
+    private sealed class AdaptiveState
+    {
+        public int CurrentBatchSize;
+        public int ConsecutiveSuccesses;
+    }
+
+    /// <summary>
+    /// Modes for <see cref="TrainMaybeBatched{T,TInput,TOutput}"/> when it
+    /// chunks an NN call.
+    /// </summary>
+    public enum GradientAccumulationMode
+    {
+        /// <summary>
+        /// Each chunk fires an independent SGD step — <c>ceil(N / batchSize)</c>
+        /// optimizer updates. Matches standard mini-batch SGD; changes the
+        /// gradient trajectory vs a full-batch step.
+        /// </summary>
+        Independent = 0,
+
+        /// <summary>
+        /// All chunks contribute to a single accumulator; one optimizer
+        /// step fires at the end with the averaged gradient. Preserves
+        /// full-batch direction AND keeps Adam's m/v cadence at one
+        /// update per logical batch.
+        /// </summary>
+        Accumulate = 1,
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // PredictMaybeBatched / TrainMaybeBatched (baseline)
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Routes <c>model.Predict(X)</c> through
+    /// <see cref="NeuralNetworkBase{T}.PredictInBatches"/> when the model
+    /// is a tensor neural network and <paramref name="X"/> is a
+    /// <see cref="Tensor{T}"/> with a leading axis larger than
+    /// <paramref name="batchSize"/>. Output is element-equivalent (modulo
+    /// matmul reduction order) to a single-shot <c>Predict</c>.
+    ///
+    /// <para><b>Adaptive OOM recovery is on by default.</b> If the
+    /// chunked forward throws <see cref="OutOfMemoryException"/>, the
+    /// helper halves <paramref name="batchSize"/>, forces a GC, and
+    /// retries — repeating down to 1. The per-model adaptive ratchet
+    /// persists across calls so subsequent calls start from the
+    /// last-known-good size instead of probing from scratch. Pass
+    /// <paramref name="disableAdaptiveRetry"/> = <see langword="true"/>
+    /// to opt out (raw OOM propagation for diagnostics).</para>
+    /// </summary>
+    public static TOutput PredictMaybeBatched<T, TInput, TOutput>(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X,
+        int batchSize = DefaultBatchSize,
+        bool disableAdaptiveRetry = false,
+        int minBatchSize = MinAdaptiveBatchSize)
+    {
+        if (model is null) throw new ArgumentNullException(nameof(model));
+        if (batchSize < 1) batchSize = 1;
+        if (minBatchSize < 1) minBatchSize = 1;
+        if (minBatchSize > batchSize) minBatchSize = batchSize;
+
+        if (!(model is NeuralNetworkBase<T> nn
+            && X is Tensor<T> xTensor
+            && xTensor.Rank >= 1))
+        {
+            return model.Predict(X);
+        }
+
+        // The leading-axis-larger-than-batchSize check is necessary but
+        // not sufficient to call a tensor "batched". A genuine single
+        // sample with shape [seq, F] or even [features] where the leading
+        // axis happens to exceed batchSize would otherwise be sliced
+        // along the wrong axis. When the architecture's expected unbatched
+        // rank matches the input rank, the tensor is unbatched — let the
+        // base Predict path handle promotion.
+        if (IsLikelyUnbatched(nn, xTensor))
+        {
+            return model.Predict(X);
+        }
+
+        if (disableAdaptiveRetry)
+        {
+            if (xTensor.Shape[0] > batchSize)
+            {
+                var chunked = nn.PredictInBatches(xTensor, batchSize);
+                if (chunked is TOutput typed) return typed;
+            }
+            return model.Predict(X);
+        }
+
+        var state = GetOrCreateAdaptiveState(model, batchSize);
+        while (true)
+        {
+            try
+            {
+                int effectiveBatchSize = System.Math.Min(state.CurrentBatchSize, batchSize);
+                TOutput result;
+                if (xTensor.Shape[0] <= effectiveBatchSize)
+                {
+                    var direct = nn.Predict(xTensor);
+                    result = direct is TOutput dt ? dt : model.Predict(X);
+                }
+                else
+                {
+                    var chunked = nn.PredictInBatches(xTensor, effectiveBatchSize);
+                    result = chunked is TOutput typed ? typed : model.Predict(X);
+                }
+                state.ConsecutiveSuccesses++;
+                MaybeGrowBatch(state, batchSize);
+                return result;
+            }
+            catch (OutOfMemoryException)
+            {
+                if (state.CurrentBatchSize <= minBatchSize) throw;
+                state.CurrentBatchSize = System.Math.Max(minBatchSize, state.CurrentBatchSize / 2);
+                state.ConsecutiveSuccesses = 0;
+                System.GC.Collect();
+                System.GC.WaitForPendingFinalizers();
+                System.GC.Collect();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Routes <c>model.Train(X, Y)</c> through chunked mini-batched
+    /// <see cref="NeuralNetworkBase{T}.Train"/> calls (or a single
+    /// gradient-accumulated step under <see cref="GradientAccumulationMode.Accumulate"/>)
+    /// when the model is a tensor neural network and the inputs share a
+    /// large leading axis. Non-NN models pass through.
+    ///
+    /// <para><b>Adaptive OOM recovery is on by default</b> — see
+    /// <see cref="PredictMaybeBatched{T,TInput,TOutput}"/> for the
+    /// halve-and-retry contract. Pass <paramref name="disableAdaptiveRetry"/>
+    /// = <see langword="true"/> to opt out.</para>
+    /// </summary>
+    public static void TrainMaybeBatched<T, TInput, TOutput>(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X,
+        TOutput Y,
+        int batchSize = DefaultBatchSize,
+        GradientAccumulationMode mode = GradientAccumulationMode.Independent,
+        bool disableAdaptiveRetry = false,
+        int minBatchSize = MinAdaptiveBatchSize)
+    {
+        if (model is null) throw new ArgumentNullException(nameof(model));
+        if (batchSize < 1) batchSize = 1;
+        if (minBatchSize < 1) minBatchSize = 1;
+        if (minBatchSize > batchSize) minBatchSize = batchSize;
+
+        if (!(model is NeuralNetworkBase<T> nn
+            && X is Tensor<T> xTensor
+            && Y is Tensor<T> yTensor
+            && xTensor.Rank >= 1
+            && yTensor.Rank >= 1
+            && xTensor.Shape[0] == yTensor.Shape[0]))
+        {
+            model.Train(X, Y);
+            return;
+        }
+
+        // Same unbatched-input guard as PredictMaybeBatched: rank-equal-
+        // to-unbatched-expected means the leading axis is sequence/
+        // feature, not batch — chunking along it would corrupt semantics.
+        if (IsLikelyUnbatched(nn, xTensor))
+        {
+            nn.Train(xTensor, yTensor);
+            return;
+        }
+
+        if (disableAdaptiveRetry)
+        {
+            if (xTensor.Shape[0] > batchSize)
+            {
+                if (mode == GradientAccumulationMode.Accumulate)
+                {
+                    nn.TrainWithGradientAccumulation(xTensor, yTensor, batchSize);
+                }
+                else
+                {
+                    TrainIndependentChunks(nn, xTensor, yTensor, batchSize);
+                }
+            }
+            else
+            {
+                nn.Train(xTensor, yTensor);
+            }
+            return;
+        }
+
+        var state = GetOrCreateAdaptiveState(model, batchSize);
+        while (true)
+        {
+            try
+            {
+                int effectiveBatchSize = System.Math.Min(state.CurrentBatchSize, batchSize);
+                if (xTensor.Shape[0] <= effectiveBatchSize)
+                {
+                    nn.Train(xTensor, yTensor);
+                }
+                else if (mode == GradientAccumulationMode.Accumulate)
+                {
+                    nn.TrainWithGradientAccumulation(xTensor, yTensor, effectiveBatchSize);
+                }
+                else
+                {
+                    TrainIndependentChunks(nn, xTensor, yTensor, effectiveBatchSize);
+                }
+                state.ConsecutiveSuccesses++;
+                MaybeGrowBatch(state, batchSize);
+                return;
+            }
+            catch (OutOfMemoryException)
+            {
+                if (state.CurrentBatchSize <= minBatchSize) throw;
+                state.CurrentBatchSize = System.Math.Max(minBatchSize, state.CurrentBatchSize / 2);
+                state.ConsecutiveSuccesses = 0;
+                System.GC.Collect();
+                System.GC.WaitForPendingFinalizers();
+                System.GC.Collect();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="input"/> is
+    /// likely an unbatched single sample for <paramref name="nn"/> — its
+    /// rank matches the architecture's expected unbatched input rank
+    /// rather than that rank + 1. Used to short-circuit axis-0 chunking
+    /// paths for inputs whose leading axis is sequence / features, not
+    /// batch, even when that axis happens to exceed the chunk size.
+    /// </summary>
+    internal static bool IsLikelyUnbatched<T>(NeuralNetworkBase<T> nn, Tensor<T> input)
+    {
+        int expectedUnbatchedRank = nn.GetExpectedUnbatchedInputRankInternal();
+        return expectedUnbatchedRank > 0 && input.Rank == expectedUnbatchedRank;
+    }
+
+    private static void TrainIndependentChunks<T>(
+        NeuralNetworkBase<T> nn, Tensor<T> xTensor, Tensor<T> yTensor, int batchSize)
+    {
+        int n = xTensor.Shape[0];
+        int nChunks = (n + batchSize - 1) / batchSize;
+        for (int chunkIdx = 0; chunkIdx < nChunks; chunkIdx++)
+        {
+            int start = chunkIdx * batchSize;
+            int end = System.Math.Min(start + batchSize, n);
+            var xChunk = xTensor.Slice(axis: 0, start: start, end: end).Contiguous();
+            var yChunk = yTensor.Slice(axis: 0, start: start, end: end).Contiguous();
+            nn.Train(xChunk, yChunk);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Feature 1: Adaptive OOM recovery
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Alias for <see cref="PredictMaybeBatched{T,TInput,TOutput}"/> with
+    /// adaptive OOM recovery — kept as a named entry point for callers
+    /// that want to make the adaptive intent explicit. Adaptive recovery
+    /// is now the default in <see cref="PredictMaybeBatched{T,TInput,TOutput}"/>
+    /// so users no longer need to opt in. <paramref name="minBatchSize"/>
+    /// caps how far the halve-on-OOM loop will reduce the chunk size
+    /// before rethrowing — defaults to <see cref="MinAdaptiveBatchSize"/>.
+    /// </summary>
+    public static TOutput PredictAdaptive<T, TInput, TOutput>(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X,
+        int initialBatchSize = DefaultBatchSize,
+        int minBatchSize = MinAdaptiveBatchSize)
+        => PredictMaybeBatched(model, X, initialBatchSize, disableAdaptiveRetry: false, minBatchSize: minBatchSize);
+
+    /// <summary>
+    /// Alias for <see cref="TrainMaybeBatched{T,TInput,TOutput}"/> with
+    /// adaptive OOM recovery — adaptive is now the default; this
+    /// overload preserves the explicit intent for callers that want it.
+    /// <paramref name="minBatchSize"/> caps how far the halve-on-OOM loop
+    /// will reduce the chunk size before rethrowing — defaults to
+    /// <see cref="MinAdaptiveBatchSize"/>.
+    /// </summary>
+    public static void TrainAdaptive<T, TInput, TOutput>(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X,
+        TOutput Y,
+        int initialBatchSize = DefaultBatchSize,
+        int minBatchSize = MinAdaptiveBatchSize,
+        GradientAccumulationMode mode = GradientAccumulationMode.Independent)
+        => TrainMaybeBatched(model, X, Y, initialBatchSize, mode, disableAdaptiveRetry: false, minBatchSize: minBatchSize);
+
+    private static AdaptiveState GetOrCreateAdaptiveState(object modelKey, int initialBatchSize)
+    {
+        if (!_adaptiveStates.TryGetValue(modelKey, out var state))
+        {
+            state = new AdaptiveState { CurrentBatchSize = initialBatchSize };
+            _adaptiveStates.Add(modelKey, state);
+        }
+        return state;
+    }
+
+    private static void MaybeGrowBatch(AdaptiveState state, int ceiling)
+    {
+        if (state.CurrentBatchSize >= ceiling) return;
+        if (state.ConsecutiveSuccesses < SuccessesBeforeGrow) return;
+        state.CurrentBatchSize = System.Math.Min(ceiling, state.CurrentBatchSize * 2);
+        state.ConsecutiveSuccesses = 0;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Feature 2: Stream-aggregation
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Walks <paramref name="X"/> in axis-0 chunks, runs
+    /// <see cref="NeuralNetworkBase{T}.Predict"/> on each, and folds the
+    /// per-chunk output into <paramref name="seed"/> via
+    /// <paramref name="reducer"/>. The full concatenated prediction tensor
+    /// is never materialised — eliminates the transient 2× peak
+    /// <see cref="NeuralNetworkBase{T}.PredictInBatches"/> incurs when the
+    /// caller only needs a scalar aggregate.
+    /// </summary>
+    public static TAccumulator PredictAndReduce<T, TInput, TOutput, TAccumulator>(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X,
+        TAccumulator seed,
+        Func<TAccumulator, TOutput, int, int, TAccumulator> reducer,
+        int batchSize = DefaultBatchSize)
+    {
+        if (model is null) throw new ArgumentNullException(nameof(model));
+        if (reducer is null) throw new ArgumentNullException(nameof(reducer));
+        if (batchSize < 1) batchSize = 1;
+
+        var nnOpt = model as NeuralNetworkBase<T>;
+        var xTensorOpt = X as Tensor<T>;
+        if (nnOpt is null || xTensorOpt is null || xTensorOpt.Rank < 1)
+        {
+            var single = model.Predict(X);
+            int n = xTensorOpt is not null && xTensorOpt.Rank > 0 ? xTensorOpt.Shape[0] : 1;
+            return reducer(seed, single, 0, n);
+        }
+        var nn = nnOpt;
+        var xTensor = xTensorOpt;
+
+        int totalN = xTensor.Shape[0];
+        if (totalN <= batchSize)
+        {
+            var direct = nn.Predict(xTensor);
+            if (direct is TOutput dt) return reducer(seed, dt, 0, totalN);
+            return reducer(seed, model.Predict(X), 0, totalN);
+        }
+
+        TAccumulator acc = seed;
+        int nChunks = (totalN + batchSize - 1) / batchSize;
+        for (int chunkIdx = 0; chunkIdx < nChunks; chunkIdx++)
+        {
+            int start = chunkIdx * batchSize;
+            int end = System.Math.Min(start + batchSize, totalN);
+            var xChunk = xTensor.Slice(axis: 0, start: start, end: end).Contiguous();
+            var chunkOut = nn.Predict(xChunk);
+            if (chunkOut is TOutput typed)
+            {
+                acc = reducer(acc, typed, start, end);
+            }
+            else
+            {
+                // Per-chunk forward returned a runtime type incompatible
+                // with TOutput. Discarding the accumulated reductions and
+                // silently restarting from `seed` against a full-input
+                // Predict would: (a) lose the chunked work already done,
+                // (b) defeat the memory-bounding contract by running an
+                // unchunked Predict, and (c) hide the type mismatch from
+                // the caller. Fail fast with an actionable diagnostic.
+                throw new InvalidOperationException(
+                    $"PredictAndReduce: per-chunk Predict on chunk [{start}..{end}) " +
+                    $"returned {chunkOut?.GetType().FullName ?? "null"}, which is not " +
+                    $"assignable to TOutput={typeof(TOutput).FullName}. The reducer " +
+                    $"contract requires every chunk output to be a {typeof(TOutput).Name}.");
+            }
+        }
+        return acc;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Feature 4: Memory-budget API
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Predicts <paramref name="X"/> at a chunk size sized to keep peak
+    /// managed-heap delta under <paramref name="memoryBudgetBytes"/>.
+    /// Probes per-sample cost via a B=1 forward, then computes the chunk
+    /// that fits with <see cref="MemoryBudgetSafetyFactor"/> headroom.
+    /// </summary>
+    public static TOutput PredictWithMemoryBudget<T, TInput, TOutput>(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X,
+        long memoryBudgetBytes)
+    {
+        if (model is null) throw new ArgumentNullException(nameof(model));
+        if (memoryBudgetBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(memoryBudgetBytes), "Memory budget must be positive.");
+
+        if (model is NeuralNetworkBase<T> nn
+            && X is Tensor<T> xTensor
+            && xTensor.Rank >= 1
+            && xTensor.Shape[0] > 1)
+        {
+            int chunk = EstimateChunkSize(nn, xTensor, memoryBudgetBytes);
+            if (chunk >= xTensor.Shape[0])
+            {
+                var direct = nn.Predict(xTensor);
+                return direct is TOutput dt ? dt : model.Predict(X);
+            }
+            var chunked = nn.PredictInBatches(xTensor, chunk);
+            return chunked is TOutput typed ? typed : model.Predict(X);
+        }
+        return model.Predict(X);
+    }
+
+    /// <summary>
+    /// Empirically estimates the chunk size that keeps a Predict call's
+    /// peak managed-heap delta under <paramref name="memoryBudgetBytes"/>.
+    /// Probes at <c>B = probeSmall</c> AND <c>B = probeLarge</c>, fits a
+    /// linear slope <c>bytes(B) ≈ alpha + beta · B</c> via the two-point
+    /// estimator, then solves for B such that <c>alpha + beta · B ≤
+    /// budget × safety</c>.
+    ///
+    /// <para>
+    /// A single B=1 probe systematically under-counts memory cost on
+    /// quadratic-in-seq operators (attention scores) because the per-call
+    /// fixed overhead (arena setup, layer caches, tape allocation) is a
+    /// large fraction of B=1's measurement and masks the per-sample
+    /// contribution. The two-point fit isolates the per-sample slope
+    /// (beta) from the per-call fixed overhead (alpha), which is what
+    /// actually determines whether a larger chunk fits.
+    /// </para>
+    /// </summary>
+    public static int EstimateChunkSize<T>(
+        NeuralNetworkBase<T> nn,
+        Tensor<T> sampleInput,
+        long memoryBudgetBytes)
+    {
+        if (nn is null) throw new ArgumentNullException(nameof(nn));
+        if (sampleInput is null) throw new ArgumentNullException(nameof(sampleInput));
+        if (sampleInput.Rank == 0) return 1;
+
+        int axis0 = sampleInput.Shape[0];
+        // Probe sizes — small enough to be feasible probes; large enough
+        // that the per-sample slope dominates the fixed overhead in the
+        // delta between them. If the input is small, fall back to a
+        // single-point estimate at the input's own size.
+        int probeSmall = System.Math.Min(8, axis0);
+        int probeLarge = System.Math.Min(16, axis0);
+
+        // Pool-aware floor: the tensor allocator pools its buffers, so
+        // GC.GetAllocatedBytesForCurrentThread (used by the allocated-bytes probe
+        // below) counts NEW allocations only — once the pool is primed at a batch
+        // size, a same-size forward reuses buffers and allocates ~0, collapsing the
+        // per-sample slope toward zero and letting the chunk grow unbounded (the
+        // pool then balloons to GBs on the oversized chunk). Measure the RETAINED
+        // managed-heap growth of a forward at probeLarge FIRST — before the
+        // allocated probes prime the pool — so the delta reflects the pooled
+        // footprint the budget must actually bound.
+        long retainedLarge = MeasureForwardRetainedBytes(nn, sampleInput, probeLarge);
+        long perSampleRetained = retainedLarge / System.Math.Max(1, probeLarge);
+
+        long bytesSmall = MeasureForwardAllocatedBytes(nn, sampleInput, probeSmall);
+        long beta;       // per-sample slope (bytes per additional sample)
+        long alpha;      // per-call fixed cost (intercept)
+        if (probeLarge > probeSmall)
+        {
+            long bytesLarge = MeasureForwardAllocatedBytes(nn, sampleInput, probeLarge);
+            long dB = probeLarge - probeSmall;
+            beta = System.Math.Max(1L, (bytesLarge - bytesSmall) / dB);
+            // Solve alpha from one point: alpha = bytesSmall - beta * probeSmall
+            alpha = System.Math.Max(0L, bytesSmall - beta * probeSmall);
+        }
+        else
+        {
+            // Single-point fallback: assume zero fixed overhead and
+            // attribute all measured bytes to the per-sample slope.
+            beta = System.Math.Max(1L, bytesSmall / System.Math.Max(1, probeSmall));
+            alpha = 0L;
+        }
+
+        // The per-sample cost is the larger of the transient allocated slope and
+        // the pooled retained footprint per sample — whichever actually grows with
+        // the chunk. Without the retained floor, a pooling allocator drives beta to
+        // ~0 and the chunk becomes unbounded.
+        beta = System.Math.Max(beta, perSampleRetained);
+
+        // Analytic per-sample floor from the model's own resolved layer shapes.
+        // The empirical probes above read POST-forward retained heap, but the memory
+        // that actually OOMs is the TRANSIENT arena high-water DURING a forward — the
+        // concurrently-live activation set — which the arena returns to its pool
+        // afterward, so retained heap systematically under-counts the in-flight peak.
+        // Worse, on quadratic-in-seq operators (attention scores [heads, seq, seq])
+        // the tiny B=8/B=16 probes never enter the allocation regime the full chunk
+        // hits. Derive a conservative per-sample lower bound straight from every
+        // (sub-)layer's resolved output element count so the chosen chunk honors the
+        // budget regardless of allocator pooling — the arena's live set is bounded
+        // below by the activations flowing through the layers. Shapes are already
+        // resolved by the warm-up forward the retained probe just ran.
+        long analyticPerSample = EstimateAnalyticPerSampleFloorBytes(nn);
+        beta = System.Math.Max(beta, analyticPerSample);
+
+        // Correct the single-forward slope for the batched path's concurrent-buffer
+        // overhead (see BatchedRetentionFactor). Without this the chosen chunk's actual
+        // retained heap overshoots the budget by ~2.1× (measured 1506 MB at a 1 GB budget).
+        // Guard the double multiply: beta can now saturate to long.MaxValue (impossible analytic
+        // floor), and casting an out-of-long-range double back to long is unspecified (can yield a
+        // negative). Clamp to long.MaxValue so an impossible per-sample floor stays impossible.
+        double scaledBeta = beta * BatchedRetentionFactor;
+        beta = scaledBeta >= long.MaxValue ? long.MaxValue : System.Math.Max(1L, (long)scaledBeta);
+
+        long budgetWithMargin = (long)(memoryBudgetBytes * MemoryBudgetSafetyFactor);
+        // Reserve memory for the COMPLETE concatenated output FIRST. PredictInBatches retains an output
+        // proportional to the ENTIRE axis0 regardless of chunk size, so a budget that fits the per-chunk
+        // activations but not the full result would still OOM at concat time — scaling beta (the
+        // chunk-dependent term) alone cannot bound it. Subtract the full-output retention, then solve for
+        // the chunk from what remains, and reject a budget too small to even hold the result.
+        long outputRetention = EstimateFinalOutputBytes(nn, axis0);
+        // Reject BEFORE subtracting. outputRetention can saturate to long.MaxValue and alpha can be
+        // large, so computing budgetWithMargin - alpha - outputRetention directly could underflow past
+        // long.MinValue and wrap to an apparently-positive availableForChunk — silently admitting a
+        // chunk that violates the budget. Order the guards so neither intermediate subtraction can
+        // underflow: test outputRetention against the budget first, then alpha against what remains.
+        if (outputRetention >= budgetWithMargin || alpha >= budgetWithMargin - outputRetention)
+        {
+            throw new InvalidOperationException(
+                $"The memory budget ({memoryBudgetBytes} bytes, {budgetWithMargin} after the " +
+                $"{MemoryBudgetSafetyFactor:P0} safety margin) cannot hold the complete prediction " +
+                $"output (~{outputRetention} bytes) plus the per-call fixed overhead (~{alpha} bytes). " +
+                "Increase the memory budget or reduce the output size.");
+        }
+        long availableForChunk = budgetWithMargin - outputRetention - alpha;
+        // Solve alpha + outputRetention + beta * chunk <= budget for chunk.
+        long chunk = availableForChunk / beta;
+        if (chunk < 1) return 1;
+        if (chunk > axis0) return axis0;
+        return (int)chunk;
+    }
+
+    /// <summary>
+    /// Probes the actual bytes-allocated cost of a single Predict at
+    /// <paramref name="batchSize"/> samples. Uses
+    /// <see cref="System.GC.GetAllocatedBytesForCurrentThread"/> which
+    /// captures every allocation regardless of GC timing — strictly
+    /// better than the heap-delta read used previously.
+    /// </summary>
+    /// <summary>
+    /// Probes the RETAINED managed-heap growth of a single Predict at
+    /// <paramref name="batchSize"/> samples — the pooled-buffer footprint that
+    /// the memory budget must bound. Warms up at B=1 only (JIT + lazy-init
+    /// weights) so the probe-size forward genuinely grows the tensor pool;
+    /// warming up at the probe size would prime the pool and make the retained
+    /// delta read ~0. Must be called BEFORE any same-or-larger-size probe primes
+    /// the pool, otherwise the growth has already happened.
+    /// </summary>
+    private static long MeasureForwardRetainedBytes<T>(
+        NeuralNetworkBase<T> nn, Tensor<T> sampleInput, int batchSize)
+    {
+        var probeInput = sampleInput.Shape[0] >= batchSize
+            ? sampleInput.Slice(axis: 0, start: 0, end: batchSize).Contiguous()
+            : sampleInput;
+
+        // Warm up at B=1 so JIT/lazy-init weight allocation is excluded WITHOUT
+        // pre-growing the pool to the probe batch size.
+        if (sampleInput.Shape[0] >= 1)
+        {
+            var warm = sampleInput.Slice(axis: 0, start: 0, end: 1).Contiguous();
+            _ = nn.Predict(warm);
+        }
+
+        long before = System.GC.GetTotalMemory(forceFullCollection: true);
+        var probeOutput = nn.Predict(probeInput);
+        long after = System.GC.GetTotalMemory(forceFullCollection: true);
+        if (probeOutput is System.IDisposable disposable) disposable.Dispose();
+        return System.Math.Max(0L, after - before);
+    }
+
+    private static long MeasureForwardAllocatedBytes<T>(
+        NeuralNetworkBase<T> nn, Tensor<T> sampleInput, int batchSize)
+    {
+        var probeInput = sampleInput.Shape[0] >= batchSize
+            ? sampleInput.Slice(axis: 0, start: 0, end: batchSize).Contiguous()
+            : sampleInput;
+
+        // Warm-up: run once so JIT and lazy-init costs don't pollute the
+        // probe. The first Predict on a lazy-init Transformer allocates
+        // weights — only the SECOND call reflects steady-state forward
+        // cost.
+        _ = nn.Predict(probeInput);
+
+        // GetAllocatedBytesForCurrentThread is net5+; for net471 fall
+        // back to GetTotalMemory (less precise but always available).
+#if NET5_0_OR_GREATER
+        long before = System.GC.GetAllocatedBytesForCurrentThread();
+        var probeOutput = nn.Predict(probeInput);
+        long after = System.GC.GetAllocatedBytesForCurrentThread();
+#else
+        long before = System.GC.GetTotalMemory(forceFullCollection: true);
+        var probeOutput = nn.Predict(probeInput);
+        long after = System.GC.GetTotalMemory(forceFullCollection: false);
+#endif
+        if (probeOutput is System.IDisposable disposable) disposable.Dispose();
+        return System.Math.Max(0L, after - before);
+    }
+
+    /// <summary>
+    /// Conservative per-sample byte floor derived from the network's own resolved
+    /// layer shapes — a lower bound on the transient forward arena footprint that the
+    /// empirical retained/allocated probes cannot see (the arena returns its scratch
+    /// to the pool after each forward, so post-forward retained heap under-counts the
+    /// in-flight peak). Sums every (sub-)layer's per-sample output element count and
+    /// scales by element size and a small factor that covers non-output scratch (e.g.
+    /// attention-score <c>[heads, seq, seq]</c> tensors, which are never a layer
+    /// OUTPUT) plus the arena holding a layer's input + output + scratch concurrently.
+    /// Returns 0 when no layer shape is resolved (the caller then keeps the empirical
+    /// estimate); never negative.
+    /// </summary>
+    private static long EstimateAnalyticPerSampleFloorBytes<T>(NeuralNetworkBase<T> nn)
+    {
+        long totalElements = 0;
+        foreach (var layer in nn.Layers)
+            totalElements = SaturatingAdd(totalElements, SumResolvedOutputElements(layer));
+        if (totalElements <= 0) return 0;
+
+        long elementSize = typeof(T) == typeof(double) ? sizeof(double)
+            : typeof(T) == typeof(float) ? sizeof(float)
+            : sizeof(double); // conservative default for an unknown numeric T
+        // 3x: attention/scratch tensors are not layer outputs, and the arena holds a
+        // layer's input, output, and intermediate scratch live at once. Keeps the
+        // floor a genuine (modestly padded) lower bound — not a wild over-estimate —
+        // so the chosen chunk stays as large as the budget safely allows.
+        const long ScratchAndDoubleBufferFactor = 3;
+        // Saturating so an absurd (impossible) layer shape floors at long.MaxValue instead of wrapping
+        // to a small/negative value that would understate the footprint and admit an invalid chunk.
+        return SaturatingMul(SaturatingMul(elementSize, totalElements), ScratchAndDoubleBufferFactor);
+    }
+
+    /// <summary>
+    /// Non-negative <see cref="long"/> multiply that saturates to <see cref="long.MaxValue"/> on
+    /// overflow instead of wrapping. All call sites here multiply element counts / byte sizes, which are
+    /// non-negative, so a wrap would produce a bogus small or negative footprint that admits an
+    /// impossible chunk.
+    /// </summary>
+    private static long SaturatingMul(long a, long b)
+    {
+        try { return checked(a * b); }
+        catch (OverflowException) { return long.MaxValue; }
+    }
+
+    /// <summary>
+    /// Non-negative <see cref="long"/> add that saturates to <see cref="long.MaxValue"/> on overflow.
+    /// </summary>
+    private static long SaturatingAdd(long a, long b)
+    {
+        try { return checked(a + b); }
+        catch (OverflowException) { return long.MaxValue; }
+    }
+
+    /// <summary>
+    /// Estimates the bytes retained by the COMPLETE concatenated prediction output over all
+    /// <paramref name="axis0"/> samples — the memory <c>PredictInBatches</c> holds for the full result
+    /// regardless of chunk size. Uses the final layer's resolved per-sample output shape × element size
+    /// × <paramref name="axis0"/> with checked arithmetic (saturating to <see cref="long.MaxValue"/> on
+    /// overflow so an impossibly large output is rejected, not silently wrapped). Returns 0 when no
+    /// output shape is resolved (caller then reserves nothing extra — prior behavior). Never negative.
+    /// </summary>
+    private static long EstimateFinalOutputBytes<T>(NeuralNetworkBase<T> nn, int axis0)
+    {
+        if (axis0 <= 0) return 0;
+
+        // Per-sample output element count = the LAST layer with a resolved output shape (the network
+        // output). Walk forward keeping the most recent resolved value so no reverse indexer is needed.
+        long perSampleElements = 0;
+        foreach (var layer in nn.Layers)
+        {
+            long p = OwnResolvedOutputElements(layer);
+            if (p > 0) perSampleElements = p;
+        }
+        if (perSampleElements <= 0) return 0;
+
+        long elementSize = typeof(T) == typeof(double) ? sizeof(double)
+            : typeof(T) == typeof(float) ? sizeof(float)
+            : sizeof(double); // conservative default for an unknown numeric T
+        try
+        {
+            return checked(elementSize * perSampleElements * axis0);
+        }
+        catch (OverflowException)
+        {
+            return long.MaxValue; // an output this large trivially exceeds any real budget
+        }
+    }
+
+    /// <summary>
+    /// The product of <paramref name="layer"/>'s OWN resolved per-sample output shape, or 0 if the shape
+    /// is unresolved or has a non-positive (sentinel/placeholder) dimension. Unlike
+    /// <see cref="SumResolvedOutputElements"/> this does NOT recurse into sub-layers — the network output
+    /// is the last top-level layer's own output, not a sum over its internals.
+    /// </summary>
+    private static long OwnResolvedOutputElements<T>(AiDotNet.Interfaces.ILayer<T> layer)
+    {
+        var shape = layer.GetOutputShape();
+        if (shape is null || shape.Length == 0) return 0;
+        long product = 1;
+        foreach (var dim in shape)
+        {
+            if (dim <= 0) return 0;
+            product = SaturatingMul(product, dim);
+        }
+        return product;
+    }
+
+    /// <summary>
+    /// Recursively sums the per-sample output element count of <paramref name="layer"/>
+    /// and all its registered sub-layers. Skips any layer whose output shape is
+    /// unresolved or contains a non-positive (sentinel/placeholder) dimension.
+    /// </summary>
+    private static long SumResolvedOutputElements<T>(AiDotNet.Interfaces.ILayer<T> layer)
+    {
+        long elements = 0;
+        var shape = layer.GetOutputShape();
+        if (shape is not null && shape.Length > 0)
+        {
+            long product = 1;
+            bool valid = true;
+            foreach (var dim in shape)
+            {
+                if (dim <= 0) { valid = false; break; }
+                product = SaturatingMul(product, dim);
+            }
+            if (valid) elements = SaturatingAdd(elements, product);
+        }
+        foreach (var sub in layer.GetSubLayers())
+            elements = SaturatingAdd(elements, SumResolvedOutputElements(sub));
+        return elements;
+    }
+}

@@ -1,0 +1,370 @@
+﻿<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- AiDotNet ecosystem -->
+    <PackageVersion Include="AiDotNet" Version="0.113.0" />
+    <!-- AiDotNet.Tensors 0.86.1 â€” bumped from 0.84.1 to unblock this PR (#1417).
+         The dep that gated this PR's INT8 wiring shipped: Tensors PR #427
+         (SgemmWithInt8RowScaledCachedB â€” per-row-scaled INT8 weight-only GEMM)
+         was merged 2026-05-22 and is published from 0.85.x onward; 0.86.1 is the
+         latest stable, so Int8WeightOnlyMatMul.cs's new single-call body now
+         compiles against the real Tensors API surface instead of a localverify.
+
+         Full v0.84.1 -> v0.86.1 delta picks up:
+           * Tensors #427 â€” SgemmWithInt8RowScaledCachedB (THIS PR's gating dep).
+           * Tensors #437 â€” CpuEngine.LstmSequenceForward (AIsEval LSTM / PR #1457).
+           * Tensors #454 â€” BroadcastElementwise SIMD perf (#1307 / PR #1448).
+           * Tensors #472 â€” Float32Precision opt-in for FusedAttention<double>
+             (FP64 attention internally runs on float32, dodges the FP64-AVX
+             half-lane penalty) + fix float SDPA nested-parallelism starvation.
+             Wired through DiffusionAttention in #1456.
+           * Tensors #485 â€” output-only SDPA (6.9x less alloc, 2.7x mean latency).
+           * Tensors #487 â€” GetSliceAlongDimension tape-backward.
+           * Tensors #488 â€” fused QKV + transpose-fused SDPA. MHA on the AIsEval
+             [128, 32, 64] h=4 shape: 5.31 -> 2.26 ms (beats torch ~2.74 ms).
+             Closes the MHA gap from #436 / Tensors #476 â€” picked up automatically
+             by the existing MultiHeadAttentionLayer wiring.
+           * Tensors #413 [CLOSED] â€” three FP64 SD UNet cliffs (AiDotNet#1305).
+           * Tensors #415 [CLOSED] â€” FP64 Conv2DBackward at ImageNet shapes
+             (ResNet50/VGG16 train-step path; co-blocker for #1305 / #1307).
+           * Tensors #474 â€” small-batch native-BLAS thread cap inside MlpForward;
+             the AIsEval MLP (Dense 784->512->128->10 bs=128) measures p95
+             1.75 ms vs 3.24 ms unbounded (~45% improvement, no API change).
+           * Tensors #462 â€” hybrid hardware-aware GEMM strategy (seed + learned).
+           * TensorArena.CreatePersistent / Activate â€” zero-GC training arena
+             that survives across Train() steps (consumed by #1448).
+         Plus the 0.81.4â€“0.82.5 baseline (GraphMode gradient recording #367,
+         FP64 SD UNet cliffs #410, fused-compiled VGG #416, clCreateCommandQueue
+         serialisation #418, TensorAllocator long-arith #424).
+         All AiDotNet.Native packages coreleased in lockstep.
+         Bumped 0.86.1 -> 0.86.6 for the DirectGpu element-wise output fix
+         (Tensors #497): the array/span Engine.Add/Subtract/Multiply/Divide
+         deferred their output download, but the IEngine vector/matrix ops wrap
+         the result in a copying Vector<T>/Matrix<T> ctor, orphaning the
+         materializer so fresh-Vector ops returned all-zeros on the GPU backend
+         (corrupted GAMLSS and any model trained via AiModelBuilder's
+         auto-detected GPU path). 0.86.6 materializes those immediately.
+
+         Bumped 0.86.6 -> 0.88.0 for the Noam fused LR schedule (Tensors #504):
+         LrSchedule.Noam(modelDim, warmup, factor) lets the default Transformer
+         recipe (Adam beta2=0.98 + Noam warmup) run on the fused-compiled
+         training path with a correct per-step LR ramp instead of falling back
+         to the slower eager tape. The fused plan already evaluates
+         LrSchedule.GetLr(step) every optimizer step (same model as PyTorch
+         fused=True, which takes lr as a per-step scalar); Noam was the only
+         missing schedule shape. Closes AiDotNet#1470 (Transformer per-call
+         training stalled because the Noam LR stayed frozen at warmup-step-1
+         on the fused path). All AiDotNet.Native packages coreleased in lockstep.
+
+         Bumped 0.88.0 -> 0.90.2 to pick up the merged compiled-inference work
+         (AiDotNet.Tensors#513 â€” CompiledMlp self-tuning kernel selection, CNN conv
+         im2col fast path, MlpForward small-batch native-BLAS routing, public
+         CpuInferenceConfig.PinBlasThreadsForLatency) so the AIsEval inference
+         benchmark exercises those wins end-to-end. 0.90.2 also carries Tensors#520
+         (ISparseEngine.SpMM<T> made unconstrained again â€” #379 had leaked a
+         `where T : unmanaged` into the public API, breaking unconstrained-T
+         consumers like SparseLinearLayer<T>; 0.90.0/0.90.1 do NOT build against
+         AiDotNet, 0.90.2 is the first 0.90.x that does).
+
+         Bumped 0.90.2 -> 0.90.3 for two any-rank / fast-path fixes that unblock the
+         CNN + unbatched inference wiring: Tensors#521 (FusedLinear accepts rank-1 [K]
+         input â€” promotes to [1,K] and squeezes back, so unbatched FeedForward Predict
+         no longer throws "TensorMatMul requires rank >= 2") and Tensors#522 (the
+         int-overload Conv2DInto routes through the im2col-GEMM fast path instead of
+         the ~15x-slower SIMD-direct cascade).
+
+         Bumped 0.90.3 -> 0.91.0 to pick up the GPU robustness fixes that unblock the
+         prebuilt-CNN/RNN facade path (#1468): Tensors#526 â€” (1) materialize-before-free
+         in DirectGpuTensorEngine.InvalidateActivationCacheEntry so a deferred GPU
+         download is no longer freed out from under a pending materializer (the #226-class
+         race that crashed AiModelBuilder.BuildAsync on CNN training with
+         "Failed to read OpenCL buffer: -5"), and (2) a GPU auto-detect correctness probe
+         so a present-but-broken backend falls back to CPU instead of being adopted.
+         AiDotNet.Native packages coreleased in lockstep at 0.91.0.
+
+         Bumped 0.91.0 -> 0.91.1 for the GPU MaxPool2D backward fix that actually
+         unblocks prebuilt-CNN training through the facade (#1468): Tensors#527 â€”
+         (1) pooling indices were uploaded as float[] but every backend's
+         maxpool2d_backward kernel reads them as int* (float bits reinterpreted as
+         ints â†’ out-of-bounds scatter), and (2) the CUDA backend launched the 9-arg
+         kernel with only 8 args (garbage outWidth). Together these caused a hard CUDA
+         access violation / OpenCL "-5" one step into CNN backprop. Verified: the CNN
+         BuildAsync facade test trains + predicts on a real GPU with 0.91.1.
+         AiDotNet.Native packages coreleased in lockstep at 0.91.1.
+
+         Bumped 0.91.1 -> 0.91.2 for the CPU train-step perf fix behind the
+         paper-scale CNN/diffusion CI-shard timeouts (#1463 compute half):
+         Tensors#528 â€” (1) allocation-free axis reductions: Tensor.Sum(int[]) and
+         the CpuEngine ReduceMean/Max/Variance(+backward)/Concat kernels replaced a
+         per-ELEMENT new int[]/List<int>+Contains+strided-indexer (3.2M heap allocs
+         per [1,64,224,224] reduction, ~40% of a ResNet50 fp64 train step) with a
+         single allocation-free odometer over the flat backing â€” ResNet50 double
+         train step 2553ms -> ~1150ms (~2.2x), bit-identical; and (2) small-batch
+         channel-parallel conv-backward (Conv2DBackwardInput/KernelInto parallelize
+         over input channels at batch=1 instead of collapsing to serial). This is
+         the Tensors-side lever #1463 called for; the memory/OOM half is handled by
+         the cache-clearing + diffusion re-shard in this PR (#1485).
+         Bumped Tensors 0.91.2 -> 0.91.11 (latest PUBLISHED on nuget.org) for the
+         GPU-resident optimizer step (host-read-free Adam for cudaGraph capture) that
+         this PR (#1501) depends on, plus the proximal-L1 (ISTA) and 8-bit Adam GPU
+         kernels and the CUDA-graph capture/replay. The managed API surface these wire
+         against (GpuOptimizer.TryAdamStep/TryAdamWStep/TryAdam8BitStep,
+         TensorAllocator.RentPinnedOnGpu, QuantizedTapeState GPU buffers) is all present
+         in 0.91.11 and the solution builds clean against it; the device-side CUDA
+         kernels are exercised only under AIDOTNET_GPU_ADAM=1 on a real GPU (off in CI).
+         Do NOT pin an unpublished version (0.91.14/0.91.16/0.91.36/0.92.0 broke restore
+         with NU1102); re-bump once a newer Tensors is actually released. The
+         AiDotNet.Native packages bump with the Tensors lockstep when available.
+
+         Bumped 0.91.12 -> 0.92.0: ships BOTH Tensors #564 (memory-bounded gradient-
+         streaming core — this PR's streaming-training path) and Tensors #574 (FP16
+         optimizer-agnostic MixedPrecisionCompiledPlan.ComputeGradients — the
+         all-fused-optimizer FP16 path). AiDotNet.Native packages coreleased in lockstep
+         at 0.92.0.
+
+         Bumped 0.91.12 -> 0.92.1 for the matmul fallback-path correctness fix this PR
+         depends on: Tensors #575 (zero the result buffer before the accumulating
+         fallback GEMM paths — pooled buffers were read non-deterministically, so the
+         Cholesky/Gram zero-alloc copy-buffer dot here could accumulate into stale
+         data). 0.92.1 also carries #574 (FP16 ComputeGradients) and #564 (memory-bounded
+         gradient-streaming core, merged to master via #1543). AiDotNet.Native packages
+         coreleased in lockstep at 0.92.1.
+
+         Bumped 0.92.1 -> 0.92.5 for Tensors #583 (validate the prepacked-B GEMM cache
+         against in-place weight mutation): the SgemmWithCachedB inference path reused a
+         stale pre-packed B panel when a layer's weights were mutated in place without a
+         MarkWeightDirty, so FusedLinear inference returned pre-update results — the root
+         cause of the #1221 transformer production-scale convergence failure. 0.92.5 is
+         the first release carrying that fix. AiDotNet.Native packages coreleased in
+         lockstep at 0.92.5. -->
+    <!-- 0.95.2: transparent weight streaming (Tensors #602 + #603 — EnsureMaterialized AND the
+         .Memory/.Data accessor auto-rehydrate a paged-out streaming weight on access; required by
+         the DiT transparent-streaming engagement here, DiTWeightStreamingTests) PLUS the full
+         weight-streaming PERF stack (Tensors #604): clean/dirty eviction (stops re-writing
+         read-only weights every eviction), default compression (bf16 inference / lossless training
+         via StreamingStoreDtype.Auto), RAM-aware budget, Belady-optimal paging, and int8 weight-only
+         quantized inference. So a foundation-scale model fits a bounded resident set with no
+         per-layer orchestration. 0.95.2 supersedes both master's 0.94.2 and this PR's earlier 0.95.1
+         pin. Native packages coreleased in lockstep at 0.95.2. -->
+    <!-- 0.96.0: Tensors PR #606 — FP16-native activation ops (LayerNorm/GELU emit + all-backend
+         kernels) keep the activation chain Half end-to-end, plus the #555 activation-cache
+         eviction-safety fix. This is the release this PR's FP16 LayerNorm/GELU integration test was
+         gated on: Dense -> LayerNorm -> GELU -> Dense now routes its between-matmul ops through the
+         FP16-native path instead of the eager FP32 fallback. 0.96.0 supersedes master's 0.95.2;
+         Native packages coreleased in lockstep at 0.96.0. -->
+    <!-- 0.101.2: latest published; supersedes 0.98.0. Pulls in the #1624-class OOM/perf work
+         (COW clone, byte-budgeted arena, fused-path per-step arena, streaming clean/dirty eviction,
+         activation-aware autotuner) that this PR's training-scale fixes build on.
+
+         Measured 0.98.0 -> 0.101.2 on the canonical #1624 leak shape (SimCSE<float> dim=384,
+         10 layers, fused-optimizer path under one never-Reset() outer TensorArena, CPU, 31 steps),
+         same local src, version the only variable:
+           * Peak RSS      1404 MiB -> 949 MiB   (-32%, the number that OOMs the 16 GiB runner)
+           * Total alloc   2422 MiB -> 1173 MiB  (-52%; alloc/step 78 -> 38 MiB)
+           * Per-step heap growth flat in BOTH (-0.001 MiB/step: the per-step leak fix is consumer
+             src, constant across the runs), and loss converges identically (1.27 -> 0.26) — the
+             reduction is not from silently breaking training.
+         0.101.2 -> 0.101.5: activation-checkpointing correctness, two fixes.
+         (1) #643 (0.101.4): GradientCheckpointing.Checkpoint's recompute differentiated only w.r.t.
+             the segment input, silently dropping every checkpointed layer's WEIGHT gradients.
+         (2) #645 (0.101.5): multi-segment recompute double-counted earlier segments — a later
+             segment's recompute followed its (non-detached) input back into the earlier segment's
+             checkpoint node, so earlier-segment gradients came out 2x. 0.101.5 detaches each
+             segment's input (matches torch.utils.checkpoint), making sqrt(N) multi-segment exact.
+         Both are required for G4 (#1624) in the diffusion NoisePredictors (sqrt(N) checkpointing) and
+         for NeuralNetworkBase checkpointing.
+
+         0.101.5 -> 0.101.7: the merged MobileNetV3 batch=1 timeout work and supporting fixes —
+         #639 batch=1 BatchNormAffine fusion (#641, required by BatchNormalizationLayer's batch=1
+         training fallback, which calls Engine.BatchNormAffine), Conv2D core-saturation (#647), the
+         nested-arena escaped-buffer #1221 fix (#648), the GPU resident-weight version-gate (#649),
+         and GPU conv-kernel arg-binding fixes (#644).
+         Native packages (OneDNN/OpenBLAS/CLBlast) coreleased in lockstep.
+         Bumped 0.101.7 -> 0.102.2: brings the #632 compiled-inference MemoryPlanning aliasing fix
+         (BlasBatch hoist vs memory planning in attention inference — the root cause of the diffusion
+         Predict_ShouldBeDeterministic failures, which reproduced on 0.101.7 and is gone on 0.102.x),
+         plus the Phase C fp16-weight / fp32-master mixed-precision storage (#650).
+
+         Bumped 0.102.2 -> 0.102.3 (from master, #658): forward-GEMM core saturation default-on
+         (s_forwardPackBothBlocking + s_singleRegion, opt-out AIDOTNET_GEMM_FORWARD_PACKBOTH=0 /
+         AIDOTNET_GEMM_SINGLE_REGION=0; ~1.3-2x on transformer/training GEMM shapes) + the net471
+         PackAOnly non-4x4 scalar-tail bugfix. 0.102.3 is a linear superset of 0.102.2, so the #632 /
+         Phase C deps above are retained. -->
+    <!-- 0.104.6 supersedes 0.104.5/0.104.0/0.103.1. 0.104.5 added the single-launch fused
+         grouped/depthwise deformable (DCNv3) kernel — fused FORWARD (#691) + GPU/CPU single-pass
+         BACKWARD (#693), what InternImage's DeformableConvolutionalLayer needs — plus the bounded
+         large-array pool for conv-backward K-concat stacks (#694, ~8x less GC). 0.104.6 adds
+         AiDotNet.Tensors #704: stop the compilation topo-sort from dropping in-place op chains, which
+         left BatchNorm running-stat updates stale (the fix PR #1704 depends on; fixes WebRTCVad and
+         TableTransformer Clone_AfterTraining). Carries forward 0.103.x weight-streaming ReleaseToPool
+         soft-defer (#692), conv implicit-GEMM (#690), diffusion CUDA-graph + FP16 (#671/#680), the
+         0.104.x GEMM JIT/routing/pinning wins (#700), and parallel SSM/linear-attention scans (#703).
+         Ships lib/net8.0 + net10.0 + net471; native packages coreleased in lockstep at 0.104.6.
+
+         Bumped 0.104.6 -> 0.106.0: brings AiDotNet.Tensors #713 — the fused bfloat16 Adam/AdamW moment
+         kernel this PR's FusedOptimizerConfig.UseBf16Moments path dispatches to (half the optimizer-state
+         footprint at fp32 update precision on the CPU float fused kernel). Superset of 0.104.6, so all
+         deps above are retained. NOTE: 0.106.0 (and the lockstep native packages below) is already
+         PUBLISHED to NuGet, so this bump does not gate CI on an unreleased dependency.
+
+         Bumped 0.110.0 -> 0.111.0 (managed + native packages in lockstep): 0.111.0 is a published
+         superset that brings BOTH AiDotNet.Tensors #739 — DirectGpuTensorEngine.InvalidateResident-
+         WeightBuffer, which this PR calls after every in-place optimizer update to force a weight
+         re-upload on the resident-GPU path (fixes stale-weight GPU transformer training) — AND #747,
+         2D AffineGrid made differentiable w.r.t. theta, which unblocks this PR's SpatialTransformer-
+         Layer tape-gradient fix.
+
+         Bumped 0.111.0 -> 0.111.1: brings AiDotNet.Tensors #753 (AiDotNet#1824) —
+         TensorArena.DetachBoundaryAndReset, the per-layer scratch-recycling primitive that landed on
+         master via #1824. 0.111.1 is PUBLISHED to NuGet and is a superset of 0.111.0, so the #739 /
+         #747 rationale above is retained.
+
+         Bumped 0.111.1 -> 0.111.2: brings AiDotNet.Tensors #755 — zero the unwritten tail in
+         CpuEngine.TensorConcatenate's axis-0 fast path. That path sized the output by SUMMING each
+         input's shape[0] but filled it by COPYING each input's Length; for ragged inputs the summed
+         output is larger than the copied total, leaving a tail the copy never wrote. Since the buffer
+         is rented UNINITIALIZED from AutoTensorCache, a tail left dirty by an earlier op (e.g. NaN/Inf
+         activations from a prior training step on the same thread) leaked straight into the concat
+         result — an intermittent, pool-state-dependent NaN, exactly the failure mode behind the
+         model-family shard flakes this PR targets. 0.111.2 is PUBLISHED to NuGet and is a superset of
+         0.111.1, so all rationale above is retained.
+
+         Bumped 0.111.2 -> 0.112.0: brings AiDotNet.Tensors #759 (N-BEATS resident blow-up — zero only
+         accumulating multi-consumer grad buffers) and #764 (GPU-resident-parameter fused-Adam mistrain
+         fix), which together make this PR's TimeSeries GPU-resident training path train faithfully (the
+         resident run now lowers the eager-forward training MSE and improves held-out MSE, so the N-BEATS
+         correctness gate accepts it). 0.112.0 is PUBLISHED to NuGet and is a superset of 0.111.2.
+
+         Bumped 0.112.0 -> 0.113.0: brings AiDotNet.Tensors #763 — this branch's GATING dependency and
+         the engine half of the non-time-series GPU-residency sweep. #763's key fix (4C): the
+         compiled/persistent backward now honors createGraph=true (GradientTape.ComputeGradients
+         previously gated the compiled path on !createGraph), so the WGAN-GP gradient penalty's inner
+         backward differentiates into the disc weights through the fused compiled plan instead of
+         silently returning zeros (issue #1844). Against 0.112.0 the fused GPU-resident WGAN-GP path
+         (WganGpFusedStep / GpuResidentFusedStep) would have silently degraded to plain WGAN. #763 also
+         publishes Engines.Training.{DpSgdStep, DpSgdFusedStep, MultiSlotFusedStep, WganGpFusedStep,
+         PersistentInputRegistry}; the src/Training mirror classes stay as the consumer-side primitives
+         (the fused-primitive centralization in #1847/#1848 wires every consumer through them) and now
+         run against the fixed engine. 0.113.0 is PUBLISHED to NuGet and is a superset of 0.112.0 (also
+         carries #765 compiled-ReduceMax axis fill), so all rationale above is retained.
+
+         Bumped 0.116.0 -> 0.117.0: brings AiDotNet.Tensors #816 — the optional attention-logit
+         soft-cap on ScaledDotProductAttention (softcap*tanh(scaledScore/softcap) before softmax)
+         implemented across the CPU backend and all six GPU backend kernels. Activates the Gemma-2
+         attn_logit_softcapping path: GroupedQueryAttentionLayer now forwards its soft-cap into the
+         fused SDPA primitive, and Gemma2ModelBuilder wires config.attn_logit_softcapping into it.
+         Default 0 leaves every other SDPA caller byte-identical.
+
+         Bumped 0.117.0 -> 0.117.2: brings AiDotNet.Tensors #821 — the persistent GPU weight-buffer
+         version gate. RegisterPersistentTensor uploads a weight to a persistent GPU buffer at
+         construction (random init) keyed by the host backing array; SetParameters then loads the real
+         weights IN PLACE (same array, so same key) and bumps the tensor Version. The persistent-buffer
+         read is now version-gated (re-uploads on a stamp mismatch), so a model built while a
+         DirectGpuTensorEngine is Current no longer runs its forward against the stale construction-time
+         weights. Fixes real GGUF-decoder-under-GPU serving (greedy first token 7042 " Paris" was 32084);
+         pairs with this branch's LlamaModelBuilder.WriteGamma routing gamma through SetParameters so its
+         persistent buffer refreshes too.
+
+         Bumped 0.117.2 -> 0.118.0: brings AiDotNet.Tensors #824 — the native fused ANN kernel stack
+         (IAnnBackend + AnnPrimitives + AnnIndex: Flat/IVF/PQ/IVFPQ across all 7 backends). This is the
+         gating dependency for the dependency-free NativeAnn vector index (AnnVectorIndex<T>) that
+         replaces the broken external FaissNet IVF/PQ path.
+
+         Bumped 0.118.0 -> 0.119.0: replaces the unpublished 0.118.10-q8 development pin with the
+         released package containing the serving branch's required Tensors APIs. Managed and native
+         packages are coreleased in lockstep. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.119.0" />
+    <!-- Microsoft / .NET -->
+    <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.27.1" />
+    <PackageVersion Include="Microsoft.Research.SEALNet" Version="4.1.1" />
+    <PackageVersion Include="Microsoft.Bcl.Numerics" Version="10.0.7" />
+    <PackageVersion Include="System.Net.Http" Version="4.3.4" />
+    <PackageVersion Include="System.Text.RegularExpressions" Version="4.3.1" />
+    <PackageVersion Include="System.ValueTuple" Version="4.6.2" />
+    <!-- ASP.NET Core -->
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0-preview.1.25120.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0-preview.1.25120.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.19.2" />
+    <!-- Entity Framework Core -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+    <PackageVersion Include="Npgsql" Version="10.0.1" />
+    <PackageVersion Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
+    <PackageVersion Include="MySqlConnector" Version="2.6.1" />
+    <!-- Azure -->
+    <PackageVersion Include="Azure.Search.Documents" Version="11.7.0" />
+    <PackageVersion Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
+    <!-- Cryptography -->
+    <!-- BouncyCastle.Cryptography (Org.BouncyCastle) provides Ed25519 (EdDSA) uniformly across
+         net471/net8/net10 — .NET's System.Security.Cryptography ships NO Ed25519 type on any of
+         those TFMs. Used by the asymmetric (aidn2) license verifier. Well-audited, single dep,
+         targets net461+/netstandard2.0. -->
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
+    <!-- Serialization and data -->
+    <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
+    <PackageVersion Include="MatFileHandler" Version="1.3.0" />
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageVersion Include="Parquet.Net" Version="5.5.0" />
+    <PackageVersion Include="SharpZipLib" Version="1.4.2" />
+    <!-- Pin Snappier to non-vulnerable 1.3.1 (1.3.0 has GHSA-pggp-6c3x-2xmx, transitive via Parquet.Net / Pipelines.Sockets.Unofficial) -->
+    <PackageVersion Include="Snappier" Version="1.3.1" />
+    <PackageVersion Include="Xunit.SkippableFact" Version="1.5.61" />
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <!-- Infrastructure -->
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.4.2" />
+    <PackageVersion Include="Neo4j.Driver" Version="5.28.4" />
+    <!-- Managed FAISS wrapper (native ANN: Flat/IVF/HNSW/PQ). Consumed only by the opt-in
+         AiDotNet.Storage.Faiss metapackage; ships a net6.0 lib + win-x64 native runtime. -->
+    <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
+    <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
+    <PackageVersion Include="Stripe.net" Version="52.1.1" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <!-- Code analysis (default version; source generators may override) -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
+    <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.3" />
+    <!-- Media and visualization -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageVersion Include="FftSharp" Version="2.2.0" />
+    <PackageVersion Include="TreeSitter.DotNet" Version="1.3.0" />
+    <PackageVersion Include="BlazorMonaco" Version="3.2.0" />
+    <!-- ML frameworks (samples) -->
+    <PackageVersion Include="Accord" Version="3.8.0" />
+    <PackageVersion Include="Accord.MachineLearning" Version="3.8.0" />
+    <PackageVersion Include="Accord.Math" Version="3.8.0" />
+    <PackageVersion Include="Accord.Statistics" Version="3.8.0" />
+    <PackageVersion Include="TensorFlow.NET" Version="0.150.0" />
+    <PackageVersion Include="SciSharp.TensorFlow.Redist" Version="2.16.0" />
+    <PackageVersion Include="TorchSharp" Version="0.107.0" />
+    <PackageVersion Include="TorchSharp-cuda-windows" Version="0.107.0" />
+    <!-- Testing -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="Moq" Version="4.20.72" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,292 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+
+namespace AiDotNet.Video.Motion;
+
+/// <summary>
+/// FlowFormer++ masked cost volume autoencoding with tile-based high-resolution flow.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "FlowFormer++: Masked Cost Volume Autoencoding for Pretraining Optical Flow Estimation" (Shi et al., 2023)</item>
+/// </list></para>
+/// <para><b>For Beginners:</b> FlowFormer++ improves on FlowFormer with enhanced cost volume processing and better handling of occlusions. It achieves state-of-the-art accuracy on optical flow benchmarks.</para>
+/// <para>
+/// FlowFormer++ extends FlowFormer with masked cost volume autoencoding pretraining and tile-based processing for high-resolution optical flow.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a FlowFormer++ model for high-resolution optical flow
+/// var flowFormerPP = new FlowFormerPlusPlus&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new FlowFormerPlusPlus&lt;double&gt;(architecture);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("FlowFormer++: Masked Cost Volume Autoencoding for Pretraining Optical Flow Estimation",
+    "https://arxiv.org/abs/2303.01237",
+    Year = 2023,
+    Authors = "Xiaoyu Shi, Zhaoyang Huang, Dasong Li, Manyuan Zhang, Ka Chun Cheung, Simon See, Hongwei Qin, Jifeng Dai, Hongsheng Li")]
+public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
+{
+    private readonly FlowFormerPlusPlusOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private int _numFeatures;
+    private int _numLayers;
+    private ConvolutionalLayer<T>? _featureExtract;
+    private readonly List<ConvolutionalLayer<T>> _processingBlocks;
+    private ConvolutionalLayer<T>? _outputConv;
+
+    /// <summary>
+    /// Creates a new FlowFormerPlusPlus model for native training and inference.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
+    /// <param name="numLayers">Number of processing layers. Default: 8.</param>
+    /// <param name="options">Optional configuration options.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public FlowFormerPlusPlus()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            // 2 frames stacked channel-wise (2×3=6): the lazy _featureExtract conv is sized from
+            // InputDepth by ResolveLazyLayerShapes, and EstimateFlow feeds it the concatenated pair,
+            // so it must be 6 not 3. Single-encoder flow models only (RAFT/GMFlow have a separate
+            // 3-channel context encoder and are excluded). PredictCore splits per-frame via Shape[1]/2.
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
+            outputSize: 2))
+    {
+    }
+
+    public FlowFormerPlusPlus(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 64,
+        int numLayers = 8,
+        FlowFormerPlusPlusOptions? options = null)
+        : base(architecture, new MeanSquaredErrorLoss<T>())
+    {
+        if (numFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), numFeatures, "Number of features must be positive.");
+        if (numLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be positive.");
+        _options = options ?? new FlowFormerPlusPlusOptions();
+        Options = _options;
+
+        _numFeatures = numFeatures;
+        _numLayers = numLayers;
+        _processingBlocks = [];
+
+        InitializeNativeLayers(architecture);
+    }
+
+    private void InitializeNativeLayers(NeuralNetworkArchitecture<T> arch)
+    {
+        int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
+        int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
+        int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
+
+        _featureExtract = new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1);
+
+        for (int i = 0; i < _numLayers; i++)
+        {
+            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1));
+        }
+
+        _outputConv = new ConvolutionalLayer<T>(2, 3, 1, 1);
+
+        InitializeLayers();
+    }
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        if (_featureExtract is not null)
+            Layers.Add(_featureExtract);
+        foreach (var block in _processingBlocks)
+            Layers.Add(block);
+        if (_outputConv is not null)
+            Layers.Add(_outputConv);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> EstimateFlow(Tensor<T> frame0, Tensor<T> frame1)
+    {
+        if (frame0.Rank < 3)
+            throw new ArgumentException($"frame0 must be at least rank 3 [C,H,W], got rank {frame0.Rank}.", nameof(frame0));
+        if (frame1.Rank < 3)
+            throw new ArgumentException($"frame1 must be at least rank 3 [C,H,W], got rank {frame1.Rank}.", nameof(frame1));
+        if (frame0.Shape[0] != frame1.Shape[0] || frame0.Shape[1] != frame1.Shape[1] || frame0.Shape[2] != frame1.Shape[2])
+            throw new ArgumentException(
+                $"Frame shapes must match. frame0: [{string.Join(",", frame0._shape)}], frame1: [{string.Join(",", frame1._shape)}].",
+                nameof(frame1));
+        int height = frame0.Shape[1];
+        int width = frame0.Shape[2];
+
+        // Concatenate frames as input pair
+        var concat = ConcatenateFeatures(frame0, frame1);
+        if (_featureExtract is null || _outputConv is null)
+            throw new InvalidOperationException("Model layers not initialized.");
+
+        var feat = _featureExtract.Forward(concat);
+        foreach (var block in _processingBlocks)
+        {
+            feat = block.Forward(feat);
+        }
+        var rawFlow = _outputConv.Forward(feat);
+
+        // Extract 2-channel flow field
+        var flow = new Tensor<T>([2, height, width]);
+        if (rawFlow.Length < flow.Length)
+            throw new InvalidOperationException($"Raw flow output ({rawFlow.Length} elements) is smaller than expected flow field ({flow.Length} elements).");
+        for (int i = 0; i < flow.Length; i++)
+        {
+            flow.Data.Span[i] = rawFlow.Data.Span[i];
+        }
+
+        return flow;
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int required = 0;
+        if (_featureExtract is not null) required += _featureExtract.GetParameters().Length;
+        foreach (var block in _processingBlocks) required += block.GetParameters().Length;
+        if (_outputConv is not null) required += _outputConv.GetParameters().Length;
+        if (parameters.Length < required)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
+        int offset = 0;
+        if (_featureExtract is not null)
+        {
+            var p = _featureExtract.GetParameters();
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            _featureExtract.SetParameters(sub);
+            offset += p.Length;
+        }
+        foreach (var block in _processingBlocks)
+        {
+            var p = block.GetParameters();
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            block.SetParameters(sub);
+            offset += p.Length;
+        }
+        if (_outputConv is not null)
+        {
+            var p = _outputConv.GetParameters();
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            _outputConv.SetParameters(sub);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ModelName", "FlowFormerPlusPlus" },
+                { "NumFeatures", _numFeatures },
+                { "NumLayers", _numLayers }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_numFeatures);
+        writer.Write(_numLayers);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _numFeatures = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+
+        // Re-link the typed role fields to the layers the BASE already deserialized (trained,
+        // shape-resolved) rather than calling InitializeNativeLayers, which allocates FRESH random-init
+        // convolutions and replaces the deserialized layers — so a cloned/loaded model predicted from
+        // random init (#1221 class). EstimateFlow reads these fields directly, not Layers. Order matches
+        // InitializeLayers: [featureExtract, ...processingBlocks, outputConv].
+        if (Layers.Count < _numLayers + 2)
+            throw new InvalidDataException(
+                $"FlowFormerPlusPlus serialized layer count {Layers.Count} is too small for {_numLayers} processing blocks.");
+        _featureExtract = Layers[0] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("FlowFormerPlusPlus feature extractor layer is missing or has the wrong type.");
+        _processingBlocks.Clear();
+        for (int i = 0; i < _numLayers; i++)
+        {
+            _processingBlocks.Add(Layers[i + 1] as ConvolutionalLayer<T>
+                ?? throw new InvalidDataException($"FlowFormerPlusPlus processing block {i} is missing or has the wrong type."));
+        }
+        _outputConv = Layers[_numLayers + 1] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("FlowFormerPlusPlus output layer is missing or has the wrong type.");
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new FlowFormerPlusPlus<T>(Architecture, _numFeatures, _numLayers, _options);
+    }
+}

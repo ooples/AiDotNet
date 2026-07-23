@@ -1,0 +1,218 @@
+using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.Models;
+
+/// <summary>
+/// Abstract base class for standalone models that directly implement <see cref="IFullModel{T, TInput, TOutput}"/>.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <typeparam name="TInput">The input data type.</typeparam>
+/// <typeparam name="TOutput">The output data type.</typeparam>
+/// <remarks>
+/// <para>
+/// Provides common infrastructure and sensible defaults for standalone model implementations
+/// that are not wrappers around other models. Subclasses must implement core model behavior:
+/// prediction, training, parameter management, loss function, and cloning.
+/// </para>
+/// <para><b>For Beginners:</b> This is the foundation for building standalone machine learning models.
+/// Models like linear regression, expression trees, gradient boosting, and ensembles all inherit
+/// from this class. It handles boilerplate like serialization and feature tracking so each model
+/// only needs to implement its core prediction and training logic.
+/// </para>
+/// </remarks>
+public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
+    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>
+{
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Numeric operations for type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <inheritdoc/>
+    public abstract ILossFunction<T> DefaultLossFunction { get; }
+
+    /// <inheritdoc/>
+    public abstract TOutput Predict(TInput input);
+
+    /// <inheritdoc/>
+    public abstract void Train(TInput input, TOutput expectedOutput);
+
+    /// <inheritdoc/>
+    public virtual ModelMetadata<T> GetModelMetadata() => new();
+
+    // --- IParameterizable ---
+
+    /// <inheritdoc/>
+    public abstract Vector<T> GetParameters();
+
+    /// <inheritdoc/>
+    public abstract void SetParameters(Vector<T> parameters);
+
+    /// <inheritdoc/>
+    public virtual long ParameterCount => GetParameters().Length;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Default implementation yields nothing. Concrete model bases that
+    /// represent a real layer stack (NeuralNetworkBase) override to walk
+    /// trainable parameters per-tensor; classical / sklearn-style models
+    /// (linear regressors, trees, clustering) keep the empty default
+    /// because their flat <see cref="GetParameters"/> path is sufficient
+    /// (parameter counts are well below int.MaxValue). Foundation-scale
+    /// diffusion models override at <c>DiffusionModelBase</c> / per-model
+    /// level — tracked by issue #1237.
+    /// </remarks>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
+
+    /// <inheritdoc/>
+    public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
+
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    // --- ICloneable ---
+
+    /// <inheritdoc/>
+    public abstract IFullModel<T, TInput, TOutput> DeepCopy();
+
+    /// <inheritdoc/>
+    public virtual IFullModel<T, TInput, TOutput> Clone() => DeepCopy();
+
+    // --- IGradientComputable ---
+
+    /// <inheritdoc/>
+    public virtual Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        throw new NotSupportedException(
+            $"Gradient computation is not supported for {GetType().Name}. " +
+            "Override ComputeGradients to provide an implementation.");
+    }
+
+    /// <inheritdoc/>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        var parameters = GetParameters();
+        if (gradients.Length != parameters.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient length mismatch: expected {parameters.Length}, got {gradients.Length}.",
+                nameof(gradients));
+        }
+
+        // Vectorized SGD: params = params - lr * gradients
+        var scaledGradients = Engine.Multiply(gradients, learningRate);
+        parameters = Engine.Subtract(parameters, scaledGradients);
+
+        SetParameters(parameters);
+    }
+
+    // --- IModelSerializer ---
+
+    /// <inheritdoc/>
+    public virtual byte[] Serialize()
+    {
+        throw new NotSupportedException(
+            $"Serialization is not supported for {GetType().Name}. Override Serialize to provide an implementation.");
+    }
+
+    /// <inheritdoc/>
+    public virtual void Deserialize(byte[] data)
+    {
+        throw new NotSupportedException(
+            $"Deserialization is not supported for {GetType().Name}. Override Deserialize to provide an implementation.");
+    }
+
+    /// <inheritdoc/>
+    public virtual void SaveModel(string filePath)
+    {
+        File.WriteAllBytes(filePath, Serialize());
+    }
+
+    /// <inheritdoc/>
+    public virtual void LoadModel(string filePath)
+    {
+        Deserialize(File.ReadAllBytes(filePath));
+    }
+
+    // --- ICheckpointableModel ---
+
+    /// <inheritdoc/>
+    public virtual void SaveState(Stream stream)
+    {
+        var data = Serialize();
+        stream.Write(data, 0, data.Length);
+        stream.Flush();
+    }
+
+    /// <inheritdoc/>
+    public virtual void LoadState(Stream stream)
+    {
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        Deserialize(ms.ToArray());
+    }
+
+    // --- IFeatureAware ---
+
+    /// <inheritdoc/>
+    public virtual IEnumerable<int> GetActiveFeatureIndices() => Array.Empty<int>();
+
+    /// <inheritdoc/>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
+
+    /// <inheritdoc/>
+    public virtual bool IsFeatureUsed(int featureIndex) => false;
+
+    // --- IFeatureImportance ---
+
+    /// <inheritdoc/>
+    public virtual Dictionary<string, T> GetFeatureImportance() => new(StringComparer.Ordinal);
+
+    // --- IDisposable ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements <see cref="System.IDisposable.Dispose"/>. Calls
+    /// <see cref="Dispose(bool)"/> with disposing=true and
+    /// suppresses finalization. Derived classes that own disposable
+    /// resources (neural-network layers, GPU handles, rented tensor
+    /// buffers from <c>TensorAllocator</c>) should override the
+    /// protected <see cref="Dispose(bool)"/> overload — issue #1136
+    /// plan part 3.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases resources held by this model. Derived classes with
+    /// disposable state (layers, GPU handles, rented tensors)
+    /// override and call <c>base.Dispose(disposing)</c> at the end.
+    /// Default is a no-op for value-only models (linear regressors,
+    /// naive Bayes, etc.) that have nothing to release.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+    }
+}

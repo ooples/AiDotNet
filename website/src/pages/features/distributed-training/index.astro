@@ -1,0 +1,62 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Distributed & Parallel Training"
+  seoTitle="Distributed Training for .NET - AiDotNet"
+  seoDescription="Scale model training with DDP, FSDP, ZeRO, tensor parallelism, and pipeline parallelism. 30+ strategies for distributed training in C#."
+  count="30+"
+  tagline="Scale training from single GPU to multi-node clusters"
+  description="Scale from a single GPU to hundreds with data parallelism (DDP, FSDP), model parallelism (tensor, pipeline), and memory optimization (ZeRO, gradient checkpointing). Train billion-parameter models efficiently across GPUs and nodes, all in pure C#."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>'
+  useCases={['Large Model Training', 'Foundation Models', 'Multi-GPU Clusters', 'Cloud Training', 'LLM Pre-training', 'Vision Model Training', 'Research Labs', 'Enterprise AI']}
+  subcategories={[
+    {
+      name: 'Data Parallelism',
+      description: 'Replicate models across GPUs, each processing different data batches.',
+      items: [
+        { name: 'DDP', detail: 'Distributed Data Parallel with AllReduce gradient synchronization.' },
+        { name: 'FSDP', detail: 'Fully Sharded Data Parallel sharding model parameters across GPUs.' },
+        { name: 'ZeRO Stage 1/2/3', detail: 'Zero Redundancy Optimizer progressively sharding states, gradients, and parameters.' },
+        { name: 'Gradient Accumulation', detail: 'Simulate larger batches by accumulating gradients across micro-batches.' },
+        { name: 'Mixed Precision', detail: 'FP16/BF16 training with loss scaling for 2x speed and 50% memory reduction.' },
+      ]
+    },
+    {
+      name: 'Model Parallelism',
+      description: 'Split large models across multiple GPUs when they exceed single GPU memory.',
+      items: [
+        { name: 'Tensor Parallelism', detail: 'Split individual layers across GPUs for intra-layer parallelism.' },
+        { name: 'Pipeline Parallelism', detail: 'Split model into stages processed by different GPUs with micro-batching.' },
+        { name: 'Expert Parallelism', detail: 'Distribute Mixture-of-Experts layers across GPUs.' },
+        { name: 'Sequence Parallelism', detail: 'Split long sequences across GPUs for attention computation.' },
+      ]
+    },
+    {
+      name: 'Memory Optimization',
+      description: 'Reduce memory footprint to train larger models on existing hardware.',
+      items: [
+        { name: 'Gradient Checkpointing', detail: 'Recompute activations during backward pass saving 60-70% memory.' },
+        { name: 'Activation Recomputation', detail: 'Selective activation recomputation for optimal memory-compute tradeoff.' },
+        { name: 'Communication Overlap', detail: 'Overlap gradient communication with computation for higher throughput.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Distributed training with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 784, hiddenSize: 512, outputSize: 10))
+    .ConfigureDistributedTraining(new FSDPConfig(
+        shardingStrategy: ShardingStrategy.FullShard,
+        mixedPrecision: MixedPrecisionPolicy.BFloat16,
+        gradientCheckpointing: true))
+    .ConfigureOptimizer(new AdamWOptimizer<float>(
+        learningRate: 1e-3f, weightDecay: 0.01f))
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(newSample);`}
+  codeTitle="Distributed training with AiModelBuilder"
+/>

@@ -1,0 +1,715 @@
+﻿using System.Diagnostics.CodeAnalysis;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+
+namespace AiDotNet.Diffusion.NoisePredictors;
+
+/// <summary>
+/// U-shaped Vision Transformer (U-ViT) noise predictor for diffusion models.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// U-ViT combines the best of U-Net and Vision Transformer architectures.
+/// It applies a transformer to image patches but adds long skip connections
+/// between encoder and decoder blocks, similar to U-Net.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> U-ViT is like a transformer with U-Net-style shortcuts:
+///
+/// U-Net: Uses conv layers with skip connections
+/// DiT: Uses transformer layers without skip connections
+/// U-ViT: Uses transformer layers WITH skip connections (best of both)
+///
+/// Architecture:
+/// 1. Patchify: Split image into patches
+/// 2. Encoder transformer blocks (L/2 blocks)
+/// 3. Middle transformer block
+/// 4. Decoder transformer blocks (L/2 blocks) with skip connections from encoder
+/// 5. Unpatchify: Reconstruct output
+///
+/// Used in: UniDiffuser (multi-modal generation).
+/// </para>
+/// <para>
+/// Reference: Bao et al., "All are Worth Words: A ViT Backbone for Diffusion Models", CVPR 2023
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new UViTNoisePredictor&lt;float&gt;(inputChannels: 4, hiddenSize: 1024, numLayers: 22, numHeads: 16);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("All are Worth Words: A ViT Backbone for Diffusion Models", "https://arxiv.org/abs/2209.12152")]
+public class UViTNoisePredictor<T> : NoisePredictorBase<T>
+{
+    private readonly int _inputChannels;
+    private readonly int _hiddenSize;
+    private readonly int _numLayers;
+    private readonly int _numHeads;
+    private readonly int _patchSize;
+    private readonly int _contextDim;
+
+    /// <summary>
+    /// Maximum number of patches (computed from latent size and patch size).
+    /// </summary>
+    private readonly int _maxPatches;
+
+    // Patch embedding
+    private DenseLayer<T> _patchEmbed;
+
+    // Time embedding MLP
+    private DenseLayer<T> _timeEmbed1;
+    private DenseLayer<T> _timeEmbed2;
+
+    // Encoder, middle, and decoder blocks (DiT-style blocks)
+    private readonly List<UViTBlock> _encoderBlocks;
+    private UViTBlock _middleBlock;
+    private readonly List<UViTBlock> _decoderBlocks;
+
+    // Skip connection projection layers: project [2*hidden] → [hidden]
+    private readonly List<DenseLayer<T>> _skipProjections;
+
+    // Final layer norm and output projection
+    private LayerNormalizationLayer<T> _finalNorm;
+    private DenseLayer<T> _outputProj;
+
+    // Position embeddings
+    private Tensor<T>? _posEmbed;
+    private Tensor<T>? _lastInput;
+
+    /// <inheritdoc />
+    public override int InputChannels => _inputChannels;
+
+    /// <inheritdoc />
+    public override int OutputChannels => _inputChannels;
+
+    /// <inheritdoc />
+    public override int BaseChannels => _hiddenSize;
+
+    /// <inheritdoc />
+    public override int TimeEmbeddingDim => _hiddenSize * 4;
+
+    /// <inheritdoc />
+    public override bool SupportsCFG => true;
+
+    /// <inheritdoc />
+    public override bool SupportsCrossAttention => _contextDim > 0;
+
+    /// <inheritdoc />
+    public override int ContextDimension => _contextDim;
+
+    /// <summary>
+    /// Gets the patch size used for tokenizing spatial features.
+    /// </summary>
+    public int PatchSize => _patchSize;
+
+    /// <summary>
+    /// Gets the hidden dimension of the transformer.
+    /// </summary>
+    public int HiddenSize => _hiddenSize;
+
+    /// <summary>
+    /// Initializes a new instance of the U-ViT noise predictor.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (4 for latent diffusion).</param>
+    /// <param name="hiddenSize">Hidden dimension of the transformer (default: 512 for U-ViT-S/2).</param>
+    /// <param name="numLayers">Total number of transformer layers (default: 12). Must be even.</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="patchSize">Patch size for spatial tokenization (default: 2).</param>
+    /// <param name="contextDim">Cross-attention context dimension (0 = no cross-attention).</param>
+    /// <param name="latentSpatialSize">Latent spatial size per dimension (default: 32 for 256/8).</param>
+    /// <param name="seed">Optional random seed for weight initialization.</param>
+    public UViTNoisePredictor(
+        int inputChannels = 4,
+        int hiddenSize = 512,
+        int numLayers = 12,
+        int numHeads = 8,
+        int patchSize = 2,
+        int contextDim = 0,
+        int latentSpatialSize = 32,
+        int? seed = null)
+        : base(seed: seed)
+    {
+        numLayers = numLayers % 2 == 0 ? numLayers : numLayers + 1;
+
+        _inputChannels = inputChannels;
+        _hiddenSize = hiddenSize;
+        _numLayers = numLayers;
+        _numHeads = numHeads;
+        _patchSize = patchSize;
+        _contextDim = contextDim;
+        _maxPatches = (latentSpatialSize / patchSize) * (latentSpatialSize / patchSize);
+
+        _encoderBlocks = [];
+        _decoderBlocks = [];
+        _skipProjections = [];
+
+        InitializeLayers();
+    }
+
+    [MemberNotNull(nameof(_patchEmbed), nameof(_timeEmbed1), nameof(_timeEmbed2),
+                   nameof(_middleBlock), nameof(_finalNorm), nameof(_outputProj))]
+    private void InitializeLayers()
+    {
+        int patchDim = _inputChannels * _patchSize * _patchSize;
+        int timeEmbedDim = _hiddenSize * 4;
+        int halfLayers = _numLayers / 2;
+
+        // Patch embedding — lazy weight allocation defers ~2+ GB until Forward().
+        _patchEmbed = LazyDense(patchDim, _hiddenSize);
+
+        // Time embedding MLP
+        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        _timeEmbed2 = LazyDense(timeEmbedDim, _hiddenSize);
+
+        // Encoder blocks
+        for (int i = 0; i < halfLayers; i++)
+        {
+            _encoderBlocks.Add(CreateBlock());
+        }
+
+        // Middle block
+        _middleBlock = CreateBlock();
+
+        // Decoder blocks with skip projections
+        for (int i = 0; i < halfLayers; i++)
+        {
+            _decoderBlocks.Add(CreateBlock());
+            // Skip projection: [2*hidden] → [hidden]
+            _skipProjections.Add(LazyDense(_hiddenSize * 2, _hiddenSize));
+        }
+
+        // Final norm and output
+        _finalNorm = new LayerNormalizationLayer<T>();
+        int outPatchDim = _inputChannels * _patchSize * _patchSize;
+        _outputProj = LazyDense(_hiddenSize, outPatchDim);
+
+        // Position embeddings (computed from latent spatial size and patch size)
+        var posEmbData = new T[_maxPatches * _hiddenSize];
+        for (int i = 0; i < posEmbData.Length; i++)
+        {
+            double u1 = 1.0 - RandomGenerator.NextDouble();
+            double u2 = RandomGenerator.NextDouble();
+            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            posEmbData[i] = NumOps.FromDouble(normal * 0.02);
+        }
+        _posEmbed = new Tensor<T>(new[] { 1, _maxPatches, _hiddenSize }, new Vector<T>(posEmbData));
+    }
+
+    private UViTBlock CreateBlock()
+    {
+        return new UViTBlock
+        {
+            Norm1 = new LayerNormalizationLayer<T>(),
+            Attention = LazySelfAttention(_maxPatches, _hiddenSize, _numHeads),
+            Norm2 = new LayerNormalizationLayer<T>(),
+            MLP1 = LazyDense(_hiddenSize, _hiddenSize * 4, new GELUActivation<T>()),
+            MLP2 = LazyDense(_hiddenSize * 4, _hiddenSize)
+        };
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
+    {
+        using var streaming = BeginWeightStreamingForward();
+        _lastInput = noisySample;
+        var timeEmbed = GetTimestepEmbedding(timestep);
+        timeEmbed = ProjectTimeEmbedding(timeEmbed);
+        return streaming.Complete(Forward(noisySample, timeEmbed, conditioning));
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
+    {
+        using var streaming = BeginWeightStreamingForward();
+        _lastInput = noisySample;
+        return streaming.Complete(Forward(noisySample, timeEmbedding, conditioning));
+    }
+
+    private Tensor<T> ProjectTimeEmbedding(Tensor<T> timeEmbed)
+    {
+        var x = _timeEmbed1.Forward(timeEmbed);
+        x = _timeEmbed2.Forward(x);
+        return x;
+    }
+
+    private Tensor<T> Forward(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
+    {
+        var shape = x._shape;
+        var batch = shape[0];
+
+        // Patchify and embed
+        var patches = Patchify(x);
+        patches = _patchEmbed.Forward(patches);
+
+        // Add position embeddings using hardware-accelerated broadcast add
+        if (_posEmbed != null)
+        {
+            int seqLen = patches.Shape[1];
+            int posLen = _posEmbed.Shape[1];
+            if (seqLen == posLen)
+            {
+                patches = Engine.TensorBroadcastAdd<T>(patches, _posEmbed);
+            }
+            else
+            {
+                // Slice position embedding to match actual sequence length (seqLen < posLen)
+                // or apply to the first posLen tokens only (seqLen > posLen)
+                int applyLen = Math.Min(seqLen, posLen);
+                int hiddenDim = _posEmbed.Shape[2];
+                var posEmbedSpan = _posEmbed.AsSpan();
+
+                // Copy all patch data (preserving batch dimension)
+                var patchSpan = patches.AsSpan();
+                int totalLen = batch * seqLen * hiddenDim;
+                var resultData = new T[totalLen];
+                patchSpan.Slice(0, totalLen).CopyTo(resultData);
+
+                // Add position embeddings to the first applyLen tokens for each batch element
+                for (int b = 0; b < batch; b++)
+                {
+                    int batchOffset = b * seqLen * hiddenDim;
+                    for (int s = 0; s < applyLen; s++)
+                    {
+                        int patchIdx = batchOffset + s * hiddenDim;
+                        int posIdx = s * hiddenDim; // posEmbed is [1, posLen, hidden], shared across batch
+                        for (int d = 0; d < hiddenDim; d++)
+                        {
+                            resultData[patchIdx + d] = NumOps.Add(resultData[patchIdx + d], posEmbedSpan[posIdx + d]);
+                        }
+                    }
+                }
+                patches = new Tensor<T>(patches._shape, new Vector<T>(resultData));
+            }
+        }
+
+        // Add time embedding (broadcast to all tokens)
+        patches = AddTimeToPatches(patches, timeEmbed);
+
+        int halfLayers = _numLayers / 2;
+
+        // Encoder: store activations for skip connections.
+        // G4 (#1624): each block is checkpointed individually (recompute its activations in backward) —
+        // gradient-equivalent. Per-block rather than one whole-stack checkpoint because the long skip
+        // connections need each pre-block activation captured, which a single fused segment would hide.
+        var skipActivations = new Tensor<T>[halfLayers];
+        for (int i = 0; i < halfLayers; i++)
+        {
+            skipActivations[i] = CloneTensor(patches);
+            var encBlock = _encoderBlocks[i];
+            patches = CheckpointBlocks(new System.Func<Tensor<T>, Tensor<T>>[] { h => ApplyBlock(encBlock, h) }, patches);
+        }
+
+        // Middle block
+        patches = CheckpointBlocks(new System.Func<Tensor<T>, Tensor<T>>[] { h => ApplyBlock(_middleBlock, h) }, patches);
+
+        // Decoder with skip connections
+        for (int i = 0; i < halfLayers; i++)
+        {
+            int skipIdx = halfLayers - 1 - i;
+            // Concatenate along feature dimension and project
+            patches = ConcatenateTensors(patches, skipActivations[skipIdx]);
+            patches = _skipProjections[i].Forward(patches);
+            var decBlock = _decoderBlocks[i];
+            patches = CheckpointBlocks(new System.Func<Tensor<T>, Tensor<T>>[] { h => ApplyBlock(decBlock, h) }, patches);
+        }
+
+        // Final norm and unpatchify
+        patches = _finalNorm.Forward(patches);
+        patches = _outputProj.Forward(patches);
+
+        return Unpatchify(patches, batch, shape.Length > 2 ? shape[2] : 32, shape.Length > 3 ? shape[3] : 32);
+    }
+
+    private Tensor<T> ApplyBlock(UViTBlock block, Tensor<T> x)
+    {
+        // Self-attention with residual
+        var normed = (block.Norm1 ?? throw new InvalidOperationException("Norm1 has not been initialized.")).Forward(x);
+        var attn = (block.Attention ?? throw new InvalidOperationException("Attention has not been initialized.")).Forward(normed);
+        x = AddTensors(x, attn);
+
+        // MLP with residual
+        normed = (block.Norm2 ?? throw new InvalidOperationException("Norm2 has not been initialized.")).Forward(x);
+        var mlp = (block.MLP1 ?? throw new InvalidOperationException("MLP1 has not been initialized.")).Forward(normed);
+        mlp = (block.MLP2 ?? throw new InvalidOperationException("MLP2 has not been initialized.")).Forward(mlp);
+        x = AddTensors(x, mlp);
+
+        return x;
+    }
+
+    #region Tensor Utilities
+
+    private Tensor<T> Patchify(Tensor<T> x)
+    {
+        var shape = x._shape;
+        var batch = shape[0];
+        var height = shape.Length > 2 ? shape[2] : 1;
+        var width = shape.Length > 3 ? shape[3] : 1;
+
+        int patchH = height / _patchSize;
+        int patchW = width / _patchSize;
+        int numPatches = patchH * patchW;
+        int patchDim = _inputChannels * _patchSize * _patchSize;
+
+        var result = new T[batch * numPatches * patchDim];
+        var xSpan = x.AsSpan();
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int ph = 0; ph < patchH; ph++)
+            {
+                for (int pw = 0; pw < patchW; pw++)
+                {
+                    int patchIdx = ph * patchW + pw;
+                    int outBase = (b * numPatches + patchIdx) * patchDim;
+                    int d = 0;
+
+                    for (int c = 0; c < _inputChannels; c++)
+                    {
+                        for (int dy = 0; dy < _patchSize; dy++)
+                        {
+                            for (int dx = 0; dx < _patchSize; dx++)
+                            {
+                                int h = ph * _patchSize + dy;
+                                int w = pw * _patchSize + dx;
+                                int inIdx = ((b * _inputChannels + c) * height + h) * width + w;
+                                result[outBase + d] = inIdx < xSpan.Length ? xSpan[inIdx] : NumOps.Zero;
+                                d++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return new Tensor<T>(new[] { batch, numPatches, patchDim }, new Vector<T>(result));
+    }
+
+    private Tensor<T> Unpatchify(Tensor<T> patches, int batch, int height, int width)
+    {
+        int patchH = height / _patchSize;
+        int patchW = width / _patchSize;
+        int outPatchDim = _inputChannels * _patchSize * _patchSize;
+
+        var result = new T[batch * _inputChannels * height * width];
+        var pSpan = patches.AsSpan();
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int ph = 0; ph < patchH; ph++)
+            {
+                for (int pw = 0; pw < patchW; pw++)
+                {
+                    int patchIdx = ph * patchW + pw;
+                    int inBase = (b * patchH * patchW + patchIdx) * outPatchDim;
+                    int d = 0;
+
+                    for (int c = 0; c < _inputChannels; c++)
+                    {
+                        for (int dy = 0; dy < _patchSize; dy++)
+                        {
+                            for (int dx = 0; dx < _patchSize; dx++)
+                            {
+                                int h = ph * _patchSize + dy;
+                                int w = pw * _patchSize + dx;
+                                int outIdx = ((b * _inputChannels + c) * height + h) * width + w;
+                                if (outIdx < result.Length && inBase + d < pSpan.Length)
+                                    result[outIdx] = pSpan[inBase + d];
+                                d++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return new Tensor<T>(new[] { batch, _inputChannels, height, width }, new Vector<T>(result));
+    }
+
+    private Tensor<T> AddTimeToPatches(Tensor<T> patches, Tensor<T> timeEmbed)
+    {
+        // Reshape time embedding to [batch, 1, hiddenSize] for broadcasting across [batch, seqLen, hidden]
+        int batch = patches.Shape[0];
+        int hiddenDim = patches.Shape.Length > 2 ? patches.Shape[2] : patches.Shape[^1];
+        var timeSpan = timeEmbed.AsSpan();
+        int totalTimeLen = timeSpan.Length;
+        int perBatchTimeLen = totalTimeLen >= batch * hiddenDim ? hiddenDim : totalTimeLen;
+        bool isBatched = totalTimeLen >= batch * hiddenDim;
+
+        // Build [batch, 1, hiddenDim] tensor with per-batch time embeddings
+        var timeData = new T[batch * hiddenDim];
+        for (int b = 0; b < batch; b++)
+        {
+            int srcOffset = isBatched ? b * perBatchTimeLen : 0;
+            int copyLen = Math.Min(perBatchTimeLen, hiddenDim);
+            timeSpan.Slice(srcOffset, copyLen).CopyTo(timeData.AsSpan(b * hiddenDim, copyLen));
+        }
+        var timeBroadcast = new Tensor<T>(new[] { batch, 1, hiddenDim }, new Vector<T>(timeData));
+        return Engine.TensorBroadcastAdd<T>(patches, timeBroadcast);
+    }
+
+    private static Tensor<T> CloneTensor(Tensor<T> t)
+    {
+        var span = t.AsSpan();
+        var data = new T[span.Length];
+        span.CopyTo(data);
+        return new Tensor<T>(t._shape, new Vector<T>(data));
+    }
+
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        return AiDotNetEngine.Current.TensorBroadcastAdd(a, b);
+    }
+
+    private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
+    {
+        // Concatenate along feature dimension (last dim). Tensors NuGet rejects axis=-1.
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: a._shape.Length - 1);
+    }
+
+    #endregion
+
+    #region IParameterizable
+
+    /// <inheritdoc />
+    public override long ParameterCount
+    {
+        get
+        {
+            // #1237: long accumulator. UViT at full hidden / depth scale
+            // can sum past int.MaxValue across encoder + decoder blocks.
+            long count = _patchEmbed.ParameterCount + _timeEmbed1.ParameterCount + _timeEmbed2.ParameterCount;
+
+            foreach (var block in _encoderBlocks)
+                count += GetBlockParamCount(block);
+
+            count += GetBlockParamCount(_middleBlock);
+
+            for (int i = 0; i < _decoderBlocks.Count; i++)
+            {
+                count += GetBlockParamCount(_decoderBlocks[i]);
+                count += _skipProjections[i].ParameterCount;
+            }
+
+            count += _finalNorm.ParameterCount + _outputProj.ParameterCount;
+            return count;
+        }
+    }
+
+    private static long GetBlockParamCount(UViTBlock block)
+    {
+        long c = 0;
+        if (block.Norm1 != null) c += block.Norm1.ParameterCount;
+        if (block.Attention != null) c += block.Attention.ParameterCount;
+        if (block.Norm2 != null) c += block.Norm2.ParameterCount;
+        if (block.MLP1 != null) c += block.MLP1.ParameterCount;
+        if (block.MLP2 != null) c += block.MLP2.ParameterCount;
+        return c;
+    }
+
+    /// <summary>
+    /// The full non-null layer list in canonical serialization order (patch/time embeds, encoder blocks,
+    /// middle block, each decoder block followed by its skip projection, final norm, output projection).
+    /// GetParameters/SetParameters/GetParameterChunks/SetParameterChunks all walk this one sequence so they
+    /// can never drift out of order.
+    /// </summary>
+    private IEnumerable<ILayer<T>> UViTLayerSequence()
+    {
+        yield return _patchEmbed;
+        yield return _timeEmbed1;
+        yield return _timeEmbed2;
+
+        foreach (var block in _encoderBlocks)
+            foreach (var layer in BlockLayers(block)) yield return layer;
+
+        foreach (var layer in BlockLayers(_middleBlock)) yield return layer;
+
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+        {
+            foreach (var layer in BlockLayers(_decoderBlocks[i])) yield return layer;
+            yield return _skipProjections[i];
+        }
+
+        yield return _finalNorm;
+        yield return _outputProj;
+    }
+
+    private static IEnumerable<ILayer<T>> BlockLayers(UViTBlock block)
+    {
+        if (block.Norm1 != null) yield return block.Norm1;
+        if (block.Attention != null) yield return block.Attention;
+        if (block.Norm2 != null) yield return block.Norm2;
+        if (block.MLP1 != null) yield return block.MLP1;
+        if (block.MLP2 != null) yield return block.MLP2;
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        foreach (var layer in UViTLayerSequence()) AddLayerParams(allParams, layer);
+
+        var result = new Vector<T>(allParams.Count);
+        for (int i = 0; i < allParams.Count; i++) result[i] = allParams[i];
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Previously this set only the patch/time-embed layers and stopped — leaving every encoder/
+        // middle/decoder block, skip projection, final norm and output projection at their random-init
+        // values (so Clone / optimizer round-trips silently produced a wrong model). Walk the full
+        // canonical sequence so the whole network round-trips. Lazy layers must already be resolved
+        // (Clone probe-forwards first) — DenseLayer self-resolves from the vector length, attention
+        // layers need their shapes materialized before the assignment lands.
+        int offset = 0;
+        foreach (var layer in UViTLayerSequence()) offset = SetLayerParams(layer, parameters, offset);
+    }
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: one chunk per layer in the canonical sequence, index-identical to GetParameters,
+        // without materializing the full aggregate.
+        foreach (var layer in UViTLayerSequence())
+        {
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in UViTLayerSequence())
+        {
+            if (layer.ParameterCount == 0) continue;
+            if (!e.MoveNext())
+                throw new System.ArgumentException(
+                    "SetParameterChunks received fewer chunks than U-ViT has parameterized layers.",
+                    nameof(chunks));
+            layer.SetParameters(e.Current.ToVector());
+        }
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than U-ViT has parameterized layers.",
+                nameof(chunks));
+    }
+
+    private static void AddLayerParams(List<T> list, ILayer<T> layer)
+    {
+        var p = layer.GetParameters();
+        for (int i = 0; i < p.Length; i++) list.Add(p[i]);
+    }
+
+    private static int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
+    {
+        int count = checked((int)layer.ParameterCount);
+        var p = new T[count];
+        for (int i = 0; i < count && offset + i < parameters.Length; i++)
+            p[i] = parameters[offset + i];
+        layer.SetParameters(new Vector<T>(p));
+        return offset + count;
+    }
+
+    #endregion
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> Clone()
+    {
+        var clone = new UViTNoisePredictor<T>(
+            inputChannels: _inputChannels,
+            hiddenSize: _hiddenSize,
+            numLayers: _numLayers,
+            numHeads: _numHeads,
+            patchSize: _patchSize,
+            contextDim: _contextDim);
+        // The block attention layers only allocate weights on the first Forward; a fresh clone has
+        // resolved shapes but unallocated weights, so SetParameters/SetParameterChunks would land into
+        // nothing and the clone would re-RNG-init on its first real forward, diverging from the source.
+        // When the source has been materialized, probe-forward the clone through the same path first so
+        // the weights exist, THEN copy. Mirrors MMDiTXNoisePredictor.Clone.
+        if (_patchEmbed.IsInitialized)
+        {
+            int probeSpatial = (int)System.Math.Sqrt(_maxPatches) * _patchSize;
+            var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
+            clone.PredictNoise(probe, timestep: 0, conditioning: null);
+        }
+        // _posEmbed is a random-init Tensor<T> field that is NOT part of Get/SetParameters and is not a
+        // trainable layer, so neither the COW share nor the SetParameters fallback below copies it —
+        // without this the clone keeps its own RNG-drawn positional embedding and diverges from the
+        // source. Copy-on-write share it (O(1) until either side writes).
+        if (_posEmbed is not null) clone._posEmbed = (Tensor<T>)_posEmbed.CloneShared();
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var allGrads = new List<T>();
+        AddLayerGrads(allGrads, _patchEmbed);
+        AddLayerGrads(allGrads, _timeEmbed1);
+        AddLayerGrads(allGrads, _timeEmbed2);
+
+        foreach (var block in _encoderBlocks) AddBlockGrads(allGrads, block);
+        AddBlockGrads(allGrads, _middleBlock);
+
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+        {
+            AddBlockGrads(allGrads, _decoderBlocks[i]);
+            AddLayerGrads(allGrads, _skipProjections[i]);
+        }
+
+        AddLayerGrads(allGrads, _finalNorm);
+        AddLayerGrads(allGrads, _outputProj);
+
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddLayerGrads(List<T> list, ILayer<T> layer)
+    {
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+    }
+
+    private static void AddBlockGrads(List<T> list, UViTBlock block)
+    {
+        if (block.Norm1 != null) AddLayerGrads(list, block.Norm1);
+        if (block.Attention != null) AddLayerGrads(list, block.Attention);
+        if (block.Norm2 != null) AddLayerGrads(list, block.Norm2);
+        if (block.MLP1 != null) AddLayerGrads(list, block.MLP1);
+        if (block.MLP2 != null) AddLayerGrads(list, block.MLP2);
+    }
+
+    /// <summary>
+    /// Block structure for U-ViT transformer layers.
+    /// </summary>
+    public class UViTBlock
+    {
+        public LayerNormalizationLayer<T>? Norm1 { get; set; }
+        public SelfAttentionLayer<T>? Attention { get; set; }
+        public LayerNormalizationLayer<T>? Norm2 { get; set; }
+        public DenseLayer<T>? MLP1 { get; set; }
+        public DenseLayer<T>? MLP2 { get; set; }
+    }
+}

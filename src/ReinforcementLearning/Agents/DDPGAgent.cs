@@ -1,0 +1,631 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.ReinforcementLearning.ReplayBuffers;
+
+namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
+
+/// <summary>
+/// Deep Deterministic Policy Gradient (DDPG) agent for continuous control.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// DDPG is an actor-critic algorithm designed for continuous action spaces. It learns
+/// a deterministic policy (actor) and uses an off-policy approach with experience replay
+/// and target networks, extending DQN ideas to continuous control.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// DDPG is perfect for controlling things that need precise, continuous adjustments like:
+/// - Robot arm angles (not just "left" or "right", but exact degrees)
+/// - Car steering and acceleration (smooth continuous values)
+/// - Temperature control, volume levels, etc.
+///
+/// Key components:
+/// - **Actor**: Learns the best action to take (deterministic policy)
+/// - **Critic**: Evaluates how good that action is (Q-value)
+/// - **Target Networks**: Stable copies for training
+/// - **Exploration Noise**: Adds randomness during training for exploration
+///
+/// Think of it like learning to drive: the actor is your decision-making (how much to
+/// turn the wheel), the critic is your judgment (was that a good turn?), and noise
+/// is trying slight variations to discover better techniques.
+/// </para>
+/// <para><b>Reference:</b>
+/// Lillicrap et al., "Continuous control with deep reinforcement learning", 2015.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a DDPG agent for continuous control tasks
+/// var options = new DDPGOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, ActorLearningRate = 0.001 };
+/// var agent = new DDPGAgent&lt;double&gt;(options);
+///
+/// // Select a continuous action for the current state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Continuous Control with Deep Reinforcement Learning",
+    "https://arxiv.org/abs/1509.02971",
+    Year = 2016,
+    Authors = "Lillicrap, T. P., Hunt, J. J., Pritzel, A., Heess, N., Erez, T., Tassa, Y., Silver, D., & Wierstra, D.")]
+public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
+{
+    private DDPGOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+    private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
+    private readonly OrnsteinUhlenbeckNoise<T> _noise;
+
+    private INeuralNetwork<T> _actorNetwork;
+    private INeuralNetwork<T> _actorTargetNetwork;
+    private INeuralNetwork<T> _criticNetwork;
+    private INeuralNetwork<T> _criticTargetNetwork;
+    private int _steps;
+
+    /// <inheritdoc/>
+    public override int FeatureCount => _options.StateSize;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DDPGAgent()
+        : this(new DDPGOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
+    public DDPGAgent(DDPGOptions<T> options)
+        : base(CreateBaseOptions(options))
+    {
+        _options = options;
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(options.ReplayBufferSize, options.Seed);
+        _noise = new OrnsteinUhlenbeckNoise<T>(options.ActionSize, NumOps, Random, options.ExplorationNoise);
+        _steps = 0;
+
+        // Build networks
+        _actorNetwork = BuildActorNetwork();
+        _actorTargetNetwork = BuildActorNetwork();
+        _criticNetwork = BuildCriticNetwork();
+        _criticTargetNetwork = BuildCriticNetwork();
+
+        // Initialize targets
+        CopyNetworkWeights(_actorNetwork, _actorTargetNetwork);
+        CopyNetworkWeights(_criticNetwork, _criticTargetNetwork);
+
+        Networks.Add(_actorNetwork);
+        Networks.Add(_actorTargetNetwork);
+        Networks.Add(_criticNetwork);
+        Networks.Add(_criticTargetNetwork);
+    }
+
+
+    private static ReinforcementLearningOptions<T> CreateBaseOptions(DDPGOptions<T> options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ReinforcementLearningOptions<T>
+        {
+            LearningRate = options.ActorLearningRate,
+            DiscountFactor = options.DiscountFactor,
+            LossFunction = options.CriticLossFunction,
+            Seed = options.Seed,
+            BatchSize = options.BatchSize,
+            ReplayBufferSize = options.ReplayBufferSize,
+            WarmupSteps = options.WarmupSteps
+        };
+    }
+
+    private NeuralNetwork<T> BuildActorNetwork()
+    {
+        var layers = new List<ILayer<T>>();
+        int prevSize = _options.StateSize;
+
+        foreach (var hiddenSize in _options.ActorHiddenLayers)
+        {
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            prevSize = hiddenSize;
+        }
+
+        // Output layer with tanh activation to bound actions to [-1, 1]
+        layers.Add(new DenseLayer<T>(_options.ActionSize, (IActivationFunction<T>)new TanhActivation<T>()));
+
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: _options.StateSize,
+            outputSize: _options.ActionSize,
+            layers: layers
+        );
+
+        return new NeuralNetwork<T>(architecture);
+    }
+
+    private NeuralNetwork<T> BuildCriticNetwork()
+    {
+        // Critic takes state + action as input
+        var layers = new List<ILayer<T>>();
+        int inputSize = _options.StateSize + _options.ActionSize;
+        int prevSize = inputSize;
+
+        foreach (var hiddenSize in _options.CriticHiddenLayers)
+        {
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            prevSize = hiddenSize;
+        }
+
+        // Output single Q-value
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
+
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: inputSize,
+            outputSize: 1,
+            layers: layers
+        );
+
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.CriticLossFunction);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+    {
+        var stateTensor = Tensor<T>.FromVector(state);
+        var actionTensor = _actorNetwork.Predict(stateTensor);
+        var action = actionTensor.ToVector();
+
+        if (training)
+        {
+            // Add exploration noise
+            var noise = _noise.Sample();
+            for (int i = 0; i < action.Length; i++)
+            {
+                action[i] = MathHelper.Clamp<T>(
+                    NumOps.Add(action[i], noise[i]),
+                    NumOps.FromDouble(-1.0),
+                    NumOps.FromDouble(1.0)
+                );
+            }
+        }
+
+        return action;
+    }
+
+    /// <inheritdoc/>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+    {
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
+    }
+
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// The shared base adapter decodes <paramref name="target"/> into a discrete one-hot action sized
+    /// to the target length, which is incompatible with DDPG's continuous critic input
+    /// (StateSize + ActionSize) — the stored experience would have the wrong action dimensionality.
+    /// We act in the state to obtain an action of the agent's own ActionSize, derive a bounded scalar
+    /// reward from the supervised target, store the transition, and run a DDPG update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        var action = SelectAction(state, training: true);
+
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        // Treat this one-shot supervised transition as terminal: nextState is fabricated as `state`, so
+        // done: false would inject a γQ'(s, μ'(s)) bootstrap and optimize against an invented target.
+        // done: true makes the critic target just the supplied reward.
+        StoreExperience(state, action, reward, state, done: true);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override T Train()
+    {
+        _steps++;
+        TrainingSteps++;
+
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _steps < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || !_replayBuffer.CanSample(effectiveBatchSize))
+        {
+            return NumOps.Zero;
+        }
+
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
+        int n = batch.Count;
+        if (n == 0) return NumOps.Zero;
+
+        int stateDim = _options.StateSize;
+        int actionDim = _options.ActionSize;
+        int saDim = stateDim + actionDim;
+        T gamma = _options.DiscountFactor;
+
+        // --- Critic update (Lillicrap et al. 2015) ---
+        // y = r + gamma*(1-done)*Q'(s', mu'(s')); regress the critic toward y.
+        var saInputs = new Tensor<T>([n, saDim]);
+        var yTargets = new Tensor<T>([n, 1]);
+        for (int i = 0; i < n; i++)
+        {
+            var exp = batch[i];
+            // Validate replay-sample shapes before any tensor write: StoreExperience() is a public
+            // input boundary, so a malformed transition would otherwise corrupt the critic inputs
+            // (saInputs) or throw deep inside the target-network forwards. Reject it with a clear message.
+            if (exp.State.Length != stateDim || exp.NextState.Length != stateDim || exp.Action.Length != actionDim)
+            {
+                throw new InvalidOperationException(
+                    $"DDPG replay experience has wrong dimensions; expected State={stateDim}, " +
+                    $"NextState={stateDim}, Action={actionDim} but got State={exp.State.Length}, " +
+                    $"NextState={exp.NextState.Length}, Action={exp.Action.Length}.");
+            }
+            var nextA = _actorTargetNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
+            var nextSA = Tensor<T>.FromVector(ConcatenateStateAction(exp.NextState, nextA));
+            T qNext = _criticTargetNetwork.Predict(nextSA).ToVector()[0];
+
+            T y = exp.Reward;
+            if (!exp.Done) y = NumOps.Add(y, NumOps.Multiply(gamma, qNext));
+
+            var saVec = ConcatenateStateAction(exp.State, exp.Action);
+            for (int j = 0; j < saDim; j++) saInputs[i, j] = saVec[j];
+            yTargets[i, 0] = y;
+        }
+        _criticNetwork.Train(saInputs, yTargets);
+        T criticLoss = _criticNetwork.GetLastLoss();
+
+        // --- Actor update via the deterministic policy gradient ---
+        // ∇θ J = E[∇a Q(s,a)|a=mu(s) · ∇θ mu(s)]. ComputeDDPGPolicyGradient returns −∇a Q (a loss
+        // gradient for gradient ASCENT on Q); the Q-ascending action target is therefore
+        // a − step·(−∇a Q) = a + step·∇a Q. Training the actor toward it realises the chain rule
+        // ∇θ mu through the network's MSE Train.
+        var actorInputs = new Tensor<T>([n, stateDim]);
+        var actorTargets = new Tensor<T>([n, actionDim]);
+        // DPG action-space ascent step for building the actor's regression target (Lillicrap et al.
+        // 2015). Named constant rather than a magic literal; deliberately distinct from the actor
+        // NETWORK's optimizer learning rate (_options.ActorLearningRate, already wired into
+        // _actorNetwork) — they play different roles and must not be conflated.
+        const double actorPolicyGradientStep = 0.05;
+        T stepSize = NumOps.FromDouble(actorPolicyGradientStep);
+        for (int i = 0; i < n; i++)
+        {
+            var s = batch[i].State;
+            var a = _actorNetwork.Predict(Tensor<T>.FromVector(s)).ToVector();
+            var negGrad = ComputeDDPGPolicyGradient(s, a);
+            for (int j = 0; j < stateDim; j++) actorInputs[i, j] = s[j];
+            for (int k = 0; k < actionDim; k++)
+                actorTargets[i, k] = MathHelper.Clamp<T>(
+                    NumOps.Subtract(a[k], NumOps.Multiply(stepSize, negGrad[k])),
+                    NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+        }
+        _actorNetwork.Train(actorInputs, actorTargets);
+        T actorLoss = _actorNetwork.GetLastLoss();
+
+        // Soft update target networks
+        SoftUpdateTargets();
+
+        var totalLoss = NumOps.Add(criticLoss, actorLoss);
+        LossHistory.Add(totalLoss);
+
+        return totalLoss;
+    }
+
+
+    private Vector<T> ComputeDDPGPolicyGradient(Vector<T> state, Vector<T> action)
+    {
+        // DDPG uses deterministic policy gradient: ∇θ J = E[∇a Q(s,a)|a=μ(s) * ∇θ μ(s)]
+        //
+        // Step 1: Compute ∇a Q(s,a) - gradient of Q-value w.r.t. actions
+        // We approximate this using finite differences since we don't have direct access to critic gradients
+        //
+        // Step 2: This gradient is then backpropagated through the actor network
+        // to compute ∇θ μ(s) via the chain rule
+
+        var gradient = new Vector<T>(action.Length);
+        T epsilon = NumOps.FromDouble(0.001); // Small perturbation for finite differences
+
+        // Compute gradient of Q w.r.t. each action dimension using finite differences
+        for (int i = 0; i < action.Length; i++)
+        {
+            // Create perturbed action: a + ε
+            var actionPlus = new Vector<T>(action.Length);
+            for (int j = 0; j < action.Length; j++)
+            {
+                actionPlus[j] = action[j];
+            }
+            actionPlus[i] = NumOps.Add(action[i], epsilon);
+
+            // Create perturbed action: a - ε
+            var actionMinus = new Vector<T>(action.Length);
+            for (int j = 0; j < action.Length; j++)
+            {
+                actionMinus[j] = action[j];
+            }
+            actionMinus[i] = NumOps.Subtract(action[i], epsilon);
+
+            // Compute Q(s, a+ε)
+            var stateActionPlus = ConcatenateStateAction(state, actionPlus);
+            var qPlus = _criticNetwork.Predict(Tensor<T>.FromVector(stateActionPlus)).ToVector()[0];
+
+            // Compute Q(s, a-ε)
+            var stateActionMinus = ConcatenateStateAction(state, actionMinus);
+            var qMinus = _criticNetwork.Predict(Tensor<T>.FromVector(stateActionMinus)).ToVector()[0];
+
+            // Finite difference approximation: ∂Q/∂a_i ≈ (Q(s,a+ε) - Q(s,a-ε)) / (2ε)
+            var dQda = NumOps.Divide(
+                NumOps.Subtract(qPlus, qMinus),
+                NumOps.Multiply(NumOps.FromDouble(2.0), epsilon)
+            );
+
+            // This gradient will be backpropagated through the actor network
+            // We negate because we want to maximize Q (gradient ascent)
+            gradient[i] = NumOps.Negate(dQda);
+        }
+
+        return gradient;
+    }
+
+    private void SoftUpdateTargets()
+    {
+        SoftUpdateNetwork(_actorNetwork, _actorTargetNetwork);
+        SoftUpdateNetwork(_criticNetwork, _criticTargetNetwork);
+    }
+
+    private void SoftUpdateNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)
+    {
+        var sourceParams = source.GetParameters();
+        var targetParams = target.GetParameters();
+
+        var tau = _options.TargetUpdateTau;
+        var oneMinusTau = NumOps.Subtract(NumOps.One, tau);
+
+        for (int i = 0; i < targetParams.Length; i++)
+        {
+            targetParams[i] = NumOps.Add(
+                NumOps.Multiply(tau, sourceParams[i]),
+                NumOps.Multiply(oneMinusTau, targetParams[i])
+            );
+        }
+
+        target.UpdateParameters(targetParams);
+    }
+
+    private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
+    {
+        var combined = new Vector<T>(state.Length + action.Length);
+        for (int i = 0; i < state.Length; i++)
+            combined[i] = state[i];
+        for (int i = 0; i < action.Length; i++)
+            combined[state.Length + i] = action[i];
+        return combined;
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetMetrics()
+    {
+        var baseMetrics = base.GetMetrics();
+        baseMetrics["ReplayBufferSize"] = NumOps.FromDouble(_replayBuffer.Count);
+        baseMetrics["Steps"] = NumOps.FromDouble(_steps);
+        return baseMetrics;
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            FeatureCount = _options.StateSize,
+        };
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        writer.Write(_options.StateSize);
+        writer.Write(_options.ActionSize);
+
+        void WriteNetwork(INeuralNetwork<T> net)
+        {
+            var bytes = net.Serialize();
+            writer.Write(bytes.Length);
+            writer.Write(bytes);
+        }
+
+        WriteNetwork(_actorNetwork);
+        WriteNetwork(_actorTargetNetwork);
+        WriteNetwork(_criticNetwork);
+        WriteNetwork(_criticTargetNetwork);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        reader.ReadInt32(); // stateSize
+        reader.ReadInt32(); // actionSize
+
+        void ReadNetwork(INeuralNetwork<T> net)
+        {
+            var len = reader.ReadInt32();
+            var bytes = reader.ReadBytes(len);
+            net.Deserialize(bytes);
+        }
+
+        ReadNetwork(_actorNetwork);
+        ReadNetwork(_actorTargetNetwork);
+        ReadNetwork(_criticNetwork);
+        ReadNetwork(_criticTargetNetwork);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var actorParams = _actorNetwork.GetParameters();
+        var criticParams = _criticNetwork.GetParameters();
+
+        var total = actorParams.Length + criticParams.Length;
+        var vector = new Vector<T>(total);
+
+        int idx = 0;
+        foreach (var p in actorParams) vector[idx++] = p;
+        foreach (var p in criticParams) vector[idx++] = p;
+
+        return vector;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var actorParams = _actorNetwork.GetParameters();
+        var criticParams = _criticNetwork.GetParameters();
+
+        int idx = 0;
+        var actorVec = new Vector<T>(actorParams.Length);
+        var criticVec = new Vector<T>(criticParams.Length);
+
+        for (int i = 0; i < actorParams.Length; i++) actorVec[i] = parameters[idx++];
+        for (int i = 0; i < criticParams.Length; i++) criticVec[i] = parameters[idx++];
+
+        _actorNetwork.UpdateParameters(actorVec);
+        _criticNetwork.UpdateParameters(criticVec);
+
+        CopyNetworkWeights(_actorNetwork, _actorTargetNetwork);
+        CopyNetworkWeights(_criticNetwork, _criticTargetNetwork);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new DDPGAgent<T>(_options);
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> ComputeGradients(
+        Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        throw new NotSupportedException(
+            "DDPG uses actor-critic training via Train() method. " +
+            "Direct gradient computation through this interface is not applicable.");
+    }
+
+    /// <inheritdoc/>
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        throw new NotSupportedException(
+            "DDPG uses actor-critic training via Train() method. " +
+            "Direct gradient application through this interface is not applicable.");
+    }
+
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
+    {
+        target.UpdateParameters(source.GetParameters());
+    }
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
+}
+
+/// <summary>
+/// Ornstein-Uhlenbeck process for temporally correlated exploration noise.
+/// </summary>
+internal class OrnsteinUhlenbeckNoise<T>
+{
+    private readonly int _size;
+    private readonly INumericOperations<T> _numOps;
+    private readonly Random _random;
+    private readonly double _theta;
+    private readonly double _sigma;
+    private Vector<T> _state;
+
+    public OrnsteinUhlenbeckNoise(int size, INumericOperations<T> numOps, Random random, double sigma, double theta = 0.15)
+    {
+        _size = size;
+        _numOps = numOps;
+        _random = random;
+        _theta = theta;
+        _sigma = sigma;
+        _state = new Vector<T>(size);
+    }
+
+    public Vector<T> Sample()
+    {
+        var noise = new Vector<T>(_size);
+
+        for (int i = 0; i < _size; i++)
+        {
+            var drift = _numOps.Multiply(_numOps.FromDouble(-_theta), _state[i]);
+            var diffusion = _numOps.Multiply(_numOps.FromDouble(_sigma),
+                MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One));
+            var dx = _numOps.Add(drift, diffusion);
+
+            _state[i] = _numOps.Add(_state[i], dx);
+            noise[i] = _state[i];
+        }
+
+        return noise;
+    }
+
+    public void Reset()
+    {
+        _state = new Vector<T>(_size);
+    }
+}

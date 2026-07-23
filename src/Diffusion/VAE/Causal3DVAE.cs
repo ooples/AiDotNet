@@ -1,0 +1,291 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Layers;
+
+namespace AiDotNet.Diffusion.VAE;
+
+/// <summary>
+/// Causal 3D VAE for video with temporal causal convolutions.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer" (2024)</item>
+/// <item>Paper: "Open-Sora Plan" (2024)</item>
+/// </list></para>
+/// <para><b>For Beginners:</b> The Causal 3D VAE compresses video into a much smaller latent space while preserving temporal information. Causal means it only uses past frames to encode each frame, enabling streaming video compression.</para>
+/// <para>
+/// The Causal 3D VAE uses causal 3D convolutions to encode and decode video. Causal convolutions
+/// ensure that each frame's encoding depends only on the current and previous frames, enabling:
+/// - Streaming video generation (encode/decode frame by frame)
+/// - Autoregressive generation without future frame leakage
+/// - Temporal compression (e.g., 4x in time dimension)
+/// </para>
+/// <para>
+/// Architecture:
+/// - Encoder: Causal 3D Conv blocks with temporal stride for temporal compression
+/// - Decoder: Causal 3D TransposeConv blocks for temporal upsampling
+/// - Both spatial and temporal compression in latent space
+/// - Typical compression: 8x spatial, 4x temporal
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var vae = new Causal3DVAE&lt;float&gt;(inputChannels: 3, latentChannels: 16, baseChannels: 128);
+/// var video = Tensor&lt;float&gt;.Random(new[] { 1, 3, 16, 256, 256 });
+/// var latent = vae.Encode(video);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer", "https://arxiv.org/abs/2408.06072", Year = 2024, Authors = "Yang et al.")]
+public class Causal3DVAE<T> : VAEModelBase<T>
+{
+    private readonly int _inputChannels;
+    private readonly int _latentChannels;
+    private readonly int _baseChannels;
+    private readonly int[] _channelMultipliers;
+    private readonly int _temporalCompression;
+    private readonly double _latentScaleFactor;
+
+    private readonly DenseLayer<T> _encoderIn;
+    private readonly DenseLayer<T> _encoderOut;
+    private readonly DenseLayer<T> _decoderIn;
+    private readonly DenseLayer<T> _decoderOut;
+    private readonly LayerNormalizationLayer<T> _encoderNorm;
+    private readonly LayerNormalizationLayer<T> _decoderNorm;
+
+    /// <inheritdoc />
+    public override int InputChannels => _inputChannels;
+
+    /// <inheritdoc />
+    public override int LatentChannels => _latentChannels;
+
+    /// <inheritdoc />
+    public override int DownsampleFactor => 8;
+
+    /// <inheritdoc />
+    public override double LatentScaleFactor => _latentScaleFactor;
+
+    /// <inheritdoc />
+    public override long ParameterCount => GetParameters().Length;
+
+    /// <summary>
+    /// Gets the temporal compression factor.
+    /// </summary>
+    public int TemporalCompression => _temporalCompression;
+
+    /// <summary>
+    /// Initializes a new Causal 3D VAE.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (3 for RGB).</param>
+    /// <param name="latentChannels">Number of latent channels.</param>
+    /// <param name="baseChannels">Base channel count for encoder/decoder.</param>
+    /// <param name="channelMultipliers">Channel multipliers for each level.</param>
+    /// <param name="temporalCompression">Temporal compression factor (e.g., 4).</param>
+    /// <param name="latentScaleFactor">Scale factor for latent space normalization.</param>
+    public Causal3DVAE(
+        int inputChannels = 3,
+        int latentChannels = 16,
+        int baseChannels = 128,
+        int[]? channelMultipliers = null,
+        int temporalCompression = 4,
+        double latentScaleFactor = 0.13025)
+        : base(new MeanSquaredErrorLoss<T>())
+    {
+        _inputChannels = inputChannels;
+        _latentChannels = latentChannels;
+        _baseChannels = baseChannels;
+        _channelMultipliers = channelMultipliers ?? new[] { 1, 2, 4, 4 };
+        _temporalCompression = temporalCompression;
+        _latentScaleFactor = latentScaleFactor;
+
+        int maxChannels = baseChannels * _channelMultipliers[^1];
+
+        // Encoder: inputChannels -> baseChannels -> (norm at baseChannels) -> latentChannels*2
+        _encoderIn = new DenseLayer<T>(baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _encoderNorm = new LayerNormalizationLayer<T>();
+        _encoderOut = new DenseLayer<T>(latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        // Decoder: latentChannels -> maxChannels -> (norm at maxChannels) -> inputChannels
+        _decoderIn = new DenseLayer<T>(maxChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _decoderNorm = new LayerNormalizationLayer<T>();
+        _decoderOut = new DenseLayer<T>(inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+
+        // Pre-resolve every encoder/decoder sublayer from the ctor-known channel topology
+        // so ParameterCount, GetParameters, SetParameters, Clone, and the base save/load
+        // path all see consistent layouts on a freshly constructed VAE — without waiting
+        // for the first Encode/Decode call.
+        _encoderIn.ResolveFromShape(new[] { 1, inputChannels });
+        _encoderNorm.ResolveFromShape(new[] { 1, baseChannels });
+        _encoderOut.ResolveFromShape(new[] { 1, baseChannels });
+        _decoderIn.ResolveFromShape(new[] { 1, latentChannels });
+        _decoderNorm.ResolveFromShape(new[] { 1, maxChannels });
+        _decoderOut.ResolveFromShape(new[] { 1, maxChannels });
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Encode(Tensor<T> input, bool sampleMode = true)
+    {
+        var (mean, logVar) = EncodeWithDistribution(input);
+        return sampleMode ? Sample(mean, logVar) : mean;
+    }
+
+    /// <inheritdoc />
+    public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> input)
+    {
+        var x = _encoderIn.Forward(input);
+        x = _encoderNorm.Forward(x);
+        x = _encoderOut.Forward(x);
+
+        // Split into mean and log variance
+        int halfLen = x.Shape[^1] / 2;
+        var meanShape = GetReducedShape(x._shape, halfLen);
+        var mean = new Tensor<T>(meanShape);
+        var logVar = new Tensor<T>(meanShape);
+        int elements = mean.Length;
+        for (int i = 0; i < elements; i++)
+        {
+            mean[i] = x[i];
+            logVar[i] = x[elements + i];
+        }
+
+        return (ScaleLatent(mean), logVar);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Decode(Tensor<T> latent)
+    {
+        var unscaled = UnscaleLatent(latent);
+        var x = _decoderIn.Forward(unscaled);
+        x = _decoderNorm.Forward(x);
+        x = _decoderOut.Forward(x);
+        return x;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var clone = new Causal3DVAE<T>(
+            inputChannels: _inputChannels,
+            latentChannels: _latentChannels,
+            baseChannels: _baseChannels,
+            channelMultipliers: (int[])_channelMultipliers.Clone(),
+            temporalCompression: _temporalCompression,
+            latentScaleFactor: _latentScaleFactor);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        return clone;
+    }
+
+    private static int[] GetReducedShape(int[] shape, int lastDim)
+    {
+        var result = (int[])shape.Clone();
+        result[^1] = lastDim;
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var parts = new[]
+        {
+            _encoderIn.GetParameters(), _encoderOut.GetParameters(),
+            _decoderIn.GetParameters(), _decoderOut.GetParameters(),
+            _encoderNorm.GetParameters(), _decoderNorm.GetParameters()
+        };
+
+        int total = 0;
+        foreach (var p in parts) total += p.Length;
+
+        var combined = new Vector<T>(total);
+        int offset = 0;
+        foreach (var p in parts)
+        {
+            for (int i = 0; i < p.Length; i++)
+                combined[offset + i] = p[i];
+            offset += p.Length;
+        }
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var layers = new LayerBase<T>[]
+        {
+            _encoderIn, _encoderOut, _decoderIn, _decoderOut,
+            _encoderNorm, _decoderNorm
+        };
+
+        int expected = 0;
+        foreach (var layer in layers) expected += layer.GetParameters().Length;
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+
+        int offset = 0;
+        foreach (var layer in layers)
+        {
+            int count = layer.GetParameters().Length;
+            var sub = new Vector<T>(count);
+            for (int i = 0; i < count; i++)
+                sub[i] = parameters[offset + i];
+            layer.SetParameters(sub);
+            offset += count;
+        }
+    }
+
+    /// <inheritdoc />
+    public override IVAEModel<T> Clone()
+    {
+        var clone = new Causal3DVAE<T>(
+            inputChannels: _inputChannels,
+            latentChannels: _latentChannels,
+            baseChannels: _baseChannels,
+            channelMultipliers: (int[])_channelMultipliers.Clone(),
+            temporalCompression: _temporalCompression,
+            latentScaleFactor: _latentScaleFactor);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        return clone;
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var parts = new[]
+        {
+            _encoderIn.GetParameterGradients(), _encoderOut.GetParameterGradients(),
+            _decoderIn.GetParameterGradients(), _decoderOut.GetParameterGradients(),
+            _encoderNorm.GetParameterGradients(), _decoderNorm.GetParameterGradients()
+        };
+        int total = 0;
+        foreach (var p in parts) total += p.Length;
+        var combined = new Vector<T>(total);
+        int offset = 0;
+        foreach (var p in parts)
+        {
+            for (int i = 0; i < p.Length; i++) combined[offset + i] = p[i];
+            offset += p.Length;
+        }
+        return combined;
+    }
+    /// <inheritdoc />
+    /// <remarks>
+    /// This concrete VAE does not implement layer-level backprop yet, so the
+    /// exact-gradient path is unsupported. The base class catches this and falls
+    /// through to SPSA in ComputeGradients.
+    /// </remarks>
+    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
+            "implemented. ComputeGradients will fall through to SPSA.");
+    }
+
+}

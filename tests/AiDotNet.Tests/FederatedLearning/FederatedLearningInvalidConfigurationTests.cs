@@ -1,0 +1,185 @@
+using AiDotNet.Data.Loaders;
+using AiDotNet.FederatedLearning.Cryptography;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.Tests.Helpers;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.FederatedLearning;
+
+public class FederatedLearningInvalidConfigurationTests
+{
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithPersonalizationAndMetaLearning_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.Personalization = new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.Ditto };
+        options.MetaLearning = new FederatedMetaLearningOptions { Enabled = true, Strategy = FederatedMetaLearningStrategy.Reptile };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("Personalization and federated meta-learning", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithAsyncModeAndSecureAggregation_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.UseSecureAggregation = true;
+        options.AsyncFederatedLearning = new AsyncFederatedLearningOptions { Mode = FederatedAsyncMode.FedAsync, SimulatedMaxClientDelaySteps = 1 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("Secure aggregation", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("asynchronous", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithAsyncModeAndHeOnly_Completes()
+    {
+        // Industry-standard FedAsync (Xie et al. 2019) and FedBuff
+        // (Nguyen et al. 2022) both natively support encrypted aggregation.
+        // When HE-only and async modes are combined, each arriving client
+        // update is homomorphically aggregated against the current global
+        // parameters — no plaintext slot exists to average separately.
+        var options = CreateBaseOptions();
+        options.AsyncFederatedLearning = new AsyncFederatedLearningOptions { Mode = FederatedAsyncMode.FedAsync, SimulatedMaxClientDelaySteps = 1 };
+        options.HomomorphicEncryption = new HomomorphicEncryptionOptions
+        {
+            Enabled = true,
+            Scheme = HomomorphicEncryptionScheme.Ckks,
+            Mode = HomomorphicEncryptionMode.HeOnly,
+            PolyModulusDegree = 4096
+        };
+
+        await BuildAsync(options, homomorphicEncryptionProvider: new SealHomomorphicEncryptionProvider<double>());
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithSecureAggregationAndUnsupportedAggregator_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.UseSecureAggregation = true;
+        options.AggregationStrategy = FederatedAggregationStrategy.FedBN;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("Secure aggregation", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("FedAvg", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithUnknownAsyncMode_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.AsyncFederatedLearning = new AsyncFederatedLearningOptions
+        {
+            Mode = (FederatedAsyncMode)999,
+            SimulatedMaxClientDelaySteps = 1
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("Unknown async federated learning mode", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithUnknownServerOptimizer_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.ServerOptimizer = new FederatedServerOptimizerOptions { Optimizer = (FederatedServerOptimizer)999 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("Unknown server optimizer", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithUnknownHeterogeneityCorrection_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.HeterogeneityCorrection = new FederatedHeterogeneityCorrectionOptions { Algorithm = (FederatedHeterogeneityCorrection)999 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("Unknown heterogeneity correction", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithUnknownPrivacyAccountant_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.UseDifferentialPrivacy = true;
+        options.DifferentialPrivacyMode = DifferentialPrivacyMode.Central;
+        options.PrivacyAccountant = (FederatedPrivacyAccountant)999;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("Unknown privacy accountant", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithUnknownClientSelectionStrategy_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.ClientSelection = new ClientSelectionOptions { Strategy = (FederatedClientSelectionStrategy)999 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("Unknown client selection strategy", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BuildAsync_WithUnknownCompressionStrategy_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.Compression = new FederatedCompressionOptions { Strategy = (FederatedCompressionStrategy)999 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("compression", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static FederatedLearningOptions CreateBaseOptions()
+    {
+        return new FederatedLearningOptions
+        {
+            NumberOfClients = 3,
+            MaxRounds = 1,
+            ClientSelectionFraction = 1.0,
+            LocalEpochs = 1,
+            AggregationStrategy = FederatedAggregationStrategy.FedAvg,
+            RandomSeed = 123,
+            MinRoundsBeforeConvergence = 100,
+            ConvergenceThreshold = 0.0
+        };
+    }
+
+    private static async Task BuildAsync(
+        FederatedLearningOptions options,
+        bool useDeterministicDeltaOptimizer = false,
+        IHomomorphicEncryptionProvider<double>? homomorphicEncryptionProvider = null)
+    {
+        var (x, y) = CreateToyData();
+        var loader = DataLoaders.FromMatrixVector(x, y);
+
+        var model = new MockFullModel(_ => new Vector<double>(8), parameterCount: 8);
+        AiDotNet.Interfaces.IOptimizer<double, Matrix<double>, Vector<double>> optimizer = useDeterministicDeltaOptimizer
+            ? new FederatedDeterministicDeltaOptimizer(model)
+            : new FederatedNoOpOptimizer(model);
+
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(loader)
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureFederatedLearning(options, homomorphicEncryptionProvider: homomorphicEncryptionProvider)
+            .BuildAsync();
+    }
+
+    private static (Matrix<double> x, Vector<double> y) CreateToyData()
+    {
+        var x = new Matrix<double>(20, 2);
+        var y = new Vector<double>(20);
+        for (int i = 0; i < 20; i++)
+        {
+            x[i, 0] = i;
+            x[i, 1] = i * 2;
+            y[i] = i;
+        }
+
+        return (x, y);
+    }
+}

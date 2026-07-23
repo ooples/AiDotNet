@@ -1,0 +1,543 @@
+using System.Threading.Tasks;
+namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
+
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors;
+using Xunit;
+
+/// <summary>
+/// Integration tests for specialized block implementations (ResNet, MobileNet, DenseNet blocks)
+/// testing forward/backward passes, skip connections, and cloning.
+/// </summary>
+public class SpecializedBlocksIntegrationTests
+{
+    #region BasicBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - ResNet basic block with same input/output channels
+        int channels = 64;
+        int height = 8;
+        int width = 8;
+        var block = new BasicBlock<float>(channels);
+        var input = CreateRandomTensor<float>([2, channels, height, width]); // NCHW format
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_ForwardPass_WithDownsample_ProducesValidOutput()
+    {
+        // Arrange - Basic block with stride 2 (downsample)
+        int inChannels = 64;
+        int outChannels = 128;
+        int height = 16;
+        int width = 16;
+        var block = new BasicBlock<float>(outChannels, stride: 2);
+        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert - output should be half spatial size with double channels
+        Assert.Equal(2, output.Shape[0]); // batch
+        Assert.Equal(outChannels, output.Shape[1]); // channels
+        Assert.Equal(height / 2, output.Shape[2]); // height halved
+        Assert.Equal(width / 2, output.Shape[3]); // width halved
+        Assert.False(ContainsNaN(output));
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int channels = 32;
+        int height = 8;
+        int width = 8;
+        var original = new BasicBlock<float>(channels);
+        var input = CreateRandomTensor<float>([2, channels, height, width]);
+        var originalOutput = original.Forward(input);
+
+        // Act
+        var cloned = (BasicBlock<float>)original.Clone();
+        var clonedOutput = cloned.Forward(input);
+
+        // Assert
+        Assert.NotSame(original, cloned);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_SkipConnection_WorksCorrectly()
+    {
+        // Arrange - When in/out channels match, skip connection is identity
+        int channels = 32;
+        int height = 8;
+        int width = 8;
+        var block = new BasicBlock<float>(channels);
+        var input = CreateRandomTensor<float>([1, channels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert - output should be affected by both convolutions and skip
+        Assert.False(ContainsNaN(output));
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region BottleneckBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion. The ctor is
+        // (baseChannels, stride): input channels resolve lazily on first Forward, and output
+        // channels = baseChannels * Expansion(4). Passing (in, out) here set stride=64.
+        int inChannels = 64;
+        int baseChannels = 64;
+        int height = 8;
+        int width = 8;
+        var block = new BottleneckBlock<float>(baseChannels);
+        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert - output channels = baseChannels * expansion (4)
+        Assert.Equal(2, output.Shape[0]); // batch
+        Assert.Equal(baseChannels * 4, output.Shape[1]); // channels * expansion
+        Assert.Equal(height, output.Shape[2]);
+        Assert.Equal(width, output.Shape[3]);
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_ForwardPass_WithDownsample_ProducesValidOutput()
+    {
+        // Arrange - Bottleneck with stride 2
+        int inChannels = 256;
+        int baseChannels = 128;
+        int height = 16;
+        int width = 16;
+        var block = new BottleneckBlock<float>(baseChannels, stride: 2);
+        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.Equal(2, output.Shape[0]);
+        Assert.Equal(baseChannels * 4, output.Shape[1]); // 128 * 4 = 512
+        Assert.Equal(height / 2, output.Shape[2]);
+        Assert.Equal(width / 2, output.Shape[3]);
+        Assert.False(ContainsNaN(output));
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inChannels = 64;
+        int baseChannels = 64;
+        int height = 8;
+        int width = 8;
+        var original = new BottleneckBlock<float>(baseChannels);
+        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
+        var originalOutput = original.Forward(input);
+
+        // Act
+        var cloned = (BottleneckBlock<float>)original.Clone();
+        var clonedOutput = cloned.Forward(input);
+
+        // Assert
+        Assert.NotSame(original, cloned);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_ExpansionFactor_CorrectlyApplied()
+    {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
+        // Arrange - default expansion is 4. BottleneckBlock is parameterized by its base
+        // width (PyTorch torchvision Bottleneck(inplanes, planes): output = planes * 4); the
+        // ctor signature is (baseChannels, stride) and input channels resolve LAZILY on first
+        // Forward, so passing (inChannels, outChannels) would mis-bind outChannels to stride.
+        int inChannels = 64;
+        int baseChannels = 32; // base width -> output = baseChannels * 4 = 128
+        int height = 8;
+        int width = 8;
+        var block = new BottleneckBlock<float>(baseChannels);
+        var input = CreateRandomTensor<float>([1, inChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert - output channels should be baseChannels * 4
+        Assert.Equal(baseChannels * 4, output.Shape[1]); // 32 * 4 = 128
+    }
+
+    #endregion
+
+    #region InvertedResidualBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - MobileNetV2 inverted residual block
+        int inChannels = 32;
+        int outChannels = 64;
+        int height = 8;
+        int width = 8;
+        var block = new InvertedResidualBlock<float>(outChannels);
+        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.Equal(2, output.Shape[0]);
+        Assert.Equal(outChannels, output.Shape[1]);
+        Assert.Equal(height, output.Shape[2]);
+        Assert.Equal(width, output.Shape[3]);
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_ForwardPass_WithStride_ProducesValidOutput()
+    {
+        // Arrange - Inverted residual with stride 2
+        int inChannels = 32;
+        int outChannels = 64;
+        int height = 16;
+        int width = 16;
+        var block = new InvertedResidualBlock<float>(outChannels, stride: 2);
+        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.Equal(2, output.Shape[0]);
+        Assert.Equal(outChannels, output.Shape[1]);
+        Assert.Equal(height / 2, output.Shape[2]);
+        Assert.Equal(width / 2, output.Shape[3]);
+        Assert.False(ContainsNaN(output));
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inChannels = 32;
+        int outChannels = 64;
+        int height = 8;
+        int width = 8;
+        var original = new InvertedResidualBlock<float>(outChannels);
+        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
+        var originalOutput = original.Forward(input);
+
+        // Act
+        var cloned = (InvertedResidualBlock<float>)original.Clone();
+        var clonedOutput = cloned.Forward(input);
+
+        // Assert
+        Assert.NotSame(original, cloned);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_ExpansionFactor_CorrectlyExpands()
+    {
+        // Arrange - expansion factor 6 is typical
+        int inChannels = 24;
+        int outChannels = 24;
+        int height = 8;
+        int width = 8;
+        int expansionRatio = 6;
+        var block = new InvertedResidualBlock<float>(outChannels, expansionRatio: expansionRatio);
+        var input = CreateRandomTensor<float>([1, inChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert - output should have outChannels
+        Assert.Equal(outChannels, output.Shape[1]);
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_WithSqueezeExcite_ProducesValidOutput()
+    {
+        // Arrange - SE module is optional enhancement
+        int inChannels = 32;
+        int outChannels = 32;
+        int height = 8;
+        int width = 8;
+        var block = new InvertedResidualBlock<float>(outChannels, useSE: true);
+        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+        Assert.False(ContainsNaN(output));
+    }
+
+    #endregion
+
+    #region DenseBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - DenseNet block with growth rate
+        int inputChannels = 64;
+        int numLayers = 4;
+        int growthRate = 32;
+        int height = 8;
+        int width = 8;
+        var block = new DenseBlock<float>(numLayers, growthRate);
+        var input = CreateRandomTensor<float>([2, inputChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert - output channels = inputChannels + numLayers * growthRate
+        int expectedChannels = inputChannels + numLayers * growthRate; // 64 + 4*32 = 192
+        Assert.Equal(2, output.Shape[0]);
+        Assert.Equal(expectedChannels, output.Shape[1]);
+        Assert.Equal(height, output.Shape[2]);
+        Assert.Equal(width, output.Shape[3]);
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_OutputChannels_CorrectlyCalculated()
+    {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
+        // Arrange - DenseBlock ctor only takes numLayers + growthRate; the
+        // inputChannels component of OutputChannels resolves from the first
+        // input.Shape (see DenseBlock.OnFirstForward).
+        int inputChannels = 32;
+        int numLayers = 6;
+        int growthRate = 16;
+        int height = 8;
+        int width = 8;
+        var block = new DenseBlock<float>(numLayers, growthRate);
+
+        // OutputChannels reports the documented lazy sentinel until the first
+        // Forward reveals the input channel count.
+        Assert.Equal(-1, block.OutputChannels);
+        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
+        block.Forward(input);
+
+        // Assert - DenseNet concatenates the input with each layer's growth-rate output.
+        Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);
+        Assert.Equal(numLayers, block.NumLayers);
+        Assert.Equal(growthRate, block.GrowthRate);
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputChannels = 32;
+        int numLayers = 3;
+        int growthRate = 16;
+        int height = 8;
+        int width = 8;
+        var original = new DenseBlock<float>(numLayers, growthRate);
+        var input = CreateRandomTensor<float>([2, inputChannels, height, width]);
+        var originalOutput = original.Forward(input);
+
+        // Act
+        var cloned = (DenseBlock<float>)original.Clone();
+        var clonedOutput = cloned.Forward(input);
+
+        // Assert
+        Assert.NotSame(original, cloned);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_DenseConnectivity_AllLayersContributeToOutput()
+    {
+        // Arrange - In DenseBlock, each layer's output is concatenated
+        int inputChannels = 16;
+        int numLayers = 4;
+        int growthRate = 8;
+        int height = 4;
+        int width = 4;
+        var block = new DenseBlock<float>(numLayers, growthRate);
+        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert - output should contain concatenation of all layer outputs
+        // Each layer adds growthRate channels
+        int expectedChannels = inputChannels + numLayers * growthRate;
+        Assert.Equal(expectedChannels, output.Shape[1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_ResetState_ClearsLayerOutputs()
+    {
+        // Arrange
+        int inputChannels = 32;
+        int numLayers = 2;
+        int growthRate = 16;
+        int height = 4;
+        int width = 4;
+        var block = new DenseBlock<float>(numLayers, growthRate);
+        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
+
+        // Act - forward then reset
+        var output1 = block.Forward(input);
+        block.ResetState();
+        var output2 = block.Forward(input);
+
+        // Assert - should produce same output after reset
+        Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
+        Assert.False(ContainsNaN(output2));
+    }
+
+    #endregion
+
+    #region Edge Cases
+
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_SingleBatch_Works()
+    {
+        // Arrange
+        int channels = 32;
+        int height = 4;
+        int width = 4;
+        var block = new BasicBlock<float>(channels);
+        var input = CreateRandomTensor<float>([1, channels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_SingleBatch_Works()
+    {
+        // Arrange
+        int channels = 64;
+        int height = 4;
+        int width = 4;
+        var block = new BottleneckBlock<float>(channels, channels / 4);
+        var input = CreateRandomTensor<float>([1, channels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_ExpansionOne_Works()
+    {
+        // Arrange - expansion 1 means no expansion (just depthwise)
+        int channels = 32;
+        int height = 4;
+        int width = 4;
+        var block = new InvertedResidualBlock<float>(channels, expansionRatio: 1);
+        var input = CreateRandomTensor<float>([1, channels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_SingleLayer_Works()
+    {
+        // Arrange - minimum layers
+        int inputChannels = 16;
+        int numLayers = 1;
+        int growthRate = 8;
+        int height = 4;
+        int width = 4;
+        var block = new DenseBlock<float>(numLayers, growthRate);
+        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.Equal(inputChannels + growthRate, output.Shape[1]);
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_LargeGrowthRate_Works()
+    {
+        // Arrange - large growth rate
+        int inputChannels = 16;
+        int numLayers = 2;
+        int growthRate = 64;
+        int height = 4;
+        int width = 4;
+        var block = new DenseBlock<float>(numLayers, growthRate);
+        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.Equal(inputChannels + numLayers * growthRate, output.Shape[1]); // 16 + 2*64 = 144
+        Assert.False(ContainsNaN(output));
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    private static Tensor<T> CreateRandomTensor<T>(int[] shape) where T : struct, IComparable<T>
+    {
+        var tensor = new Tensor<T>(shape);
+        var random = new Random(42);
+
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            double value = random.NextDouble() * 2 - 1; // [-1, 1]
+            tensor[i] = (T)Convert.ChangeType(value, typeof(T));
+        }
+
+        return tensor;
+    }
+
+    private static bool ContainsNaN<T>(Tensor<T> tensor) where T : struct, IComparable<T>
+    {
+        foreach (var value in tensor.ToArray())
+        {
+            if (value is float f && float.IsNaN(f)) return true;
+            if (value is double d && double.IsNaN(d)) return true;
+        }
+        return false;
+    }
+
+    #endregion
+}

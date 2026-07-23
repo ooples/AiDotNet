@@ -1,0 +1,1035 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+
+namespace AiDotNet.Video.FrameInterpolation;
+
+/// <summary>
+/// Real-time Intermediate Flow Estimation (RIFE) for video frame interpolation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> RIFE is a state-of-the-art model for generating intermediate frames between
+/// two existing video frames. This is useful for:
+/// - Increasing video frame rate (e.g., 24fps to 60fps)
+/// - Creating slow-motion effects
+/// - Smoothing video playback
+/// - Reducing temporal aliasing
+///
+/// RIFE uses a privileged distillation approach with intermediate flow estimation
+/// to create realistic frames at arbitrary positions between input frames.
+/// </para>
+/// <para>
+/// <b>Technical Details:</b>
+/// - Uses IFNet architecture for intermediate flow estimation
+/// - Coarse-to-fine flow refinement across multiple scales
+/// - Context-aware fusion with feature maps
+/// - Supports arbitrary timestep interpolation (not just midpoint)
+/// </para>
+/// <para>
+/// <b>Reference:</b> Huang et al., "RIFE: Real-Time Intermediate Flow Estimation for Video Frame Interpolation"
+/// ECCV 2022.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a RIFE model for real-time video frame interpolation
+/// var rife = new RIFE&lt;double&gt;();
+///
+/// // Or configure with custom flow estimation parameters. inputDepth is the
+/// // per-frame channel count (3 for RGB) — RIFE concatenates the two input
+/// // frames internally to feed a 6-channel tensor into the flow network.
+/// // The previous example here showed inputDepth: 6 which recreated the
+/// // exact slicing bug the constructor was patched to prevent.
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 3);
+/// var model = new RIFE&lt;double&gt;(architecture, numFeatures: 64, numFlowBlocks: 8);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FrameInterpolation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("RIFE: Real-Time Intermediate Flow Estimation for Video Frame Interpolation",
+    "https://arxiv.org/abs/2011.06294",
+    Year = 2022,
+    Authors = "Zhewei Huang, Tianyuan Zhang, Wen Heng, Boxin Shi, Shuchang Zhou")]
+public class RIFE<T> : FrameInterpolationBase<T>
+{
+    private readonly RIFEOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    #region Fields
+
+    private int _height;
+    private int _width;
+    private int _channels;
+    private int _numFeatures;
+    private int _numFlowBlocks;
+
+    // IFNet components - coarse to fine flow estimation
+    private readonly List<ConvolutionalLayer<T>> _encoder;
+    private readonly List<ConvolutionalLayer<T>> _flowDecoder;
+    private readonly List<ConvolutionalLayer<T>> _contextEncoder;
+    private ConvolutionalLayer<T>? _fusion;
+    private ConvolutionalLayer<T>? _outputConv;
+
+    // Flow refinement blocks
+    private readonly List<ConvolutionalLayer<T>> _flowBlocks;
+
+    private const int DefaultNumFeatures = 64;
+    // RIFE (Huang et al., ECCV 2022, "Real-Time Intermediate Flow Estimation") uses a 3-block coarse-to-
+    // fine IFNet; it is a REAL-TIME/lightweight model. The previous default of 8 refinement blocks was
+    // well beyond the paper and ~2.7x the per-forward refinement compute (which timed MoreData out).
+    private const int DefaultNumFlowBlocks = 3;
+
+    // Activation cache for backward pass
+    private Tensor<T>? _cachedConcatenatedFrames;
+    private Tensor<T>? _cachedFrame1;
+    private Tensor<T>? _cachedFrame2;
+    private Tensor<T>? _cachedFlow;
+    private Tensor<T>? _cachedFlow_0_1;
+    private Tensor<T>? _cachedFlow_1_0;
+    private Tensor<T>? _cachedFlow_t_0;
+    private Tensor<T>? _cachedFlow_t_1;
+    private Tensor<T>? _cachedFrame1Warped;
+    private Tensor<T>? _cachedFrame2Warped;
+    private Tensor<T>? _cachedContext;
+    private Tensor<T>? _cachedFusionInput;
+    private Tensor<T>? _cachedFused;
+    private double _cachedTimestep;
+    private readonly List<Tensor<T>> _cachedEncoderOutputs;
+    private readonly List<Tensor<T>> _cachedFlowDecoderOutputs;
+    private readonly List<Tensor<T>> _cachedContextEncoderOutputs;
+    private readonly List<Tensor<T>> _cachedFlowBlockInputs;
+    private readonly List<Tensor<T>> _cachedFlowBlockOutputs;
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Gets whether training is supported.
+    /// </summary>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the input height for frames.
+    /// </summary>
+    internal int InputHeight => _height;
+
+    /// <summary>
+    /// Gets the input width for frames.
+    /// </summary>
+    internal int InputWidth => _width;
+
+    /// <summary>
+    /// Gets the number of input channels.
+    /// </summary>
+    internal int InputChannels => _channels;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance of the RIFE class.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">The number of features in intermediate layers.</param>
+    /// <param name="numFlowBlocks">The number of flow refinement blocks.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public RIFE()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            // inputDepth is the PER-FRAME channel count (RGB = 3). RIFE
+            // consumes a channel-wise concatenated frame pair, so the actual
+            // Predict input has 2 * inputDepth = 6 channels and the model
+            // slices it back into two 3-channel frames (ProcessInterpolation
+            // -> SliceChannels(0, _channels) and (_channels, 2*_channels)).
+            // Setting this to 6 made _channels = 6, so the second slice read
+            // channels [6,12) off a 6-channel input -> "Index 1 out of range".
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 3))
+    {
+    }
+
+    public RIFE(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = DefaultNumFeatures,
+        int numFlowBlocks = DefaultNumFlowBlocks,
+        RIFEOptions? options = null)
+        : base(architecture, new CharbonnierLoss<T>())
+    {
+        _options = options ?? new RIFEOptions();
+        Options = _options;
+
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numFeatures = numFeatures;
+        _numFlowBlocks = numFlowBlocks;
+
+        _encoder = [];
+        _flowDecoder = [];
+        _contextEncoder = [];
+        _flowBlocks = [];
+
+        // Initialize activation caches
+        _cachedEncoderOutputs = [];
+        _cachedFlowDecoderOutputs = [];
+        _cachedContextEncoderOutputs = [];
+        _cachedFlowBlockInputs = [];
+        _cachedFlowBlockOutputs = [];
+
+        InitializeNativeLayers();
+    }
+
+    #endregion
+
+    #region Public Methods
+
+    /// <summary>
+    /// Interpolates frames between two input frames.
+    /// </summary>
+    /// <param name="frame1">The first frame tensor [C, H, W] or [B, C, H, W].</param>
+    /// <param name="frame2">The second frame tensor [C, H, W] or [B, C, H, W].</param>
+    /// <param name="timestep">The interpolation position (0.0 = frame1, 1.0 = frame2, 0.5 = midpoint).</param>
+    /// <returns>The interpolated frame.</returns>
+    public override Tensor<T> Interpolate(Tensor<T> frame1, Tensor<T> frame2, double timestep = 0.5)
+    {
+        timestep = Math.Max(0.0, Math.Min(1.0, timestep));
+
+        bool hasBatch = frame1.Rank == 4;
+        if (!hasBatch)
+        {
+            frame1 = AddBatchDimension(frame1);
+            frame2 = AddBatchDimension(frame2);
+        }
+
+        var concatenated = ConcatenateChannels(frame1, frame2);
+        var result = ProcessInterpolation(concatenated, timestep);
+
+        if (!hasBatch)
+        {
+            result = RemoveBatchDimension(result);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Interpolates multiple frames between input frames for frame rate upsampling.
+    /// </summary>
+    /// <param name="frames">List of input frames.</param>
+    /// <param name="factor">The upsampling factor (e.g., 2 doubles frame rate).</param>
+    /// <returns>List of interpolated frames including original frames.</returns>
+    public List<Tensor<T>> UpsampleFrameRate(List<Tensor<T>> frames, int factor = 2)
+    {
+        if (frames.Count < 2)
+        {
+            return [.. frames];
+        }
+
+        var result = new List<Tensor<T>>();
+
+        for (int i = 0; i < frames.Count - 1; i++)
+        {
+            result.Add(frames[i]);
+
+            for (int j = 1; j < factor; j++)
+            {
+                double timestep = (double)j / factor;
+                var interpolated = Interpolate(frames[i], frames[i + 1], timestep);
+                result.Add(interpolated);
+            }
+        }
+
+        result.Add(frames[^1]);
+        return result;
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        // Input should be concatenated frames [B, 2*C, H, W]
+        return ProcessInterpolation(input, 0.5);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// RIFE's real computation graph is <see cref="ProcessInterpolation"/>
+    /// (encode → flow decode → warp → fuse → refine), not a sequential pass
+    /// over the flat <c>Layers</c> list. The base
+    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> runs the layers
+    /// in order, which produces channel-count mismatches because the warp /
+    /// fusion stages interleave non-layer tensor ops. Route the training
+    /// forward through the same graph Predict uses.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return ProcessInterpolation(input, 0.5);
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    private void InitializeNativeLayers()
+    {
+        // Check for user-provided custom layers
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateRIFELayers(
+                channels: _channels, height: _height, width: _width,
+                numFeatures: _numFeatures, numFlowBlocks: _numFlowBlocks).ToList();
+            Layers.AddRange(layers);
+        }
+
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// (Re)builds the sub-list references (<see cref="_encoder"/>,
+    /// <see cref="_flowDecoder"/>, etc.) that <see cref="ProcessInterpolation"/>
+    /// uses, from the canonical <see cref="NeuralNetworks.NeuralNetworkBase{T}.Layers"/>
+    /// list. Must be called both after the layers are built and after
+    /// deserialization replaces <c>Layers</c> with the loaded weights — otherwise
+    /// a clone would keep running the constructor's random-init layers while the
+    /// loaded weights sit unused in <c>Layers</c>
+    /// (Clone_ShouldProduceIdenticalOutput / Clone_AfterTraining). Idempotent.
+    /// </summary>
+    private void ExtractLayerReferences()
+    {
+        _encoder.Clear();
+        _flowDecoder.Clear();
+        _contextEncoder.Clear();
+        _flowBlocks.Clear();
+
+        int idx = 0;
+        // Encoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _encoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow decoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _flowDecoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Context encoder (2 layers)
+        for (int i = 0; i < 2; i++)
+            _contextEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow blocks
+        for (int i = 0; i < _numFlowBlocks; i++)
+            _flowBlocks.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Fusion
+        _fusion = (ConvolutionalLayer<T>)Layers[idx++];
+        // Output conv
+        _outputConv = (ConvolutionalLayer<T>)Layers[idx++];
+    }
+
+    private Tensor<T> ProcessInterpolation(Tensor<T> concatenatedFrames, double timestep)
+    {
+        // The ModelFamily harness feeds a rank-3 [2*C, H, W] unbatched pair, but the warp/encode pipeline
+        // (WarpImage reads Shape[2]/[3]) needs rank-4 [B, 2*C, H, W]. Promote here (tape-aware reshape)
+        // and squeeze the batch dim back off the output below.
+        bool addedBatch = concatenatedFrames.Rank == 3;
+        if (addedBatch)
+            concatenatedFrames = Engine.Reshape(concatenatedFrames,
+                [1, concatenatedFrames.Shape[0], concatenatedFrames.Shape[1], concatenatedFrames.Shape[2]]);
+
+        // Clear and cache input for backward pass
+        ClearActivationCache();
+        _cachedConcatenatedFrames = concatenatedFrames;
+        _cachedTimestep = timestep;
+
+        _cachedFrame1 = SliceChannels(concatenatedFrames, 0, _channels);
+        _cachedFrame2 = SliceChannels(concatenatedFrames, _channels, _channels * 2);
+
+        // Encode features with caching
+        var features = concatenatedFrames;
+        _cachedEncoderOutputs.Add(features); // Cache input
+        foreach (var encoder in _encoder)
+        {
+            features = encoder.Forward(features);
+            _cachedEncoderOutputs.Add(features);
+        }
+
+        // Decode flow with caching
+        var flowFeatures = features;
+        _cachedFlowDecoderOutputs.Add(flowFeatures); // Cache input
+        for (int i = 0; i < _flowDecoder.Count; i++)
+        {
+            flowFeatures = _flowDecoder[i].Forward(flowFeatures);
+            _cachedFlowDecoderOutputs.Add(flowFeatures);
+            if (i < _flowDecoder.Count - 1)
+            {
+                flowFeatures = BilinearUpsample(flowFeatures, 2);
+                _cachedFlowDecoderOutputs.Add(flowFeatures); // Cache after upsample
+            }
+        }
+
+        _cachedFlow = flowFeatures;
+        _cachedFlow_0_1 = SliceChannels(_cachedFlow, 0, 2);
+        _cachedFlow_1_0 = SliceChannels(_cachedFlow, 2, 4);
+
+        var t = NumOps.FromDouble(timestep);
+        var oneMinusT = NumOps.FromDouble(1.0 - timestep);
+
+        // Scale flows correctly for interpolation at time t
+        _cachedFlow_t_0 = ScaleFlow(_cachedFlow_0_1, t);
+        _cachedFlow_t_1 = ScaleFlow(_cachedFlow_1_0, oneMinusT);
+
+        _cachedFrame1Warped = WarpImage(_cachedFrame1, _cachedFlow_t_0);
+        _cachedFrame2Warped = WarpImage(_cachedFrame2, _cachedFlow_t_1);
+
+        // Context encoder with caching
+        var context = concatenatedFrames;
+        _cachedContextEncoderOutputs.Add(context); // Cache input
+        foreach (var contextEnc in _contextEncoder)
+        {
+            context = contextEnc.Forward(context);
+            _cachedContextEncoderOutputs.Add(context);
+        }
+        _cachedContext = context;
+
+        _cachedFusionInput = ConcatenateChannels(
+            ConcatenateChannels(_cachedFrame1Warped, _cachedFrame2Warped),
+            ConcatenateChannels(_cachedContext, _cachedFlow));
+
+        var fusion = _fusion ?? throw new InvalidOperationException("Fusion layer has not been initialized.");
+        _cachedFused = fusion.Forward(_cachedFusionInput);
+
+        // Flow blocks with caching
+        var fused = _cachedFused;
+        for (int i = 0; i < _flowBlocks.Count; i++)
+        {
+            var blockInput = ConcatenateChannels(fused, _cachedFlow);
+            _cachedFlowBlockInputs.Add(blockInput);
+            fused = _flowBlocks[i].Forward(blockInput);
+            _cachedFlowBlockOutputs.Add(fused);
+        }
+
+        var rifeOutputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
+        var rifeOutput = rifeOutputConv.Forward(fused);
+        return addedBatch
+            ? Engine.Reshape(rifeOutput, [rifeOutput.Shape[1], rifeOutput.Shape[2], rifeOutput.Shape[3]])
+            : rifeOutput;
+    }
+
+    /// <summary>
+    /// Computes gradients through the warping operation.
+    /// </summary>
+    private (Tensor<T> frameGrad, Tensor<T> flowGrad) WarpBackward(
+        Tensor<T> outputGrad,
+        Tensor<T> inputFrame,
+        Tensor<T> flow)
+    {
+        int batchSize = outputGrad.Shape[0];
+        int channels = outputGrad.Shape[1];
+        int height = outputGrad.Shape[2];
+        int width = outputGrad.Shape[3];
+
+        var frameGrad = new Tensor<T>(inputFrame._shape);
+        var flowGrad = new Tensor<T>(flow._shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    double dx = Convert.ToDouble(flow[b, 0, h, w]);
+                    double dy = Convert.ToDouble(flow[b, 1, h, w]);
+
+                    double srcH = h + dy;
+                    double srcW = w + dx;
+
+                    // Compute bilinear interpolation coefficients
+                    int h0 = (int)Math.Floor(srcH);
+                    int w0 = (int)Math.Floor(srcW);
+                    int h1 = h0 + 1;
+                    int w1 = w0 + 1;
+
+                    double hWeight = srcH - Math.Floor(srcH);
+                    double wWeight = srcW - Math.Floor(srcW);
+
+                    // Coefficients for bilinear interpolation
+                    double c00 = (1 - hWeight) * (1 - wWeight);
+                    double c01 = (1 - hWeight) * wWeight;
+                    double c10 = hWeight * (1 - wWeight);
+                    double c11 = hWeight * wWeight;
+
+                    for (int c = 0; c < channels; c++)
+                    {
+                        T grad = outputGrad[b, c, h, w];
+
+                        // Distribute gradient to source pixels (gradient w.r.t. input frame)
+                        if (h0 >= 0 && h0 < height && w0 >= 0 && w0 < width)
+                            frameGrad[b, c, h0, w0] = NumOps.Add(
+                                frameGrad[b, c, h0, w0],
+                                NumOps.Multiply(grad, NumOps.FromDouble(c00)));
+
+                        if (h0 >= 0 && h0 < height && w1 >= 0 && w1 < width)
+                            frameGrad[b, c, h0, w1] = NumOps.Add(
+                                frameGrad[b, c, h0, w1],
+                                NumOps.Multiply(grad, NumOps.FromDouble(c01)));
+
+                        if (h1 >= 0 && h1 < height && w0 >= 0 && w0 < width)
+                            frameGrad[b, c, h1, w0] = NumOps.Add(
+                                frameGrad[b, c, h1, w0],
+                                NumOps.Multiply(grad, NumOps.FromDouble(c10)));
+
+                        if (h1 >= 0 && h1 < height && w1 >= 0 && w1 < width)
+                            frameGrad[b, c, h1, w1] = NumOps.Add(
+                                frameGrad[b, c, h1, w1],
+                                NumOps.Multiply(grad, NumOps.FromDouble(c11)));
+
+                        // Gradient w.r.t. flow (spatial derivatives of bilinear interpolation)
+                        T v00 = GetPixelSafe(inputFrame, b, c, h0, w0, height, width);
+                        T v01 = GetPixelSafe(inputFrame, b, c, h0, w1, height, width);
+                        T v10 = GetPixelSafe(inputFrame, b, c, h1, w0, height, width);
+                        T v11 = GetPixelSafe(inputFrame, b, c, h1, w1, height, width);
+
+                        // dOutput/dx = derivative of bilinear interpolation w.r.t. x (width direction)
+                        T dX = NumOps.Add(
+                            NumOps.Multiply(
+                                NumOps.Subtract(v01, v00),
+                                NumOps.FromDouble(1 - hWeight)),
+                            NumOps.Multiply(
+                                NumOps.Subtract(v11, v10),
+                                NumOps.FromDouble(hWeight)));
+
+                        // dOutput/dy = derivative of bilinear interpolation w.r.t. y (height direction)
+                        T dY = NumOps.Add(
+                            NumOps.Multiply(
+                                NumOps.Subtract(v10, v00),
+                                NumOps.FromDouble(1 - wWeight)),
+                            NumOps.Multiply(
+                                NumOps.Subtract(v11, v01),
+                                NumOps.FromDouble(wWeight)));
+
+                        // Accumulate flow gradients
+                        flowGrad[b, 0, h, w] = NumOps.Add(
+                            flowGrad[b, 0, h, w],
+                            NumOps.Multiply(grad, dX));
+                        flowGrad[b, 1, h, w] = NumOps.Add(
+                            flowGrad[b, 1, h, w],
+                            NumOps.Multiply(grad, dY));
+                    }
+                }
+            }
+        }
+
+        return (frameGrad, flowGrad);
+    }
+
+    /// <summary>
+    /// Gets a pixel value safely with boundary handling.
+    /// </summary>
+    private T GetPixelSafe(Tensor<T> tensor, int b, int c, int h, int w, int height, int width)
+    {
+        h = Math.Max(0, Math.Min(h, height - 1));
+        w = Math.Max(0, Math.Min(w, width - 1));
+        return tensor[b, c, h, w];
+    }
+
+    /// <summary>
+    /// Splits a concatenated gradient tensor along the channel dimension.
+    /// </summary>
+    private (Tensor<T> first, Tensor<T> second) SplitConcatenatedGradient(
+        Tensor<T> gradient, int firstChannels, int secondChannels)
+    {
+        int batchSize = gradient.Shape[0];
+        int height = gradient.Shape[2];
+        int width = gradient.Shape[3];
+
+        var first = new Tensor<T>([batchSize, firstChannels, height, width]);
+        var second = new Tensor<T>([batchSize, secondChannels, height, width]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    for (int c = 0; c < firstChannels; c++)
+                        first[b, c, h, w] = gradient[b, c, h, w];
+                    for (int c = 0; c < secondChannels; c++)
+                        second[b, c, h, w] = gradient[b, firstChannels + c, h, w];
+                }
+            }
+        }
+
+        return (first, second);
+    }
+
+    /// <summary>
+    /// Combines flow gradients from different sources.
+    /// </summary>
+    private Tensor<T> CombineFlowGradients(
+        Tensor<T> flowGrad1,
+        Tensor<T> flowGrad2,
+        Tensor<T> flowGradAccumulator)
+    {
+        // flow_0_1 channels 0-1, flow_1_0 channels 2-3
+        // Concatenate the two 2-channel flow grads into a single 4-channel tensor
+        var flowGradsCombined = Engine.TensorConcatenate([flowGrad1, flowGrad2], axis: 1);
+        // Element-wise add with the accumulator
+        return Engine.TensorAdd(flowGradAccumulator, flowGradsCombined);
+    }
+
+    /// <summary>
+    /// Accumulates gradients from multiple branches back to the input.
+    /// </summary>
+    private Tensor<T> AccumulateInputGradients(
+        Tensor<T> encoderGrad,
+        Tensor<T> contextGrad,
+        Tensor<T> frame1Grad,
+        Tensor<T> frame2Grad)
+    {
+        // The input is concatenated frames [frame1, frame2]
+        // Encoder and context encoder both process full concatenated input
+        // Frame gradients only affect their respective parts
+
+        int batchSize = encoderGrad.Shape[0];
+        int totalChannels = encoderGrad.Shape[1];
+        int height = encoderGrad.Shape[2];
+        int width = encoderGrad.Shape[3];
+
+        var result = new Tensor<T>(encoderGrad._shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    for (int c = 0; c < totalChannels; c++)
+                    {
+                        // Accumulate encoder and context encoder gradients
+                        T grad = NumOps.Add(encoderGrad[b, c, h, w], contextGrad[b, c, h, w]);
+
+                        // Add frame-specific gradients
+                        if (c < _channels)
+                        {
+                            grad = NumOps.Add(grad, frame1Grad[b, c, h, w]);
+                        }
+                        else if (c < _channels * 2)
+                        {
+                            grad = NumOps.Add(grad, frame2Grad[b, c - _channels, h, w]);
+                        }
+
+                        result[b, c, h, w] = grad;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Adds two tensors element-wise.
+    /// </summary>
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        return Engine.TensorAdd(a, b);
+    }
+
+    /// <summary>
+    /// Downsamples a tensor using bilinear interpolation (backward of upsample).
+    /// </summary>
+    private Tensor<T> BilinearDownsample(Tensor<T> input, int factor)
+    {
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        int outHeight = inHeight / factor;
+        int outWidth = inWidth / factor;
+
+        var output = new Tensor<T>([batchSize, channels, outHeight, outWidth]);
+
+        // Average pooling as inverse of bilinear upsampling
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < outHeight; h++)
+                {
+                    for (int w = 0; w < outWidth; w++)
+                    {
+                        T sum = NumOps.Zero;
+                        int count = 0;
+
+                        for (int dy = 0; dy < factor; dy++)
+                        {
+                            for (int dx = 0; dx < factor; dx++)
+                            {
+                                int srcH = h * factor + dy;
+                                int srcW = w * factor + dx;
+                                if (srcH < inHeight && srcW < inWidth)
+                                {
+                                    sum = NumOps.Add(sum, input[b, c, srcH, srcW]);
+                                    count++;
+                                }
+                            }
+                        }
+
+                        output[b, c, h, w] = count > 0
+                            ? NumOps.Divide(sum, NumOps.FromDouble(count))
+                            : NumOps.Zero;
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Clears the activation cache.
+    /// </summary>
+    private void ClearActivationCache()
+    {
+        _cachedConcatenatedFrames = null;
+        _cachedFrame1 = null;
+        _cachedFrame2 = null;
+        _cachedFlow = null;
+        _cachedFlow_0_1 = null;
+        _cachedFlow_1_0 = null;
+        _cachedFlow_t_0 = null;
+        _cachedFlow_t_1 = null;
+        _cachedFrame1Warped = null;
+        _cachedFrame2Warped = null;
+        _cachedContext = null;
+        _cachedFusionInput = null;
+        _cachedFused = null;
+        _cachedEncoderOutputs.Clear();
+        _cachedFlowDecoderOutputs.Clear();
+        _cachedContextEncoderOutputs.Clear();
+        _cachedFlowBlockInputs.Clear();
+        _cachedFlowBlockOutputs.Clear();
+    }
+
+    private Tensor<T> ConcatenateChannels(Tensor<T> t1, Tensor<T> t2)
+    {
+        return Engine.TensorConcatenate([t1, t2], axis: 1);
+    }
+
+    private Tensor<T> SliceChannels(Tensor<T> input, int startChannel, int endChannel)
+    {
+        // Tape-aware channel slice so gradients propagate back through the flow
+        // (and frame) tensors during training. A manual element copy would
+        // detach the gradient path to the flow decoder / encoder.
+        int rank = input.Shape.Length;
+        var start = new int[rank];
+        var length = (int[])input._shape.Clone();
+        start[1] = startChannel;
+        length[1] = endChannel - startChannel;
+        return Engine.TensorSlice(input, start, length);
+    }
+
+    private Tensor<T> ScaleFlow(Tensor<T> flow, T scale)
+    {
+        return Engine.TensorMultiplyScalar(flow, scale);
+    }
+
+    private Tensor<T> WarpImage(Tensor<T> image, Tensor<T> flow)
+    {
+        // Backward-warp `image` by `flow` using a tape-aware bilinear grid sample
+        // (the differentiable warp RIFE relies on — Huang et al. 2022). A manual
+        // per-pixel bilinear copy would detach the autodiff tape, so gradients
+        // would never reach the flow decoder / feature encoder and training would
+        // diverge. image: [B, C, H, W]; flow: [B, 2, H, W] with channel 0 = dx,
+        // channel 1 = dy in pixel units.
+        int batchSize = image.Shape[0];
+        int height = image.Shape[2];
+        int width = image.Shape[3];
+
+        // Identity affine grid → per-pixel base sampling positions in normalized
+        // [-1, 1] coordinates ([B, H, W, 2], last dim = (x, y)).
+        var identityTheta = new Tensor<T>([batchSize, 2, 3]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            identityTheta[b, 0, 0] = NumOps.One; // x scale
+            identityTheta[b, 1, 1] = NumOps.One; // y scale
+        }
+        var baseGrid = Engine.AffineGrid(identityTheta, height, width);
+
+        // Convert the pixel-unit flow [B, 2, H, W] to a normalized grid offset
+        // [B, H, W, 2]: a dx-pixel shift is 2*dx/(W-1) in normalized coords.
+        var flowNHWC = Engine.TensorPermute(flow, [0, 2, 3, 1]); // [B, H, W, 2] (x=dx, y=dy)
+        double sx = width > 1 ? 2.0 / (width - 1) : 0.0;
+        double sy = height > 1 ? 2.0 / (height - 1) : 0.0;
+        var scale = new Tensor<T>([batchSize, height, width, 2]);
+        var scaleSpan = scale.Data.Span;
+        for (int idx = 0; idx + 1 < scaleSpan.Length; idx += 2)
+        {
+            scaleSpan[idx] = NumOps.FromDouble(sx);
+            scaleSpan[idx + 1] = NumOps.FromDouble(sy);
+        }
+        var flowOffset = Engine.TensorMultiply(flowNHWC, scale);
+        var grid = Engine.TensorAdd(baseGrid, flowOffset);
+
+        // Engine.GridSample is NCHW (PyTorch convention): image is already [B, C, H, W],
+        // pass it directly. The grid is [B, H, W, 2] regardless of image layout.
+        return Engine.GridSample(image, grid);                      // [B, C, H, W]
+    }
+
+    private Tensor<T> BilinearUpsample(Tensor<T> input, int factor)
+    {
+        // Tape-aware upsample so the flow-decoder gradient path stays connected.
+        return Engine.Upsample(input, factor, factor);
+    }
+
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    {
+        // Convert [C, H, W] to [1, C, H, W]
+        int c = tensor.Shape[0];
+        int h = tensor.Shape[1];
+        int w = tensor.Shape[2];
+
+        var result = new Tensor<T>([1, c, h, w]);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    {
+        // Convert [1, C, H, W] to [C, H, W]
+        int c = tensor.Shape[1];
+        int h = tensor.Shape[2];
+        int w = tensor.Shape[3];
+
+        var result = new Tensor<T>([c, h, w]);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
+
+    #endregion
+
+    #region Abstract Implementation
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        foreach (var layer in _encoder) Layers.Add(layer);
+        foreach (var layer in _flowDecoder) Layers.Add(layer);
+        foreach (var layer in _contextEncoder) Layers.Add(layer);
+        if (_fusion is not null) Layers.Add(_fusion);
+        if (_outputConv is not null) Layers.Add(_outputConv);
+        foreach (var layer in _flowBlocks) Layers.Add(layer);
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+
+        // Update encoder layers
+        foreach (var layer in _encoder)
+        {
+            var layerParams = layer.GetParameters();
+            if (offset + layerParams.Length <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParams.Length);
+                for (int i = 0; i < layerParams.Length; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                layer.SetParameters(newParams);
+                offset += layerParams.Length;
+            }
+        }
+
+        // Update flow decoder layers
+        foreach (var layer in _flowDecoder)
+        {
+            var layerParams = layer.GetParameters();
+            if (offset + layerParams.Length <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParams.Length);
+                for (int i = 0; i < layerParams.Length; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                layer.SetParameters(newParams);
+                offset += layerParams.Length;
+            }
+        }
+
+        // Update context encoder layers
+        foreach (var layer in _contextEncoder)
+        {
+            var layerParams = layer.GetParameters();
+            if (offset + layerParams.Length <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParams.Length);
+                for (int i = 0; i < layerParams.Length; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                layer.SetParameters(newParams);
+                offset += layerParams.Length;
+            }
+        }
+
+        // Update flow blocks
+        foreach (var layer in _flowBlocks)
+        {
+            var layerParams = layer.GetParameters();
+            if (offset + layerParams.Length <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParams.Length);
+                for (int i = 0; i < layerParams.Length; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                layer.SetParameters(newParams);
+                offset += layerParams.Length;
+            }
+        }
+
+        // Update fusion and output layers
+        if (_fusion != null)
+        {
+            var layerParams = _fusion.GetParameters();
+            if (offset + layerParams.Length <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParams.Length);
+                for (int i = 0; i < layerParams.Length; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                _fusion.SetParameters(newParams);
+                offset += layerParams.Length;
+            }
+        }
+
+        if (_outputConv != null)
+        {
+            var layerParams = _outputConv.GetParameters();
+            if (offset + layerParams.Length <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParams.Length);
+                for (int i = 0; i < layerParams.Length; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                _outputConv.SetParameters(newParams);
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var additionalInfo = new Dictionary<string, object>
+        {
+            { "ModelName", "RIFE" },
+            { "Description", "Real-time Intermediate Flow Estimation for Video Frame Interpolation" },
+            { "InputHeight", _height },
+            { "InputWidth", _width },
+            { "InputChannels", _channels },
+            { "NumFeatures", _numFeatures },
+            { "NumFlowBlocks", _numFlowBlocks },
+            { "NumLayers", Layers.Count }
+        };
+
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = additionalInfo,
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_height);
+        writer.Write(_width);
+        writer.Write(_channels);
+        writer.Write(_numFeatures);
+        writer.Write(_numFlowBlocks);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _numFlowBlocks = reader.ReadInt32();
+
+        // Deserialization rebuilt the canonical Layers list with the loaded
+        // weights; re-point the sub-list references at those layers (otherwise
+        // Forward keeps running the constructor's random-init layers).
+        int expectedCount = 3 + 3 + 2 + _numFlowBlocks + 2; // encoder+flowDec+ctx+blocks+fusion+output
+        if (Layers.Count >= expectedCount)
+        {
+            ExtractLayerReferences();
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new RIFE<T>(Architecture, _numFeatures, _numFlowBlocks);
+    }
+
+    #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
+}

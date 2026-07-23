@@ -1,0 +1,123 @@
+# yaml-language-server: $schema=../../schemas/aidotnet-config.schema.json
+#
+# AiModelBuilder YAML Configuration Example
+#
+# This YAML file configures an AiModelBuilder instance. Load it with:
+#
+#   var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>("examples/configs/ai-model-builder.yaml");
+#   var result = await builder.BuildAsync();
+#
+# Every section below maps 1:1 to a Configure*() method on AiModelBuilder.
+# All sections are optional — only include what you need.
+# Property names are case-insensitive.
+#
+# For the full JSON Schema with autocomplete support, see: schemas/aidotnet-config.schema.json
+
+# ─── Model Selection ───────────────────────────────────────────────
+
+# Select optimizer by type name (matches OptimizerType enum)
+optimizer:
+  type: "Adam"
+
+# Select time series model by type name (matches TimeSeriesModelType enum)
+timeSeriesModel:
+  type: "ARIMA"
+
+# ─── Deployment Configuration ──────────────────────────────────────
+
+# Model quantization for inference optimization
+quantization:
+  mode: "Int8"
+  strategy: "Dynamic"
+  granularity: "PerChannel"
+  useSymmetricQuantization: true
+
+# Model compression settings
+compression:
+  enabled: true
+  compressionLevel: 5
+
+# Model caching configuration
+caching:
+  enabled: true
+  maxCacheSize: 100
+
+# A/B testing for model comparison
+abTesting:
+  enabled: true
+
+# Telemetry for tracking inference metrics
+telemetry:
+  enabled: true
+  trackLatency: true
+  trackErrors: true
+  samplingRate: 1.0
+
+# ─── Training Infrastructure ──────────────────────────────────────
+
+# Mixed precision training
+mixedPrecision:
+  enabled: true
+
+# Inference optimizations (KV caching, batching, speculative decoding)
+inferenceOptimizations:
+  enableKVCaching: true
+  enableBatching: true
+  maxBatchSize: 32
+
+# Training memory management
+memoryManagement:
+  enableGradientCheckpointing: true
+
+# ─── Interface-Based Sections ──────────────────────────────────────
+# These use "type" + "params" to select a concrete implementation
+
+# Select regularization strategy
+regularization:
+  type: "NoRegularization"
+
+# Select fit detector
+fitDetector:
+  type: "DefaultFitDetector"
+
+# Select fairness evaluator
+fairnessEvaluator:
+  type: "BasicFairnessEvaluator"
+
+# Select prompt template
+promptTemplate:
+  type: "InstructionFollowingTemplate"
+
+# Select tokenizer
+tokenizer:
+  type: "BPETokenizer"
+  params:
+    vocabSize: 32000
+
+# ─── Pipeline Sections ─────────────────────────────────────────────
+# These define ordered processing steps
+
+preprocessing:
+  steps:
+    - type: "StandardScaler"
+    - type: "SimpleImputer"
+      params:
+        strategy: "Mean"
+
+# ─── Configuration POCOs ───────────────────────────────────────────
+# These accept direct property values
+
+# Federated learning settings
+federatedLearning:
+  numberOfClients: 10
+  communicationRounds: 100
+  clientFraction: 0.1
+
+# Augmentation settings
+augmentation:
+  enabled: true
+
+# Time series feature extraction
+timeSeriesFeatures:
+  enableLagFeatures: true
+  maxLags: 12

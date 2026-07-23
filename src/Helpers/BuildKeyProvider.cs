@@ -1,0 +1,140 @@
+using System.Reflection;
+
+namespace AiDotNet.Helpers;
+
+/// <summary>
+/// Provides access to the build-time signing key embedded as a resource during official CI/CD builds.
+/// </summary>
+/// <remarks>
+/// <b>For Beginners:</b> When AiDotNet is built through the official CI/CD pipeline, a secret signing key
+/// is embedded into the DLL as a resource. This key is used to derive encryption keys that are unique
+/// to official builds. Fork or dev builds will not have this key, which means they derive different
+/// encryption keys and cannot decrypt models encrypted by official builds.
+///
+/// This is Layer 1 of the three-layer obfuscation system.
+/// </remarks>
+internal static class BuildKeyProvider
+{
+    private const string ResourceName = "AiDotNet.BuildKey";
+    private static byte[]? _cachedKey;
+    private static bool _loaded;
+    private static readonly object _lock = new();
+
+    /// <summary>
+    /// TEST-ONLY: overrides the embedded build key so tests can exercise the real HMAC verification
+    /// path with a known key, or simulate a dev/fork build (pass null or empty) to assert fail-closed
+    /// offline behaviour. Not used by production code paths.
+    /// </summary>
+    internal static void OverrideForTesting(byte[]? key)
+    {
+        lock (_lock)
+        {
+            _cachedKey = key is { Length: > 0 } ? (byte[])key.Clone() : null;
+            _loaded = true;
+        }
+    }
+
+    /// <summary>
+    /// TEST-ONLY: reports whether the embedded build-key RESOURCE is present in the assembly,
+    /// bypassing the in-memory cache (which the test ModuleInitializer overrides process-wide).
+    /// Lets dev-build assertions check the actual ship-state of the DLL instead of the runtime
+    /// cache that has been populated for license-validation tests.
+    /// </summary>
+    internal static bool HasEmbeddedResource()
+    {
+        try
+        {
+            var assembly = typeof(BuildKeyProvider).Assembly;
+            using var stream = assembly.GetManifestResourceStream(ResourceName);
+            return stream is { Length: > 0 };
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets whether this is an official build with an embedded build key.
+    /// </summary>
+    internal static bool IsOfficialBuild
+    {
+        get
+        {
+            var key = GetBuildKey();
+            return key.Length > 0;
+        }
+    }
+
+    /// <summary>
+    /// Gets the embedded build key, or an empty array if not present (dev/fork build).
+    /// </summary>
+    internal static byte[] GetBuildKey()
+    {
+        if (_loaded)
+        {
+            // Return defensive copy to prevent callers from mutating the cached key
+            return _cachedKey is not null ? (byte[])_cachedKey.Clone() : Array.Empty<byte>();
+        }
+
+        lock (_lock)
+        {
+            if (_loaded)
+            {
+                return _cachedKey is not null ? (byte[])_cachedKey.Clone() : Array.Empty<byte>();
+            }
+
+            try
+            {
+                var assembly = typeof(BuildKeyProvider).Assembly;
+                using var stream = assembly.GetManifestResourceStream(ResourceName);
+                if (stream is null || stream.Length == 0)
+                {
+                    _cachedKey = null;
+                    return Array.Empty<byte>();
+                }
+
+                if (stream.Length > int.MaxValue)
+                {
+                    _cachedKey = null;
+                    return Array.Empty<byte>();
+                }
+
+                var buffer = new byte[checked((int)stream.Length)];
+                int bytesRead = 0;
+                while (bytesRead < buffer.Length)
+                {
+                    int read = stream.Read(buffer, bytesRead, buffer.Length - bytesRead);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    bytesRead += read;
+                }
+
+                // Guard against partial reads — treat as missing key
+                if (bytesRead < buffer.Length)
+                {
+                    _cachedKey = null;
+                    return Array.Empty<byte>();
+                }
+
+                // Publish to cache after full read to avoid exposing partial data
+                _cachedKey = buffer;
+                return (byte[])_cachedKey.Clone();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "BuildKeyProvider: failed to load build key: " + ex.GetType().Name + ": " + ex.Message);
+                _cachedKey = null;
+                return Array.Empty<byte>();
+            }
+            finally
+            {
+                _loaded = true;
+            }
+        }
+    }
+}

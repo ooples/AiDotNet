@@ -1,0 +1,522 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a reparameterization layer used in variational autoencoders (VAEs) to enable backpropagation through random sampling.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The RepParameterizationLayer implements the reparameterization trick commonly used in variational autoencoders.
+/// It takes an input tensor that contains means and log variances of a latent distribution, samples from this
+/// distribution using the reparameterization trick, and outputs the sampled values. This approach allows
+/// gradients to flow through the random sampling process, which is essential for training VAEs.
+/// </para>
+/// <para><b>For Beginners:</b> This layer is a special component used in variational autoencoders (VAEs).
+/// 
+/// Think of the RepParameterizationLayer as a clever randomizer with memory:
+/// - It takes information about a range of possible values (represented by mean and variance)
+/// - It generates random samples from this range
+/// - It remembers how it generated these samples so it can learn during training
+/// 
+/// For example, in a VAE generating faces:
+/// - Input might represent "average nose size is 5 with variation of ±2"
+/// - This layer randomly picks a specific nose size (like 6.3) based on those statistics
+/// - But it does this in a way that allows the network to learn better statistics
+/// 
+/// The "reparameterization trick" is what makes this possible - it separates the random sampling
+/// (which can't be directly learned from) from the statistical parameters (which can be learned).
+/// 
+/// This layer is crucial for variational autoencoders to learn meaningful latent representations
+/// while still incorporating randomness, which helps with generating diverse outputs.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
+public class RepParameterizationLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// Stores the mean values extracted from the input tensor during the forward pass.
+    /// </summary>
+    /// <remarks>
+    /// This tensor holds the mean values for each dimension of the latent space for each item in the batch.
+    /// It represents the center of the distribution from which samples are drawn. The tensor is null
+    /// before the first forward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _lastMean;
+
+    /// <summary>
+    /// Stores the log variance values extracted from the input tensor during the forward pass.
+    /// </summary>
+    /// <remarks>
+    /// This tensor holds the log variance values for each dimension of the latent space for each item in the batch.
+    /// Log variance is used instead of variance for numerical stability. It represents the spread of the
+    /// distribution from which samples are drawn. The tensor is null before the first forward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _lastLogVar;
+
+    /// <summary>
+    /// Stores the random noise values used during the sampling process in the forward pass.
+    /// </summary>
+    /// <remarks>
+    /// This tensor holds the random noise values (epsilon) drawn from a standard normal distribution
+    /// during the forward pass. These values are used to generate samples from the parameterized
+    /// distribution. Saving these values is necessary for the backward pass. The tensor is null
+    /// before the first forward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _lastEpsilon;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> for RepParameterizationLayer, indicating that the layer can be trained through backpropagation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that the RepParameterizationLayer can propagate gradients during backpropagation.
+    /// Although this layer does not have trainable parameters itself, it needs to participate in the training process
+    /// by correctly propagating gradients to previous layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can participate in the learning process.
+    ///
+    /// A value of true means:
+    /// - The layer can pass learning signals (gradients) backward through it
+    /// - It contributes to the training of the entire network
+    ///
+    /// While this layer doesn't have any internal values that it learns directly,
+    /// it's designed to let learning signals flow through it to previous layers.
+    /// This is critical for training a variational autoencoder.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => false; // Reparameterization trick computes state during forward, no trainable parameters
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    // GPU cached tensors for backward pass
+    private Tensor<T>? _gpuMean;
+    private Tensor<T>? _gpuLogVar;
+    private Tensor<T>? _gpuEpsilon;
+    private Tensor<T>? _gpuStdDev;
+    private int _gpuBatchSize;
+    private int _gpuLatentSize;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RepParameterizationLayer{T}"/> class.
+    /// </summary>
+    /// <param name="inputShape">The shape of the input tensor. The first dimension is the batch size, and the second dimension must be even (half for means, half for log variances).</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new RepParameterizationLayer with the specified input shape. The output shape
+    /// is set to match the input shape except for the second dimension, which is halved since the output
+    /// contains only the sampled values, not both means and log variances.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new reparameterization layer for your variational autoencoder.
+    /// 
+    /// When you create this layer, you specify:
+    /// - inputShape: The shape of the data coming into the layer
+    /// 
+    /// The input is expected to contain two parts:
+    /// - The first half contains the mean values for each latent dimension
+    /// - The second half contains the log variance values for each latent dimension
+    /// 
+    /// For example, if inputShape[1] is 100, then:
+    /// - The first 50 values represent means
+    /// - The last 50 values represent log variances
+    /// - The output will have 50 values (the sampled points)
+    /// 
+    /// This layer doesn't have any trainable parameters - it just performs the reparameterization operation.
+    /// </para>
+    /// </remarks>
+    public RepParameterizationLayer()
+        : base(new[] { -1 }, new[] { -1 })
+    {
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward; output halves the last dim (mean+logvar split).
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        var output = ComputeOutputShape(shape);
+        ResolveShapes(shape, output);
+    }
+
+    private static int[] ComputeOutputShape(int[] inputShape)
+    {
+        var outputShape = (int[])inputShape.Clone();
+        outputShape[^1] = inputShape[^1] / 2;
+        return outputShape;
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the reparameterization layer.
+    /// </summary>
+    /// <param name="input">The input tensor containing concatenated mean and log variance values.</param>
+    /// <returns>The output tensor containing sampled points from the latent distribution.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the reparameterization layer. It splits the input tensor
+    /// into mean and log variance parts, generates random noise (epsilon) from a standard normal distribution,
+    /// and uses the reparameterization trick (z = mean + std_dev * epsilon) to sample from the latent distribution.
+    /// The input, means, log variances, and epsilon values are cached for use during the backward pass.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method samples random points from your specified distribution.
+    /// 
+    /// During the forward pass:
+    /// 1. The layer separates the input into mean values and log variance values
+    /// 2. It generates random noise values (epsilon) from a standard normal distribution
+    /// 3. It calculates standard deviation values from the log variances
+    /// 4. It produces samples using the formula: sample = mean + (std_dev * epsilon)
+    /// 
+    /// This reparameterization trick is clever because:
+    /// - The randomness comes from epsilon, which is independent of what the network is learning
+    /// - The mean and standard deviation can be learned and improved through backpropagation
+    /// - During inference, you can either use random samples or just use the mean values
+    /// 
+    /// The layer saves all intermediate values for later use during training.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        EnsureInitializedFromInput(input);
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 2D for processing
+        Tensor<T> processInput;
+        int batchSize;
+        int latentSize;
+
+        if (rank == 1)
+        {
+            // 1D: add batch dim
+            batchSize = 1;
+            latentSize = input.Shape[0] / 2;
+            processInput = Engine.Reshape(input, [1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // Standard 2D
+            batchSize = input.Shape[0];
+            latentSize = input.Shape[1] / 2;
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            latentSize = input.Shape[rank - 1] / 2;
+            processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 1]]);
+        }
+
+        // Use Engine.TensorSlice to split mean and logvar
+        _lastMean = Engine.TensorSlice(processInput, [0, 0], [batchSize, latentSize]);
+        _lastLogVar = Engine.TensorSlice(processInput, [0, latentSize], [batchSize, latentSize]);
+
+        // Generate random epsilon during training; use zero epsilon for deterministic inference
+        if (IsTrainingMode)
+        {
+            _lastEpsilon = Tensor<T>.CreateRandom(batchSize, latentSize);
+        }
+        else
+        {
+            _lastEpsilon = TensorAllocator.Rent<T>([batchSize, latentSize]);
+            _lastEpsilon.Fill(NumOps.Zero);
+        }
+
+        // Compute stdDev = exp(logvar * 0.5) using Engine operations
+        var halfTensor = TensorAllocator.Rent<T>([batchSize, latentSize]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var scaledLogVar = Engine.TensorMultiply(_lastLogVar, halfTensor);
+        var stdDev = Engine.TensorExp(scaledLogVar);
+
+        // Compute output = mean + stdDev * epsilon using Engine operations
+        var scaledEpsilon = Engine.TensorMultiply(stdDev, _lastEpsilon);
+        var output = Engine.TensorAdd(_lastMean, scaledEpsilon);
+
+        // Restore original shape for any-rank support (output is half the input size)
+        if (_originalInputShape != null && _originalInputShape.Length > 2)
+        {
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 1] = latentSize;
+            output = Engine.Reshape(output, newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            output = Engine.Reshape(output, [latentSize]);
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass for the reparameterization trick.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Implements the reparameterization trick on GPU: z = mean + exp(logvar * 0.5) * epsilon
+    /// The epsilon values are generated on CPU (no GPU RNG available) and uploaded once.
+    /// All other operations (exp, multiply, add) are performed on GPU.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputs">Input GPU tensors (uses first input containing [mean, logvar]).</param>
+    /// <returns>GPU-resident output tensor with sampled latent values.</returns>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        int[] shape = input._shape;
+
+        // Store original shape for any-rank tensor support
+        _originalInputShape = shape;
+        int rank = shape.Length;
+
+        // Handle any-rank tensor: determine batch and latent dimensions
+        int batchSize;
+        int latentSize;
+        int totalFeatures;
+
+        if (rank == 1)
+        {
+            batchSize = 1;
+            totalFeatures = shape[0];
+            latentSize = totalFeatures / 2;
+        }
+        else if (rank == 2)
+        {
+            batchSize = shape[0];
+            totalFeatures = shape[1];
+            latentSize = totalFeatures / 2;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= shape[d];
+            batchSize = flatBatch;
+            totalFeatures = shape[rank - 1];
+            latentSize = totalFeatures / 2;
+        }
+
+        int totalElements = batchSize * latentSize;
+
+        // Allocate GPU buffers for mean and logvar
+        var meanBuffer = backend.AllocateBuffer(totalElements);
+        var logvarBuffer = backend.AllocateBuffer(totalElements);
+
+        // Extract mean and logvar using GPU strided copy (no download for inference)
+        // Input layout: [batch, totalFeatures] where totalFeatures = 2 * latentSize
+        // Mean: input[b, 0:latentSize], Logvar: input[b, latentSize:2*latentSize]
+        for (int b = 0; b < batchSize; b++)
+        {
+            int srcBatchOffset = b * totalFeatures;
+            int dstBatchOffset = b * latentSize;
+            // Copy mean for this batch
+            backend.Copy(input.Buffer, srcBatchOffset, meanBuffer, dstBatchOffset, latentSize);
+            // Copy logvar for this batch
+            backend.Copy(input.Buffer, srcBatchOffset + latentSize, logvarBuffer, dstBatchOffset, latentSize);
+        }
+
+        // Generate random epsilon on CPU (no GPU RNG available) and upload
+        var epsilonData = new float[totalElements];
+        var random = RandomHelper.CreateSecureRandom();
+        for (int i = 0; i < totalElements; i++)
+        {
+            // Box-Muller transform for standard normal distribution
+            double u1 = 1.0 - random.NextDouble(); // Uniform(0,1] to avoid log(0)
+            double u2 = random.NextDouble();
+            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            epsilonData[i] = (float)z;
+        }
+        var epsilonBuffer = backend.AllocateBuffer(epsilonData);
+
+        // Compute stdDev = exp(logvar * 0.5) on GPU
+        using var scaledLogvarBuffer = backend.AllocateBuffer(totalElements);
+        backend.Scale(logvarBuffer, scaledLogvarBuffer, 0.5f, totalElements);
+
+        var stdDevBuffer = backend.AllocateBuffer(totalElements);
+        backend.Exp(scaledLogvarBuffer, stdDevBuffer, totalElements);
+
+        // Compute scaledEpsilon = stdDev * epsilon on GPU
+        using var scaledEpsilonBuffer = backend.AllocateBuffer(totalElements);
+        backend.Multiply(stdDevBuffer, epsilonBuffer, scaledEpsilonBuffer, totalElements);
+
+        // Compute output = mean + scaledEpsilon on GPU
+        var outputBuffer = backend.AllocateBuffer(totalElements);
+        backend.Add(meanBuffer, scaledEpsilonBuffer, outputBuffer, totalElements);
+
+        // Cache GPU tensors for backward pass (keep on GPU for efficiency)
+        if (IsTrainingMode)
+        {
+            int[] latentShape = [batchSize, latentSize];
+            _gpuMean = GpuTensorHelper.UploadToGpu<T>(backend, meanBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuLogVar = GpuTensorHelper.UploadToGpu<T>(backend, logvarBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuEpsilon = GpuTensorHelper.UploadToGpu<T>(backend, epsilonBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuStdDev = GpuTensorHelper.UploadToGpu<T>(backend, stdDevBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuBatchSize = batchSize;
+            _gpuLatentSize = latentSize;
+
+            // Also cache CPU tensors for CPU backward compatibility
+            var meanData = backend.DownloadBuffer(meanBuffer);
+            var logvarData = backend.DownloadBuffer(logvarBuffer);
+            _lastMean = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), latentShape);
+            _lastLogVar = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(logvarData), latentShape);
+            _lastEpsilon = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(epsilonData), latentShape);
+        }
+        else
+        {
+            // Not training - dispose intermediate buffers
+            meanBuffer.Dispose();
+            logvarBuffer.Dispose();
+            epsilonBuffer.Dispose();
+            stdDevBuffer.Dispose();
+        }
+
+        // Determine output shape (half the input size in feature dimension)
+        int[] outputShape;
+        if (rank == 1)
+        {
+            outputShape = [latentSize];
+        }
+        else if (rank == 2)
+        {
+            outputShape = [batchSize, latentSize];
+        }
+        else
+        {
+            // Restore original batch dimensions for higher-rank input
+            outputShape = new int[rank];
+            for (int d = 0; d < rank - 1; d++)
+                outputShape[d] = shape[d];
+            outputShape[rank - 1] = latentSize;
+        }
+
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Updates the parameters of the reparameterization layer.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is required by the LayerBase class but does nothing in the RepParameterizationLayer
+    /// because this layer has no trainable parameters to update. The learning happens in the encoder
+    /// network that produces the means and log variances.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method is empty because the layer has no internal values to update.
+    /// 
+    /// Unlike most layers in a neural network, the reparameterization layer doesn't have any
+    /// weights or biases that need to be adjusted during training. It's more like a mathematical
+    /// operation that passes gradients through.
+    /// 
+    /// The actual learning happens in:
+    /// - The encoder network that produces the means and log variances
+    /// - The decoder network that processes the samples this layer produces
+    /// 
+    /// This method exists only because all layers in the network must implement it.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // No parameters to update in this layer
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the reparameterization layer as a single vector.
+    /// </summary>
+    /// <returns>An empty vector since this layer has no trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns an empty vector because the RepParameterizationLayer has no trainable parameters.
+    /// The method is required by the LayerBase class but is essentially a no-op for this layer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns an empty list because the layer has no learnable values.
+    /// 
+    /// As mentioned earlier, the reparameterization layer doesn't have any weights or biases
+    /// that it learns during training. It just performs the sampling operation and passes
+    /// gradients through.
+    /// 
+    /// This method returns an empty vector to indicate that there are no parameters to retrieve.
+    /// It exists only because all layers in the network must implement it.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // This layer has no trainable parameters, so return an empty vector
+        return Vector<T>.Empty();
+    }
+
+    /// <summary>
+    /// Resets the internal state of the reparameterization layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the reparameterization layer, including the cached means,
+    /// log variances, and epsilon values from the forward pass. This is useful when starting to process
+    /// a new batch of data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - Stored means, log variances, and random noise values are cleared
+    /// - The layer forgets any information from previous batches
+    /// 
+    /// This is important for:
+    /// - Processing a new, unrelated batch of data
+    /// - Preventing information from one batch affecting another
+    /// - Starting a new training episode
+    /// 
+    /// Since this layer has no learned parameters, resetting just clears the temporary
+    /// values used during the forward and backward passes.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear cached CPU values from forward and backward passes
+        _lastMean = null;
+        _lastLogVar = null;
+        _lastEpsilon = null;
+
+        // Clear cached GPU tensors
+        _gpuMean = null;
+        _gpuLogVar = null;
+        _gpuEpsilon = null;
+        _gpuStdDev = null;
+    }
+
+}

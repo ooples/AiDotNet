@@ -1,0 +1,2649 @@
+global using AiDotNet.Enums;
+global using AiDotNet.Evaluation;
+global using AiDotNet.Models.Inputs;
+using AiDotNet.Helpers;
+using AiDotNet.Caching;
+using AiDotNet.Deployment.Configuration;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralRadianceFields.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
+
+namespace AiDotNet.Optimizers;
+
+/// <summary>
+/// Represents the base class for all optimization algorithms, providing common functionality and interfaces.
+/// </summary>
+/// <remarks>
+/// <para>
+/// OptimizerBase is an abstract class that serves as the foundation for all optimization algorithms. It defines 
+/// the common structure and functionality that all optimizers must implement, such as solution evaluation, 
+/// caching, and adaptive parameter management. This class handles the core mechanics of optimization processes, 
+/// allowing derived classes to focus on their specific optimization strategies.
+/// </para>
+/// <para><b>For Beginners:</b> This is the blueprint that all optimization algorithms follow.
+/// 
+/// Think of OptimizerBase as the common foundation that all optimizers are built upon:
+/// - It defines what every optimizer must be able to do (evaluate solutions, manage caching)
+/// - It provides shared tools that all optimizers can use (like adaptive learning rates and early stopping)
+/// - It manages the evaluation of solutions and tracks the optimization progress
+/// - It handles saving and loading optimizer states
+/// 
+/// All specific optimizer types (like genetic algorithms, particle swarm, etc.) inherit from this class,
+/// which ensures they all work together consistently in the optimization process.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data for the model.</typeparam>
+/// <typeparam name="TOutput">The type of output data for the model.</typeparam>
+public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>, IModelShape
+{
+    /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Provides numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
+
+    /// <summary>
+    /// Provides random number generation for all derived classes.
+    /// </summary>
+    protected readonly Random Random;
+
+    /// <summary>
+    /// Contains the configuration options for the optimization algorithm.
+    /// </summary>
+    protected readonly OptimizationAlgorithmOptions<T, TInput, TOutput> Options;
+
+    /// <summary>
+    /// Options for prediction statistics calculations.
+    /// </summary>
+    protected readonly PredictionStatsOptions PredictionOptions;
+
+    /// <summary>
+    /// Options for model statistics calculations.
+    /// </summary>
+    protected readonly ModelStatsOptions ModelStatsOptions;
+
+    /// <summary>
+    /// Detects the quality of fit for models.
+    /// </summary>
+    protected readonly IFitDetector<T, TInput, TOutput> FitDetector;
+
+    /// <summary>
+    /// Calculates the fitness score of models.
+    /// </summary>
+    protected readonly IFitnessCalculator<T, TInput, TOutput> FitnessCalculator;
+
+    /// <summary>
+    /// Stores the fitness scores of evaluated models.
+    /// </summary>
+    protected readonly List<T> FitnessList;
+
+    /// <summary>
+    /// Stores information about each optimization iteration.
+    /// </summary>
+    protected readonly List<OptimizationIterationInfo<T>> IterationHistoryList;
+
+    /// <summary>
+    /// Optional per-epoch progress callback invoked once per outer optimization iteration.
+    /// Receives the iteration index and the CURRENT iteration's fitness/loss, and returns
+    /// <c>false</c> to request that optimization stop early. Registered via
+    /// <see cref="SetEpochProgressCallback"/>; <c>null</c> when no observer is attached.
+    /// </summary>
+    private Func<int, T, bool>? _epochProgressCallback;
+
+    /// <summary>
+    /// The most recent CURRENT-iteration fitness observed by <see cref="UpdateBestSolution"/>,
+    /// used to report per-epoch loss to <see cref="_epochProgressCallback"/> instead of the
+    /// monotonic best-so-far fitness. <c>_hasObservedFitness</c> guards the initial state.
+    /// </summary>
+    private T? _lastObservedFitness;
+    private bool _hasObservedFitness;
+
+    /// <summary>
+    /// Caches evaluated models to avoid redundant calculations. Reconfigured once at build time via
+    /// <see cref="ApplyCacheConfiguration"/> (the facade's <c>ConfigureCaching</c>) before any training
+    /// starts — it is not intended to be swapped concurrently with in-flight cache reads/writes.
+    /// </summary>
+    protected IModelCache<T, TInput, TOutput> ModelCache;
+
+    /// <summary>
+    /// The current learning rate used in the optimization process.
+    /// </summary>
+    protected T CurrentLearningRate;
+
+    // ReduceLROnPlateau-coordinated-with-stopping state (opt-in via Options.MaxLearningRateReductionsOnPlateau).
+    // _plateauReductionsUsed counts how many times the LR has been halved on a plateau this run;
+    // _earlyStopHistoryFloor is the iteration-history index from which ShouldEarlyStop measures its window, so a
+    // reduction clears the plateau window and grants the lowered LR a fresh patience budget. Floor 0 (the
+    // default when the feature is off) makes ShouldEarlyStop byte-for-byte the historical behavior.
+    private int _plateauReductionsUsed;
+    private int _earlyStopHistoryFloor;
+
+    /// <summary>
+    /// The current momentum used in the optimization process.
+    /// </summary>
+    protected T CurrentMomentum;
+
+    /// <summary>
+    /// Counts the number of consecutive iterations without improvement.
+    /// </summary>
+    protected int IterationsWithoutImprovement;
+
+    /// <summary>
+    /// When true, TrainAndEvaluateSolution skips model.Train() during evaluation.
+    /// Gradient-based optimizers set this because they already update parameters
+    /// via UpdateSolution() — calling Train() would overwrite those updates.
+    /// </summary>
+    protected virtual bool SkipTrainingInEvaluation => false;
+
+    /// <summary>
+    /// Called after the first TrainAndEvaluateSolution completes successfully.
+    /// Gradient-based optimizers use this to enable SkipTrainingInEvaluation.
+    /// </summary>
+    protected virtual void OnInitialTrainingCompleted() { }
+
+    /// <summary>
+    /// Per-axis-0 chunk size used when the optimizer's evaluator path
+    /// (<see cref="CalculateDataSetStatsForOptimizer"/> /
+    /// <see cref="CalculateR2OnlyStatsForOptimizer"/>) routes its
+    /// <c>model.Predict(X)</c> call through
+    /// <see cref="NeuralNetworkBase{T}.PredictInBatches"/>.
+    /// Defaults to <c>256</c> — large enough to amortise per-call overhead on
+    /// small / medium tensors, small enough that a Transformer at
+    /// <c>d=128 / L=4 / heads=4 / ctx=64</c> peaks at ~17 MB of attention
+    /// scores per chunk instead of the multi-GB single-shot allocation that
+    /// surfaced as the second half of #1296. Subclasses MAY override this
+    /// to track a configured training <c>BatchSize</c>; doing so is opt-in
+    /// per-optimizer because not every options type carries the same
+    /// <c>BatchSize</c> property.
+    /// </summary>
+    protected virtual int EvaluationBatchSize => 256;
+
+    /// <summary>
+    /// Counts the number of consecutive iterations with improvement.
+    /// </summary>
+    protected int IterationsWithImprovement;
+
+    /// <summary>
+    /// Gets the model that this optimizer is configured to optimize.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property provides access to the model that the optimizer is working with.
+    /// It implements the IOptimizer interface property to expose the protected Model field.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property lets external code see which model
+    /// the optimizer is currently working with, without being able to change it.
+    /// It's like a window that lets you look at the model but not touch it.
+    /// </para>
+    /// </remarks>
+    public IFullModel<T, TInput, TOutput>? Model => _model;
+
+    /// <summary>
+    /// The model that this optimizer is configured to optimize.
+    /// </summary>
+    private IFullModel<T, TInput, TOutput>? _model;
+
+    /// <summary>
+    /// Returns the current model or throws if none has been set via <see cref="SetModel"/>.
+    /// </summary>
+    protected IFullModel<T, TInput, TOutput> RequireModel()
+    {
+        return _model ?? throw new InvalidOperationException(
+            "No model has been set. Call SetModel() before optimizing.");
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived classes can override this method to perform additional initialization
+    /// when the model is set, such as caching model-specific parameters or resizing
+    /// internal data structures based on the model's parameter count.
+    /// </remarks>
+    public virtual void SetModel(IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        var oldModel = _model;
+        _model = model;
+        OnModelChanged(oldModel, _model);
+    }
+
+    /// <summary>
+    /// Called whenever the optimizer's model is changed via <see cref="SetModel"/>.
+    /// </summary>
+    /// <param name="oldModel">The previous model instance, or <c>null</c> if none was set.</param>
+    /// <param name="newModel">The new model instance that has just been set.</param>
+    /// <remarks>
+    /// Derived optimizers can override this method to update or reset any internal state that depends on the model.
+    /// </remarks>
+    protected virtual void OnModelChanged(IFullModel<T, TInput, TOutput>? oldModel, IFullModel<T, TInput, TOutput> newModel)
+    {
+        // Default implementation does nothing.
+        // Derived classes can override to reinitialize state based on model changes.
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the OptimizerBase class.
+    /// </summary>
+    /// <param name="model">The model to be optimized (can be null if set later).</param>
+    /// <param name="options">The optimization algorithm options.</param>
+    protected OptimizerBase(IFullModel<T, TInput, TOutput>? model,
+        OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+        _model = model;
+        Random = new();
+        NumOps = MathHelper.GetNumericOperations<T>();
+        Options = options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>();
+        PredictionOptions = Options.PredictionOptions;
+        ModelStatsOptions = Options.ModelStatsOptions;
+        FitDetector = Options.FitDetector;
+        FitnessCalculator = Options.FitnessCalculator;
+        FitnessList = new List<T>();
+        IterationHistoryList = new List<OptimizationIterationInfo<T>>();
+        ModelCache = Options.ModelCache;
+        CurrentLearningRate = NumOps.Zero;
+        CurrentMomentum = NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Performs the optimization process.
+    /// </summary>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The result of the optimization process.</returns>
+    public abstract OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData);
+
+    /// <summary>
+    /// Applies a <see cref="CacheConfig"/> to this optimizer's caches, replacing the model-evaluation
+    /// cache with one bounded to the configured capacity + eviction policy (or a disabled pass-through
+    /// when <see cref="CacheConfig.Enabled"/> is false). Builder-only plumbing — called once from
+    /// <c>AiModelBuilder.BuildPipeline</c> (the facade's <c>ConfigureCaching</c>) before training starts,
+    /// not a public user API. Derived optimizers that own additional caches override this and call
+    /// <c>base</c> first.
+    /// </summary>
+    /// <param name="config">The cache configuration to apply (must not be null).</param>
+    internal virtual void ApplyCacheConfiguration(CacheConfig config)
+    {
+        if (config is null) throw new ArgumentNullException(nameof(config));
+        ModelCache = new DefaultModelCache<T, TInput, TOutput>(
+            config.ModelCacheCapacity, config.OptimizerCacheEvictionPolicy, config.Enabled);
+    }
+
+    /// <summary>
+    /// Retrieves cached step data for a given solution.
+    /// </summary>
+    /// <param name="key">The cache key for the solution.</param>
+    /// <returns>The cached step data, if available; otherwise, null.</returns>
+    protected OptimizationStepData<T, TInput, TOutput>? GetCachedStepData(string key)
+    {
+        return ModelCache.GetCachedStepData(key);
+    }
+
+    /// <summary>
+    /// Caches step data for a given solution.
+    /// </summary>
+    /// <param name="key">The cache key for the solution.</param>
+    /// <param name="stepData">The step data to cache.</param>
+    protected void CacheStepData(string key, OptimizationStepData<T, TInput, TOutput> stepData)
+    {
+        ModelCache.CacheStepData(key, stepData);
+    }
+
+    /// <summary>
+    /// Adjusts the parameters (weights) of a model.
+    /// </summary>
+    /// <param name="model">The model whose parameters should be adjusted.</param>
+    /// <param name="adjustmentScale">Scale factor for parameter adjustments.</param>
+    /// <param name="signFlipProbability">Probability of flipping a parameter's sign.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is like adjusting the quantities of ingredients in your recipe.
+    /// While keeping the same ingredients, you're changing how much of each one you use to
+    /// find the perfect balance.
+    /// </remarks>
+    protected virtual void AdjustModelParameters(
+        IFullModel<T, TInput, TOutput> model,
+        double adjustmentScale = 0.1,
+        double signFlipProbability = 0.05)
+    {
+        // Get current parameters
+        var currentParameters = InterfaceGuard.Parameterizable(model).GetParameters();
+
+        // Create new parameters by applying random adjustments
+        var newParameters = AdjustParameters(
+            currentParameters,
+            adjustmentScale * Options.ExplorationRate,
+            signFlipProbability);
+
+        // Apply the new parameters to the model
+        var updatedModel = InterfaceGuard.Parameterizable(model).WithParameters(newParameters);
+    }
+
+    /// <summary>
+    /// Randomly selects a subset of features to use in a model.
+    /// </summary>
+    /// <param name="totalFeatures">The total number of available features.</param>
+    /// <param name="minFeatures">The minimum number of features to select.</param>
+    /// <param name="maxFeatures">The maximum number of features to select.</param>
+    /// <returns>A list of selected feature indices.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is like randomly selecting a subset of ingredients from
+    /// your pantry to include in your recipe experiment.
+    /// </remarks>
+    protected virtual List<int> RandomlySelectFeatures(
+        int totalFeatures,
+        int? minFeatures = null,
+        int? maxFeatures = null)
+    {
+        int min = minFeatures ?? Options.MinimumFeatures;
+        // MaximumFeatures = 0 means "use all features" (default behavior)
+        int configMax = Options.MaximumFeatures > 0 ? Options.MaximumFeatures : totalFeatures;
+        int max = maxFeatures ?? Math.Min(configMax, totalFeatures);
+
+        // The no-selection path must preserve column order. Some optimizers resolve the
+        // default 0/0 bounds to totalFeatures/totalFeatures before reaching this helper;
+        // randomly enumerating all columns in that case trains against a permutation even
+        // though no feature selection was requested.
+        if ((Options.MinimumFeatures == 0 && Options.MaximumFeatures == 0)
+            || (min >= totalFeatures && max >= totalFeatures))
+        {
+            return Enumerable.Range(0, totalFeatures).ToList();
+        }
+
+        // Ensure min/max values are valid
+        min = Math.Max(1, Math.Min(min, totalFeatures));
+        max = Math.Min(max, totalFeatures);
+
+        if (min > max)
+        {
+            max = min;
+        }
+
+        var selectedFeatures = new List<int>();
+        int numFeatures = Random.Next(min, max + 1);
+
+        while (selectedFeatures.Count < numFeatures)
+        {
+            int feature = Random.Next(totalFeatures);
+            if (!selectedFeatures.Contains(feature))
+            {
+                selectedFeatures.Add(feature);
+            }
+        }
+
+        return selectedFeatures;
+    }
+
+    /// <summary>
+    /// Checks whether a model uses embedding-based input (Transformers, RNNs with
+    /// token input, etc.) and therefore does not support feature selection. Their
+    /// "input dimension" is a single token ID, not a feature vector — the optimizer
+    /// sees the sequence length as the feature count, producing indices that exceed
+    /// the embedding layer's input shape. Used by both <see cref="ApplyFeatureSelection"/>
+    /// and <see cref="PrepareAndEvaluateSolution"/> to skip feature selection entirely.
+    /// Fixes #1113 / #1121.
+    /// </summary>
+    protected static bool IsEmbeddingBasedModel(IFullModel<T, TInput, TOutput> model)
+    {
+        return model is NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.Layers.Count > 0
+            && nn.Layers[0] is NeuralNetworks.Layers.EmbeddingLayer<T>;
+    }
+
+    /// <summary>
+    /// Determines whether <paramref name="model"/> takes a non-flat (multi-dimensional)
+    /// input — i.e. a neural network whose first layer's input shape has rank &gt; 1
+    /// (CNN depth×height×width, RNN/GRU/LSTM sequence-length×features, Vision Transformer,
+    /// ResNet, etc.). For such models "feature selection" (selecting a subset of input
+    /// columns) is meaningless: the optimizer derives feature indices from the flattened
+    /// per-sample size, but these models index features against the first axis of their
+    /// input shape, and subsetting a spatial/sequence tensor by flat column index would
+    /// break the shape contract. Used by <see cref="PrepareAndEvaluateSolutionCore"/> and
+    /// <see cref="ApplyFeatureSelection"/> to skip feature selection/subsetting entirely,
+    /// generalizing the embedding-only <see cref="IsEmbeddingBasedModel"/> handling. Fixes #1468.
+    ///
+    /// <para>Also treats <see cref="IRadianceField{T}"/> models (NeRF, GaussianSplatting,
+    /// InstantNGP) as non-flat regardless of the first layer's shape rank. Radiance-field
+    /// inputs are semantically multi-dimensional (a 3D position + a viewing direction),
+    /// but that <c>[N, 6]</c> input tensor gets positionally-encoded into a 1-D feature
+    /// vector before the first dense layer — so the shape-rank check alone would fail to
+    /// exclude them, feature indices up to 5 (or beyond, after encoding) would reach
+    /// <see cref="NeuralNetworkBase{T}.SetActiveFeatureIndices"/>, and it would throw
+    /// "Feature index N exceeds the input dimension 1" mid-<c>BuildAsync</c>. Fixes #1826.</para>
+    /// </summary>
+    protected static bool HasNonFlatNeuralInput(IFullModel<T, TInput, TOutput> model)
+    {
+        // Radiance-field models are semantically non-flat even when their first dense
+        // layer sees a 1-D positionally-encoded vector. Check the interface directly
+        // rather than the layer shape; adding a new radiance-field type shouldn't have
+        // to re-teach this guard.
+        if (model is IRadianceField<T>)
+            return true;
+
+        return model is NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.Layers.Count > 0
+            && nn.Layers[0].GetInputShape() is { Length: > 1 };
+    }
+
+    /// <summary>
+    /// Applies the selected features to a model.
+    /// </summary>
+    /// <param name="model">The model to apply feature selection to.</param>
+    /// <param name="selectedFeatures">The list of selected feature indices.</param>
+    protected virtual void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, List<int> selectedFeatures)
+    {
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        if (selectedFeatures == null || selectedFeatures.Count == 0)
+            throw new ArgumentException("At least one feature must be selected.", nameof(selectedFeatures));
+
+        // Embedding-based and multi-dimensional-input models (CNN/RNN/ViT/etc.) don't
+        // support feature subsetting — their "feature index" doesn't map to a flat column.
+        // Skip applying selection so SetActiveFeatureIndices isn't fed flat indices that
+        // exceed the first layer's input-shape axis (#1113 / #1468).
+        if (IsEmbeddingBasedModel(model) || HasNonFlatNeuralInput(model))
+            return;
+
+        // Apply features if model supports it
+        if (model is IFeatureAware featureAwareModel)
+        {
+            featureAwareModel.SetActiveFeatureIndices(selectedFeatures);
+        }
+    }
+
+    /// <summary>
+    /// Adjusts a vector of parameters by applying random modifications.
+    /// </summary>
+    /// <param name="parameters">The original parameters.</param>
+    /// <param name="adjustmentScale">Scale factor for parameter adjustments.</param>
+    /// <param name="signFlipProbability">Probability of flipping a parameter's sign.</param>
+    /// <returns>A new vector with adjusted parameters.</returns>
+    protected virtual Vector<T> AdjustParameters(
+        Vector<T> parameters,
+        double adjustmentScale,
+        double signFlipProbability)
+    {
+        var newParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Generate a random adjustment factor
+            double factor = 1.0 + ((Random.NextDouble() * 2.0 - 1.0) * adjustmentScale);
+
+            // Apply the adjustment
+            T originalValue = parameters[i];
+            T newValue = NumOps.Multiply(originalValue, NumOps.FromDouble(factor));
+
+            // Add some probability of the parameter flipping sign
+            if (Random.NextDouble() < signFlipProbability)
+            {
+                newValue = NumOps.Negate(newValue);
+            }
+
+            newParameters[i] = newValue;
+        }
+
+        return newParameters;
+    }
+
+    /// <summary>
+    /// Evaluates a solution, using cached results if available.
+    /// </summary>
+    /// <param name="solution">The solution to evaluate.</param>
+    /// <param name="inputData">The input data for evaluation.</param>
+    /// <returns>The evaluation results for the solution.</returns>
+    protected virtual OptimizationStepData<T, TInput, TOutput> EvaluateSolution(
+        IFullModel<T, TInput, TOutput> solution,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        string cacheKey = GenerateCacheKey(solution, inputData);
+        var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
+
+        if (cachedStepData != null)
+        {
+            return cachedStepData;
+        }
+
+        // #1380 FIX: gradient-based optimizers (Adam et al.) set training
+        // mode TRUE for the whole Optimize loop at line 188 of
+        // AdamOptimizer.Optimize. Without temporarily flipping to eval
+        // mode for the validation/test forward passes inside
+        // PrepareAndEvaluateSolution → EvaluateModelDirectly, those
+        // forward passes update LayerNorm/BatchNorm running statistics
+        // with VALIDATION-SET batch statistics (typically a much smaller
+        // dataset than training). The corrupted running stats are then
+        // read on the next training forward pass, producing NaN
+        // gradients and NaN params.
+        // Reproducer: tests/Learning/Phase_PAPER_A_BuildAsyncDiagnostic_1380Bisect.cs
+        //   .Optimizer_Optimize_With_Split_Data_Should_Not_NaN (FAILS without this fix)
+        //   .Optimizer_Optimize_With_SmallTrain_FullVal_Should_Not_NaN (PASSES — full val = no corruption)
+        // Wrap the eval in a SetTrainingMode(false)/(true) try/finally;
+        // safe no-op for non-NN models. Solution is a fresh DeepCopy
+        // inside PrepareAndEvaluateSolution (line ~528), so flipping
+        // training mode on `solution` here propagates to the cached
+        // model returned via stepData.Solution.
+        // Capture a single NeuralNetworkBase<T> reference for BOTH read and
+        // write paths so the IsTrainingMode read and the SetTrainingMode
+        // write always target the same runtime type. Today
+        // NeuralNetworkBase<T> is the only concrete INeuralNetwork<T>
+        // implementer in the repo, so the prior split (cast to INeuralNetwork
+        // for write, cast to NeuralNetworkBase for read) hit the same
+        // instance — but the future-proof form keeps the read/write paths
+        // syntactically aligned regardless of what other implementers ship.
+        var nn = solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>;
+        bool wasTraining = nn?.IsTrainingMode ?? false;
+        nn?.SetTrainingMode(false);
+        OptimizationStepData<T, TInput, TOutput> stepData;
+        try
+        {
+            stepData = PrepareAndEvaluateSolution(solution, inputData);
+        }
+        finally
+        {
+            nn?.SetTrainingMode(wasTraining);
+        }
+        ModelCache.CacheStepData(cacheKey, stepData);
+
+        return stepData;
+    }
+
+    /// <summary>
+    /// Prepares and evaluates a solution, applying feature selection before checking the cache.
+    /// </summary>
+    /// <param name="solution">The solution to evaluate.</param>
+    /// <param name="inputData">The input data for evaluation.</param>
+    /// <returns>The evaluation results for the solution.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method prepares a model with a specific set of features,
+    /// checks if we've already trained this exact configuration before, and if not,
+    /// trains and evaluates the model with the selected features.
+    /// </remarks>
+    protected OptimizationStepData<T, TInput, TOutput> PrepareAndEvaluateSolution(
+        IFullModel<T, TInput, TOutput> solution,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // #1380 FIX (part 2): EvaluateSolution wraps a SetTrainingMode(false)
+        // around its PrepareAndEvaluateSolution call to prevent LayerNorm/
+        // BatchNorm running-stats corruption from validation forward passes.
+        // But Adam.Optimize calls PrepareAndEvaluateSolution DIRECTLY at
+        // line 192 (pre-epoch baseline eval) without going through
+        // EvaluateSolution. That direct call also runs Predict on the val
+        // set and corrupts running stats. Wrap here as well; safe to nest
+        // since SetTrainingMode is idempotent and the EvaluateSolution
+        // wrapper restores correctly on the outer scope.
+        // Same single-cast pattern as EvaluateSolution above — read/write
+        // training mode through ONE NeuralNetworkBase<T> reference so the
+        // captured wasTraining bit and the restore call target identical
+        // runtime types regardless of future INeuralNetwork<T> implementers.
+        var nnGuard = solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>;
+        bool wasTrainingGuard = nnGuard?.IsTrainingMode ?? false;
+        nnGuard?.SetTrainingMode(false);
+        try
+        {
+            return PrepareAndEvaluateSolutionCore(solution, inputData);
+        }
+        finally
+        {
+            nnGuard?.SetTrainingMode(wasTrainingGuard);
+        }
+    }
+
+    private OptimizationStepData<T, TInput, TOutput> PrepareAndEvaluateSolutionCore(
+        IFullModel<T, TInput, TOutput> solution,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // Step 1: Generate feature selection.
+        // Models that don't support parameter initialization (NB, decision trees, etc.)
+        // learn their structure from ALL features during training. Random feature selection
+        // can remove features that are critical for discrimination, causing 50% accuracy.
+        //
+        // Embedding-based models (Transformers, RNNs with token input) also MUST use all
+        // features — their "feature dimension" is the sequence length, and selecting a
+        // random subset of token positions breaks the shape contract between input and
+        // target. Fixes #1113 / #1121 — affects ALL optimizers via OptimizerBase.
+        //
+        // Multi-dimensional-input models (CNN/RNN/GRU/LSTM/ViT/ResNet/etc.) are the same
+        // case generalized: their input is a spatial/sequence tensor, not a flat feature
+        // vector, so column-subset feature selection doesn't apply. They use all features
+        // and skip data subsetting entirely (Step 4 below). Fixes #1468.
+        int totalFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        // "Non-flat" = the input is a spatial/sequence tensor, so column-subset feature selection doesn't apply.
+        // HasNonFlatNeuralInput inspects the first layer's declared input rank, which misses Dense-embedding
+        // forecasters (PatchTST/iTransformer start with a Dense patch/variate embedding, so their first-layer
+        // rank is 1) even though they consume a rank-3 [batch, seq, features] tensor. Fall back to the ACTUAL
+        // input rank so any rank>2 tensor input skips column extraction (which would otherwise index axis 1 of a
+        // rank-3 tensor and throw). Matrix inputs and rank-2 tensors are unaffected.
+        bool hasNonFlatInput = HasNonFlatNeuralInput(solution)
+            || (inputData.XTrain is Tensor<T> nonFlatTensor && nonFlatTensor.Shape.Length > 2);
+        List<int> selectedFeaturesIndices;
+
+        if (!InterfaceGuard.Parameterizable(solution).SupportsParameterInitialization
+            || IsEmbeddingBasedModel(solution)
+            || hasNonFlatInput)
+        {
+            selectedFeaturesIndices = Enumerable.Range(0, totalFeatures).ToList();
+        }
+        else
+        {
+            selectedFeaturesIndices = RandomlySelectFeatures(
+                totalFeatures, Options.MinimumFeatures, Options.MaximumFeatures);
+        }
+
+        // Step 2: Apply feature selection to the model BEFORE we check the cache.
+        // Rank-3+ tensor inputs were already classified as non-flat above, but
+        // ApplyFeatureSelection can only inspect the first layer's declared
+        // shape. Dense-first sequence forecasters therefore slipped through and
+        // received flat per-sample indices (0..sequenceLength-1) as though they
+        // were tabular columns. Keep the actual-input-rank decision consistent
+        // for both model masking and data slicing.
+        if (!hasNonFlatInput)
+        {
+            ApplyFeatureSelection(solution, selectedFeaturesIndices);
+        }
+
+        // Step 3: Generate cache key based on the selected features and check cache
+        string cacheKey = GenerateCacheKey(solution, inputData);
+        var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
+
+        if (cachedStepData != null)
+        {
+            return cachedStepData;
+        }
+
+        // Step 4: Apply feature selection to input data.
+        // Multi-dimensional-input models train on the FULL input: flat column indices don't
+        // map to a spatial/sequence tensor's feature axis (GetColumnVectors/SelectFeatures
+        // index axis 1, but totalFeatures is the flattened per-sample size), so subsetting
+        // would throw or corrupt the shape. The indices stay the flat identity range, which
+        // AiModelResult treats as a no-op at predict time. Fixes #1468.
+        List<Vector<T>> selectedFeatures;
+        TInput XTrainSubset, XValSubset, XTestSubset;
+        if (hasNonFlatInput)
+        {
+            selectedFeatures = new List<Vector<T>>();
+            XTrainSubset = inputData.XTrain;
+            XValSubset = inputData.XValidation;
+            XTestSubset = inputData.XTest;
+        }
+        else
+        {
+            selectedFeatures = ModelHelper<T, TInput, TOutput>.GetColumnVectors(
+                inputData.XTrain, [.. selectedFeaturesIndices]);
+
+            XTrainSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+                inputData.XTrain, selectedFeaturesIndices);
+            XValSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+                inputData.XValidation, selectedFeaturesIndices);
+            XTestSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+                inputData.XTest, selectedFeaturesIndices);
+        }
+
+        // Step 5: Create input data with selected features
+        var subsetInputData = new OptimizationInputData<T, TInput, TOutput>
+        {
+            XTrain = XTrainSubset,
+            YTrain = inputData.YTrain,
+            XValidation = XValSubset,
+            YValidation = inputData.YValidation,
+            XTest = XTestSubset,
+            YTest = inputData.YTest
+        };
+
+        // Step 6: Create evaluation input
+        var input = new ModelEvaluationInput<T, TInput, TOutput>
+        {
+            Model = solution,
+            InputData = subsetInputData
+        };
+
+        // Step 7: Train and evaluate.
+        // On the first call, always train (SkipTrainingInEvaluation is false initially).
+        // After the first training, gradient-based optimizers skip Train() because they
+        // update parameters via UpdateSolution() — re-training would overwrite those.
+        var (currentFitnessScore, fitDetectionResult, evaluationData) =
+            TrainAndEvaluateSolution(input, skipTraining: SkipTrainingInEvaluation);
+
+        // After first successful train+evaluate, enable skip for subsequent calls
+        OnInitialTrainingCompleted();
+
+        FitnessList.Add(currentFitnessScore);
+
+        // Step 8: Create and store step data
+        var stepData = new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = solution.DeepCopy(),  // Now trained, so DeepCopy works
+            SelectedFeatures = selectedFeatures,
+            SelectedFeatureIndices = new List<int>(selectedFeaturesIndices),
+            XTrainSubset = XTrainSubset,
+            XValSubset = XValSubset,
+            XTestSubset = XTestSubset,
+            FitnessScore = currentFitnessScore,
+            FitDetectionResult = fitDetectionResult,
+            EvaluationData = evaluationData
+        };
+
+        // Step 9: Cache the results
+        ModelCache.CacheStepData(cacheKey, stepData);
+
+        return stepData;
+    }
+
+    /// <summary>
+    /// Evaluates a solution using the fit detector and fitness calculator.
+    /// </summary>
+    /// <param name="input">The input data for model evaluation.</param>
+    /// <returns>A tuple containing the fitness score, fit detection result, and evaluation data.</returns>
+    private (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, ModelEvaluationData<T, TInput, TOutput> EvaluationData)
+        TrainAndEvaluateSolution(ModelEvaluationInput<T, TInput, TOutput> input, bool skipTraining = false)
+    {
+        // Skip training when the optimizer has already updated parameters externally
+        // (e.g., gradient-based optimizers use UpdateSolution to set parameters directly).
+        // Training is still needed when feature selection changed the input subset,
+        // since closed-form models must re-solve with the new feature combination.
+        if (!skipTraining)
+        {
+            input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
+        }
+
+        // Evaluate the model using inline evaluation
+        var evaluationData = EvaluateModelDirectly(input);
+        var fitDetectionResult = FitDetector.DetectFit(evaluationData);
+        var currentFitnessScore = FitnessCalculator.CalculateFitnessScore(evaluationData);
+
+        return (currentFitnessScore, fitDetectionResult, evaluationData);
+    }
+
+    /// <summary>
+    /// Directly evaluates a model without external evaluator dependency.
+    /// </summary>
+    private ModelEvaluationData<T, TInput, TOutput> EvaluateModelDirectly(ModelEvaluationInput<T, TInput, TOutput> input)
+    {
+        var model = input.Model;
+        var inputData = input.InputData;
+        var predictionType = input.PredictionTypeOverride
+            ?? PredictionTypeInference.InferFromTargets<T, TOutput>(inputData.YTrain);
+
+        // Only compute stats for the dataset the fitness calculator actually uses.
+        // Computing all 3 datasets every epoch (Predict + ErrorStats + PredictionStats each)
+        // was the dominant cost — 2/3 of the work was wasted.
+        //
+        // Probe for the optional IPreferredDataSetFitnessCalculator extension instead of
+        // requiring it on the base IFitnessCalculator interface, so external calculators
+        // that pre-date this perf work continue to compile and run. Calculators that don't
+        // opt in fall back to validation — the historical default before this optimization.
+        var preferred = FitnessCalculator is IPreferredDataSetFitnessCalculator<T, TInput, TOutput> pds
+            ? pds.PreferredDataSetType
+            : Enums.DataSetType.Validation;
+
+        DataSetStats<T, TInput, TOutput>? trainingSet = null;
+        DataSetStats<T, TInput, TOutput>? validationSet = null;
+        DataSetStats<T, TInput, TOutput>? testSet = null;
+        // Track which dataset was actually scored against so we can correctly populate
+        // the slot the FitnessCalculator reads from (and avoid silently scoring against
+        // an Empty dataset when a fallback fires).
+        Enums.DataSetType actualPreferred = preferred;
+
+        // Always compute the preferred dataset (with full stats) — this is what the
+        // FitnessCalculator scores against.
+        switch (preferred)
+        {
+            case Enums.DataSetType.Training:
+                trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                break;
+            case Enums.DataSetType.Validation:
+                if (inputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(inputData.XValidation) > 0)
+                {
+                    validationSet = CalculateDataSetStatsForOptimizer(model, inputData.XValidation, inputData.YValidation, predictionType);
+                }
+                else
+                {
+                    // Fallback: training data fills the validation slot too. This keeps
+                    // the FitnessCalculator (which reads PreferredDataSetType=Validation)
+                    // from scoring against an empty stats object.
+                    trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                    validationSet = trainingSet;
+                    actualPreferred = Enums.DataSetType.Training;
+                }
+                break;
+            case Enums.DataSetType.Testing:
+                if (inputData.XTest != null && InputHelper<T, TInput>.GetInputSize(inputData.XTest) > 0)
+                {
+                    testSet = CalculateDataSetStatsForOptimizer(model, inputData.XTest, inputData.YTest, predictionType);
+                }
+                else
+                {
+                    // Same fallback rationale as the Validation branch above.
+                    trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                    testSet = trainingSet;
+                    actualPreferred = Enums.DataSetType.Training;
+                }
+                break;
+            default:
+                trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                break;
+        }
+
+        // Lightweight R²-only stats for the non-preferred datasets, so FitDetector
+        // (which reads TrainingSet/ValidationSet/TestSet PredictionStats.R2) gets accurate
+        // overfitting/underfitting signals without paying the cost of full stats
+        // construction (learning curves, confidence intervals, etc.) for every dataset
+        // on every epoch. The FitnessCalculator still scores only against the
+        // fully-computed preferred dataset.
+        if (trainingSet is null)
+            trainingSet = CalculateR2OnlyStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+        if (validationSet is null && inputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(inputData.XValidation) > 0)
+            validationSet = CalculateR2OnlyStatsForOptimizer(model, inputData.XValidation, inputData.YValidation, predictionType);
+        if (testSet is null && inputData.XTest != null && InputHelper<T, TInput>.GetInputSize(inputData.XTest) > 0)
+            testSet = CalculateR2OnlyStatsForOptimizer(model, inputData.XTest, inputData.YTest, predictionType);
+
+        // For model stats calculation, prefer whichever full set was computed
+        // (validation, then training, then test).
+        var statsForModelCalc = (actualPreferred == Enums.DataSetType.Validation ? validationSet : null)
+            ?? (actualPreferred == Enums.DataSetType.Testing ? testSet : null)
+            ?? trainingSet ?? validationSet ?? testSet
+            ?? new DataSetStats<T, TInput, TOutput>();
+
+        return new ModelEvaluationData<T, TInput, TOutput>
+        {
+            TrainingSet = trainingSet ?? new DataSetStats<T, TInput, TOutput>(),
+            ValidationSet = validationSet ?? new DataSetStats<T, TInput, TOutput>(),
+            TestSet = testSet ?? new DataSetStats<T, TInput, TOutput>(),
+            ModelStats = TryCalculateModelStatsForOptimizer(
+                model, statsForModelCalc.Features, statsForModelCalc.Actual, statsForModelCalc.Predicted, input.PreprocessingInfo)
+        };
+    }
+
+    /// <summary>
+    /// Routes the evaluator's <c>model.Predict(X)</c> through
+    /// <see cref="NeuralBatchHelper.PredictMaybeBatched{T,TInput,TOutput}"/>
+    /// at the optimizer's <see cref="EvaluationBatchSize"/> chunk size,
+    /// so the per-epoch full-dataset forward inside
+    /// <c>EvaluateModelDirectly</c> is bounded for neural-network models
+    /// while staying identical for all other model types.
+    /// </summary>
+    private TOutput PredictForEvaluation(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X)
+        => NeuralBatchHelper.PredictMaybeBatched(model, X, EvaluationBatchSize);
+
+    /// <summary>
+    /// Lightweight stats helper: computes R² only (the metric FitDetector reads) for a
+    /// dataset, skipping the expensive PredictionStats / ErrorStats / BasicStats
+    /// construction. The Predict call still happens because R² requires per-sample
+    /// predictions, but the heavier per-sample metric calculations are skipped.
+    /// </summary>
+    private DataSetStats<T, TInput, TOutput> CalculateR2OnlyStatsForOptimizer(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput X,
+        TOutput y,
+        PredictionType predictionType)
+    {
+        if (model is null)
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                IsDataProvided = true
+            };
+        }
+
+        var predictions = PredictForEvaluation(model, X);
+
+        // First-class multi-output (n×H) regression: score by uniform-average R² instead of collapsing to a
+        // single vector (which is meaningless for an n×H target and which ConvertToVector cannot even flatten).
+        var multiOutputR2 = TryCalculateMultiOutputRegressionStats(X, y, predictions, predictionType, r2Only: true);
+        if (multiOutputR2 is not null)
+        {
+            return multiOutputR2;
+        }
+
+        if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                Predicted = predictions,
+                Features = X,
+                Actual = y,
+                IsDataProvided = true
+            };
+        }
+
+        // R² = 1 - SS_res / SS_tot. Computed inline to avoid the cost of constructing
+        // a full PredictionStats (which would also compute MAE, RMSE, learning curves,
+        // confidence intervals, etc. that nothing in the FitDetector path consumes).
+        T ssRes = NumOps.Zero;
+        T meanActual = NumOps.Zero;
+        for (int i = 0; i < actual.Length; i++) meanActual = NumOps.Add(meanActual, actual[i]);
+        if (actual.Length > 0) meanActual = NumOps.Divide(meanActual, NumOps.FromDouble(actual.Length));
+
+        T ssTot = NumOps.Zero;
+        for (int i = 0; i < actual.Length; i++)
+        {
+            T diffRes = NumOps.Subtract(actual[i], predicted[i]);
+            ssRes = NumOps.Add(ssRes, NumOps.Multiply(diffRes, diffRes));
+            T diffTot = NumOps.Subtract(actual[i], meanActual);
+            ssTot = NumOps.Add(ssTot, NumOps.Multiply(diffTot, diffTot));
+        }
+        T r2 = NumOps.Equals(ssTot, NumOps.Zero)
+            ? NumOps.Zero
+            : NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+
+        return new DataSetStats<T, TInput, TOutput>
+        {
+            ErrorStats = ErrorStats<T>.Empty(),
+            ActualBasicStats = BasicStats<T>.Empty(),
+            PredictedBasicStats = BasicStats<T>.Empty(),
+            PredictionStats = PredictionStats<T>.WithR2Only(r2),
+            Predicted = predictions,
+            Features = X,
+            Actual = y,
+            IsDataProvided = true
+        };
+    }
+
+    private DataSetStats<T, TInput, TOutput> CalculateDataSetStatsForOptimizer(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput X,
+        TOutput y,
+        PredictionType predictionType)
+    {
+        if (model == null)
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                IsDataProvided = true
+            };
+        }
+
+        var predictions = PredictForEvaluation(model, X);
+        var inputSize = InputHelper<T, TInput>.GetInputSize(X);
+
+        // First-class multi-output (n×H) regression: uniform-average R² + pooled error stats (see helper).
+        var multiOutputStats = TryCalculateMultiOutputRegressionStats(X, y, predictions, predictionType, r2Only: false);
+        if (multiOutputStats is not null)
+        {
+            return multiOutputStats;
+        }
+
+        if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                Predicted = predictions,
+                Features = X,
+                Actual = y,
+                IsDataProvided = true
+            };
+        }
+
+        return new DataSetStats<T, TInput, TOutput>
+        {
+            ErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+            {
+                Actual = actual,
+                Predicted = predicted,
+                FeatureCount = inputSize,
+                PredictionType = predictionType
+            }),
+            ActualBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = actual }),
+            PredictedBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = predicted }),
+            PredictionStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+            {
+                Actual = actual,
+                Predicted = predicted,
+                NumberOfParameters = inputSize,
+                ConfidenceLevel = PredictionOptions.ConfidenceLevel,
+                LearningCurveSteps = PredictionOptions.LearningCurveSteps,
+                PredictionType = predictionType
+            }),
+            Predicted = predictions,
+            Features = X,
+            Actual = y,
+            IsDataProvided = true
+        };
+    }
+
+    /// <summary>
+    /// First-class evaluation for a multi-output (n×H) REGRESSION target. The generic single-vector path
+    /// (<see cref="TryGetAlignedVectorsForOptimizer"/>) collapses TOutput to one <see cref="Vector{T}"/>, which is
+    /// meaningless for an n×H target — and for a <see cref="Matrix{T}"/> it cannot flatten at all, so a correctly
+    /// trained multi-output model scores as garbage and loses selection to the default untrained model. This scores
+    /// by the INDUSTRY-STANDARD uniform-average R² (the mean of the per-column R², i.e. scikit-learn's
+    /// <c>multioutput='uniform_average'</c>) as the selection signal, plus pooled error stats over the flattened
+    /// residuals. Returns <c>null</c> for anything that is not a genuine (&gt;1 column) regression matrix, so every
+    /// existing single-output and classification path is left completely untouched.
+    /// </summary>
+    private DataSetStats<T, TInput, TOutput>? TryCalculateMultiOutputRegressionStats(
+        TInput X, TOutput y, TOutput predictions, PredictionType predictionType, bool r2Only)
+    {
+        if (predictionType != PredictionType.Regression
+            || y is not Matrix<T> actualMatrix
+            || predictions is not Matrix<T> predictedMatrix
+            || actualMatrix.Columns <= 1
+            || actualMatrix.Rows != predictedMatrix.Rows
+            || actualMatrix.Columns != predictedMatrix.Columns)
+        {
+            return null;
+        }
+
+        int rows = actualMatrix.Rows;
+        int cols = actualMatrix.Columns;
+
+        // Uniform-average R²: per-column R² = 1 - SS_res/SS_tot, then the mean across columns.
+        T sumR2 = NumOps.Zero;
+        for (int c = 0; c < cols; c++)
+        {
+            T mean = NumOps.Zero;
+            for (int r = 0; r < rows; r++)
+            {
+                mean = NumOps.Add(mean, actualMatrix[r, c]);
+            }
+
+            if (rows > 0)
+            {
+                mean = NumOps.Divide(mean, NumOps.FromDouble(rows));
+            }
+
+            T ssRes = NumOps.Zero;
+            T ssTot = NumOps.Zero;
+            for (int r = 0; r < rows; r++)
+            {
+                T res = NumOps.Subtract(actualMatrix[r, c], predictedMatrix[r, c]);
+                ssRes = NumOps.Add(ssRes, NumOps.Multiply(res, res));
+                T tot = NumOps.Subtract(actualMatrix[r, c], mean);
+                ssTot = NumOps.Add(ssTot, NumOps.Multiply(tot, tot));
+            }
+
+            T colR2 = NumOps.Equals(ssTot, NumOps.Zero)
+                ? NumOps.Zero
+                : NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+            sumR2 = NumOps.Add(sumR2, colR2);
+        }
+
+        T meanR2 = cols > 0 ? NumOps.Divide(sumR2, NumOps.FromDouble(cols)) : NumOps.Zero;
+
+        if (r2Only)
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.WithR2Only(meanR2),
+                Predicted = predictions,
+                Features = X,
+                Actual = y,
+                IsDataProvided = true
+            };
+        }
+
+        // Full path: pooled error stats over the flattened (row-major) residuals, with the uniform-average R² as
+        // the authoritative selection signal (RSquaredFitnessCalculator, the default, reads PredictionStats.R2).
+        var actualFlat = new Vector<T>(rows * cols);
+        var predictedFlat = new Vector<T>(rows * cols);
+        int k = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            for (int c = 0; c < cols; c++)
+            {
+                actualFlat[k] = actualMatrix[r, c];
+                predictedFlat[k] = predictedMatrix[r, c];
+                k++;
+            }
+        }
+
+        var inputSize = InputHelper<T, TInput>.GetInputSize(X);
+        return new DataSetStats<T, TInput, TOutput>
+        {
+            ErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+            {
+                Actual = actualFlat,
+                Predicted = predictedFlat,
+                FeatureCount = inputSize,
+                PredictionType = predictionType
+            }),
+            ActualBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = actualFlat }),
+            PredictedBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = predictedFlat }),
+            // Full stats over the flattened residuals, but seeded with the uniform-average R² (the
+            // authoritative selection signal) rather than the pooled R² — so AdjustedR², intervals,
+            // correlations and the learning curve are populated on the preferred dataset too (#1793).
+            PredictionStats = PredictionStats<T>.WithFullStatsAndSeededR2(new PredictionStatsInputs<T>
+            {
+                Actual = actualFlat,
+                Predicted = predictedFlat,
+                NumberOfParameters = inputSize,
+                ConfidenceLevel = PredictionOptions.ConfidenceLevel,
+                LearningCurveSteps = PredictionOptions.LearningCurveSteps,
+                PredictionType = predictionType
+            }, meanR2),
+            Predicted = predictions,
+            Features = X,
+            Actual = y,
+            IsDataProvided = true
+        };
+    }
+
+    private static bool TryGetAlignedVectorsForOptimizer(
+        TOutput actualOutput,
+        TOutput predictedOutput,
+        PredictionType predictionType,
+        out Vector<T> actual,
+        out Vector<T> predicted)
+    {
+        actual = Vector<T>.Empty();
+        predicted = Vector<T>.Empty();
+
+        try
+        {
+            actual = ConversionsHelper.ConvertToVector<T, TOutput>(actualOutput);
+            predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictedOutput);
+
+            if (actual.Length == predicted.Length)
+            {
+                return true;
+            }
+        }
+        catch (InvalidOperationException) { }
+        catch (ArgumentException) { }
+        catch (NotSupportedException) { }
+
+        return false;
+    }
+
+    private static ModelStats<T, TInput, TOutput> TryCalculateModelStatsForOptimizer(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput xForStatistics,
+        TOutput actual,
+        TOutput predicted,
+        Preprocessing.PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo)
+    {
+        try
+        {
+            return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
+            {
+                XMatrix = xForStatistics,
+                FeatureCount = InputHelper<T, TInput>.GetInputSize(xForStatistics),
+                Actual = actual,
+                Predicted = predicted,
+                Model = model
+            });
+        }
+        catch (InvalidOperationException) { return ModelStats<T, TInput, TOutput>.Empty(); }
+        catch (ArgumentException) { return ModelStats<T, TInput, TOutput>.Empty(); }
+        catch (NotSupportedException) { return ModelStats<T, TInput, TOutput>.Empty(); }
+        catch (ArithmeticException) { return ModelStats<T, TInput, TOutput>.Empty(); }
+        catch (IndexOutOfRangeException) { return ModelStats<T, TInput, TOutput>.Empty(); }
+    }
+
+    /// <summary>
+    /// Calculates the loss for a given solution.
+    /// </summary>
+    /// <param name="solution">The solution to evaluate.</param>
+    /// <param name="inputData">The input data for evaluation.</param>
+    /// <returns>The calculated loss value.</returns>
+    protected virtual T CalculateLoss(
+        IFullModel<T, TInput, TOutput> solution,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        var stepData = EvaluateSolution(solution, inputData);
+        return FitnessCalculator.CalculateFitnessScore(stepData.EvaluationData);
+    }
+
+    /// <summary>
+    /// Creates a new optimization result based on the best step data found during optimization.
+    /// </summary>
+    /// <param name="bestStepData">The data from the best optimization step.</param>
+    /// <param name="input">The original input data used for optimization.</param>
+    /// <returns>A structured optimization result containing all relevant information.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method packages all the optimization results into a single structured object that can be returned to the caller.
+    /// It includes the best solution found, its fitness score, training metrics, validation metrics, and test metrics.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this method as packaging up all the results from your optimization process
+    /// into one neat container.
+    /// 
+    /// It's like finishing a science experiment and organizing all your findings into a clear report:
+    /// - It includes the best solution found
+    /// - It shows how well that solution performed (fitness score)
+    /// - It contains detailed statistics about how the solution performed on different datasets
+    /// - It records other important information like selected features and iteration count
+    /// 
+    /// This makes it easy for you or other code to work with the results.
+    /// </para>
+    /// </remarks>
+    protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
+    {
+        // Single-trajectory contract (Adam, SGD, RMSProp, etc.): the working
+        // solution IS the user's model — already trained in place by the
+        // optimizer's per-iteration UpdateSolution. ReferenceEquals returns
+        // true and the writeback below is a no-op.
+        //
+        // Population/structural-training contract (PSO, GA, CMAES, Bayesian,
+        // DE, SimulatedAnnealing, etc.): bestStepData.Solution is the best
+        // individual — a Clone with its own trained parameters. The user's
+        // model reference (RequireModel) is unchanged. To honor the
+        // PyTorch-style "model you passed in is the model you get back,
+        // trained" contract, copy the best individual's parameters back
+        // into the user's model and use the user's reference as
+        // BestSolution.
+        var userModel = RequireModel();
+        var bestSolutionForResult = bestStepData.Solution;
+        if (!ReferenceEquals(bestSolutionForResult, userModel))
+        {
+            var userParameterizable = InterfaceGuard.TryParameterizable(userModel);
+            var bestParameterizable = InterfaceGuard.TryParameterizable(bestSolutionForResult);
+            if (userParameterizable is not null
+                && bestParameterizable is not null
+                && bestParameterizable.ParameterCount > 0)
+            {
+                // Lazy-init NN case: user's model has ParameterCount=0 (no
+                // forward pass yet). The best individual has fully-materialized
+                // parameters. SetParameters on a lazy-init NN should grow the
+                // parameter vector to match. NeuralNetworkBase.UpdateParameters
+                // handles this via right-sizing. If the user's model already
+                // has a different (non-zero) param count, sizes must match
+                // exactly — otherwise this is a structural mismatch (e.g.,
+                // GA evolved a different architecture) and we leave the best
+                // individual as-is.
+                if (userParameterizable.ParameterCount == 0
+                    || userParameterizable.ParameterCount == bestParameterizable.ParameterCount)
+                {
+                    try
+                    {
+                        userParameterizable.SetParameters(bestParameterizable.GetParameters());
+                        bestSolutionForResult = userModel;
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Size mismatch after lazy-init growth attempt — fall
+                        // back to returning the trained clone unchanged.
+                        // Caller still gets a working trained model via
+                        // result.Model, just not the same instance as their
+                        // ConfigureModel reference.
+                    }
+                }
+            }
+        }
+
+        return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
+            bestSolutionForResult,
+            bestStepData.FitnessScore,
+            FitnessList,
+            bestStepData.SelectedFeatures,
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            {
+                X = bestStepData.XTrainSubset,
+                Y = input.YTrain,
+                Predictions = bestStepData.EvaluationData.TrainingSet.Predicted,
+                ErrorStats = bestStepData.EvaluationData.TrainingSet.ErrorStats,
+                ActualBasicStats = bestStepData.EvaluationData.TrainingSet.ActualBasicStats,
+                PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
+                PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
+            },
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            {
+                X = bestStepData.XValSubset,
+                Y = input.YValidation,
+                Predictions = bestStepData.EvaluationData.ValidationSet.Predicted,
+                ErrorStats = bestStepData.EvaluationData.ValidationSet.ErrorStats,
+                ActualBasicStats = bestStepData.EvaluationData.ValidationSet.ActualBasicStats,
+                PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
+                PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
+            },
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            {
+                X = bestStepData.XTestSubset,
+                Y = input.YTest,
+                Predictions = bestStepData.EvaluationData.TestSet.Predicted,
+                ErrorStats = bestStepData.EvaluationData.TestSet.ErrorStats,
+                ActualBasicStats = bestStepData.EvaluationData.TestSet.ActualBasicStats,
+                PredictedBasicStats = bestStepData.EvaluationData.TestSet.PredictedBasicStats,
+                PredictionStats = bestStepData.EvaluationData.TestSet.PredictionStats
+            },
+            bestStepData.FitDetectionResult,
+            IterationHistoryList.Count,
+            bestStepData.SelectedFeatureIndices
+        );
+    }
+
+    /// <summary>
+    /// Applies feature selection to a model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method selects a subset of features to be used by the model, potentially
+    /// improving its performance by focusing on the most relevant data dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding which ingredients to include in your recipe. Some ingredients
+    /// might not be necessary or might even make the dish worse, so you're experimenting
+    /// with different combinations to find which ones are truly important.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The model to apply feature selection to.</param>
+    /// <param name="totalFeatures">The total number of available features.</param>
+    protected virtual void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, int totalFeatures)
+    {
+        // Randomly select features
+        var selectedFeatures = RandomlySelectFeatures(
+            totalFeatures,
+            Options.MinimumFeatures,
+            Options.MaximumFeatures);
+
+        // Apply the selected features to the model using the base class method
+        ApplyFeatureSelection(model, selectedFeatures);
+    }
+
+    /// <summary>
+    /// Creates a potential solution based on the optimization mode.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new model variant by either selecting features, adjusting parameters,
+    /// or both, depending on the optimization mode.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a new version of the recipe. Depending on what you're focusing on,
+    /// you might change which ingredients you use, how much of each ingredient you add,
+    /// or both aspects at once.
+    /// </para>
+    /// </remarks>
+    /// <param name="xTrain">Training data used to determine data dimensions.</param>
+    /// <returns>A new potential solution (model variant).</returns>
+    protected virtual IFullModel<T, TInput, TOutput> CreateSolution(TInput xTrain)
+    {
+        // Create a deep copy of the model to avoid modifying the original
+        var solution = RequireModel().DeepCopy();
+
+        // Return the deep copy - subclasses can override to add custom solution creation logic
+        return solution;
+    }
+
+    /// <summary>
+    /// Generates a cache key for the given solution and input data.
+    /// </summary>
+    /// <param name="solution">The solution model.</param>
+    /// <param name="inputData">The optimization input data.</param>
+    /// <returns>A unique cache key string.</returns>
+    protected virtual string GenerateCacheKey(IFullModel<T, TInput, TOutput> solution, OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // Models that don't support parameter initialization (time series, density-based clustering)
+        // may not have parameters before training — use type name + hash code as fallback.
+        if (!InterfaceGuard.Parameterizable(solution).SupportsParameterInitialization)
+        {
+            return $"{solution.GetType().Name}_{solution.GetHashCode()}";
+        }
+
+        // Content-based hash from actual parameter values.
+        // Vector<T>.GetHashCode() returns the default object hash (memory address),
+        // which changes every time UpdateSolution creates a new model via WithParameters().
+        // This caused the cache to ALWAYS miss, making model.Train() run every epoch
+        // even when parameters hadn't changed — 1000x redundant training for closed-form models.
+        //
+        // Collision-resistance note: an earlier version hashed only 3 sampled parameters
+        // (first/middle/last). That made it trivial for two genuinely-different parameter
+        // vectors to collide, causing the cache to return STALE evaluation results for a
+        // different solution (silent correctness bug flagged in PR review). We now hash
+        // every parameter via a stable rolling hash. Cost is O(n) but n is typically
+        // a few thousand floats, and the alternative (always re-training) is orders of
+        // magnitude more expensive than the hash itself.
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
+        unchecked
+        {
+            // FNV-1a-style rolling hash over all parameters: each new value is mixed
+            // multiplicatively, so transposing two values changes the hash. Length is
+            // folded in at the end to disambiguate same-prefix vectors of different sizes.
+            const int fnvOffsetBasis = unchecked((int)2166136261);
+            const int fnvPrime = 16777619;
+            int hash = fnvOffsetBasis;
+            int len = parameters.Length;
+            for (int i = 0; i < len; i++)
+            {
+                hash = (hash ^ NumOps.ToDouble(parameters[i]).GetHashCode()) * fnvPrime;
+            }
+            hash = (hash ^ len) * fnvPrime;
+
+            // Fold the model's active feature indices into the key, since two
+            // identical parameter vectors evaluated against different feature subsets
+            // produce different evaluation results — using the same cache key would
+            // serve a stale entry. Falls back to no-op when the model isn't
+            // IFeatureAware (e.g., dense models that consume all input features).
+            if (solution is IFeatureAware featureAware)
+            {
+                var indices = featureAware.GetActiveFeatureIndices();
+                if (indices is not null)
+                {
+                    foreach (int idx in indices)
+                    {
+                        hash = (hash ^ idx) * fnvPrime;
+                    }
+                }
+            }
+
+            return $"{solution.GetType().Name}_{hash}";
+        }
+    }
+
+    /// <summary>
+    /// Compares the current model result with the best result found so far and updates the best result if the current one is better.
+    /// </summary>
+    /// <param name="currentResult">The most recent model result.</param>
+    /// <param name="bestResult">The best model result found so far, passed by reference so it can be updated.</param>
+    /// <remarks>
+    /// <para>
+    /// This method compares fitness scores between the current and best results using the fitness calculator.
+    /// If the current result has a better fitness score, all properties of the best result are updated
+    /// with the values from the current result.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method is like keeping track of a high score in a game.
+    ///
+    /// When you get a new score (currentResult), it checks:
+    /// - Is this score better than the previous best score?
+    /// - If yes, it updates the high score (bestResult) with this new score
+    /// - It also saves all the details about how that high score was achieved
+    ///
+    /// The "ref" keyword means it directly updates the bestResult that was passed in,
+    /// so the caller immediately sees the updated values.
+    /// </para>
+    /// </remarks>
+    private void UpdateAndApplyBestSolution(ModelResult<T, TInput, TOutput> currentResult, ref ModelResult<T, TInput, TOutput> bestResult)
+    {
+        if (FitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
+        {
+            bestResult.Solution = currentResult.Solution;
+            bestResult.Fitness = currentResult.Fitness;
+            bestResult.FitDetectionResult = currentResult.FitDetectionResult;
+            bestResult.EvaluationData = currentResult.EvaluationData;
+            bestResult.SelectedFeatures = currentResult.SelectedFeatures;
+            bestResult.SelectedFeatureIndices = currentResult.SelectedFeatureIndices;
+        }
+    }
+
+    /// <summary>
+    /// Updates the best step data if the current step data has a better solution.
+    /// </summary>
+    /// <param name="currentStepData">The current optimization step data.</param>
+    /// <param name="bestStepData">The best optimization step data found so far, passed by reference to be updated.</param>
+    /// <remarks>
+    /// <para>
+    /// This method wraps the current and best step data in ModelResult objects and calls UpdateAndApplyBestSolution
+    /// to determine if the current step data is better. If it is, the bestStepData reference is updated with values
+    /// from the current step data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method compares two sets of optimization results to keep the better one.
+    /// 
+    /// Think of it like a talent competition:
+    /// - You have a current contestant (currentStepData)
+    /// - You have the current champion (bestStepData)
+    /// - This method compares them to see who performs better
+    /// - If the contestant wins, they become the new champion
+    /// 
+    /// This is a key part of optimization - always keeping track of the best solution found so far.
+    /// </para>
+    /// </remarks>
+    protected void UpdateBestSolution(OptimizationStepData<T, TInput, TOutput> currentStepData, ref OptimizationStepData<T, TInput, TOutput> bestStepData)
+    {
+        // Stash the CURRENT step's fitness so the per-epoch progress callback can report the
+        // live loss (which may be diverging / NaN) rather than the monotonic best-so-far
+        // fitness that UpdateIterationHistoryAndCheckEarlyStopping otherwise receives. Gradient
+        // optimizers call this exactly once per epoch with the freshly evaluated step, giving
+        // the callback (and any health monitor) an accurate divergence signal. Guarded so this
+        // is a strict no-op when no progress observer is attached (zero behaviour change on the
+        // default training paths). An optimizer that evaluates multiple candidates per iteration overwrites
+        // this on each call, so the value consumed once per iteration in
+        // UpdateIterationHistoryAndCheckEarlyStopping is the LAST candidate stashed that iteration (the
+        // consumer then resets the stash so it can't go stale across iterations); the seam is designed for
+        // the once-per-epoch gradient optimizers described above.
+        if (_epochProgressCallback is not null)
+        {
+            _lastObservedFitness = currentStepData.FitnessScore;
+            _hasObservedFitness = true;
+        }
+
+        // If bestStepData has never been set by a real evaluation, always accept the
+        // first real result. This prevents a bug where the default FitnessScore of 0 is
+        // considered "better" than real evaluations by fitness calculators that treat
+        // lower scores as better.
+        //
+        // The uninitialized signal is "no solution recorded yet" (Solution is null until
+        // the first accept below sets it). It must NOT key off SelectedFeatures.Count == 0:
+        // multi-dimensional-input models (CNN/RNN/etc.) legitimately produce an empty
+        // SelectedFeatures list (feature subsetting doesn't apply — #1468), so a Count==0
+        // sentinel would treat every such step as uninitialized and overwrite a real best
+        // without a fitness comparison whenever the score is 0.
+        // Captured as a local and tested inline (not via an intermediate bool) so the
+        // compiler narrows it to non-null past this guard for the bestResult build below.
+        // Accept the first real evaluation unconditionally when the best slot is either
+        // unset (Solution null) OR still the throwaway placeholder from the parameterless
+        // OptimizationStepData ctor (default model + FitnessScore 0). Without the placeholder
+        // check, a real evaluation whose score can't beat the placeholder's 0 — an
+        // error-minimizing fitness, or a NaN/zero score produced under heavy parallel
+        // contention — would never replace it, leaking the throwaway default model out as the
+        // optimization result (observed as a Transformer build returning a 3-layer default
+        // NeuralNetwork only under parallel test execution).
+        var bestSolution = bestStepData.Solution;
+        if (bestSolution is null || bestStepData.IsUninitializedPlaceholder)
+        {
+            bestStepData.Solution = currentStepData.Solution;
+            bestStepData.FitnessScore = currentStepData.FitnessScore;
+            bestStepData.FitDetectionResult = currentStepData.FitDetectionResult;
+            bestStepData.EvaluationData = currentStepData.EvaluationData;
+            bestStepData.SelectedFeatures = currentStepData.SelectedFeatures;
+            bestStepData.SelectedFeatureIndices = currentStepData.SelectedFeatureIndices;
+            bestStepData.IsUninitializedPlaceholder = false;
+            return;
+        }
+
+        var currentResult = new ModelResult<T, TInput, TOutput>
+        {
+            Solution = currentStepData.Solution,
+            Fitness = currentStepData.FitnessScore,
+            FitDetectionResult = currentStepData.FitDetectionResult,
+            EvaluationData = currentStepData.EvaluationData,
+            SelectedFeatures = currentStepData.SelectedFeatures,
+            SelectedFeatureIndices = currentStepData.SelectedFeatureIndices
+        };
+
+        var bestResult = new ModelResult<T, TInput, TOutput>
+        {
+            Solution = bestSolution,
+            Fitness = bestStepData.FitnessScore,
+            FitDetectionResult = bestStepData.FitDetectionResult,
+            EvaluationData = bestStepData.EvaluationData,
+            SelectedFeatures = bestStepData.SelectedFeatures,
+            SelectedFeatureIndices = bestStepData.SelectedFeatureIndices
+        };
+
+        UpdateAndApplyBestSolution(currentResult, ref bestResult);
+
+        // Update the bestStepData with the new best values
+        bestStepData.Solution = bestResult.Solution;
+        bestStepData.FitnessScore = bestResult.Fitness;
+        bestStepData.FitDetectionResult = bestResult.FitDetectionResult;
+        bestStepData.EvaluationData = bestResult.EvaluationData;
+        bestStepData.SelectedFeatures = bestResult.SelectedFeatures;
+        bestStepData.SelectedFeatureIndices = bestResult.SelectedFeatureIndices;
+    }
+
+    /// <summary>
+    /// Initializes the adaptive parameters used during optimization to their starting values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method sets the initial values for parameters that can adapt during optimization, such as
+    /// learning rate and momentum. It also resets tracking variables for monitoring improvement.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets up the starting values for parameters that will change
+    /// during the optimization process.
+    /// 
+    /// Think of it like setting up a car before a long journey:
+    /// - Setting the initial speed (learning rate)
+    /// - Setting the initial acceleration (momentum)
+    /// - Resetting the trip counters (improvement trackers)
+    /// 
+    /// These values will adjust automatically during optimization to help find the best solution efficiently.
+    /// The learning rate controls how big each step is, while momentum helps move through flat areas.
+    /// </para>
+    /// </remarks>
+    protected virtual void InitializeAdaptiveParameters()
+    {
+        CurrentLearningRate = NumOps.FromDouble(Options.InitialLearningRate);
+        CurrentMomentum = NumOps.FromDouble(Options.InitialMomentum);
+        IterationsWithoutImprovement = 0;
+        IterationsWithImprovement = 0;
+        _plateauReductionsUsed = 0;
+        _earlyStopHistoryFloor = 0;
+    }
+
+    /// <summary>
+    /// Resets the optimizer state, clearing the model cache.
+    /// </summary>
+    public virtual void Reset()
+    {
+        ModelCache.ClearCache();
+        ResetAdaptiveParameters();
+    }
+
+    /// <summary>
+    /// Resets the adaptive parameters back to their initial values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method calls InitializeAdaptiveParameters to reset all adaptive parameters to their starting values.
+    /// This can be useful when the optimization process needs to be restarted or when a significant change occurs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method resets the optimization process parameters to start fresh.
+    /// 
+    /// It's like restarting a navigation system when you've gone off course:
+    /// - You reset your speed back to the initial value
+    /// - You reset your direction and momentum
+    /// - You clear any history of previous attempts
+    /// 
+    /// This gives the optimization a clean slate to try again from the beginning.
+    /// </para>
+    /// </remarks>
+    protected virtual void ResetAdaptiveParameters()
+    {
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
+    /// Updates the adaptive parameters based on the progress of optimization.
+    /// </summary>
+    /// <param name="currentStepData">The current optimization step data.</param>
+    /// <param name="previousStepData">The previous optimization step data.</param>
+    /// <remarks>
+    /// <para>
+    /// This method adjusts the learning rate and momentum based on whether the optimization is improving.
+    /// If the fitness is improving, it may increase certain parameters to move faster.
+    /// If the fitness is not improving, it may decrease certain parameters to explore more carefully.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method changes how the optimization behaves based on its progress.
+    /// 
+    /// Think of it like adjusting your driving based on the road conditions:
+    /// - If you're making good progress, you might speed up (decrease learning rate, increase momentum)
+    /// - If you're not improving, you might slow down and try different directions (increase learning rate, decrease momentum)
+    /// 
+    /// These automatic adjustments help the optimizer find better solutions by being more efficient:
+    /// - When close to a good solution, it takes smaller, more precise steps
+    /// - When stuck in a difficult area, it tries different approaches
+    /// 
+    /// The learning rate controls how big each step is in the optimization process.
+    /// The momentum helps maintain direction through flat or noisy areas.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Called whenever a fitness score is observed, so a subclass can forward it to whatever reacts
+    /// to it. Base implementation does nothing; gradient optimizers route it to their schedule.
+    /// </summary>
+    /// <param name="fitness">The fitness score, in the fitness calculator's direction.</param>
+    protected virtual void OnFitnessObserved(T fitness)
+    {
+    }
+
+    protected virtual void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
+    {
+        if (Options.UseAdaptiveLearningRate)
+        {
+            // Adaptive-LR semantics:
+            //   improving fitness → reduce LR (we are converging; take smaller, finer steps)
+            //   stagnant or worse → increase LR (we are stuck; take larger steps to escape)
+            //
+            // The rate itself is NOT written here. That rule now lives in AdaptiveFitnessScheduler,
+            // which gradient optimizers install automatically when this flag is set and no explicit
+            // scheduler was configured (see GradientBasedOptimizerBase). Keeping it here as well
+            // meant two mechanisms wrote CurrentLearningRate: any attached scheduler set a rate and
+            // this branch immediately overwrote it, so a configured schedule silently did nothing.
+            // One writer, one schedule — and an explicit scheduler simply replaces this one instead
+            // of fighting it.
+            //
+            // The counter pair still belongs here: it tracks improvement/stagnation streaks for the
+            // adaptive-momentum logic below and for scheduler step decisions, neither of which the
+            // scheduler owns. Correct mapping is "improving ⇒ IterationsWithImprovement++"; earlier
+            // code had both branches reversed, which broke every downstream branch keyed off them.
+            if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            {
+                IterationsWithImprovement++;
+                IterationsWithoutImprovement = 0;
+            }
+            else
+            {
+                IterationsWithoutImprovement++;
+                IterationsWithImprovement = 0;
+            }
+        }
+
+        // Hand the schedule the value it reacts to. Done unconditionally: an explicitly configured
+        // scheduler is metric-driven regardless of whether UseAdaptiveLearningRate was set.
+        OnFitnessObserved(currentStepData.FitnessScore);
+
+        if (Options.UseAdaptiveMomentum)
+        {
+            if (IterationsWithImprovement > 2)
+            {
+                CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(Options.MomentumIncreaseFactor));
+            }
+            else if (IterationsWithoutImprovement > 2)
+            {
+                CurrentMomentum = NumOps.Multiply(CurrentMomentum, NumOps.FromDouble(Options.MomentumDecreaseFactor));
+            }
+
+            CurrentMomentum = MathHelper.Max(NumOps.FromDouble(Options.MinMomentum),
+                MathHelper.Min(NumOps.FromDouble(Options.MaxMomentum), CurrentMomentum));
+        }
+    }
+
+    /// <summary>
+    /// Updates the iteration history with the current step data and checks if early stopping should be applied.
+    /// </summary>
+    /// <param name="iteration">The current iteration number.</param>
+    /// <param name="stepData">The current step data.</param>
+    /// <returns>True if optimization should stop early, false if it should continue.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method adds the current iteration's data to the history list and then checks if early stopping
+    /// criteria have been met. Early stopping helps prevent overfitting by stopping the optimization process
+    /// when progress stagnates for a number of iterations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method keeps track of progress and decides if it's time to stop trying.
+    /// 
+    /// Imagine you're trying to climb a hill to find the highest point:
+    /// - You keep a record of your altitude at each step (the iteration history)
+    /// - If you haven't gone any higher after walking for a while, you might decide to stop
+    /// - This saves time and prevents you from wandering too far
+    /// 
+    /// Early stopping is important because:
+    /// - It saves computation time when further optimization isn't helping
+    /// - It can prevent overfitting (when a model works too well on training data but poorly on new data)
+    /// - It tells you when you've found a good enough solution
+    /// </para>
+    /// </remarks>
+    protected bool UpdateIterationHistoryAndCheckEarlyStopping(int iteration, OptimizationStepData<T, TInput, TOutput> stepData)
+    {
+        IterationHistoryList.Add(new OptimizationIterationInfo<T>
+        {
+            Iteration = iteration,
+            Fitness = stepData.FitnessScore,
+            FitDetectionResult = stepData.FitDetectionResult
+        });
+
+        // The CURRENT iteration's live fitness (stashed by UpdateBestSolution) — including a diverging or NaN
+        // loss — rather than the monotonic best-so-far in stepData. Captured BEFORE the observer block consumes
+        // the stash so both the observer and the divergence guard below see the same live value. When an
+        // optimizer evaluates multiple candidates per iteration this is the LAST candidate stashed this
+        // iteration (falling back to the monotonic best when nothing was stashed).
+        T liveFitness = (_hasObservedFitness && _lastObservedFitness is { } observed) ? observed : stepData.FitnessScore;
+
+        // Notify the per-epoch progress observer (if any). A false return means an observer (e.g. a user
+        // training callback or health monitor) requested an abort, which we honor by signalling a stop.
+        if (_epochProgressCallback is not null)
+        {
+            // Consume the stash so each iteration reports a value stashed DURING that iteration (see
+            // SetEpochProgressCallback): without this reset an iteration that never calls UpdateBestSolution
+            // would re-report the previous iteration's stale fitness.
+            _hasObservedFitness = false;
+            if (!_epochProgressCallback(iteration, liveFitness))
+            {
+                return true; // Observer requested an early stop
+            }
+        }
+
+        // Divergence guard — ALWAYS on, independent of any configured observer. A non-finite live fitness means
+        // the optimization has blown up (NaN/Inf gradients/loss); stop now so the run returns the best FINITE
+        // solution tracked so far (a NaN never wins UpdateBestSolution) instead of iterating on NaNs. This fires
+        // even on the facade's bare no-observer path, where nothing else would catch divergence — a safety floor
+        // under every model trained through the optimizer. Most optimizers keep iterating on NaN.
+        double liveFitnessMagnitude = Convert.ToDouble(liveFitness);
+        if (double.IsNaN(liveFitnessMagnitude) || double.IsInfinity(liveFitnessMagnitude))
+        {
+            return true; // stop before NaNs corrupt the model
+        }
+
+        // Check for early stopping — coordinated with ReduceLROnPlateau when enabled.
+        if (Options.UseEarlyStopping && ShouldEarlyStop())
+        {
+            // Reduce-first, stop-only-once-reduction-stops-helping: on a plateau, HALVE the learning rate up to
+            // MaxLearningRateReductionsOnPlateau times before actually stopping, each reduction clearing the
+            // plateau window so the lowered LR gets a fresh patience budget. Only stop once reductions are
+            // exhausted (or the LR is already at the floor). Default (0 reductions) stops immediately, exactly
+            // as before. The returned model is still the global best (UpdateBestSolution is unaffected), so a
+            // reduction can only help — it trades a few more epochs at a finer LR for a possibly-better optimum.
+            if (Options.MaxLearningRateReductionsOnPlateau > 0
+                && _plateauReductionsUsed < Options.MaxLearningRateReductionsOnPlateau
+                && Convert.ToDouble(CurrentLearningRate) > Options.MinLearningRate)
+            {
+                _plateauReductionsUsed++;
+                double reduced = Math.Max(
+                    Options.MinLearningRate,
+                    Convert.ToDouble(CurrentLearningRate) * Options.PlateauLearningRateReductionFactor);
+                CurrentLearningRate = NumOps.FromDouble(reduced);
+                _earlyStopHistoryFloor = IterationHistoryList.Count; // fresh window for the reduced LR
+                return false; // keep training at the lower learning rate
+            }
+
+            return true; // Signal to stop the optimization
+        }
+
+        return false; // Continue optimization
+    }
+
+    /// <summary>
+    /// Registers a per-epoch progress callback invoked once per outer optimization iteration.
+    /// </summary>
+    /// <param name="callback">
+    /// A delegate receiving the zero-based iteration index and that iteration's current
+    /// fitness/loss. It should return <c>true</c> to continue optimizing or <c>false</c> to
+    /// request an early, graceful stop. Pass <c>null</c> to clear a previously registered
+    /// callback.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// This is the seam the <c>AiModelBuilder</c> facade uses to stream per-epoch metrics to a
+    /// training monitor and to invoke user-registered training callbacks against the in-memory
+    /// supervised path (where the optimizer owns the epoch loop). It fires from within
+    /// <see cref="UpdateIterationHistoryAndCheckEarlyStopping"/>, which every gradient-based
+    /// optimizer calls once per epoch.
+    /// </para>
+    /// <para><b>For Beginners:</b> You normally will not call this directly — the model builder
+    /// wires it up for you when you register a training callback. It lets code outside the
+    /// optimizer watch each epoch and stop training early if needed.
+    /// </para>
+    /// </remarks>
+    internal void SetEpochProgressCallback(Func<int, T, bool>? callback)
+    {
+        _epochProgressCallback = callback;
+    }
+
+    /// <summary>
+    /// Determines whether the optimization process should stop early based on the recent history of fitness scores.
+    /// </summary>
+    /// <returns>True if early stopping criteria are met, false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method checks if the fitness score has not improved significantly over a specified number of iterations.
+    /// If the improvement is below a threshold for a consecutive number of iterations, it suggests stopping early.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method decides if it's time to stop trying to improve the solution.
+    /// 
+    /// Imagine you're trying to beat your personal best in a game:
+    /// - You keep playing and tracking your scores
+    /// - If your score hasn't improved much after several attempts, you might decide to stop
+    /// - This method does that for the optimization process
+    /// 
+    /// It's useful because:
+    /// - It prevents wasting time when the solution isn't getting much better
+    /// - It helps avoid overfitting, where the model becomes too specific to the training data
+    /// - It can save computational resources by stopping when further improvement is unlikely
+    /// </para>
+    /// </remarks>
+    public virtual bool ShouldEarlyStop()
+    {
+        // Measure the plateau over the CURRENT window only. Without ReduceLROnPlateau the floor is 0, so this is
+        // the whole history (byte-for-byte the historical behavior); after a plateau LR reduction the floor
+        // advances so the lowered LR is judged on its own fresh window, not against the pre-reduction best.
+        int floor = Math.Min(_earlyStopHistoryFloor, IterationHistoryList.Count);
+        var window = IterationHistoryList.Skip(floor).ToList();
+        if (window.Count < Options.EarlyStoppingPatience)
+        {
+            return false;
+        }
+
+        var recentIterations = window.Skip(Math.Max(0, window.Count - Options.EarlyStoppingPatience)).ToList();
+
+        // Find the best fitness score (within the current window)
+        T bestFitness = window[0].Fitness;
+        foreach (var iteration in window)
+        {
+            if (FitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
+            {
+                bestFitness = iteration.Fitness;
+            }
+        }
+
+        // Check for improvement in recent iterations
+        bool noImprovement = true;
+        foreach (var iteration in recentIterations)
+        {
+            if (FitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
+            {
+                noImprovement = false;
+                break;
+            }
+        }
+
+        // Check for consecutive bad fits
+        int consecutiveBadFits = 0;
+        foreach (var iteration in recentIterations.Reverse<OptimizationIterationInfo<T>>())
+        {
+            if (iteration.FitDetectionResult.FitType != FitType.GoodFit)
+            {
+                consecutiveBadFits++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return noImprovement || consecutiveBadFits >= Options.BadFitPatience;
+    }
+
+    /// <summary>
+    /// Serializes the optimizer state to a byte array.
+    /// </summary>
+    /// <returns>A byte array containing the serialized optimizer state.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method saves the current state of the optimizer, including its options and any derived class-specific data.
+    /// The serialized data can be used to reconstruct the optimizer's state later or to transfer it between processes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves all the important information about the optimizer's current state.
+    /// 
+    /// Think of it like taking a snapshot of the optimizer:
+    /// - It captures all the current settings and progress
+    /// - This snapshot can be saved to a file or sent to another computer
+    /// - Later, you can use this snapshot to continue from where you left off
+    /// 
+    /// This is useful for:
+    /// - Saving your progress in case the program crashes
+    /// - Sharing your optimizer's state with others
+    /// - Continuing a long optimization process after a break
+    /// </para>
+    /// </remarks>
+    public virtual byte[] Serialize()
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        using var memoryStream = new MemoryStream();
+        using var writer = new BinaryWriter(memoryStream);
+
+        // Write the type name
+        writer.Write(GetType().AssemblyQualifiedName ?? string.Empty);
+
+        // Serialize options
+        var optionsJson = JsonConvert.SerializeObject(Options);
+        writer.Write(optionsJson);
+
+        // Allow derived classes to serialize additional data
+        SerializeAdditionalData(writer);
+        SerializeExtensionData(writer);
+
+        return memoryStream.ToArray();
+    }
+
+    /// <summary>
+    /// Reconstructs the optimizer from a serialized byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized optimizer.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the serialized type doesn't match the current type.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method rebuilds the optimizer's state from a serialized byte array. It verifies that the
+    /// serialized type matches the current type, restores configuration options, and calls into derived
+    /// classes to restore any additional data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved optimizer state.
+    /// 
+    /// It's like restoring a snapshot:
+    /// - It takes a byte array that was previously created with Serialize()
+    /// - It checks that the type matches (you can't load settings from a different type of optimizer)
+    /// - It reconstructs all the settings and values
+    /// 
+    /// This allows you to:
+    /// - Continue working with an optimizer that you previously saved
+    /// - Use an optimizer that someone else created and shared
+    /// - Recover from backups if needed
+    /// </para>
+    /// </remarks>
+    public virtual void Deserialize(byte[] data)
+    {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+        using MemoryStream ms = new(data);
+        using BinaryReader reader = new(ms);
+
+        // Read and verify the type
+        string typeName = reader.ReadString();
+        if (typeName != this.GetType().AssemblyQualifiedName)
+        {
+            throw new InvalidOperationException("Mismatched optimizer type during deserialization.");
+        }
+
+        // Deserialize options
+        string optionsJson = reader.ReadString();
+        Type optionsType = Options?.GetType() ?? typeof(OptimizationAlgorithmOptions<T, TInput, TOutput>);
+        object? deserializedOptions = JsonConvert.DeserializeObject(optionsJson, optionsType);
+        var options = deserializedOptions as OptimizationAlgorithmOptions<T, TInput, TOutput>;
+
+        // Update the options
+        if (options != null)
+        {
+            UpdateOptions(options);
+        }
+
+        // Allow derived classes to deserialize additional data
+        DeserializeAdditionalData(reader);
+        DeserializeExtensionData(reader);
+    }
+
+    /// <summary>
+    /// Serializes additional data specific to derived optimizer classes.
+    /// </summary>
+    /// <param name="writer">The binary writer to use for serialization.</param>
+    /// <remarks>
+    /// <para>
+    /// This protected virtual method allows derived optimizer classes to serialize additional data
+    /// beyond what is handled by the base implementation. The base implementation does nothing.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method allows specialized optimizers to save their unique settings.
+    /// 
+    /// Think of it as adding extra details to the snapshot:
+    /// - The base optimizer saves the common information
+    /// - This method lets specialized optimizers save their specific settings
+    /// - It's empty in the base class since it doesn't have any special data to save
+    /// 
+    /// This is part of the extensible design that allows different types of optimizers
+    /// to all use the same saving and loading system.
+    /// </para>
+    /// </remarks>
+    protected virtual void SerializeAdditionalData(BinaryWriter writer)
+    {
+        // Base implementation does nothing
+    }
+
+    /// <summary>
+    /// Serializes optional extension data after the base and derived optimizer payloads.
+    /// </summary>
+    /// <param name="writer">The binary writer to use for serialization.</param>
+    /// <remarks>
+    /// This hook is intentionally separate from <see cref="SerializeAdditionalData"/>
+    /// so framework-level optimizer infrastructure can append versioned data without
+    /// changing every optimizer-specific serialization layout.
+    /// </remarks>
+    private protected virtual void SerializeExtensionData(BinaryWriter writer)
+    {
+        // Base implementation does nothing.
+    }
+
+    /// <summary>
+    /// Deserializes additional data specific to derived optimizer classes.
+    /// </summary>
+    /// <param name="reader">The binary reader to use for deserialization.</param>
+    /// <remarks>
+    /// <para>
+    /// This protected virtual method allows derived optimizer classes to deserialize additional data
+    /// beyond what is handled by the base implementation. The base implementation does nothing.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method allows specialized optimizers to load their unique settings.
+    /// 
+    /// Think of it as reading extra details from the snapshot:
+    /// - The base optimizer loads the common information
+    /// - This method lets specialized optimizers load their specific settings
+    /// - It's empty in the base class since it doesn't have any special data to load
+    /// 
+    /// This complements the SerializeAdditionalData method to allow different optimizers
+    /// to save and load their specialized settings.
+    /// </para>
+    /// </remarks>
+    protected virtual void DeserializeAdditionalData(BinaryReader reader)
+    {
+        // Base implementation does nothing
+    }
+
+    /// <summary>
+    /// Deserializes optional extension data appended by <see cref="SerializeExtensionData"/>.
+    /// </summary>
+    /// <param name="reader">The binary reader to use for deserialization.</param>
+    /// <remarks>
+    /// Implementations must tolerate older payloads where no extension data was present.
+    /// </remarks>
+    private protected virtual void DeserializeExtensionData(BinaryReader reader)
+    {
+        // Base implementation does nothing.
+    }
+
+    /// <summary>
+    /// Updates the optimizer's options with the provided options.
+    /// </summary>
+    /// <param name="options">The options to apply to this optimizer.</param>
+    /// <remarks>
+    /// <para>
+    /// This abstract method must be implemented by derived classes to update their specific options
+    /// based on the provided generic optimization options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method configures the optimizer with specific settings.
+    /// 
+    /// Think of it like updating the settings on your device:
+    /// - You provide a set of options (settings)
+    /// - This method applies those options to the optimizer
+    /// - Each type of optimizer will implement this differently based on what options it supports
+    /// 
+    /// This is important because different optimizers might interpret the same options differently,
+    /// or might have additional specialized options.
+    /// </para>
+    /// </remarks>
+    protected abstract void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options);
+
+    /// <summary>
+    /// Performs a single optimization step, updating the model parameters based on gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method performs one iteration of parameter updates. The default implementation
+    /// throws a NotImplementedException, and gradient-based optimizers should override this method
+    /// to implement their specific parameter update logic.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like taking one small step toward a better model.
+    /// After calculating how wrong the model is (gradients), this method adjusts the
+    /// model's parameters slightly to make it more accurate.
+    ///
+    /// Think of it like adjusting a recipe:
+    /// 1. You taste the dish (check model performance)
+    /// 2. You determine what needs changing (calculate gradients)
+    /// 3. You adjust the ingredients (this Step method updates parameters)
+    /// 4. Repeat until the dish tastes good (model is accurate)
+    ///
+    /// Most training loops call this method many times, each time making the model
+    /// a little bit better.
+    /// </para>
+    /// </remarks>
+    public virtual void Step()
+    {
+        throw new NotSupportedException(
+            $"Step() is not supported by {GetType().Name}. " +
+            "This optimizer is a non-gradient-based optimizer (e.g. evolutionary / black-box / Bayesian search) — " +
+            "use the Optimize() method instead. Gradient-based optimizers (Adam, SGD, AdamW, etc.) override Step() in the derived class.");
+    }
+
+    /// <summary>
+    /// Calculates the parameter update based on the provided gradients.
+    /// </summary>
+    /// <param name="gradients">The gradients used to compute the parameter updates.</param>
+    /// <returns>The calculated parameter updates as a dictionary mapping parameter names to their update vectors.</returns>
+    public virtual Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients)
+    {
+        throw new NotSupportedException(
+            $"CalculateUpdate() is not supported by {GetType().Name}. " +
+            "This optimizer is a non-gradient-based optimizer (e.g. evolutionary / black-box / Bayesian search) — " +
+            "use the Optimize() method instead. Gradient-based optimizers (Adam, SGD, AdamW, etc.) override CalculateUpdate() in the derived class.");
+    }
+
+    /// <summary>
+    /// Gets the current options for this optimizer.
+    /// </summary>
+    /// <returns>The current optimization algorithm options.</returns>
+    /// <remarks>
+    /// <para>
+    /// This abstract method must be implemented by derived classes to return their current
+    /// configuration options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method retrieves the current settings of the optimizer.
+    ///
+    /// It's like checking the current configuration of your device:
+    /// - It returns all the settings that control how the optimizer behaves
+    /// - Each type of optimizer will implement this differently to return its specific settings
+    ///
+    /// This is useful for:
+    /// - Seeing what settings are currently active
+    /// - Making a copy of settings to modify and apply later
+    /// - Comparing settings between different optimizers
+    /// </para>
+    /// </remarks>
+    public abstract OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions();
+
+    /// <summary>
+    /// Calculates the parameter updates based on the gradients.
+    /// </summary>
+    /// <param name="gradients">The gradients of the loss function with respect to the parameters.</param>
+    /// <param name="parameters">The current parameter values.</param>
+    /// <returns>The updates to be applied to the parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This base implementation returns the gradients as-is,
+    /// which represents vanilla gradient descent. Derived classes should override this
+    /// to implement specific optimization algorithms (like Adam, SGD with momentum, etc.).</para>
+    /// </remarks>
+    public virtual Vector<T> CalculateUpdate(Vector<T> gradients, Vector<T> parameters)
+    {
+        // Base implementation: return gradients as-is (vanilla gradient descent)
+        // Derived classes should override this for specific optimization algorithms
+        return gradients;
+    }
+
+    /// <summary>
+    /// Initializes a random solution within the given bounds.
+    /// </summary>
+    /// <param name="lowerBounds">Lower bounds for each parameter.</param>
+    /// <param name="upperBounds">Upper bounds for each parameter.</param>
+    /// <returns>A vector representing a random solution.</returns>
+    protected virtual Vector<T> InitializeRandomSolution(Vector<T> lowerBounds, Vector<T> upperBounds)
+    {
+        if (lowerBounds == null) throw new ArgumentNullException(nameof(lowerBounds));
+        if (upperBounds == null) throw new ArgumentNullException(nameof(upperBounds));
+        if (lowerBounds.Length != upperBounds.Length)
+            throw new ArgumentException("Lower and upper bounds must have the same length");
+
+        // Validate bounds
+        for (int i = 0; i < lowerBounds.Length; i++)
+        {
+            if (NumOps.GreaterThan(lowerBounds[i], upperBounds[i]))
+            {
+                throw new ArgumentException(
+                    $"Lower bound ({lowerBounds[i]}) is greater than upper bound ({upperBounds[i]}) at dimension {i}.",
+                    nameof(lowerBounds));
+            }
+        }
+
+        var solution = new Vector<T>(lowerBounds.Length);
+        for (int i = 0; i < lowerBounds.Length; i++)
+        {
+            // Generate random value between lower and upper bounds
+            var range = NumOps.Subtract(upperBounds[i], lowerBounds[i]);
+            var randomFraction = NumOps.FromDouble(Random.NextDouble());
+            var randomValue = NumOps.Add(lowerBounds[i], NumOps.Multiply(range, randomFraction));
+            solution[i] = randomValue;
+        }
+        return solution;
+    }
+
+    /// <summary>
+    /// Initializes a random solution by computing lower and upper bounds from training data.
+    /// </summary>
+    /// <param name="trainingData">The training data used to compute bounds.</param>
+    /// <returns>A model with randomly initialized parameters within the computed bounds.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes proper lower and upper bounds from the training data:
+    /// - Lower bounds: minimum value for each feature across all training samples
+    /// - Upper bounds: maximum value for each feature across all training samples
+    /// </para>
+    /// <para>
+    /// This ensures valid random initialization where lower < upper for proper random solution generation.
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of you having to manually specify lower and upper bounds,
+    /// this method analyzes your training data to find the minimum and maximum values for each feature,
+    /// then creates random parameters somewhere within those ranges.</para>
+    /// </remarks>
+    /// <summary>
+    /// Returns the working solution that single-trajectory optimizers
+    /// (Adam / SGD / RMSProp / LBFGS / etc.) train in place.
+    /// </summary>
+    /// <param name="trainingData">The training data — used to derive
+    /// random parameter init for genuinely uninitialized models that need it.</param>
+    /// <returns>The user's model reference (NOT a clone) — the optimizer's
+    /// per-iteration <c>UpdateSolution</c> mutates this instance directly.</returns>
+    /// <remarks>
+    /// <para>
+    /// Single-trajectory optimizers maintain one current solution that they
+    /// refine over iterations. The PyTorch / TensorFlow / Keras semantic is
+    /// that the model the user passed to <c>ConfigureModel</c> IS the model
+    /// that gets trained — same reference, mutated in place. Without this,
+    /// <c>AiModelResult.Model</c> is a different instance from the user's
+    /// reference and direct vs facade prediction paths diverge (issue #1267).
+    /// </para>
+    /// <para>
+    /// For models that don't support parameter init (decision trees, etc.):
+    /// returns the user's model as-is. The structural-training subclass takes
+    /// over and trains the model in place.
+    /// </para>
+    /// <para>
+    /// For models with already-initialized parameters (NN with Xavier, fine-
+    /// tuning a warm-started model): returns the user's model as-is. The
+    /// user-chosen init is preserved — Adam refines from there.
+    /// </para>
+    /// <para>
+    /// For genuinely-uninitialized parameter-vector models (e.g., a fresh
+    /// linear regression with no coefficients yet): seeds the user's model
+    /// in place with data-derived random parameters. No clone allocated.
+    /// </para>
+    /// <para>
+    /// Population optimizers (PSO, Bayesian, CMAES, GA, DE, …) must NOT call
+    /// this method — they need genuinely-distinct instances per swarm member.
+    /// They call <see cref="SpawnIndividual"/> instead, which produces a Clone.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> InitializeWorkingSolution(TInput trainingData)
+    {
+        if (trainingData == null) throw new ArgumentNullException(nameof(trainingData));
+
+        var model = RequireModel();
+        var parameterizable = InterfaceGuard.Parameterizable(model);
+
+        // Decision trees, meta classifiers, untrained clustering models, etc.:
+        // they learn their structure during training, not via parameter injection.
+        // Return the user's model as-is — the structural-training path mutates it.
+        if (!parameterizable.SupportsParameterInitialization)
+        {
+            return model;
+        }
+
+        // For neural networks, the constructor's Xavier/He/etc. initializer
+        // has already populated weight magnitudes proportional to 1/√fanIn —
+        // exactly the scale the layers expect. Re-randomizing those weights
+        // from training-data feature ranges (e.g. [0, 255] for byte input,
+        // or [0, 1] for normalized features) replaces well-chosen initial
+        // weights with values orders of magnitude too large or too small,
+        // and the optimizer cannot recover from that starting point in
+        // any reasonable budget. Closes #1267.
+        //
+        // SCOPE: This skip is NN-specific. For non-NN parametric models
+        // (linear regression, polynomial regression, classical optimizers
+        // operating in feature space) the data-derived random init IS the
+        // right behavior — gating on `model is INeuralNetwork<T>` preserves
+        // that. Single-trajectory path returns the in-place user model;
+        // population diversity is handled in SpawnIndividual via Gaussian
+        // perturbation (review-comment #1265.hc85).
+        if (model is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return model;
+        }
+
+        // Genuinely-uninitialized parameter-vector model: seed it in place with
+        // data-derived random parameters drawn from feature ranges. This is
+        // appropriate for shallow linear/ridge models where the parameter space
+        // IS the feature space — uniform [feature_min, feature_max] is a
+        // reasonable starting point.
+        var randomParams = BuildDataDerivedRandomParameters(trainingData, parameterizable.ParameterCount);
+        randomParams = parameterizable.SanitizeParameters(randomParams);
+        parameterizable.SetParameters(randomParams);
+        return model;
+    }
+
+    /// <summary>
+    /// Spawns a fresh independent solution that population optimizers
+    /// (PSO / Bayesian / CMAES / GA / DE / SA / AntColony / …) add to their
+    /// swarm or population.
+    /// </summary>
+    /// <param name="trainingData">The training data — used to derive random
+    /// parameter init for genuinely uninitialized models that need it.</param>
+    /// <returns>A Clone of the user's model with random parameters applied
+    /// when appropriate. Each call returns a NEW instance — population
+    /// optimizers can store N of these in a list without aliasing.</returns>
+    /// <remarks>
+    /// <para>
+    /// Population optimizers genuinely need distinct model instances — each
+    /// swarm member / population individual is evaluated and updated
+    /// independently, so they cannot share a reference. This method always
+    /// returns a fresh Clone.
+    /// </para>
+    /// <para>
+    /// Single-trajectory optimizers (Adam, SGD, etc.) must NOT call this — it
+    /// allocates an unnecessary clone and breaks the user-model-is-trained-in-
+    /// place contract. They call <see cref="InitializeWorkingSolution"/> instead.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> SpawnIndividual(TInput trainingData)
+    {
+        if (trainingData == null) throw new ArgumentNullException(nameof(trainingData));
+
+        var model = RequireModel();
+        var parameterizable = InterfaceGuard.Parameterizable(model);
+
+        // Models that don't support parameter init: clone the user's model
+        // and let the structural-training path build out the cloned individual.
+        if (!parameterizable.SupportsParameterInitialization)
+        {
+            return model.Clone();
+        }
+
+        // For neural networks, the clone preserves the user's chosen init
+        // (Xavier/He) at the right magnitude. But returning identical clones
+        // would give the population zero diversity — every member of a
+        // PSO swarm / DE generation / GA cohort starts from the SAME point
+        // and the meta-search degenerates. Add small Gaussian perturbations
+        // to each individual's parameter vector — scaled to ~10% of the
+        // per-parameter magnitude — so the population explores the basin
+        // around the user's well-initialized weights without escaping
+        // into the wrong scale regime. Closes review-comment #1265.hc85.
+        //
+        // For non-NN parametric models, retain the legacy data-derived
+        // randomization path so PSO / Differential Evolution / Bayesian
+        // can spread their initial swarm/population across the feature
+        // space as before.
+        if (model is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            var nnClone = model.Clone();
+            var nnCloneParameterizable = InterfaceGuard.Parameterizable(nnClone);
+            // Skip perturbation when ParameterCount==0 (lazy NN that hasn't
+            // materialized yet). Diversity will come from each candidate's
+            // own first-forward materialization in that case.
+            if (nnCloneParameterizable.ParameterCount > 0)
+            {
+                var current = nnCloneParameterizable.GetParameters();
+                var perturbed = new Vector<T>(current.Length);
+                var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+                for (int i = 0; i < current.Length; i++)
+                {
+                    // Gaussian noise ~ N(0, σ²) where σ = max(|current[i]|, ε) * 0.1.
+                    // Box-Muller transform: two uniforms → one Gaussian. The
+                    // ε=1e-3 floor keeps zero-init biases / fresh-allocated
+                    // tensors from getting bit-identical zero perturbations
+                    // (which would also produce zero diversity).
+                    double u1 = rng.NextDouble();
+                    double u2 = rng.NextDouble();
+                    if (u1 < 1e-15) u1 = 1e-15; // log(0) guard
+                    double gaussian = System.Math.Sqrt(-2.0 * System.Math.Log(u1)) * System.Math.Cos(2.0 * System.Math.PI * u2);
+                    double currentDouble = Convert.ToDouble(current[i]);
+                    double sigma = System.Math.Max(System.Math.Abs(currentDouble), 1e-3) * 0.1;
+                    double noisy = currentDouble + gaussian * sigma;
+                    perturbed[i] = NumOps.FromDouble(noisy);
+                }
+                nnCloneParameterizable.SetParameters(perturbed);
+            }
+            return nnClone;
+        }
+
+        // Genuinely-uninitialized parameter-vector model: clone and seed
+        // with data-derived random parameters.
+        var clone = model.Clone();
+        var cloneParameterizable = InterfaceGuard.Parameterizable(clone);
+        var randomParams = BuildDataDerivedRandomParameters(trainingData, cloneParameterizable.ParameterCount);
+        randomParams = cloneParameterizable.SanitizeParameters(randomParams);
+        cloneParameterizable.SetParameters(randomParams);
+        return clone;
+    }
+
+    /// <summary>
+    /// Computes data-derived random parameter bounds and samples a vector
+    /// of length <paramref name="parameterCount"/> uniformly in those bounds.
+    /// Used by both <see cref="InitializeWorkingSolution"/> and
+    /// <see cref="SpawnIndividual"/> for the genuinely-uninitialized branch.
+    /// </summary>
+    private Vector<T> BuildDataDerivedRandomParameters(TInput trainingData, long parameterCount)
+    {
+        Vector<T> lowerBounds;
+        Vector<T> upperBounds;
+
+        if (trainingData is Matrix<T> matrix)
+        {
+            if (matrix.Rows == 0)
+                throw new ArgumentException("Training data matrix cannot be empty", nameof(trainingData));
+            if (matrix.Columns == 0)
+                throw new ArgumentException("Training data matrix must have at least one column", nameof(trainingData));
+
+            int features = matrix.Columns;
+            int paramCount = (int)parameterCount;
+            // If the model is untrained (ParameterCount is less than the number of features),
+            // infer the correct parameter count from the input dimensions.
+            // For regression models: paramCount = features + 1 (for intercept) is typical.
+            if (paramCount < features)
+            {
+                paramCount = features + 1;
+            }
+
+            lowerBounds = new Vector<T>(paramCount);
+            upperBounds = new Vector<T>(paramCount);
+
+            var featureMins = new T[features];
+            var featureMaxs = new T[features];
+            for (int col = 0; col < features; col++)
+            {
+                T initialValue = matrix[0, col];
+                T min = initialValue;
+                T max = initialValue;
+                for (int row = 1; row < matrix.Rows; row++)
+                {
+                    T value = matrix[row, col];
+                    if (NumOps.LessThan(value, min)) min = value;
+                    if (NumOps.GreaterThan(value, max)) max = value;
+                }
+                featureMins[col] = min;
+                featureMaxs[col] = max;
+            }
+
+            for (int i = 0; i < paramCount; i++)
+            {
+                if (i < features)
+                {
+                    lowerBounds[i] = featureMins[i];
+                    upperBounds[i] = featureMaxs[i];
+                }
+                else
+                {
+                    T min = featureMins[0];
+                    T max = featureMaxs[0];
+                    for (int j = 1; j < featureMins.Length; j++)
+                    {
+                        if (NumOps.LessThan(featureMins[j], min)) min = featureMins[j];
+                        if (NumOps.GreaterThan(featureMaxs[j], max)) max = featureMaxs[j];
+                    }
+                    lowerBounds[i] = min;
+                    upperBounds[i] = max;
+                }
+            }
+        }
+        else if (trainingData is Vector<T> vector)
+        {
+            if (vector.Length == 0)
+                throw new ArgumentException("Training data vector cannot be empty", nameof(trainingData));
+
+            T initialValue = vector[0];
+            T min = initialValue;
+            T max = initialValue;
+            for (int i = 1; i < vector.Length; i++)
+            {
+                T value = vector[i];
+                if (NumOps.LessThan(value, min)) min = value;
+                if (NumOps.GreaterThan(value, max)) max = value;
+            }
+
+            int paramCount = (int)parameterCount;
+            if (paramCount < 1) paramCount = 1;
+            lowerBounds = new Vector<T>(paramCount);
+            upperBounds = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                lowerBounds[i] = min;
+                upperBounds[i] = max;
+            }
+        }
+        else
+        {
+            int paramCount = (int)parameterCount;
+            if (paramCount < 1) paramCount = 1;
+            lowerBounds = new Vector<T>(paramCount);
+            upperBounds = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                lowerBounds[i] = NumOps.FromDouble(-10.0);
+                upperBounds[i] = NumOps.FromDouble(10.0);
+            }
+        }
+
+        return InitializeRandomSolution(lowerBounds, upperBounds);
+    }
+
+    /// <summary>
+    /// Legacy entry point. Existing optimizer implementations call this; new
+    /// code should call <see cref="InitializeWorkingSolution"/> for single-
+    /// trajectory optimizers or <see cref="SpawnIndividual"/> for population
+    /// optimizers. This wrapper preserves backward compatibility for any
+    /// out-of-tree optimizer subclass that overrode the original method —
+    /// it now routes through <see cref="SpawnIndividual"/> (clone semantic),
+    /// which is the safer of the two for unknown call-site intent.
+    /// </summary>
+    /// <remarks>
+    /// All in-tree optimizers have been migrated. This method exists only to
+    /// preserve the protected-virtual contract for external subclasses.
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> InitializeRandomSolution(TInput trainingData)
+    {
+        return SpawnIndividual(trainingData);
+    }
+
+    /// <summary>
+    /// Saves the optimizer state to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the optimizer should be saved.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves the complete state of the optimizer, including all configuration options
+    /// and any optimizer-specific data, to a file.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves your optimizer's current settings and state to a file.
+    ///
+    /// Think of it like saving your progress:
+    /// - It captures all the optimizer's settings and current state
+    /// - This can be loaded later to resume optimization or reuse the same settings
+    /// - It's useful for checkpointing long-running optimizations
+    /// </para>
+    /// </remarks>
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        var model = RequireModel();
+        return new[] { (int)InterfaceGuard.Parameterizable(model).ParameterCount };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        var model = RequireModel();
+        return new[] { (int)InterfaceGuard.Parameterizable(model).ParameterCount };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    public virtual void SaveModel(string filePath)
+    {
+        byte[] serializedData = Serialize();
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(filePath, envelopedData);
+    }
+
+    /// <summary>
+    /// Loads the optimizer state from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved optimizer.</param>
+    /// <remarks>
+    /// <para>
+    /// This method loads the complete state of the optimizer from a file, including all configuration
+    /// options and any optimizer-specific data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This loads a previously saved optimizer from a file.
+    ///
+    /// It's like loading a saved game:
+    /// - It restores all the optimizer's settings and state
+    /// - You can continue optimization from where you left off
+    /// - You can reuse optimizer configurations that worked well previously
+    /// </para>
+    /// </remarks>
+    public virtual void LoadModel(string filePath)
+    {
+        byte[] serializedData = File.ReadAllBytes(filePath);
+
+        // Extract payload from AIMF envelope if present, otherwise assume legacy raw format
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
+
+        Deserialize(serializedData);
+    }
+}

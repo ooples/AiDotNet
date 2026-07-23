@@ -1,0 +1,568 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+
+namespace AiDotNet.Regression;
+
+/// <summary>
+/// Implements Locally Weighted Regression, a non-parametric approach that creates a different model
+/// for each prediction point based on the weighted influence of nearby training examples.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Locally Weighted Regression (LWR) is a memory-based, non-parametric method that creates a unique model
+/// for each prediction point. Unlike global regression methods that find a single model for all data,
+/// LWR fits a separate weighted regression model for each query point, giving higher influence to
+/// nearby training examples. This approach provides excellent flexibility for modeling complex, nonlinear
+/// relationships without specifying a fixed functional form.
+/// </para>
+/// <para><b>For Beginners:</b> Locally Weighted Regression is like having a personalized prediction for each point.
+/// 
+/// Instead of creating a single model for all data (like linear regression does), LWR:
+/// - Creates a new, custom model for each prediction point you want to estimate
+/// - Gives more importance to training examples that are close to your prediction point
+/// - Gives less importance to training examples that are far away
+/// 
+/// Imagine predicting house prices: When estimating the price of a specific house, LWR would:
+/// - Give most influence to similar houses in the same neighborhood
+/// - Give moderate influence to somewhat similar houses in nearby areas
+/// - Give little or no influence to very different houses in distant locations
+/// 
+/// This approach is flexible and works well for complex patterns, but requires keeping all training
+/// data around for making predictions, which can be computationally intensive for large datasets.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a locally weighted regression (LOESS/LOWESS)
+/// var options = new LocallyWeightedRegressionOptions&lt;double&gt;();
+/// var model = new LocallyWeightedRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Store all training examples for local model fitting
+/// model.Train(features, targets);
+///
+/// // Predict by fitting a weighted local model near the query point
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 6, 7 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ResearchPaper("Locally Weighted Regression: An Approach to Regression Analysis by Local Fitting", "https://doi.org/10.1080/01621459.1988.10478639")]
+public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
+{
+    /// <summary>
+    /// Configuration options for the Locally Weighted Regression algorithm.
+    /// </summary>
+    private readonly LocallyWeightedRegressionOptions _options;
+
+    /// <summary>
+    /// Tolerance below which total kernel weight is treated as zero (no neighbors in bandwidth).
+    /// </summary>
+    private const double ZeroWeightTolerance = 1e-15;
+
+    /// <summary>
+    /// Relative scale factor for the adaptive ridge penalty (fraction of mean diagonal magnitude).
+    /// </summary>
+    private const double StabilityStrengthScale = 1e-6;
+
+    /// <summary>
+    /// Absolute floor for the ridge penalty when diagonal magnitude is near zero.
+    /// </summary>
+    private const double MinimumStabilityStrength = 1e-6;
+
+    /// <summary>
+    /// Matrix containing the feature vectors of the training samples.
+    /// </summary>
+    private Matrix<T> _xTrain;
+
+    /// <summary>
+    /// Vector containing the target values of the training samples.
+    /// </summary>
+    private Vector<T> _yTrain;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LocallyWeightedRegression{T}"/> class.
+    /// </summary>
+    /// <param name="options">Optional configuration options for the Locally Weighted Regression algorithm.</param>
+    /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new Locally Weighted Regression model with the specified options and regularization
+    /// strategy. If no options are provided, default values are used. If no regularization is specified, no regularization
+    /// is applied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how you create a new Locally Weighted Regression model.
+    /// 
+    /// The most important option is the "bandwidth", which controls how quickly the influence of training points
+    /// drops off with distance:
+    /// - Smaller bandwidth: Only very nearby points have influence (more local, potentially more wiggly)
+    /// - Larger bandwidth: Points farther away also have some influence (smoother, potentially less accurate for complex patterns)
+    /// 
+    /// If you don't specify these parameters, the model will use reasonable default settings.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Create a Locally Weighted Regression model with default settings
+    /// var lwr = new LocallyWeightedRegression&lt;double&gt;();
+    /// 
+    /// // Create a model with custom options
+    /// var options = new LocallyWeightedRegressionOptions { Bandwidth = 0.5 };
+    /// var customLwr = new LocallyWeightedRegression&lt;double&gt;(options);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public LocallyWeightedRegression(LocallyWeightedRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        : base(options, regularization)
+    {
+        _options = options ?? new LocallyWeightedRegressionOptions();
+        _xTrain = Matrix<T>.Empty();
+        _yTrain = Vector<T>.Empty();
+    }
+
+    /// <summary>
+    /// Stores the training data for later use in making predictions.
+    /// </summary>
+    /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>
+    /// <param name="y">A vector of target values corresponding to each sample in x.</param>
+    /// <remarks>
+    /// <para>
+    /// This method "optimizes" the Locally Weighted Regression model by simply storing the training data for later use
+    /// during prediction. Unlike global regression methods that compute a fixed set of parameters during training,
+    /// LWR defers the actual model fitting until prediction time, when a unique model is created for each query point.
+    /// </para>
+    /// <para><b>For Beginners:</b> Unlike most regression models, LWR doesn't compute a model during training.
+    /// 
+    /// Instead of finding a single global model during training, LWR simply:
+    /// - Stores all the training examples (both features and target values)
+    /// - Waits until prediction time to create a custom model for each point
+    /// 
+    /// This is similar to K-Nearest Neighbors but more sophisticated, as it creates a weighted regression
+    /// model for each prediction rather than just averaging nearby points.
+    /// 
+    /// Because it doesn't do much work during training, LWR is sometimes called a "lazy learner" - it
+    /// postpones the real work until prediction time.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// LWR is a lazy learner — no optimizer parameter injection.
+    /// </summary>
+    public override long ParameterCount => 0;
+
+    /// <summary>
+    /// Returns all features used during training.
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, _xTrain.Columns > 0 ? _xTrain.Columns : 0);
+    }
+
+    /// <summary>
+    /// Deep copy via serialization.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new LocallyWeightedRegression<T>(null, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
+    {
+        // In LWR, we don't pre-compute a global model. Instead, we store the training data.
+        _xTrain = x;
+        _yTrain = y;
+
+        // Auto-scale bandwidth if using the default value of 1.0.
+        // The tricube kernel returns 0 for |distance/bandwidth| > 1,
+        // so bandwidth must be large enough relative to typical inter-point distances.
+        if (Math.Abs(_options.Bandwidth - 1.0) < 1e-10)
+        {
+            // Use the median of pairwise distances as a robust bandwidth estimate
+            double totalDist = 0;
+            int count = 0;
+            int sampleSize = Math.Min(50, x.Rows);
+            for (int i = 0; i < sampleSize; i++)
+            {
+                for (int j = i + 1; j < sampleSize; j++)
+                {
+                    totalDist += NumOps.ToDouble(VectorHelper.EuclideanDistance(x.GetRow(i), x.GetRow(j)));
+                    count++;
+                }
+            }
+            double meanDist = count > 0 ? totalDist / count : 1.0;
+            _options.Bandwidth = Math.Max(meanDist, 0.1);
+        }
+    }
+
+    /// <summary>
+    /// Predicts target values for the provided input features using the trained Locally Weighted Regression model.
+    /// </summary>
+    /// <param name="input">A matrix where each row represents a sample to predict and each column represents a feature.</param>
+    /// <returns>A vector of predicted values corresponding to each input sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method predicts target values for new input data by creating a unique weighted regression model
+    /// for each input sample. It processes each input row separately, creating a custom model that gives higher
+    /// weight to training examples that are closer to the query point, then uses that model to make a prediction.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method uses your training data to make predictions on new data.
+    /// 
+    /// For each input example you want to predict:
+    /// 1. The method creates a custom model just for that example
+    /// 2. It computes predictions using this personalized model
+    /// 3. It repeats this process for each example
+    /// 
+    /// This approach can be more accurate than global models for complex patterns, but
+    /// it's also more computationally intensive because a new model is created for each prediction.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Make predictions
+    /// var predictions = lwr.Predict(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        var predictions = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            predictions[i] = PredictSingle(input.GetRow(i));
+        }
+
+        return predictions;
+    }
+
+    /// <summary>
+    /// Predicts the target value for a single input feature vector.
+    /// </summary>
+    /// <param name="input">The feature vector of the sample to predict.</param>
+    /// <returns>The predicted value for the input sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method predicts the target value for a single input feature vector by creating a weighted least squares
+    /// model. First, it computes weights for each training example based on their distance to the input point,
+    /// giving higher weight to closer points. Then it solves a weighted linear regression problem using these
+    /// weights to find the best coefficients, and uses those coefficients to make a prediction for the input.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a personalized prediction model for a single data point.
+    /// 
+    /// The prediction process for a single point works like this:
+    /// 1. Calculate weights for all training examples based on how close they are to the input point
+    ///    (nearby examples get higher weights)
+    /// 2. Use these weights to create a custom weighted regression model
+    /// 3. Use this custom model to make a prediction for the input point
+    /// 
+    /// The bandwidth parameter controls how quickly the weights decrease with distance:
+    /// - Small bandwidth: Only very close points get significant weight
+    /// - Large bandwidth: Even somewhat distant points get some weight
+    /// 
+    /// This personalized approach allows the model to adapt to local patterns in different regions of the data.
+    /// </para>
+    /// </remarks>
+    protected override T PredictSingle(Vector<T> input)
+    {
+        // Compute weights for each training point
+        var weights = ComputeWeights(input);
+
+        // Fail fast if the model hasn't been trained yet
+        if (_xTrain.Rows == 0 || _yTrain.Length == 0)
+        {
+            throw new InvalidOperationException("Call Train() before Predict().");
+        }
+
+        // If all weights are zero (query point is outside bandwidth of all training data),
+        // fall back to the global mean of y to avoid NaN from a zero-weight solve.
+        double totalWeight = 0;
+        for (int i = 0; i < weights.Length; i++)
+            totalWeight += NumOps.ToDouble(weights[i]);
+        if (totalWeight < ZeroWeightTolerance)
+        {
+            return _yTrain.Mean();
+        }
+
+        // Create the weighted design matrix and target vector
+        // For weighted least squares, we multiply each row of X by its corresponding weight
+        // This is equivalent to W^0.5 * X where W is the diagonal weight matrix
+        var sqrtWeights = weights.Transform(w => NumOps.Sqrt(w));
+        // Add intercept column to training data for bias term
+        var xWithIntercept = _xTrain.AddConstantColumn(NumOps.One);
+        var weightedX = sqrtWeights.CreateDiagonal().Multiply(xWithIntercept);
+        var weightedY = _yTrain.PointwiseMultiply(sqrtWeights);
+
+        // Solve the weighted least squares problem
+        var xTx = weightedX.Transpose().Multiply(weightedX);
+
+        // Add ridge regularization penalty to ensure numerical stability.
+        // The tricube kernel can produce many zero weights, making X^T*W*X nearly singular.
+        // Scale regularization relative to diagonal magnitude.
+        double diagMean = 0;
+        for (int i = 0; i < xTx.Rows; i++)
+            diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
+        diagMean = xTx.Rows > 0 ? diagMean / xTx.Rows : 1.0;
+        var stabilityStrength = NumOps.FromDouble(
+            Math.Max(diagMean * StabilityStrengthScale, MinimumStabilityStrength));
+        for (int i = 0; i < xTx.Rows; i++)
+        {
+            xTx[i, i] = NumOps.Add(xTx[i, i], stabilityStrength);
+        }
+
+        var xTy = weightedX.Transpose().Multiply(weightedY);
+        var coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
+
+        // Apply regularization to coefficients (shrinkage) if regularization is configured
+        if (Regularization != null)
+        {
+            coefficients = Regularization.Regularize(coefficients);
+        }
+
+        // Make prediction: AddConstantColumn puts intercept at index 0
+        // coefficients[0] is intercept, coefficients[1..p] are feature weights
+        T prediction = coefficients[0]; // intercept (first column)
+        for (int j = 0; j < input.Length; j++)
+            prediction = NumOps.Add(prediction, NumOps.Multiply(input[j], coefficients[j + 1]));
+        return prediction;
+    }
+
+    /// <summary>
+    /// Computes weights for each training example based on their distance to the input point.
+    /// </summary>
+    /// <param name="input">The input feature vector for which to compute weights.</param>
+    /// <returns>A vector of weights for each training example.</returns>
+    private Vector<T> ComputeWeights(Vector<T> input)
+    {
+        var weights = new Vector<T>(_xTrain.Rows);
+        var bandwidth = NumOps.FromDouble(_options.Bandwidth);
+
+        for (int i = 0; i < _xTrain.Rows; i++)
+        {
+            var distance = VectorHelper.EuclideanDistance(input, _xTrain.GetRow(i));
+            weights[i] = KernelFunction(NumOps.Divide(distance, bandwidth));
+        }
+
+        return weights;
+    }
+
+
+    /// <summary>
+    /// Applies a kernel function to transform distances into weights.
+    /// </summary>
+    /// <param name="u">The normalized distance value to transform.</param>
+    /// <returns>The weight value after applying the kernel function.</returns>
+    private T KernelFunction(T u)
+    {
+        // Tricube kernel function
+        var absU = NumOps.Abs(u);
+        if (NumOps.GreaterThan(absU, NumOps.One))
+            return NumOps.Zero;
+        var temp = NumOps.Subtract(NumOps.One, NumOps.Power(absU, NumOps.FromDouble(3)));
+        return NumOps.Power(temp, NumOps.FromDouble(3));
+    }
+
+    /// <summary>
+    /// Gets the model type of the Locally Weighted Regression model.
+    /// </summary>
+    /// <returns>The model type enumeration value.</returns>
+
+    /// <summary>
+    /// Serializes the Locally Weighted Regression model to a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts the Locally Weighted Regression model into a byte array that can be stored in a file,
+    /// database, or transmitted over a network. The serialized data includes the base class data, the bandwidth
+    /// parameter, and the training data that is used for making predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+    /// 
+    /// Serialization allows you to:
+    /// - Save your model to a file
+    /// - Store your model in a database
+    /// - Send your model over a network
+    /// - Keep your model for later use without having to retrain it
+    /// 
+    /// The serialized data includes:
+    /// - The bandwidth parameter that controls the locality of the weighted regression
+    /// - All the training examples (both features and target values)
+    /// 
+    /// Since Locally Weighted Regression stores all training data, the serialized model can be
+    /// quite large compared to parametric models like linear regression.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Serialize the model
+    /// byte[] modelData = lwr.Serialize();
+    /// 
+    /// // Save to a file
+    /// File.WriteAllBytes("lwr.model", modelData);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Serialize LWR specific data
+        writer.Write(_options.Bandwidth);
+
+        // Serialize _xTrain
+        writer.Write(_xTrain.Rows);
+        writer.Write(_xTrain.Columns);
+        for (int i = 0; i < _xTrain.Rows; i++)
+        {
+            for (int j = 0; j < _xTrain.Columns; j++)
+            {
+                writer.Write(Convert.ToDouble(_xTrain[i, j]));
+            }
+        }
+
+        // Serialize _yTrain
+        writer.Write(_yTrain.Length);
+        for (int i = 0; i < _yTrain.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_yTrain[i]));
+        }
+
+        return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Loads a previously serialized Locally Weighted Regression model from a byte array.
+    /// </summary>
+    /// <param name="modelData">The byte array containing the serialized model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs a Locally Weighted Regression model from a byte array that was previously created
+    /// using the Serialize method. It restores the base class data, the bandwidth parameter, and the training data
+    /// that is used for making predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+    /// 
+    /// Deserialization allows you to:
+    /// - Load a model that was saved earlier
+    /// - Use a model without having to retrain it
+    /// - Share models between different applications
+    /// 
+    /// When you deserialize a model:
+    /// - The bandwidth parameter is restored
+    /// - All training examples are loaded back into memory
+    /// - The model is ready to make predictions immediately
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Load from a file
+    /// byte[] modelData = File.ReadAllBytes("lwr.model");
+    /// 
+    /// // Deserialize the model
+    /// var lwr = new LocallyWeightedRegression&lt;double&gt;();
+    /// lwr.Deserialize(modelData);
+    /// 
+    /// // Now you can use the model for predictions
+    /// var predictions = lwr.Predict(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize LWR specific data
+        _options.Bandwidth = reader.ReadDouble();
+
+        // Deserialize _xTrain
+        int rows = reader.ReadInt32();
+        int cols = reader.ReadInt32();
+        _xTrain = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                _xTrain[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+
+        // Deserialize _yTrain
+        int length = reader.ReadInt32();
+        _yTrain = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            _yTrain[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the LocallyWeightedRegression with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new LocallyWeightedRegression instance with the same options and regularization as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the LocallyWeightedRegression model with the same configuration options
+    /// and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
+    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of model with identical settings:
+    /// - This method creates a new, empty model with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new model has the same settings but no trained data
+    /// - This is useful for techniques that need multiple models, like cross-validation
+    /// 
+    /// For example, when testing your model on different subsets of data,
+    /// you'd want each test to use a model with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new LocallyWeightedRegression<T>(_options, Regularization);
+    }
+
+    /// <summary>
+    /// Gets or sets whether to use soft (differentiable) mode for JIT compilation support.
+    /// </summary>
+    /// <value><c>true</c> to enable soft mode; <c>false</c> (default) for traditional LWR behavior.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, LocallyWeightedRegression uses a differentiable approximation that embeds
+    /// all training data as constants in the computation graph and computes attention-weighted
+    /// predictions using the softmax of negative squared distances.
+    /// </para>
+    /// <para><b>For Beginners:</b> Soft mode allows this model to be JIT compiled for faster inference.
+    /// Traditional LWR solves a new weighted least squares problem for each prediction, which
+    /// cannot be represented as a static computation graph. Soft mode uses a simplified approach
+    /// that enables JIT compilation while giving similar results for smooth data.
+    /// </para>
+    /// </remarks>
+    public bool UseSoftMode
+    {
+        get => _options.UseSoftMode;
+        set => _options.UseSoftMode = value;
+    }
+}

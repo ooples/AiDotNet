@@ -1,0 +1,932 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a digit capsule layer that implements the dynamic routing algorithm between capsules.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A digit capsule layer extends the concept of traditional neural networks by using groups of neurons
+/// (capsules) that encapsulate various properties of entities. This implementation is based on the 
+/// CapsNet architecture proposed by Hinton et al., which uses a dynamic routing algorithm to determine 
+/// how lower-level capsules should send their output to higher-level capsules.
+/// </para>
+/// <para><b>For Beginners:</b> A capsule layer is a special type of neural network layer that groups neurons together.
+/// 
+/// Think of regular neural networks as looking at individual puzzle pieces (like detecting edges or corners). 
+/// A capsule network looks at how these pieces fit together to form objects.
+/// 
+/// For example, in image recognition:
+/// - Regular neurons might detect a wheel, a window, and a door
+/// - Capsules understand that these parts can make up a car, and how those parts relate to each other
+/// 
+/// This layer specifically handles digit recognition, taking information from previous capsule layers
+/// and determining which digit is most likely present in the input.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Capsule)]
+[LayerTask(LayerTask.Routing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 10, 4, 3")]
+public partial class DigitCapsuleLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// The weight tensor connecting input capsules to output capsules.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This 4D tensor stores the transformation matrices that map the input capsule vectors to
+    /// the output capsule vectors. The dimensions are [inputCapsules, numClasses, inputCapsuleDimension, outputCapsuleDimension].
+    /// </para>
+    /// <para><b>For Beginners:</b> These weights are how the network learns to transform input information into output predictions.
+    /// 
+    /// Imagine translating between languages:
+    /// - The weights act like a translation dictionary
+    /// - They convert information from one "language" (input capsules) to another (output capsules)
+    /// - During training, these weights are adjusted to make better predictions
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _weights;
+
+    /// <summary>
+    /// Gradients for the weight tensor, used during backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the gradients of the loss with respect to each weight. These gradients are used
+    /// to update the weights during training. It has the same shape as the weight tensor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores information about how to adjust the weights to improve accuracy.
+    /// 
+    /// When the network makes a mistake:
+    /// - The gradients indicate which weights need to change and by how much
+    /// - Larger gradients mean bigger adjustments are needed
+    /// - They're like a "report card" for each weight showing what needs improvement
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _weightsGradient;
+
+    /// <summary>
+    /// The input tensor from the last forward pass, saved for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the input received during the last forward pass. It is necessary for computing
+    /// gradients during the backward pass (backpropagation).
+    /// </para>
+    /// <para><b>For Beginners:</b> This remembers what input data was processed during the latest prediction.
+    /// 
+    /// It's like keeping your work when solving a math problem:
+    /// - The network needs to know what input values it used
+    /// - During training, it looks back at this input to understand its mistakes
+    /// - This helps it learn how to adjust its weights correctly
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// The output tensor from the last forward pass, saved for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the output produced during the last forward pass. It is used during
+    /// backpropagation to compute certain gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This remembers what predictions the layer made in its latest run.
+    /// 
+    /// When training the network:
+    /// - It needs to remember what it predicted
+    /// - It compares these predictions with the correct answers
+    /// - This helps it understand how to improve for next time
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastPreSquash;
+
+    /// <summary>
+    /// The coupling coefficients from the last routing iteration, saved for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the coupling coefficients computed during the dynamic routing process.
+    /// These coefficients determine how much each input capsule contributes to each output capsule.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tracks how strongly different input features connect to each output class.
+    /// 
+    /// Think of it like voting:
+    /// - Each input capsule "votes" for different output capsules
+    /// - These numbers record how strongly each input voted for each output
+    /// - Higher values mean a stronger connection between an input and output
+    /// 
+    /// For example, if detecting numbers, an input feature that looks like a loop might strongly 
+    /// "vote" for digits like 0, 6, 8, and 9.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastCouplings;
+
+    /// <summary>
+    /// The number of capsules in the input layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the number of capsules in the input layer that feed into this layer.
+    /// Each capsule represents a group of neurons that encode a specific entity or feature.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how many groups of features the layer receives as input.
+    /// 
+    /// For example, in an image recognition task:
+    /// - Each input capsule might represent a different feature (edges, corners, textures)
+    /// - More input capsules mean the network can detect more features
+    /// - These features are combined to recognize more complex patterns
+    /// </para>
+    /// </remarks>
+    // Non-readonly: lazy ctor leaves _inputCapsules = -1 until
+    // OnFirstForward resolves it from input.Shape[^2]. Eager ctor
+    // sets it at construction.
+    private int _inputCapsules;
+    private bool _isInitialized;
+
+    /// <summary>
+    /// The dimension (number of values) of each input capsule vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the dimension of each input capsule vector. Each value in the vector
+    /// represents a different property or attribute of the entity that the capsule detects.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how much information each input feature group contains.
+    /// 
+    /// If each input capsule is a feature:
+    /// - The dimension is how many aspects of that feature we track
+    /// - For instance, a feature might have properties like size, orientation, and position
+    /// - More dimensions allow for more detailed feature representation
+    /// </para>
+    /// </remarks>
+    // Non-readonly: lazy ctor leaves _inputCapsuleDimension = -1 until
+    // OnFirstForward resolves it from input.Shape[^1].
+    private int _inputCapsuleDimension;
+
+    /// <summary>
+    /// The number of classes (output capsules) that this layer can identify.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the number of classes that this layer can identify, which corresponds
+    /// to the number of output capsules. For digit recognition, this would typically be 10 (for digits 0-9).
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how many different categories the layer can classify inputs into.
+    /// 
+    /// For example:
+    /// - In digit recognition, there would be 10 classes (digits 0-9)
+    /// - In letter recognition, there might be 26 classes (A-Z)
+    /// - Each class gets its own output capsule to represent that category
+    /// </para>
+    /// </remarks>
+    private readonly int _numClasses;
+
+    /// <summary>
+    /// The dimension (number of values) of each output capsule vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the dimension of each output capsule vector. The length of this vector
+    /// represents the probability of the entity's existence, while its orientation represents the entity's properties.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how much detail each output prediction contains.
+    /// 
+    /// In capsule networks:
+    /// - The length of an output vector shows how confident the network is about a prediction
+    /// - The direction of the vector encodes properties like position, size, or orientation
+    /// - More dimensions allow for capturing more properties about what was detected
+    /// </para>
+    /// </remarks>
+    private readonly int _outputCapsuleDimension;
+
+    /// <summary>
+    /// The number of iterations to use in the dynamic routing algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field determines how many iterations of the dynamic routing algorithm to perform.
+    /// More iterations can lead to better routing decisions but increase computational cost.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how carefully the network considers connections between features and classes.
+    /// 
+    /// Think of it like deliberating before making a decision:
+    /// - More routing iterations means more careful consideration of all evidence
+    /// - With each iteration, the network refines which inputs are important for each output
+    /// - Typically 3-5 iterations provides a good balance of accuracy and speed
+    /// </para>
+    /// </remarks>
+    private readonly int _routingIterations;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because this layer has trainable parameters (weights).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that the digit capsule layer supports training through backpropagation.
+    /// The layer has trainable weights that are updated during the training process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
+    /// 
+    /// A value of true means:
+    /// - The layer can adjust its internal values during training
+    /// - It will improve its performance as it sees more data
+    /// - It has weights that are updated to make better predictions over time
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount => _weights.Length;
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// DigitCapsuleLayer requires per-capsule routing with complex tensor indexing patterns.
+    /// Without specialized GPU kernels, true GPU-resident execution isn't possible - CPU fallback is used.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DigitCapsuleLayer{T}"/> class.
+    /// </summary>
+    /// <param name="inputCapsules">The number of capsules in the input layer.</param>
+    /// <param name="inputCapsuleDimension">The dimension of each input capsule vector.</param>
+    /// <param name="numClasses">The number of classes (output capsules) that this layer can identify.</param>
+    /// <param name="outputCapsuleDimension">The dimension of each output capsule vector.</param>
+    /// <param name="routingIterations">The number of iterations to use in the dynamic routing algorithm.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new digit capsule layer with the specified parameters. It initializes the
+    /// weight tensor with small random values scaled according to the dimensions of the input and output capsules.
+    /// The layer uses a squash activation function, which is specific to capsule networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up the capsule layer with the specific details it needs.
+    /// 
+    /// When creating a digit capsule layer, you need to specify:
+    /// - How many input feature groups there are (inputCapsules)
+    /// - How detailed each input feature is (inputCapsuleDimension)
+    /// - How many categories to classify into (numClasses)
+    /// - How detailed each output prediction should be (outputCapsuleDimension)
+    /// - How carefully to analyze connections between inputs and outputs (routingIterations)
+    /// 
+    /// For example, to recognize handwritten digits, you might use 10 output classes (digits 0-9)
+    /// with a moderate number of routing iterations (3-5) for good performance.
+    /// </para>
+    /// </remarks>
+    public DigitCapsuleLayer(int inputCapsules, int inputCapsuleDimension, int numClasses, int outputCapsuleDimension, int routingIterations)
+        : base([inputCapsules, inputCapsuleDimension], [numClasses, outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
+    {
+        _inputCapsules = inputCapsules;
+        _inputCapsuleDimension = inputCapsuleDimension;
+        _numClasses = numClasses;
+        _outputCapsuleDimension = outputCapsuleDimension;
+        _routingIterations = routingIterations;
+        _weights = new Tensor<T>([inputCapsules, numClasses, inputCapsuleDimension, outputCapsuleDimension]);
+
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor: resolves <c>inputCapsules</c> and
+    /// <c>inputCapsuleDimension</c> from <c>input.Shape[^2..]</c> on
+    /// first <see cref="Forward"/>. Output structure (numClasses ×
+    /// outputCapsuleDimension) and routing iterations are architectural
+    /// and stay required.
+    /// </summary>
+    /// <param name="numClasses">Number of output classes (output capsules).</param>
+    /// <param name="outputCapsuleDimension">Dimension of each output capsule's vector.</param>
+    /// <param name="routingIterations">Number of dynamic-routing iterations.</param>
+    public DigitCapsuleLayer(int numClasses, int outputCapsuleDimension, int routingIterations)
+        : base([-1, -1], [numClasses, outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
+    {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be positive.");
+        if (outputCapsuleDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputCapsuleDimension), "outputCapsuleDimension must be positive.");
+        if (routingIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(routingIterations), "routingIterations must be at least 1.");
+
+        _inputCapsules = -1;
+        _inputCapsuleDimension = -1;
+        _numClasses = numClasses;
+        _outputCapsuleDimension = outputCapsuleDimension;
+        _routingIterations = routingIterations;
+        _weights = new Tensor<T>([0, 0, 0, 0]);
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Resolves <c>_inputCapsules</c> and <c>_inputCapsuleDimension</c>
+    /// from input shape using the same rank-aware contract that
+    /// <see cref="Forward"/>'s reshape path uses:
+    /// <list type="bullet">
+    /// <item><b>rank-2 [I, D_in]</b>: no batch — capsules from axis 0,
+    /// dimension from axis 1.</item>
+    /// <item><b>rank-3 [B, I, D_in]</b>: batched — capsules from axis 1,
+    /// dimension from axis 2.</item>
+    /// <item><b>rank-4+ [B, H, W, ..., C, D_in]</b> (e.g. PrimaryCapsule
+    /// output [B, H, W, C, D]): the last axis is dimension, all middle
+    /// axes (excluding batch) collapse into the capsule count. So for
+    /// [B, H, W, C, D], <c>_inputCapsules = H*W*C</c>, matching how
+    /// Forward's higher-rank branch reshapes the tensor.</item>
+    /// </list>
+    /// Pre-fix this method just read <c>input.Shape[^2]</c> regardless of
+    /// rank, which would mis-resolve a [B, H, W, C, D] input as
+    /// <c>_inputCapsules = C</c> and trip the reshape on Line 513
+    /// (see DigitCapsuleLayer Forward, rank&gt;3 branch).
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"DigitCapsuleLayer requires rank>=2 input; got rank {rank}.", nameof(input));
+
+        int inputCapsuleDimension = input.Shape[rank - 1];
+        int inputCapsules;
+        if (rank == 2)
+        {
+            // Rank-2 is genuinely ambiguous for lazy shape resolution:
+            // Forward accepts both [inputCapsules, inputCapsuleDimension]
+            // (unbatched) and [batch, inputCapsules*inputCapsuleDimension]
+            // (batched/flat). With no other signal we cannot tell which
+            // interpretation the caller intended, and picking one
+            // silently misroutes the other. Force the caller to disambiguate
+            // by constructing the layer eagerly with known dimensions, or
+            // by passing rank>=3 input on the lazy first forward.
+            throw new ArgumentException(
+                $"DigitCapsuleLayer cannot lazy-resolve a rank-2 input of shape " +
+                $"[{input.Shape[0]}, {input.Shape[1]}]: this is ambiguous between " +
+                $"[inputCapsules, inputCapsuleDimension] and [batch, " +
+                $"inputCapsules*inputCapsuleDimension]. Either construct the layer " +
+                $"eagerly with explicit (inputCapsules, inputCapsuleDimension), or " +
+                $"reshape the first forward input to rank>=3 so OnFirstForward can " +
+                $"resolve unambiguously. Subsequent calls may use rank-2 once the " +
+                $"layer is resolved.", nameof(input));
+        }
+        else if (rank == 3)
+        {
+            // [batch, inputCapsules, inputCapsuleDimension].
+            inputCapsules = input.Shape[1];
+        }
+        else
+        {
+            // Rank >= 4 (e.g., [B, H, W, C, D] from PrimaryCapsule). The
+            // capsule count is the product of every axis except the
+            // leading batch and trailing dimension. Forward's reshape
+            // does the same collapse via totalElements/batch arithmetic,
+            // so this stays consistent.
+            inputCapsules = 1;
+            for (int d = 1; d < rank - 1; d++) inputCapsules *= input.Shape[d];
+        }
+
+        if (inputCapsules <= 0)
+            throw new ArgumentException(
+                $"DigitCapsuleLayer's inputCapsules must be positive; got {inputCapsules} from input shape.", nameof(input));
+        if (inputCapsuleDimension <= 0)
+            throw new ArgumentException(
+                $"DigitCapsuleLayer's inputCapsuleDimension must be positive; got {inputCapsuleDimension} from input shape.", nameof(input));
+
+        _inputCapsules = inputCapsules;
+        _inputCapsuleDimension = inputCapsuleDimension;
+        ResolveShapes(new[] { inputCapsules, inputCapsuleDimension }, new[] { _numClasses, _outputCapsuleDimension });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate the routing weight tensor against
+    /// the resolved <c>[inputCapsules, numClasses, inputCapsuleDimension,
+    /// outputCapsuleDimension]</c> shape and run the standard parameter
+    /// initialization. Eager-ctor instances bypass this path because
+    /// <see cref="_isInitialized"/> is set to true at construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_inputCapsules <= 0 || _inputCapsuleDimension <= 0)
+            throw new InvalidOperationException(
+                "DigitCapsuleLayer cannot initialize until OnFirstForward has resolved the input capsule structure from input shape.");
+
+        _weights = AllocateLazyWeight([_inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Initializes the weight parameters with small random values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method initializes the weight tensor with small random values. The values are scaled by a factor
+    /// that depends on the input size, which helps in achieving good convergence during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up the initial connection strengths with random starting values.
+    /// 
+    /// Before training begins:
+    /// - The network needs some starting values for its weights
+    /// - Random values give it an unbiased starting point
+    /// - The scaling makes sure these values aren't too large or too small
+    /// 
+    /// It's like shuffling cards before a game - it ensures a fair and random starting point
+    /// before the network begins learning.
+    /// </para>
+    /// </remarks>
+    private void InitializeParameters()
+    {
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputCapsules * _inputCapsuleDimension)));
+
+        // Calculate total elements for flat tensor initialization
+        int totalElements = _inputCapsules * _numClasses * _inputCapsuleDimension * _outputCapsuleDimension;
+
+        // Create flat random tensor [0, 1] directly as 1D, shift to [-0.5, 0.5], scale.
+        var randomTensor = Tensor<T>.CreateRandom(totalElements);
+        var halfTensor = new Tensor<T>([totalElements]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+
+        // Copy into the EXISTING lazy-allocated _weights tensor in
+        // place — Reshape returns a new tensor view, so the original
+        // assignment-via-Reshape would have discarded the
+        // AllocateLazyWeight registration. Closes #1271.7BoP.
+        scaled.AsSpan().CopyTo(_weights.AsWritableSpan());
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the digit capsule layer using dynamic routing.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after capsule routing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the digit capsule layer using the dynamic routing algorithm.
+    /// It transforms input capsules into predictions for each class, then iteratively refines the routing
+    /// coefficients to determine how strongly each input capsule should connect to each output capsule.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where the layer makes its predictions based on the input data.
+    /// 
+    /// The forward pass works in these steps:
+    /// 
+    /// 1. Transform each input feature into predictions for each possible class
+    /// 2. Start with equal connection strengths between all inputs and outputs
+    /// 3. For several iterations:
+    ///    - Calculate how strongly each input connects to each output
+    ///    - Update these connections based on how well inputs agree with outputs
+    ///    - Recalculate the output predictions using the updated connections
+    /// 
+    /// This process is like having experts (input capsules) vote on different outcomes (classes),
+    /// then gradually giving more weight to experts who agree with the consensus for each outcome.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Lazy-ctor instances start with _inputCapsules =
+        // _inputCapsuleDimension = -1; resolve from input.Shape on first
+        // call. Eager-ctor instances are already initialized so both
+        // calls are no-ops.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 3D [B, I, D_in] for capsule processing
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            // 1D: [I*D_in] -> [1, I, D_in]
+            batchSize = 1;
+            processInput = Engine.Reshape(input, [1, _inputCapsules, _inputCapsuleDimension]);
+        }
+        else if (rank == 2)
+        {
+            // 2D: could be [I, D_in] or [B, I*D_in]
+            if (input.Shape[0] == _inputCapsules && input.Shape[1] == _inputCapsuleDimension)
+            {
+                // [I, D_in] -> [1, I, D_in]
+                batchSize = 1;
+                processInput = Engine.Reshape(input, [1, _inputCapsules, _inputCapsuleDimension]);
+            }
+            else
+            {
+                // [B, I*D_in] -> [B, I, D_in]
+                batchSize = input.Shape[0];
+                processInput = Engine.Reshape(input, [batchSize, _inputCapsules, _inputCapsuleDimension]);
+            }
+        }
+        else if (rank == 3)
+        {
+            // 3D: [B, I, D_in]
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: typically from PrimaryCapsuleLayer [H, W, C, D] or [B, H, W, C, D]
+            // Last dim is capsule dimension, second-to-last is capsule channels
+            // Preceding dims are spatial (H, W) possibly with batch
+            int totalElements = 1;
+            for (int d = 0; d < rank; d++)
+                totalElements *= input.Shape[d];
+
+            // Check if this matches [I, D_in] pattern (no batch)
+            if (totalElements == _inputCapsules * _inputCapsuleDimension)
+            {
+                batchSize = 1;
+                processInput = Engine.Reshape(input, [1, _inputCapsules, _inputCapsuleDimension]);
+            }
+            else
+            {
+                // Assume first dim is batch, rest collapses to [I, D_in]
+                batchSize = input.Shape[0];
+                int restElements = totalElements / batchSize;
+                if (restElements == _inputCapsules * _inputCapsuleDimension)
+                {
+                    processInput = Engine.Reshape(input, [batchSize, _inputCapsules, _inputCapsuleDimension]);
+                }
+                else
+                {
+                    throw new ArgumentException(
+                        $"Input shape {string.Join(",", input._shape)} cannot be reshaped to [B, {_inputCapsules}, {_inputCapsuleDimension}]");
+                }
+            }
+        }
+
+        _lastInput = processInput;
+
+        // Compute predictions u_hat_ij = W_ij * u_i
+        // prediction[b,i,c,l] = sum_d(weights[i,c,d,l] * input[b,i,d])
+        // Engine-accelerated: broadcast multiply + reduce sum over the input-capsule-dim axis
+        var inputExpanded = Engine.Reshape(processInput, [batchSize, _inputCapsules, 1, _inputCapsuleDimension, 1]);
+        var weightsExpanded = Engine.Reshape(_weights, [1, _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
+        var product = Engine.TensorBroadcastMultiply(inputExpanded, weightsExpanded);
+        var predictions = Engine.ReduceSum(product, new[] { 3 }, keepDims: false); // [B, I, C, D_out]
+
+        var couplings = TensorAllocator.Rent<T>([batchSize, _inputCapsules, _numClasses]);
+        couplings.Fill(NumOps.Zero);
+
+        var output = TensorAllocator.Rent<T>([batchSize, _numClasses, _outputCapsuleDimension]);
+
+        var softmaxActivation = new SoftmaxActivation<T>();
+        for (int iteration = 0; iteration < _routingIterations; iteration++)
+        {
+            var routingWeights = softmaxActivation.Activate(couplings); // [B,I,C]
+
+            // weightedSum = sum_i routing * predictions
+            var routingExpanded = Engine.Reshape(routingWeights, [batchSize, _inputCapsules, _numClasses, 1]);
+            var weightedPred = Engine.TensorBroadcastMultiply(predictions, routingExpanded);
+            var weightedSum = Engine.ReduceSum(weightedPred, new[] { 1 }, keepDims: false); // [B, C, outDim]
+
+            // activation - SquashActivation expects 2D [numCapsules, capsuleDim]
+            // weightedSum is [B, C, outDim], reshape to [B*C, outDim] for activation
+            var flatWeightedSum = Engine.Reshape(weightedSum, [batchSize * _numClasses, _outputCapsuleDimension]);
+            _lastPreSquash = flatWeightedSum;
+            var flatActivated = ApplyActivation(flatWeightedSum);
+            var activated = Engine.Reshape(flatActivated, [batchSize, _numClasses, _outputCapsuleDimension]);
+            output = activated;
+
+            if (iteration < _routingIterations - 1)
+            {
+                // couplings += predictions · output
+                var outputExpanded = Engine.Reshape(output, [batchSize, 1, _numClasses, _outputCapsuleDimension]);
+                var dot = Engine.ReduceSum(Engine.TensorBroadcastMultiply(predictions, outputExpanded), new[] { 3 }, keepDims: false); // [B,I,C]
+                couplings = Engine.TensorAdd(couplings, dot);
+            }
+        }
+
+        _lastOutput = output;
+        _lastCouplings = couplings;
+
+        // DigitCapsuleLayer outputs [batch, numClasses * outputCapsuleDimension] for compatibility
+        // with downstream layers (like ReconstructionLayer) that expect flattened capsule features
+        // The output is flattened from [batch, numClasses, outputCapsuleDimension] to [batch, numClasses * outputCapsuleDimension]
+        var flattenedOutput = Engine.Reshape(output, [batchSize, _numClasses * _outputCapsuleDimension]);
+
+        // For single-sample with low-rank input, return appropriate shape
+        if (batchSize == 1 && _originalInputShape != null && _originalInputShape.Length < 3)
+        {
+            // Single sample with low-rank input: return 1D [numClasses * outputCapsuleDimension]
+            return Engine.Reshape(flattenedOutput, [_numClasses * _outputCapsuleDimension]);
+        }
+
+        // Standard 2D output [batch, numClasses * outputCapsuleDimension]
+        return flattenedOutput;
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass through the digit capsule layer.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensors.</param>
+    /// <returns>GPU-resident output tensor after capsule routing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass using GPU-resident operations for the dynamic
+    /// routing iterations. Uses CapsulePredictionsGpu for the prediction transform and
+    /// DynamicRoutingGpu for the routing iterations, keeping all data on GPU.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy-ctor DigitCapsuleLayer that takes the GPU path on first
+        // use would reshape with -1 input dims and reach
+        // CapsulePredictionsGpu with a [0,0,0,0] weight tensor.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
+        var inputShape = input._shape;
+        int rank = inputShape.Length;
+
+        // Determine batch size and reshape to [B, I, D_in] for capsule processing
+        int batchSize;
+        Tensor<T> input3D;
+
+        if (rank == 1)
+        {
+            // 1D: [I*D_in] -> [1, I, D_in]
+            batchSize = 1;
+            input3D = gpuEngine.ReshapeGpu(input, [1, _inputCapsules, _inputCapsuleDimension]);
+        }
+        else if (rank == 2)
+        {
+            // 2D: could be [I, D_in] or [B, I*D_in]
+            if (inputShape[0] == _inputCapsules && inputShape[1] == _inputCapsuleDimension)
+            {
+                // [I, D_in] -> [1, I, D_in]
+                batchSize = 1;
+                input3D = gpuEngine.ReshapeGpu(input, [1, _inputCapsules, _inputCapsuleDimension]);
+            }
+            else
+            {
+                // [B, I*D_in] -> [B, I, D_in]
+                batchSize = inputShape[0];
+                input3D = gpuEngine.ReshapeGpu(input, [batchSize, _inputCapsules, _inputCapsuleDimension]);
+            }
+        }
+        else if (rank == 3)
+        {
+            // 3D: [B, I, D_in]
+            batchSize = inputShape[0];
+            input3D = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims to batch
+            int totalElements = 1;
+            for (int d = 0; d < rank; d++)
+                totalElements *= inputShape[d];
+
+            if (totalElements == _inputCapsules * _inputCapsuleDimension)
+            {
+                batchSize = 1;
+                input3D = gpuEngine.ReshapeGpu(input, [1, _inputCapsules, _inputCapsuleDimension]);
+            }
+            else
+            {
+                batchSize = inputShape[0];
+                int restElements = totalElements / batchSize;
+                if (restElements != _inputCapsules * _inputCapsuleDimension)
+                {
+                    throw new ArgumentException(
+                        $"Input shape [{string.Join(",", inputShape)}] cannot be reshaped to [B, {_inputCapsules}, {_inputCapsuleDimension}]");
+                }
+                input3D = gpuEngine.ReshapeGpu(input, [batchSize, _inputCapsules, _inputCapsuleDimension]);
+            }
+        }
+
+        // Store original shape for backward pass compatibility
+        _originalInputShape = inputShape;
+
+        // Cache input on CPU for backward pass (training mode only)
+        if (IsTrainingMode)
+        {
+            _lastInput = input3D;
+        }
+
+        // Compute predictions on GPU: [B, I, D_in] -> [B, I, C, D_out]
+        // predictions[b,i,c,d] = sum_k(input[b,i,k] * weights[i,c,k,d])
+        var predictions = gpuEngine.CapsulePredictionsGpu(input3D, _weights);
+
+        // Perform dynamic routing on GPU
+        // Returns output [B, C, D_out] and coupling coefficients [B, I, C]
+        var (routedOutput, couplings) = gpuEngine.DynamicRoutingGpu(predictions, _routingIterations);
+
+        // Cache output and couplings on CPU for backward pass (training mode only)
+        if (IsTrainingMode)
+        {
+            _lastOutput = routedOutput;
+            _lastCouplings = couplings;
+        }
+
+        // Dispose intermediate tensors. Critical: only dispose `couplings`
+        // when we did NOT cache it on _lastCouplings — otherwise the
+        // backward pass reads a disposed tensor and reports a use-after-
+        // free (or a zeroed-out buffer if the pool reused it). predictions
+        // is never cached so it's always safe to drop.
+        predictions.Dispose();
+        if (!IsTrainingMode)
+        {
+            couplings.Dispose();
+        }
+
+        // Flatten output for compatibility with downstream layers
+        // [B, C, D_out] -> [B, C*D_out]
+        var flattenedOutput = gpuEngine.ReshapeGpu(routedOutput, [batchSize, _numClasses * _outputCapsuleDimension]);
+
+        // For single-sample with low-rank input, return 1D output
+        if (batchSize == 1 && _originalInputShape != null && _originalInputShape.Length < 3)
+        {
+            return gpuEngine.ReshapeGpu(flattenedOutput, [_numClasses * _outputCapsuleDimension]);
+        }
+
+        return flattenedOutput;
+    }
+
+
+    /// <summary>
+    /// Updates the layer's weights using the calculated gradients and the specified learning rate.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <exception cref="InvalidOperationException">Thrown when update is called before backward.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates the layer's weights based on the gradients calculated during the backward pass.
+    /// The learning rate determines the size of the parameter updates. Smaller learning rates lead to more
+    /// stable but slower training, while larger learning rates can lead to faster but potentially unstable training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method actually adjusts the weights based on what was learned.
+    /// 
+    /// After figuring out what changes need to be made:
+    /// - The network adjusts each weight by a small amount
+    /// - The learning rate controls how big this adjustment is
+    /// - Too small: learning happens very slowly
+    /// - Too large: learning becomes unstable
+    /// 
+    /// It's like adjusting a recipe based on taste - you don't want to add too much salt at once,
+    /// but you also don't want to add just one grain at a time.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_weightsGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters (weights) of the layer as a single vector.
+    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
+    /// and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
+    /// 
+    /// The parameters:
+    /// - Are all the weight values that the network learns
+    /// - Are flattened into a single long list (vector)
+    /// - Can be saved to disk or loaded from a previous training session
+    /// 
+    /// This allows you to:
+    /// - Save a trained model for later use
+    /// - Transfer a model's knowledge to another identical model
+    /// - Share trained models with others
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Use ToArray() for production-grade parameter extraction
+        return new Vector<T>(_weights.ToArray());
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the layer from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets all trainable parameters (weights) of the layer from a single vector.
+    /// This is useful for loading saved model weights or for implementing optimization algorithms
+    /// that operate on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the layer's learnable values from a provided list.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with the exact right length
+    /// - Each value in the vector corresponds to a specific weight in the layer
+    /// - This allows loading previously trained weights
+    /// 
+    /// Use cases include:
+    /// - Restoring a saved model
+    /// - Using pre-trained weights
+    /// - Testing specific weight configurations
+    /// 
+    /// The method throws an error if the provided vector doesn't contain exactly the right number of values.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightsGradient == null)
+            return new Vector<T>(_weights.Length);
+        return new Vector<T>(_weightsGradient.ToArray());
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputCapsules"] = _inputCapsules.ToString();
+        metadata["InputCapsuleDimension"] = _inputCapsuleDimension.ToString();
+        metadata["NumClasses"] = _numClasses.ToString();
+        metadata["OutputCapsuleDimension"] = _outputCapsuleDimension.ToString();
+        metadata["RoutingIterations"] = _routingIterations.ToString();
+        return metadata;
+    }
+
+    public override void ClearGradients()
+    {
+        _weightsGradient = null;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != _weights.Length)
+        {
+            throw new ArgumentException($"Expected {_weights.Length} parameters, but got {parameters.Length}");
+        }
+
+        // Write parameters directly into a new mutable tensor
+        _weights = new Tensor<T>(_weights._shape);
+        for (int i = 0; i < parameters.Length; i++)
+            _weights[i] = parameters[i];
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the layer by clearing all cached values from forward
+    /// and backward passes. This is useful when starting to process a new batch of data or when
+    /// implementing stateful recurrent networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - All stored inputs, outputs, and intermediate values are cleared
+    /// - The layer forgets previous data it processed
+    /// - This prepares it for processing new, unrelated data
+    /// 
+    /// It's like wiping a whiteboard clean before starting a new calculation.
+    /// This ensures that information from one batch of data doesn't affect the
+    /// processing of another, unrelated batch.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _lastCouplings = null;
+        _weightsGradient = null;
+    }
+}

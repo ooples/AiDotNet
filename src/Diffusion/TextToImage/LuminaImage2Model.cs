@@ -1,0 +1,244 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+
+namespace AiDotNet.Diffusion.TextToImage;
+
+/// <summary>
+/// Lumina Image 2.0 model for high-resolution text-to-image generation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Lumina Image 2.0 uses a Flag-DiT (Flow-Aware Generative DiT) architecture with improved
+/// multi-resolution support and efficient attention mechanisms. It features Gemma text encoding
+/// and flow matching training for generating images up to 2K resolution with excellent detail.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Lumina Image 2.0 is an open-source model from the Lumina framework.
+///
+/// How Lumina Image 2.0 works:
+/// 1. Text is encoded by Gemma 2B for strong multilingual understanding
+/// 2. A Flag-DiT (Flow-Aware Generative DiT) processes tokens with flow matching
+/// 3. Multi-resolution support handles different aspect ratios natively
+/// 4. A 16-channel VAE decodes latents to high-resolution images
+///
+/// Key characteristics:
+/// - Flag-DiT architecture with flow-aware generation
+/// - Gemma 2B text encoder
+/// - Native multi-resolution and aspect ratio support
+/// - 2B parameters in the transformer
+/// - 16 latent channels
+/// - Up to 2K resolution generation
+///
+/// Advantages:
+/// - Open-source with permissive license
+/// - Native multi-resolution support
+/// - Good quality-to-compute ratio
+/// - Flexible aspect ratio handling
+/// </para>
+/// <para>
+/// Reference: Gao et al., "Lumina-Image: High-Resolution Image Generation with
+/// Flow-Aware Generative Transformers", 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
+/// var model = new LuminaImage2Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Lumina-Image 2.0: A Unified and Efficient Image Generative Framework", "https://arxiv.org/abs/2503.09153", Year = 2025, Authors = "Gao et al.")]
+public class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
+{
+    #region Constants
+
+    public const int DefaultWidth = 1024;
+    public const int DefaultHeight = 1024;
+
+    private const int LUMINA_LATENT_CHANNELS = 16;
+    private const int LUMINA_HIDDEN_SIZE = 2048;
+    private const int LUMINA_NUM_LAYERS = 32;
+    private const int LUMINA_CONTEXT_DIM = 2048;
+    private const double LUMINA_DEFAULT_GUIDANCE = 4.0;
+    private const int LUMINA_DEFAULT_STEPS = 30;
+
+    #endregion
+
+    #region Fields
+
+    private FlagDiTPredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    #endregion
+
+    #region Properties
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LUMINA_LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+
+    #endregion
+
+    #region Constructor
+
+    public LuminaImage2Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        FlagDiTPredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.0001, BetaEnd = 1.0, BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(LUMINA_DEFAULT_GUIDANCE);
+    }
+
+    #endregion
+
+    #region Layer Initialization
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(FlagDiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new FlagDiTPredictor<T>(seed: seed);
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LUMINA_LATENT_CHANNELS, baseChannels: 128,
+            channelMultipliers: [1, 2, 4, 4], numResBlocksPerLevel: 2, seed: seed);
+    }
+
+    #endregion
+
+    #region Generation Methods
+
+    /// <inheritdoc />
+    public override Tensor<T> GenerateFromText(
+        string prompt, string? negativePrompt = null,
+        int width = DefaultWidth, int height = DefaultHeight,
+        int numInferenceSteps = LUMINA_DEFAULT_STEPS,
+        double? guidanceScale = null, int? seed = null)
+    {
+        return base.GenerateFromText(prompt, negativePrompt, width, height,
+            numInferenceSteps, guidanceScale ?? LUMINA_DEFAULT_GUIDANCE, seed);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ImageToImage(
+        Tensor<T> inputImage, string prompt, string? negativePrompt = null,
+        double strength = 0.75, int numInferenceSteps = LUMINA_DEFAULT_STEPS,
+        double? guidanceScale = null, int? seed = null)
+    {
+        return base.ImageToImage(inputImage, prompt, negativePrompt, strength,
+            numInferenceSteps, guidanceScale ?? LUMINA_DEFAULT_GUIDANCE, seed);
+    }
+
+    #endregion
+
+    #region IParameterizable Implementation
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        var combined = new Vector<T>(pp.Length + vp.Length);
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
+
+    #endregion
+
+    #region ICloneable Implementation
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+                        return new LuminaImage2Model<T>(predictor: (FlagDiTPredictor<T>)_predictor.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
+    }
+
+    #endregion
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "Lumina Image 2.0", Version = "2.0",
+            Description = "Flag-DiT with flow matching, Gemma text encoder, and multi-resolution support",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "flag-dit-flow-matching");
+        m.SetProperty("base_model", "Lumina-Image 2.0");
+        m.SetProperty("text_encoder", "Gemma 2B");
+        m.SetProperty("context_dim", LUMINA_CONTEXT_DIM);
+        m.SetProperty("hidden_size", LUMINA_HIDDEN_SIZE);
+        m.SetProperty("num_layers", LUMINA_NUM_LAYERS);
+        m.SetProperty("latent_channels", LUMINA_LATENT_CHANNELS);
+        m.SetProperty("multi_resolution", true);
+        m.SetProperty("default_resolution", DefaultWidth);
+        m.SetProperty("max_resolution", 2048);
+        m.SetProperty("default_guidance_scale", LUMINA_DEFAULT_GUIDANCE);
+        m.SetProperty("default_inference_steps", LUMINA_DEFAULT_STEPS);
+        return m;
+    }
+
+    #endregion
+}

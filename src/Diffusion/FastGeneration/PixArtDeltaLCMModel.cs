@@ -1,0 +1,172 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.FastGeneration;
+
+/// <summary>
+/// PixArt-Delta LCM for few-step generation from the efficient PixArt-Delta DiT architecture.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Applies Latent Consistency Model distillation to PixArt-Delta, a training-efficient
+/// DiT model. PixArt-Delta uses a decomposed cross-attention mechanism that significantly
+/// reduces training cost. The LCM variant enables 2-8 step generation while maintaining
+/// PixArt-Delta's strong text-image alignment.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> PixArt-Delta is an efficient alternative to SD3 — it produces
+/// great images with much less training data and compute. This LCM version makes it
+/// even faster at inference time, generating in just 2-8 steps. Good for when you want
+/// high quality but don't need FLUX/SD3-level capability.
+/// </para>
+/// <para>
+/// Reference: Chen et al., "PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
+/// var model = new PixArtDeltaLCMModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", "https://arxiv.org/abs/2401.05252", Year = 2024, Authors = "Chen et al.")]
+public class PixArtDeltaLCMModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 4;
+    private const double DEFAULT_GUIDANCE = 0.0;
+
+    private SiTPredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+
+    public PixArtDeltaLCMModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        SiTPredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.0001,
+                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new LCMScheduler<T>(SchedulerConfig<T>.CreateLCM()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(SiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new SiTPredictor<T>(
+            inputChannels: LATENT_CHANNELS,
+            hiddenSize: 1152,
+            numLayers: 28,
+            numHeads: 16,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2, latentScaleFactor: 0.18215, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        var combined = new Vector<T>(pp.Length + vp.Length);
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // #1711: delegate to predictor/VAE Clone (probe-forward + copy); DiT LazyDense weights resolve
+        // via the FORWARD path so a model-level SetParameters(GetParameters()) clone re-RNG-initialized.
+        var clone = new PixArtDeltaLCMModel<T>(
+            conditioner: _conditioner,
+            predictor: (SiTPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            seed: null);
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "PixArt-Delta LCM", Version = "1.0",
+            Description = "Latent Consistency Model distillation of PixArt-Delta for 2-8 step generation",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "pixart-delta-lcm-dit");
+        m.SetProperty("base_model", "PixArt-delta");
+        m.SetProperty("text_encoder", "T5-XXL");
+        m.SetProperty("context_dim", 4096);
+        m.SetProperty("distillation_method", "latent-consistency");
+        m.SetProperty("optimal_steps", 4);
+        m.SetProperty("max_recommended_steps", 8);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        return m;
+    }
+}

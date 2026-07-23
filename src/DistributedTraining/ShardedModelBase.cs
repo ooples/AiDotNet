@@ -1,0 +1,584 @@
+using AiDotNet.Helpers;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Validation;
+
+
+namespace AiDotNet.DistributedTraining;
+
+/// <summary>
+/// Provides base implementation for distributed models with parameter sharding.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This abstract class implements common functionality for all sharded models,
+/// including parameter management, sharding logic, gradient synchronization, and
+/// integration with the model serialization system. Derived classes can customize
+/// the sharding strategy, communication pattern, or add optimization-specific features.
+/// </para>
+/// <para><b>For Beginners:</b> This is the foundation that all distributed models build upon.
+///
+/// Think of this as a template for splitting a big model across multiple computers or GPUs.
+/// It handles common tasks like:
+/// - Dividing model parameters into chunks (sharding)
+/// - Collecting all chunks when needed (gathering)
+/// - Sharing learning updates across all processes (gradient sync)
+/// - Saving and loading distributed models
+///
+/// Specific types of distributed models (like fully sharded or hybrid sharded) inherit
+/// from this and add their own strategies. This prevents code duplication and ensures
+/// all distributed models work consistently.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type for operations</typeparam>
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public abstract class ShardedModelBase<T, TInput, TOutput> :
+    IShardedModel<T, TInput, TOutput>,
+    IParameterizable<T, TInput, TOutput>,
+    IGradientComputable<T, TInput, TOutput>,
+    IModelShape
+{
+    /// <summary>
+    /// Provides numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
+
+    /// <summary>
+    /// The wrapped model that this sharded model delegates to.
+    /// </summary>
+    private readonly IFullModel<T, TInput, TOutput> _wrappedModel;
+
+    /// <summary>
+    /// The sharding configuration containing communication backend and settings.
+    /// </summary>
+    protected readonly IShardingConfiguration<T> Config;
+
+    /// <summary>
+    /// The local parameter shard owned by this process.
+    /// </summary>
+    protected Vector<T> LocalShard;
+
+    /// <summary>
+    /// Cached full parameters to avoid repeated gathering.
+    /// </summary>
+    protected Vector<T>? CachedFullParameters;
+
+    /// <summary>
+    /// Starting index of this process's shard in the full parameter vector.
+    /// </summary>
+    protected int ShardStartIndex;
+
+    /// <summary>
+    /// Size of this process's parameter shard.
+    /// </summary>
+    protected int ShardSize;
+
+    /// <summary>
+    /// Flag indicating whether sharding has been initialized.
+    /// </summary>
+    private bool _isShardingInitialized;
+
+    /// <inheritdoc/>
+    public IFullModel<T, TInput, TOutput> WrappedModel => _wrappedModel;
+
+    /// <summary>
+    /// Protected access to wrapped model for derived classes.
+    /// </summary>
+    protected IFullModel<T, TInput, TOutput> WrappedModelInternal => _wrappedModel;
+
+    /// <inheritdoc/>
+    public int Rank => Config.CommunicationBackend.Rank;
+
+    /// <inheritdoc/>
+    public int WorldSize => Config.CommunicationBackend.WorldSize;
+
+    /// <inheritdoc/>
+    public Vector<T> LocalParameterShard
+    {
+        get
+        {
+            EnsureShardingInitialized();
+            return LocalShard;
+        }
+    }
+
+    /// <inheritdoc/>
+    public IShardingConfiguration<T> ShardingConfiguration => Config;
+
+    /// <inheritdoc/>
+    public long ParameterCount => InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+
+    /// <summary>
+    /// Initializes a new instance of the ShardedModelBase class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This constructor wraps an existing model with distributed training capabilities.
+    /// It initializes the communication backend if needed and sets up parameter sharding.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor takes your regular model and makes it distributed.
+    ///
+    /// You provide:
+    /// 1. The model you want to distribute
+    /// 2. Configuration that tells us how to distribute it
+    ///
+    /// The constructor automatically:
+    /// - Sets up communication if not already done
+    /// - Splits the model's parameters across processes
+    /// - Prepares everything for distributed training
+    /// </para>
+    /// </remarks>
+    /// <param name="wrappedModel">The model to wrap with distributed capabilities</param>
+    /// <param name="config">Configuration for sharding and communication</param>
+    /// <exception cref="ArgumentNullException">Thrown if model or config is null</exception>
+    protected ShardedModelBase(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
+    {
+        Guard.NotNull(wrappedModel);
+        _wrappedModel = wrappedModel;
+        Guard.NotNull(config);
+        Config = config;
+        NumOps = MathHelper.GetNumericOperations<T>();
+
+        // Initialize communication backend if needed
+        if (!Config.CommunicationBackend.IsInitialized)
+        {
+            Config.CommunicationBackend.Initialize();
+        }
+
+        // Initialize sharding state (actual sharding is done lazily to avoid virtual calls in constructor)
+        LocalShard = new Vector<T>(Array.Empty<T>());
+        ShardStartIndex = 0;
+        ShardSize = 0;
+        CachedFullParameters = null;
+        _isShardingInitialized = false;
+    }
+
+    /// <summary>
+    /// Ensures that sharding has been initialized. Call this at the start of any method that requires sharding.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method uses lazy initialization to avoid calling virtual methods in the constructor,
+    /// which can cause issues when derived classes override these methods.
+    /// </para>
+    /// </remarks>
+    protected void EnsureShardingInitialized()
+    {
+        if (!_isShardingInitialized)
+        {
+            OnBeforeInitializeSharding();
+            InitializeSharding();
+            _isShardingInitialized = true;
+        }
+    }
+
+    /// <summary>
+    /// Called before InitializeSharding to allow derived classes to set up state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Override this method in derived classes to initialize fields that are needed
+    /// by InitializeSharding but cannot be set before the base constructor call.
+    /// </para>
+    /// </remarks>
+    protected virtual void OnBeforeInitializeSharding()
+    {
+        // Default implementation does nothing
+    }
+
+    /// <summary>
+    /// Initializes parameter sharding by dividing parameters across processes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method calculates how to distribute parameters evenly across all processes,
+    /// with remainder parameters distributed to the first few processes.
+    /// Derived classes can override this to implement different sharding strategies.
+    /// </para>
+    /// <para><b>For Beginners:</b> This splits the model's parameters across all processes.
+    ///
+    /// Think of it like dividing a deck of cards among players. If you have 10 parameters
+    /// and 3 processes:
+    /// - Process 0 gets parameters 0-3 (4 parameters)
+    /// - Process 1 gets parameters 4-6 (3 parameters)
+    /// - Process 2 gets parameters 7-9 (3 parameters)
+    ///
+    /// We try to split evenly, but if there's a remainder, the first processes get
+    /// one extra parameter each.
+    /// </para>
+    /// </remarks>
+    protected virtual void InitializeSharding()
+    {
+        var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
+        int totalParams = fullParameters.Length;
+
+        // Calculate shard size for this process
+        int baseShardSize = totalParams / WorldSize;
+        int remainder = totalParams % WorldSize;
+
+        // Distribute remainder among first 'remainder' processes
+        ShardSize = baseShardSize + (Rank < remainder ? 1 : 0);
+        ShardStartIndex = Rank * baseShardSize + Math.Min(Rank, remainder);
+
+        // Extract local shard
+        var shardData = new T[ShardSize];
+        Array.Copy(fullParameters.ToArray(), ShardStartIndex, shardData, 0, ShardSize);
+        LocalShard = new Vector<T>(shardData);
+
+        // Invalidate cache
+        CachedFullParameters = null;
+    }
+
+    /// <inheritdoc/>
+    public virtual Vector<T> GatherFullParameters()
+    {
+        EnsureShardingInitialized();
+
+        // Use cached version if available
+        if (CachedFullParameters != null)
+        {
+            return CachedFullParameters;
+        }
+
+        // Gather parameters from all processes
+        var gathered = Config.CommunicationBackend.AllGather(LocalShard);
+        CachedFullParameters = gathered;
+        return gathered;
+    }
+
+    /// <inheritdoc/>
+    public virtual void SynchronizeGradients()
+    {
+        EnsureShardingInitialized();
+
+        // Perform AllReduce with average operation
+        Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Average);
+
+        // Invalidate cached full parameters
+        CachedFullParameters = null;
+    }
+
+    /// <summary>
+    /// Runtime side of <see cref="IShardingConfiguration{T}.CpuOffloadGradients"/>.
+    /// Forces a gradient vector to fully materialize on the CPU (draining any
+    /// pending deferred GPU download) and drops the GPU-cached buffer for its
+    /// backing array. Called by sharded models before the AllReduce /
+    /// ReduceScatter that fans gradients out — the reduction operates on the
+    /// managed backing array directly, so after this call it reads current
+    /// gradient values (not a not-yet-materialized deferred-download stub) and
+    /// no GPU cache pins a stale pre-reduce copy. No-op when the flag is off
+    /// or the current engine isn't a GPU engine.
+    /// </summary>
+    protected void OffloadGradientsToCpu(Vector<T>? gradients)
+    {
+        if (!Config.CpuOffloadGradients || gradients is null || gradients.Length == 0) return;
+        var array = gradients.GetDataArray();
+        if (array is null) return;
+        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        if (AiDotNetEngine.Current is DirectGpuTensorEngine gpu)
+        {
+            gpu.InvalidateWeightCache(array);
+        }
+    }
+
+    /// <summary>
+    /// Runtime side of <see cref="IShardingConfiguration{T}.CpuOffloadParams"/>.
+    /// After a parameter update, drops the GPU-cached buffer for the wrapped
+    /// model's parameters so the next forward re-uploads from the just-updated
+    /// CPU-resident values. Called at the tail of the sharded model's Train
+    /// path. No-op when the flag is off or the current engine isn't a GPU
+    /// engine.
+    /// </summary>
+    protected void OffloadParamsToCpu()
+    {
+        if (!Config.CpuOffloadParams) return;
+        // Invalidate the sharded-model gather cache FIRST, unconditionally — its bytes
+        // otherwise still reflect the pre-update parameters and the next Predict/Train
+        // would serve them. This must happen even on CPU execution (no GPU engine), where
+        // there is no weight cache to invalidate but the gather cache is just as stale.
+        CachedFullParameters = null;
+        if (AiDotNetEngine.Current is not DirectGpuTensorEngine gpu) return;
+        Vector<T>? parameters;
+        try { parameters = InterfaceGuard.Parameterizable(WrappedModelInternal).GetParameters(); }
+        catch { return; }
+        if (parameters is null || parameters.Length == 0) return;
+        var array = parameters.GetDataArray();
+        if (array is null) return;
+        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        gpu.InvalidateWeightCache(array);
+    }
+
+    /// <summary>
+    /// Invalidates the cached full parameters, forcing a re-gather on next access.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method should be called whenever local parameters change to ensure
+    /// the cache is refreshed on the next GatherFullParameters call.
+    /// </para>
+    /// <para><b>For Beginners:</b> When parameters change, we need to throw away
+    /// the old cached full parameters.
+    ///
+    /// It's like when you update a document - you need to discard the old
+    /// saved copy so that next time you need it, you get the updated version.
+    /// </para>
+    /// </remarks>
+    protected void InvalidateCache()
+    {
+        CachedFullParameters = null;
+    }
+
+    /// <summary>
+    /// Updates the local parameter shard from the full parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method extracts this process's shard from a full parameter vector.
+    /// Used after training updates or when setting parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> After the full model is updated, we need to
+    /// extract our piece of it.
+    ///
+    /// It's like taking your slice of a pizza after it's been prepared - you get
+    /// the portion that belongs to you from the whole.
+    /// </para>
+    /// </remarks>
+    /// <param name="fullParameters">The full parameter vector</param>
+    protected void UpdateLocalShardFromFull(Vector<T> fullParameters)
+    {
+        EnsureShardingInitialized();
+
+        var shardData = new T[ShardSize];
+        Array.Copy(fullParameters.ToArray(), ShardStartIndex, shardData, 0, ShardSize);
+        LocalShard = new Vector<T>(shardData);
+        InvalidateCache();
+    }
+
+    /// <inheritdoc/>
+    public abstract void Train(TInput input, TOutput expectedOutput);
+
+    /// <inheritdoc/>
+    public abstract TOutput Predict(TInput input);
+
+    /// <inheritdoc/>
+    public abstract ModelMetadata<T> GetModelMetadata();
+
+    /// <inheritdoc/>
+    public virtual Vector<T> GetParameters()
+    {
+        return GatherFullParameters();
+    }
+
+    /// <inheritdoc/>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Parameter count mismatch. Expected {ParameterCount}, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        // Update local shard
+        UpdateLocalShardFromFull(parameters);
+
+        // Update wrapped model
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(parameters);
+    }
+
+    /// <inheritdoc/>
+    public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
+
+    /// <inheritdoc/>
+    public abstract byte[] Serialize();
+
+    /// <inheritdoc/>
+    public abstract void Deserialize(byte[] data);
+
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        if (WrappedModel is IModelShape shapeModel)
+        {
+            return shapeModel.GetInputShape();
+        }
+
+        // Cannot infer input shape without the wrapped model implementing IModelShape.
+        // Return empty to avoid persisting misleading metadata.
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        if (WrappedModel is IModelShape shapeModel)
+        {
+            return shapeModel.GetOutputShape();
+        }
+
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
+        // Each rank saves its own shard for correct distributed checkpoint round-trip
+        string rankPath = $"{Path.GetFullPath(filePath)}.rank{Rank}";
+        string? directory = Path.GetDirectoryName(rankPath);
+        if (directory is not null && !Directory.Exists(directory))
+            Directory.CreateDirectory(directory);
+
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] data = Serialize();
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            File.WriteAllBytes(rankPath, envelopedData);
+        }
+    }
+
+    /// <inheritdoc/>
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
+        // Try per-rank filename first (matching SaveModel's behavior)
+        string rankPath = $"{Path.GetFullPath(filePath)}.rank{Rank}";
+        string fullPath = File.Exists(rankPath) ? rankPath : Path.GetFullPath(filePath);
+
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"Model file not found: {fullPath}", fullPath);
+
+        byte[] data = File.ReadAllBytes(fullPath);
+
+        // Extract payload from AIMF envelope
+        data = ModelFileHeader.ExtractPayload(data);
+
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(data);
+        }
+    }
+
+    /// <inheritdoc/>
+    public abstract IFullModel<T, TInput, TOutput> Clone();
+
+    /// <inheritdoc/>
+    public virtual IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return Clone();
+    }
+
+    /// <inheritdoc/>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        return WrappedModel.GetFeatureImportance();
+    }
+
+    /// <inheritdoc/>
+    public virtual IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return InterfaceGuard.FeatureAware(WrappedModel).GetActiveFeatureIndices();
+    }
+
+    /// <inheritdoc/>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        InterfaceGuard.FeatureAware(WrappedModel).SetActiveFeatureIndices(featureIndices);
+    }
+
+    /// <inheritdoc/>
+    public virtual bool IsFeatureUsed(int featureIndex)
+    {
+        return InterfaceGuard.FeatureAware(WrappedModel).IsFeatureUsed(featureIndex);
+    }
+
+    /// <inheritdoc/>
+    public virtual ILossFunction<T> DefaultLossFunction => WrappedModel.DefaultLossFunction;
+
+    /// <inheritdoc/>
+    public virtual Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        return InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, target, lossFunction);
+    }
+
+    /// <inheritdoc/>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(gradients, learningRate);
+    }
+
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    public virtual void SaveState(Stream stream)
+    {
+        WrappedModel.SaveState(stream);
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    public virtual void LoadState(Stream stream)
+    {
+        WrappedModel.LoadState(stream);
+    }
+
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Forwards Dispose to <see cref="WrappedModel"/> when it
+    /// implements IDisposable. The shard wrapper itself owns no
+    /// additional disposable state beyond the wrapped model.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Disposes the wrapped sharded model. Override + call base for additional cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing)
+        {
+            (WrappedModel as System.IDisposable)?.Dispose();
+        }
+        _disposed = true;
+    }
+}

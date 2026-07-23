@@ -1,0 +1,721 @@
+using AiDotNet.Enums;
+
+namespace AiDotNet.Configuration;
+
+/// <summary>
+/// Configuration for inference-time optimizations to maximize prediction throughput and efficiency.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This configuration controls advanced inference optimizations including KV caching for transformers,
+/// request batching for throughput, and speculative decoding for faster autoregressive generation.
+/// These optimizations are automatically applied during prediction based on your configuration.
+/// </para>
+/// <para><b>For Beginners:</b> Inference optimization makes your model's predictions faster and more efficient.
+///
+/// Key features:
+/// - <b>KV Cache:</b> Remembers previous computations in attention layers (2-10x faster for long sequences)
+/// - <b>Batching:</b> Groups multiple predictions together (higher throughput)
+/// - <b>Speculative Decoding:</b> Uses a small model to draft tokens, then verifies (1.5-3x faster generation)
+///
+/// Default settings are optimized for most use cases. Simply enable and let the library handle the rest.
+///
+/// Example:
+/// <code>
+/// var config = InferenceOptimizationConfig.Default;
+///
+/// var result = await new AiModelBuilder&lt;double, ...&gt;()
+///     .ConfigureModel(myModel)
+///     .ConfigureInferenceOptimizations(config)
+///     .BuildAsync();
+/// </code>
+/// </para>
+/// </remarks>
+public class InferenceOptimizationConfig
+{
+    /// <summary>
+    /// Gets a default configuration with sensible settings for most use cases.
+    /// </summary>
+    /// <remarks>
+    /// Default settings:
+    /// - KV Cache: Enabled for transformer models, 1GB max size
+    /// - Batching: Enabled with adaptive batch sizing
+    /// - Speculative Decoding: Disabled (requires explicit configuration)
+    /// </remarks>
+    public static InferenceOptimizationConfig Default => new()
+    {
+        EnableKVCache = true,
+        EnableBatching = true,
+        SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = false }
+    };
+
+    /// <summary>
+    /// Gets a high-performance configuration optimized for maximum throughput.
+    /// </summary>
+    /// <remarks>
+    /// All optimizations enabled with aggressive settings:
+    /// - KV Cache: Enabled with 2GB max size
+    /// - Batching: Enabled with larger batch sizes
+    /// - Speculative Decoding: Enabled with NGram draft model
+    /// </remarks>
+    public static InferenceOptimizationConfig HighPerformance => new()
+    {
+        EnableKVCache = true,
+        KVCacheMaxSizeMB = 2048,
+        EnableBatching = true,
+        MaxBatchSize = 64,
+        SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true, SpeculationDepth = 5 }
+    };
+
+    #region KV Cache Settings
+
+    /// <summary>
+    /// Gets or sets whether KV (Key-Value) caching is enabled for attention layers.
+    /// </summary>
+    /// <value>True to enable KV caching (default: true).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> KV caching speeds up transformer models by remembering previous computations.
+    ///
+    /// How it works:
+    /// - Attention layers compute keys and values for each token
+    /// - Without caching: Recomputes all keys/values for every new token
+    /// - With caching: Stores previous keys/values, only computes for new tokens
+    ///
+    /// Benefits:
+    /// - 2-10x faster for long sequences
+    /// - Essential for autoregressive generation (GPT-style)
+    /// - Minimal memory overhead for huge speedup
+    ///
+    /// When to disable:
+    /// - Memory-constrained environments
+    /// - Very short sequences (overhead exceeds benefit)
+    /// - Non-transformer models (no effect)
+    /// </para>
+    /// </remarks>
+    public bool EnableKVCache { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the maximum KV cache size in megabytes.
+    /// </summary>
+    /// <value>Maximum cache size in MB (default: 1024 = 1GB).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This limits how much memory the KV cache can use.
+    ///
+    /// Guidelines:
+    /// - 512MB: Good for small models or memory-constrained systems
+    /// - 1024MB (default): Balanced for most use cases
+    /// - 2048MB+: For large models or long sequences
+    ///
+    /// When cache fills up, oldest entries are evicted (LRU policy).
+    /// </para>
+    /// </remarks>
+    public int KVCacheMaxSizeMB { get; set; } = 1024;
+
+    /// <summary>
+    /// Gets or sets the KV cache eviction policy.
+    /// </summary>
+    /// <value>Cache eviction policy (default: LRU).</value>
+    public CacheEvictionPolicy KVCacheEvictionPolicy { get; set; } = CacheEvictionPolicy.LRU;
+
+    /// <summary>
+    /// Gets or sets whether to use a sliding window KV-cache for long contexts.
+    /// </summary>
+    /// <remarks>
+    /// When enabled, only the most recent <see cref="KVCacheWindowSize"/> tokens are kept.
+    /// This is a common industry approach for long-context serving to cap memory usage.
+    /// </remarks>
+    public bool UseSlidingWindowKVCache { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the sliding window size in tokens when <see cref="UseSlidingWindowKVCache"/> is enabled.
+    /// </summary>
+    /// <value>Window size in tokens (default: 1024).</value>
+    public int KVCacheWindowSize { get; set; } = 1024;
+
+    /// <summary>
+    /// Gets or sets the precision used for KV-cache storage.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Industry-standard serving stores KV-cache in FP16 to halve memory usage and increase cache capacity.
+    /// The default <see cref="KVCachePrecisionMode.Auto"/> selects FP16 when KV-cache is enabled and the numeric
+    /// type supports it.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This setting controls how much memory your model uses during autoregressive inference.
+    ///
+    /// - FP16: Uses about half the memory (recommended default)
+    /// - FP32: Uses more memory but can be slightly more numerically accurate
+    ///
+    /// Most production systems prefer FP16 KV-cache for capacity and throughput.
+    /// </para>
+    /// </remarks>
+    public KVCachePrecisionMode KVCachePrecision { get; set; } = KVCachePrecisionMode.Auto;
+
+    /// <summary>
+    /// Gets or sets the quantization mode used for KV-cache storage.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// KV-cache quantization can further reduce memory beyond FP16 by storing keys/values in int8 with scaling.
+    /// This is an opt-in advanced feature because it can introduce small numerical error.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// - None (default): Store KV-cache in FP16/FP32 depending on <see cref="KVCachePrecision"/>.
+    /// - Int8: Store KV-cache in 8-bit integers to save memory (advanced).
+    /// </para>
+    /// </remarks>
+    public KVCacheQuantizationMode KVCacheQuantization { get; set; } = KVCacheQuantizationMode.None;
+
+    /// <summary>
+    /// Gets or sets whether to use a paged KV-cache backend (vLLM-style) for long-context / multi-sequence serving.
+    /// </summary>
+    /// <remarks>
+    /// When enabled, the system may choose a paged cache implementation that allocates KV memory in fixed-size blocks.
+    /// This is the industry-standard approach for high-throughput serving where many sequences are active concurrently.
+    /// Users can disable this to force the traditional contiguous KV-cache.
+    /// </remarks>
+    public bool EnablePagedKVCache { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the block size (in tokens) for the paged KV-cache when enabled.
+    /// </summary>
+    /// <remarks>
+    /// Common values are 16 or 32. Smaller blocks reduce internal fragmentation; larger blocks reduce table overhead.
+    /// </remarks>
+    public int PagedKVCacheBlockSize { get; set; } = 16;
+
+    #endregion
+
+    #region Attention Settings
+
+    /// <summary>
+    /// Gets or sets whether Flash Attention is enabled (when applicable).
+    /// </summary>
+    /// <remarks>
+    /// Flash Attention computes exact attention without materializing the full N×N attention matrix,
+    /// reducing memory bandwidth pressure and improving throughput for long sequences.
+    /// </remarks>
+    public bool EnableFlashAttention { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how attention masking should be applied for optimized attention implementations.
+    /// </summary>
+    /// <remarks>
+    /// - Auto: Applies causal masking for known autoregressive models (e.g., text generation), otherwise no mask.
+    /// - Disabled: Never applies causal masking.
+    /// - Causal: Always applies causal masking (GPT-style).
+    /// </remarks>
+    public AttentionMaskingMode AttentionMasking { get; set; } = AttentionMaskingMode.Auto;
+
+    #endregion
+
+    #region Positional Encoding Settings
+
+    /// <summary>
+    /// Gets or sets the positional encoding type for attention layers.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Positional encoding tells the model about token order in a sequence.
+    ///
+    /// Options:
+    /// - <b>Sinusoidal</b> (default): Classic sine/cosine encoding from the original Transformer
+    /// - <b>Rotary (RoPE)</b>: Modern approach used by Llama, Mistral, Phi - encodes relative positions
+    /// - <b>ALiBi</b>: Simple distance bias used by BLOOM, MPT - great length extrapolation
+    /// - <b>None</b>: No positional encoding (when handled externally or not needed)
+    ///
+    /// For modern LLM inference, <see cref="PositionalEncodingType.Rotary"/> is recommended.
+    /// </para>
+    /// </remarks>
+    public PositionalEncodingType PositionalEncoding { get; set; } = PositionalEncodingType.Sinusoidal;
+
+    /// <summary>
+    /// Gets or sets the base frequency parameter for RoPE (theta).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This controls how quickly the rotation frequencies change across dimensions.
+    ///
+    /// Standard values:
+    /// - 10000.0 (default): Standard for Llama 2, Mistral, most models
+    /// - 500000.0: Used by some long-context models (Llama 3.1 with extended context)
+    ///
+    /// Only used when <see cref="PositionalEncoding"/> is <see cref="PositionalEncodingType.Rotary"/>.
+    /// </para>
+    /// </remarks>
+    public double RoPETheta { get; set; } = 10000.0;
+
+    #endregion
+
+    #region Batching Settings
+
+    /// <summary>
+    /// Gets or sets whether request batching is enabled.
+    /// </summary>
+    /// <value>True to enable batching (default: true).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Batching groups multiple predictions together for efficiency.
+    ///
+    /// Benefits:
+    /// - Higher throughput (more predictions per second)
+    /// - Better GPU utilization
+    /// - Lower per-request latency under load
+    ///
+    /// How it works:
+    /// - Incoming prediction requests are queued
+    /// - When batch is full OR timeout reached, batch is processed together
+    /// - Results are returned to each caller
+    ///
+    /// Trade-offs:
+    /// - Slight latency increase for single requests (waiting for batch)
+    /// - Significant throughput increase under load
+    /// </para>
+    /// </remarks>
+    public bool EnableBatching { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the maximum batch size for grouped predictions.
+    /// </summary>
+    /// <value>Maximum batch size (default: 32).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How many predictions to group together.
+    ///
+    /// Guidelines:
+    /// - 8-16: Good for memory-constrained systems
+    /// - 32 (default): Balanced for most cases
+    /// - 64+: For high-throughput GPU inference
+    ///
+    /// Larger batches = better throughput but more memory.
+    /// </para>
+    /// </remarks>
+    public int MaxBatchSize { get; set; } = 32;
+
+    /// <summary>
+    /// Gets or sets the minimum batch size before processing.
+    /// </summary>
+    /// <value>Minimum batch size (default: 1).</value>
+    public int MinBatchSize { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets the maximum time to wait for batch to fill in milliseconds.
+    /// </summary>
+    /// <value>Batch timeout in milliseconds (default: 10ms).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How long to wait before processing a partial batch.
+    ///
+    /// Lower values = lower latency but smaller batches.
+    /// Higher values = larger batches but more waiting.
+    /// </para>
+    /// </remarks>
+    public int BatchTimeoutMs { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets whether adaptive batch sizing is enabled.
+    /// </summary>
+    /// <value>True to enable adaptive sizing (default: true).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Automatically adjusts batch size based on system load.
+    ///
+    /// When enabled:
+    /// - Low load: Smaller batches for lower latency
+    /// - High load: Larger batches for higher throughput
+    /// - Automatically balances latency vs throughput
+    /// </para>
+    /// </remarks>
+    public bool AdaptiveBatchSize { get; set; } = true;
+
+    #endregion
+
+    #region Validation
+
+    /// <summary>
+    /// Validates the configuration and throws if any values are invalid.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when configuration values are invalid.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Call this method to ensure your configuration is valid before use.
+    ///
+    /// Validation rules:
+    /// - KVCacheMaxSizeMB must be positive
+    /// - MaxBatchSize must be positive
+    /// - MinBatchSize must be positive and not exceed MaxBatchSize
+    /// - BatchTimeoutMs must be non-negative
+    /// - SpeculationDepth must be non-negative
+    /// </para>
+    /// </remarks>
+    public void Validate()
+    {
+        if (KVCacheMaxSizeMB <= 0)
+        {
+            throw new InvalidOperationException(
+                $"KVCacheMaxSizeMB must be positive. Got: {KVCacheMaxSizeMB}");
+        }
+
+        if (MaxBatchSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"MaxBatchSize must be positive. Got: {MaxBatchSize}");
+        }
+
+        if (MinBatchSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"MinBatchSize must be positive. Got: {MinBatchSize}");
+        }
+
+        if (MinBatchSize > MaxBatchSize)
+        {
+            throw new InvalidOperationException(
+                $"MinBatchSize ({MinBatchSize}) cannot exceed MaxBatchSize ({MaxBatchSize}).");
+        }
+
+        if (BatchTimeoutMs < 0)
+        {
+            throw new InvalidOperationException(
+                $"BatchTimeoutMs must be non-negative. Got: {BatchTimeoutMs}");
+        }
+
+        if (SpeculativeDecoding.SpeculationDepth < 0)
+        {
+            throw new InvalidOperationException(
+                $"SpeculativeDecoding.SpeculationDepth must be non-negative. Got: {SpeculativeDecoding.SpeculationDepth}");
+        }
+
+        if (TensorParallelSize < 1)
+        {
+            throw new InvalidOperationException(
+                $"TensorParallelSize must be at least 1 (1 = no tensor parallelism). Got: {TensorParallelSize}");
+        }
+
+        if (UseSlidingWindowKVCache && KVCacheWindowSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"KVCacheWindowSize must be positive when UseSlidingWindowKVCache is enabled. Got: {KVCacheWindowSize}");
+        }
+
+        if (EnablePagedKVCache && PagedKVCacheBlockSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"PagedKVCacheBlockSize must be positive when EnablePagedKVCache is enabled. Got: {PagedKVCacheBlockSize}");
+        }
+
+        // Documented domain is 0 (disabled) or a positive token count. A negative value is invalid — reject
+        // it rather than letting downstream code silently treat it as disabled.
+        if (MaxPrefillChunkTokens < 0)
+        {
+            throw new InvalidOperationException(
+                $"MaxPrefillChunkTokens must be 0 (disabled) or a positive token count. Got: {MaxPrefillChunkTokens}");
+        }
+    }
+
+    #endregion
+
+    #region Speculative Decoding Settings
+
+    /// <summary>
+    /// Gets or sets the speculative-decoding tuning options (enable flag, speculation depth, policy, method,
+    /// tree speculation). <i>Which</i> draft model does the guessing is configured separately via the builder's
+    /// <c>ConfigureSpeculativeDecoding</c> overloads; these options control <i>how</i> speculation runs.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Speculative decoding speeds up text generation by having a small "guesser"
+    /// model propose the next few tokens while the big model verifies them all at once — no quality loss, often
+    /// 1.5–3× faster. This object bundles the tuning knobs for that feature. Turn it on with
+    /// <c>SpeculativeDecoding.Enabled = true</c>; the defaults use a zero-cost N-gram guesser so you don't need a
+    /// second model to start benefiting. See <see cref="SpeculativeDecodingOptions"/> for each knob.</para>
+    /// </remarks>
+    public SpeculativeDecodingOptions SpeculativeDecoding { get; set; } = new SpeculativeDecodingOptions();
+
+    /// <summary>
+    /// Gets or sets the maximum number of prompt tokens to prefill per scheduler step (chunked prefill).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When &gt; 0, a long prompt's prefill is split into chunks of at most this many tokens so decode steps
+    /// for other in-flight requests are interleaved with it, keeping inter-token latency low under mixed load
+    /// (vLLM-style chunked prefill). 0 disables chunking (each prompt prefills in a single step).
+    /// </para>
+    /// <para><b>For Beginners:</b> Without this, one very long prompt can hog the engine while everyone else
+    /// waits. Chunked prefill feeds the long prompt in bite-sized pieces so other users' words keep streaming.
+    /// A value like 512 is a good starting point; 0 turns it off.
+    /// </para>
+    /// </remarks>
+    public int MaxPrefillChunkTokens { get; set; } = 0;
+
+    #endregion
+
+    #region Inference Quantization (Advanced)
+
+    /// <summary>
+    /// Gets or sets the weight quantization mode used for inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Weight-only quantization reduces memory bandwidth and improves cache locality by storing weights
+    /// in a lower-precision format with per-row/per-group scaling. Activations remain in FP32 and
+    /// accumulation is performed in FP32. This applies to both dense and attention layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This compresses your model's weights to use less memory and run faster.
+    ///
+    /// Options:
+    /// - <b>None</b> (default): No quantization, full FP32 precision
+    /// - <b>WeightOnlyInt8</b>: 4x compression, per-row INT8 (good quality, works everywhere)
+    /// - <b>WeightOnlyFP8</b>: 4x compression, per-row FP8 E4M3 (better outlier handling)
+    /// - <b>WeightOnlyNF4</b>: 8x compression, per-group 4-bit NormalFloat (maximum compression, QLoRA format)
+    ///
+    /// INT8 and FP8 typically preserve &gt;99% accuracy. NF4 may introduce slightly more error
+    /// but uses half the memory of 8-bit formats.
+    /// </para>
+    /// </remarks>
+    public InferenceQuantizationMode InferenceQuantization { get; set; } = InferenceQuantizationMode.None;
+
+    /// <summary>
+    /// Gets or sets whether weight-only INT8 quantization is enabled for inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is a backward-compatible convenience property. Setting it to true is equivalent to
+    /// setting <see cref="InferenceQuantization"/> to <see cref="InferenceQuantizationMode.WeightOnlyInt8"/>.
+    /// </para>
+    /// </remarks>
+    public bool EnableWeightOnlyQuantization
+    {
+        get => InferenceQuantization != InferenceQuantizationMode.None;
+        set
+        {
+            if (value && InferenceQuantization == InferenceQuantizationMode.None)
+                InferenceQuantization = InferenceQuantizationMode.WeightOnlyInt8;
+            else if (!value)
+                InferenceQuantization = InferenceQuantizationMode.None;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether freeze-time layer fusion (BatchNorm folding) is applied
+    /// when optimizing a model for inference. Default: <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// At inference a <c>BatchNormalization</c> layer is a fixed per-channel affine
+    /// transform: <c>y = γ·(x − μ)/√(σ² + ε) + β</c>. When it directly follows a
+    /// linear op with identity activation (the canonical Conv→BN→activation block in
+    /// ResNet/VGG/EfficientNet), it can be folded into that op's weights and bias with
+    /// no change in output: <c>W' = W·s</c>, <c>b' = (b − μ)·s + β</c> where
+    /// <c>s = γ/√(σ² + ε)</c>. The BatchNorm layer is then removed, eliminating a full
+    /// per-element pass and an intermediate tensor per such block.
+    /// </para>
+    /// <para><b>For Beginners:</b> This makes a trained CNN faster at prediction time
+    /// by absorbing the (now-constant) batch-norm math into the convolution itself.
+    /// It's lossless — the predictions are identical (to floating-point rounding) — so
+    /// it's enabled by default. It only triggers on models built for it (a convolution
+    /// with no activation, immediately followed by batch-norm).</para>
+    /// </remarks>
+    public bool EnableLayerFusion { get; set; } = true;
+
+    #endregion
+
+    #region Tensor Parallelism (Advanced)
+
+    /// <summary>
+    /// Gets or sets the number of tensor-parallel ranks (shards) the model is split across for serving.
+    /// </summary>
+    /// <value>Tensor-parallel world size (default: 1 = no tensor parallelism).</value>
+    /// <remarks>
+    /// <para>
+    /// When &gt; 1, a compatible transformer's attention heads and feed-forward hidden units are partitioned
+    /// across this many ranks (Megatron-LM style): each rank holds a shard of every layer's Q/K/V/O and FFN
+    /// weights and its own slice of the paged KV cache, and the per-rank partial outputs are all-reduced so the
+    /// generated tokens are identical to the un-sharded model. On a multi-GPU engine the ranks run on separate
+    /// devices for higher throughput / larger models; on CPU the ranks run sequentially (correct, but for
+    /// verification rather than speedup). Serving falls back to the normal single-model path (with a logged
+    /// reason) when the model is not a recognized tensor-parallelizable transformer.
+    /// </para>
+    /// <para>
+    /// <c>NumHeads</c> and the FFN hidden size must both be divisible by this value.
+    /// </para>
+    /// <para><b>For Beginners:</b> A very large language model may not fit — or run fast enough — on one GPU.
+    /// Tensor parallelism splits each layer's math across several GPUs that work together on every token, so a
+    /// model too big for one card can still be served. Leave this at 1 unless you have multiple GPUs and a large
+    /// model; the output is exactly the same either way, it's purely about fitting and speed.</para>
+    /// </remarks>
+    public int TensorParallelSize { get; set; } = 1;
+
+    #endregion
+
+    /// <summary>
+    /// Returns a shallow copy of this configuration. Used when a consumer (e.g. the serving layer) needs to
+    /// override a few settings for its own context without mutating the caller's shared config instance.
+    /// </summary>
+    public InferenceOptimizationConfig Clone()
+    {
+        var clone = (InferenceOptimizationConfig)MemberwiseClone();
+        // Deep-copy the nested speculation options so mutating one config's SpeculativeDecoding does not
+        // bleed into the other (MemberwiseClone copies the reference, not the object).
+        clone.SpeculativeDecoding = SpeculativeDecoding.Clone();
+        return clone;
+    }
+}
+
+/// <summary>
+/// Policies for enabling/disabling speculative decoding at runtime.
+/// </summary>
+public enum SpeculationPolicy
+{
+    /// <summary>
+    /// Automatically decide based on runtime conditions (recommended).
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Always enable speculative decoding when configured.
+    /// </summary>
+    ForceOn,
+
+    /// <summary>
+    /// Always disable speculative decoding even if enabled in config.
+    /// </summary>
+    ForceOff,
+
+    /// <summary>
+    /// Prefer speculative decoding to reduce latency, even under moderate load.
+    /// </summary>
+    LatencyFirst,
+
+    /// <summary>
+    /// Prefer throughput and stability: use speculative decoding only when conditions are ideal.
+    /// </summary>
+    ThroughputFirst
+}
+
+/// <summary>
+/// Selects the speculative decoding method.
+/// </summary>
+public enum SpeculativeMethod
+{
+    /// <summary>
+    /// Automatically select the best available method (defaults to ClassicDraftModel today).
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Classic draft-model speculative decoding (standard).
+    /// </summary>
+    ClassicDraftModel,
+
+    /// <summary>
+    /// Medusa-style multi-head proposals (hook for future internal implementation).
+    /// </summary>
+    Medusa,
+
+    /// <summary>
+    /// EAGLE-style enhanced draft proposals (hook for future internal implementation).
+    /// </summary>
+    Eagle
+}
+
+/// <summary>
+/// Cache eviction policies for KV cache management.
+/// </summary>
+public enum CacheEvictionPolicy
+{
+    /// <summary>Least Recently Used - evicts entries that haven't been accessed recently.</summary>
+    LRU,
+    /// <summary>First In First Out - evicts oldest entries first.</summary>
+    FIFO,
+    /// <summary>Least Frequently Used - evicts entries with lowest access count.</summary>
+    LFU
+}
+
+/// <summary>
+/// Controls how attention masking is applied for optimized attention implementations.
+/// </summary>
+public enum AttentionMaskingMode
+{
+    /// <summary>
+    /// Automatically select masking based on model/task heuristics.
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Do not apply causal masking.
+    /// </summary>
+    Disabled,
+
+    /// <summary>
+    /// Apply causal masking (autoregressive decoding).
+    /// </summary>
+    Causal
+}
+
+/// <summary>
+/// Controls the numeric precision of KV-cache storage.
+/// </summary>
+public enum KVCachePrecisionMode
+{
+    /// <summary>
+    /// Select an industry-standard default.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses FP16 when KV-cache is enabled and the numeric type supports conversion; otherwise falls back to FP32.
+    /// </para>
+    /// </remarks>
+    Auto,
+
+    /// <summary>
+    /// Store KV-cache in FP16 (half precision) to reduce memory use.
+    /// </summary>
+    Float16,
+
+    /// <summary>
+    /// Store KV-cache in FP32 (single precision) for maximal numerical fidelity.
+    /// </summary>
+    Float32
+}
+
+/// <summary>
+/// Controls optional KV-cache quantization for inference.
+/// </summary>
+public enum KVCacheQuantizationMode
+{
+    /// <summary>No quantization (default).</summary>
+    None,
+
+    /// <summary>Signed int8 quantization with scaling (advanced, opt-in).</summary>
+    Int8
+}
+
+/// <summary>
+/// Specifies the weight quantization mode for inference optimization.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These modes control how model weights are compressed for faster inference.
+///
+/// Each mode offers a different trade-off between compression and accuracy:
+/// - INT8: 4x compression, excellent accuracy (per-row scaling)
+/// - FP8: 4x compression, better outlier handling (floating-point format)
+/// - NF4: 8x compression, optimized for normally-distributed weights (QLoRA format)
+/// </para>
+/// </remarks>
+public enum InferenceQuantizationMode
+{
+    /// <summary>No weight quantization. Weights stay in original FP32/FP64 precision.</summary>
+    None,
+
+    /// <summary>
+    /// Per-row INT8 weight-only quantization (4x compression).
+    /// Each output row is quantized with its own scale factor.
+    /// </summary>
+    WeightOnlyInt8,
+
+    /// <summary>
+    /// Per-row FP8 E4M3 weight-only quantization (4x compression).
+    /// Uses 8-bit floating-point for better outlier preservation than INT8.
+    /// </summary>
+    WeightOnlyFP8,
+
+    /// <summary>
+    /// Per-group NF4 (4-bit NormalFloat) weight-only quantization (8x compression).
+    /// Optimal for normally-distributed weights. Uses block-wise scaling.
+    /// </summary>
+    WeightOnlyNF4
+}

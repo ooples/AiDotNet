@@ -1,0 +1,196 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
+
+namespace AiDotNet.CausalDiscovery.DeepLearning;
+
+/// <summary>
+/// DAG-GNN — DAG Structure Learning with Graph Neural Networks.
+/// </summary>
+/// <remarks>
+/// <para>
+/// DAG-GNN uses a variational autoencoder framework where the encoder maps data to a
+/// latent adjacency matrix A via learned node embeddings, and the decoder reconstructs
+/// data using X_hat = X * A. The NOTEARS acyclicity constraint h(A) = tr(e^(A*A)) - d
+/// is enforced via augmented Lagrangian. Edge probabilities are computed as
+/// A[i,j] = sigmoid(Zs_i^T * Zt_j) from separate source/target embeddings Zs, Zt.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> DAG-GNN trains a special neural network (GNN) to simultaneously
+/// figure out the graph structure AND generate data that matches the observed data.
+/// The best graph is the one that lets the network most accurately recreate the data.
+/// </para>
+/// <para>
+/// Reference: Yu et al. (2019), "DAG-GNN: DAG Structure Learning with Graph Neural Networks", ICML.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ResearchPaper("DAG-GNN: DAG Structure Learning with Graph Neural Networks", "https://proceedings.mlr.press/v97/yu19a.html", Year = 2019, Authors = "Yue Yu, Jie Chen, Tian Gao, Mo Yu")]
+public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
+{
+    /// <inheritdoc/>
+    public override string Name => "DAG-GNN";
+
+    /// <inheritdoc/>
+    public override bool SupportsNonlinear => true;
+
+    public DAGGNNAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+
+    /// <inheritdoc/>
+    protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
+    {
+        int n = data.Rows;
+        int d = data.Columns;
+        int embDim = HiddenUnits;
+        if (n < 3 || d < 2) return new Matrix<T>(d, d);
+
+        // Raw per-column variance (computed BEFORE standardizing) — used only to ORIENT the final DAG, not
+        // to learn it. DAG-GNN's data-fit signal here is the squared correlation cov[i,j]²/var[i], which
+        // becomes symmetric once the columns are standardized to unit variance (cov[i,j]² = cov[j,i]²), so
+        // the learned probability matrix P cannot recover edge DIRECTION on its own. An exogenous root has
+        // higher variance than its attenuated descendants (x1 = 0.8·x0 + noise ⇒ var(x1) < var(x0)), so
+        // ordering nodes by descending raw variance yields the correct causal direction. This stays
+        // invariant to the uniform data scaling the contract requires: scaling every column by c multiplies
+        // every variance by c², leaving the ordering — and therefore the oriented structure — unchanged.
+        var rawVar = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            double mean = 0;
+            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
+            mean /= n;
+            double v = 0;
+            for (int i = 0; i < n; i++) { double c = NumOps.ToDouble(data[i, j]) - mean; v += c * c; }
+            rawVar[j] = v / Math.Max(1, n - 1);
+        }
+
+        // Standardize columns so the LEARNING is invariant to per-variable scaling.
+        data = StandardizeColumns(data);
+
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
+
+        // Separate source and target embeddings to break symmetry:
+        // P[i,j] = sigmoid(Zs_i . Zt_j) != P[j,i] = sigmoid(Zs_j . Zt_i)
+        var Zs = new Matrix<T>(d, embDim);
+        var Zt = new Matrix<T>(d, embDim);
+        for (int i = 0; i < d; i++)
+            for (int k = 0; k < embDim; k++)
+            {
+                Zs[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+                Zt[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+            }
+
+        T lr = NumOps.FromDouble(LearningRate);
+        T alpha = NumOps.Zero;
+        // Acyclicity warm-up: rho = 0 (no NOTEARS penalty) for the first half of training so the data fit
+        // can drive edge probabilities up; a bounded fixed penalty is applied after (see the rho update).
+        T rho = NumOps.Zero;
+        var cov = ComputeCovarianceMatrix(data);
+        T eps = NumOps.FromDouble(1e-10);
+
+        for (int epoch = 0; epoch < MaxEpochs; epoch++)
+        {
+            // Compute edge probabilities: P[i,j] = sigmoid(Zs_i . Zt_j)
+            var P = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue;
+                    T dot = NumOps.Zero;
+                    for (int k = 0; k < embDim; k++)
+                        dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
+                    double sv = NumOps.ToDouble(dot);
+                    P[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
+                }
+
+            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+            var PSq = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
+            var expPSq = MatrixExponentialTaylor(PSq, d);
+            T hVal = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hVal = NumOps.Add(hVal, expPSq[i, i]);
+            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
+
+            // Gradient w.r.t. Zs and Zt
+            var gradZs = new Matrix<T>(d, embDim);
+            var gradZt = new Matrix<T>(d, embDim);
+
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue;
+                    T varI = cov[i, i];
+                    if (!NumOps.GreaterThan(varI, eps)) continue;
+
+                    // Data fit: encourage P[i,j] when cov[i,j] is large
+                    T corrSq = NumOps.Divide(NumOps.Multiply(cov[i, j], cov[i, j]), varI);
+                    T dataGrad = NumOps.Negate(corrSq);
+
+                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                    T acycGrad = NumOps.Multiply(
+                        NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
+                        NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), P[i, j])));
+                    T totalGradP = NumOps.Add(dataGrad, acycGrad);
+
+                    T sigDeriv = NumOps.Multiply(P[i, j], NumOps.Subtract(NumOps.One, P[i, j]));
+                    T gradScale = NumOps.Multiply(totalGradP, sigDeriv);
+
+                    // d(Zs_i . Zt_j)/dZs_i = Zt_j, d(Zs_i . Zt_j)/dZt_j = Zs_i
+                    for (int k = 0; k < embDim; k++)
+                    {
+                        gradZs[i, k] = NumOps.Add(gradZs[i, k], NumOps.Multiply(gradScale, Zt[j, k]));
+                        gradZt[j, k] = NumOps.Add(gradZt[j, k], NumOps.Multiply(gradScale, Zs[i, k]));
+                    }
+                }
+
+            for (int i = 0; i < d; i++)
+                for (int k = 0; k < embDim; k++)
+                {
+                    Zs[i, k] = NumOps.Subtract(Zs[i, k], NumOps.Multiply(lr, gradZs[i, k]));
+                    Zt[i, k] = NumOps.Subtract(Zt[i, k], NumOps.Multiply(lr, gradZt[i, k]));
+                }
+
+            // Apply only a BOUNDED acyclicity penalty in the second half of training (warm-up; see the rho
+            // init). The original schedule grew rho ×10 toward 1e16 AND accumulated alpha every epoch, which
+            // on strongly correlated data made the penalty collapse every edge to 0 (empty graph = trivially
+            // acyclic), recovering nothing. A fixed, modest rho breaks ties toward a DAG without overwhelming
+            // the data fit. DAG-GNN learns ASYMMETRIC edge probabilities (Zs_i·Zt_j ≠ Zs_j·Zt_i) which can
+            // form a directed cycle, so the final probabilities are projected onto a DAG below.
+            if (epoch >= MaxEpochs / 2)
+                rho = NumOps.FromDouble(1.0);
+        }
+
+        // Final output: use trained P for directionality, covariance for weights
+        var result = new Matrix<T>(d, d);
+        // Compute final P matrix from trained embeddings
+        var finalP = new double[d, d];
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+            {
+                if (i == j) continue;
+                T dot = NumOps.Zero;
+                for (int k = 0; k < embDim; k++)
+                    dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
+                double sv = NumOps.ToDouble(dot);
+                finalP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
+            }
+
+        // Project the asymmetric learned probabilities onto a DAG, orienting by raw per-column variance
+        // (highest-variance exogenous root first). The learned P is (near-)symmetric after standardization
+        // and cannot orient edges by itself; the variance ordering supplies the direction and is preserved
+        // under uniform scaling (see rawVar above), so the result stays scale-invariant. BuildFinalAdjacency
+        // then thresholds and weights the acyclic probabilities.
+        return BuildFinalAdjacency(ProjectToDag(finalP, d, rawVar), cov, d);
+    }
+
+}

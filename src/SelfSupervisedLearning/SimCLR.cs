@@ -1,0 +1,154 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.SelfSupervisedLearning.Losses;
+
+namespace AiDotNet.SelfSupervisedLearning;
+
+/// <summary>
+/// SimCLR: A Simple Framework for Contrastive Learning of Visual Representations.
+/// </summary>
+/// <typeparam name="T">The numeric type used for computations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> SimCLR is one of the most influential self-supervised learning methods.
+/// It learns representations by maximizing agreement between differently augmented views of the same image
+/// using a contrastive loss.</para>
+///
+/// <para><b>How SimCLR works:</b></para>
+/// <list type="number">
+/// <item>Take an image and create two random augmented views</item>
+/// <item>Pass both through the same encoder network</item>
+/// <item>Pass both through a projection head (MLP)</item>
+/// <item>Apply NT-Xent contrastive loss to bring views together</item>
+/// <item>Other images in the batch serve as negative samples</item>
+/// </list>
+///
+/// <para><b>Key hyperparameters:</b></para>
+/// <list type="bullet">
+/// <item><b>Batch size:</b> Larger is better (4096-8192 in paper)</item>
+/// <item><b>Temperature:</b> 0.1 (controls softmax sharpness)</item>
+/// <item><b>Projection dimension:</b> 128</item>
+/// <item><b>Augmentations:</b> Random crop, color jitter, blur</item>
+/// </list>
+///
+/// <para><b>Reference:</b> Chen et al., "A Simple Framework for Contrastive Learning of Visual
+/// Representations" (ICML 2020)</para>
+///
+/// <para><b>Best for:</b> Simple setup, strong performance, research baselines.</para>
+/// <para><b>Pros:</b> Simple architecture, strong performance, well-understood.</para>
+/// <para><b>Cons:</b> Requires large batch sizes for best performance.</para>
+/// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
+public class SimCLR<T> : SelfSupervisedLearningMethodBase<T>
+{
+    private readonly NTXentLoss<T> _loss;
+    private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
+
+    /// <inheritdoc />
+    public override string Name => "SimCLR";
+
+    /// <inheritdoc />
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.Contrastive;
+
+    /// <inheritdoc />
+    public override bool RequiresMemoryBank => false;
+
+    /// <inheritdoc />
+    public override bool UsesMomentumEncoder => false;
+
+    /// <summary>
+    /// Initializes a new instance of the SimCLR class.
+    /// </summary>
+    /// <param name="encoder">The backbone encoder network (e.g., ResNet).</param>
+    /// <param name="projector">The projection head (MLP).</param>
+    /// <param name="config">Optional SSL configuration.</param>
+    public SimCLR(
+        INeuralNetwork<T> encoder,
+        IProjectorHead<T> projector,
+        SelfSupervisedLearningConfig<T>? config = null)
+        : base(encoder, projector, config ?? new SelfSupervisedLearningConfig<T>())
+    {
+        var temperature = _config.Temperature ?? 0.1;
+        _loss = new NTXentLoss<T>(temperature);
+        _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
+    }
+
+    private void UpdateWithGradients(T learningRate, Vector<T> encoderGrads, Vector<T> projectorGrads)
+    {
+        // SGD update for encoder
+        var encoderParams = _encoder.GetParameters();
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
+
+        // SGD update for projector
+        var projectorParams = (_projector ?? throw new InvalidOperationException("Projector has not been initialized.")).GetParameters();
+        _projector.SetParameters(Engine.Subtract(projectorParams, Engine.Multiply(projectorGrads, learningRate)));
+    }
+
+    private T ComputeAverageNorm(Tensor<T> embeddings)
+    {
+        var batchSize = embeddings.Shape[0];
+        var dim = embeddings.Shape[1];
+        T totalNorm = NumOps.Zero;
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            T sumSquared = NumOps.Zero;
+            for (int j = 0; j < dim; j++)
+            {
+                var val = embeddings[i, j];
+                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
+            }
+            totalNorm = NumOps.Add(totalNorm, NumOps.Sqrt(sumSquared));
+        }
+
+        return NumOps.Divide(totalNorm, NumOps.FromDouble(batchSize));
+    }
+
+    private Tensor<T> CombineGradients(Tensor<T> grad1, Tensor<T> grad2)
+    {
+        var batchSize = grad1.Shape[0];
+        var dim = grad1.Shape[1];
+        var combined = new T[batchSize * dim];
+        var half = NumOps.FromDouble(0.5);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < dim; j++)
+            {
+                // Average the gradients from both views
+                var sum = NumOps.Add(grad1[i, j], grad2[i, j]);
+                combined[i * dim + j] = NumOps.Multiply(sum, half);
+            }
+        }
+
+        return new Tensor<T>(combined, [batchSize, dim]);
+    }
+
+    /// <summary>
+    /// Creates a SimCLR instance with default configuration.
+    /// </summary>
+    /// <param name="encoder">The backbone encoder.</param>
+    /// <param name="encoderOutputDim">Output dimension of the encoder.</param>
+    /// <param name="projectionDim">Dimension of the projection space (default: 128).</param>
+    /// <param name="hiddenDim">Hidden dimension of the projector MLP (default: 2048).</param>
+    /// <returns>A configured SimCLR instance.</returns>
+    public static SimCLR<T> Create(
+        INeuralNetwork<T> encoder,
+        int encoderOutputDim,
+        int projectionDim = 128,
+        int hiddenDim = 2048)
+    {
+        var projector = new MLPProjector<T>(
+            encoderOutputDim, hiddenDim, projectionDim);
+
+        return new SimCLR<T>(encoder, projector);
+    
+
+}
+}

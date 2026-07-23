@@ -1,0 +1,174 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+
+namespace AiDotNet.Diffusion.ImageEditing;
+
+/// <summary>
+/// CycleGAN-Turbo model combining CycleGAN unpaired translation with a diffusion backbone.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Combines the unpaired image-to-image translation paradigm of CycleGAN with a
+/// pre-trained SDXL diffusion model backbone. Uses cycle consistency loss on a diffusion
+/// U-Net to enable single-step unpaired domain translation with high fidelity.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> CycleGAN-Turbo translates images between two styles (like
+/// photos to paintings, summer to winter) using a single fast step. Unlike traditional
+/// CycleGAN, it leverages a pre-trained SDXL model for much higher quality results.
+/// </para>
+/// <para>
+/// Technical specifications:
+/// - Base model: SDXL U-Net with cycle consistency fine-tuning
+/// - Text encoders: CLIP ViT-L/14 + OpenCLIP ViT-G/14 (2048 context)
+/// - Input channels: 8 (4 source latent + 4 target latent)
+/// - Inference: Single-step (1 NFE)
+/// - Guidance: 1.0 (single-step, no CFG needed)
+/// - Training: Cycle consistency + adversarial loss on SDXL
+///
+/// Reference: Parmar et al., "One-Step Image Translation with Text-to-Image Models", 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 1 };
+/// var model = new CycleGANTurboModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var translated = model.Predict(input);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.ImageEditing)]
+[ModelTask(ModelTask.StyleTransfer)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("One-Step Image Translation with Text-to-Image Models", "https://arxiv.org/abs/2403.12036", Year = 2024, Authors = "Parmar et al.")]
+public class CycleGANTurboModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 4;
+    private const int SDXL_CONTEXT_DIM = 2048;
+    private const double DEFAULT_GUIDANCE = 1.0;
+    private const int DEFAULT_STEPS = 1;
+
+    private UNetNoisePredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+
+    public CycleGANTurboModel(
+        NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null, UNetNoisePredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
+        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
+            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(UNetNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new UNetNoisePredictor<T>(
+            architecture: Architecture, inputChannels: 8, outputChannels: LATENT_CHANNELS,
+            baseChannels: 320, channelMultipliers: [1, 2, 4],
+            numResBlocks: 2, attentionResolutions: [4, 2], contextDim: SDXL_CONTEXT_DIM, seed: seed);
+        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: [1, 2, 4, 4], numResBlocksPerLevel: 2, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        var combined = new Vector<T>(pp.Length + vp.Length);
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Clone the ACTUAL predictor/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved sub-models, so once
+        // the source resolved its lazy layers via a forward pass the trainable-layer shapes no longer
+        // lined up 1:1 and Clone diverged. Cloning the resolved predictor/VAE (+ same architecture/
+        // options/scheduler) makes the clone structurally identical.
+        var clone = new CycleGANTurboModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "CycleGAN-Turbo", Version = "1.0",
+            Description = "Single-step unpaired image translation with SDXL backbone and cycle consistency",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "cyclegan-sdxl-turbo");
+        m.SetProperty("base_model", "Stable Diffusion XL");
+        m.SetProperty("text_encoder_1", "CLIP ViT-L/14");
+        m.SetProperty("text_encoder_2", "OpenCLIP ViT-G/14");
+        m.SetProperty("context_dim", SDXL_CONTEXT_DIM);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("default_steps", DEFAULT_STEPS);
+        m.SetProperty("training", "cycle-consistency-adversarial");
+        return m;
+    }
+}

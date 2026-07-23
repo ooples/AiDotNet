@@ -1,0 +1,873 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+
+namespace AiDotNet.Diffusion.VAE;
+
+/// <summary>
+/// Standard Variational Autoencoder for latent diffusion models.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// This implements a standard VAE architecture similar to Stable Diffusion's VAE,
+/// with an encoder that compresses images to latent space and a decoder that
+/// reconstructs images from latents.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> The StandardVAE is like a very smart image compressor:
+///
+/// How it works:
+/// 1. Encoder: Takes a 512x512x3 image and compresses it to 64x64x4 latent
+///    - That's 48x compression! (786,432 values -> 16,384 values)
+///    - Uses multiple layers of convolutions and downsampling
+///
+/// 2. Decoder: Takes the 64x64x4 latent and reconstructs a 512x512x3 image
+///    - Uses upsampling and convolutions to expand back to full size
+///    - The reconstruction isn't perfect but preserves important visual features
+///
+/// Why 4 latent channels?
+/// - The VAE learns to pack image information into 4 channels
+/// - Each channel captures different aspects (colors, edges, textures, etc.)
+/// - More channels = better quality but larger latent space
+///
+/// Why 8x downsampling?
+/// - Each side is reduced by 8 (512 -> 64)
+/// - This is the sweet spot between compression and quality
+/// - Smaller latents = faster diffusion, but potentially lower quality
+/// </para>
+/// <para>
+/// Architecture details:
+/// - Input: [batch, 3, H, W] RGB image normalized to [-1, 1]
+/// - Encoder: ResBlocks with GroupNorm, downsampling via strided conv
+/// - Latent: [batch, 4, H/8, W/8] with mean and variance for sampling
+/// - Decoder: ResBlocks with GroupNorm, upsampling via transpose conv
+/// - Output: [batch, 3, H, W] reconstructed image
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var vae = new StandardVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4, baseChannels: 128);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 512, 512 });
+/// var latent = vae.Encode(image);
+/// var decoded = vae.Decode(latent);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114")]
+public class StandardVAE<T> : VAEModelBase<T>
+{
+    /// <summary>
+    /// Standard Stable Diffusion latent scale factor.
+    /// </summary>
+    private const double SD_LATENT_SCALE = 0.18215;
+
+    /// <summary>
+    /// Number of encoder blocks.
+    /// </summary>
+    private readonly int _numEncoderBlocks;
+
+    /// <summary>
+    /// Number of decoder blocks.
+    /// </summary>
+    private readonly int _numDecoderBlocks;
+
+    /// <summary>
+    /// Base channel count.
+    /// </summary>
+    private readonly int _baseChannels;
+
+    /// <summary>
+    /// Channel multipliers for each level.
+    /// </summary>
+    private readonly int[] _channelMultipliers;
+
+    /// <summary>
+    /// Number of residual blocks per level.
+    /// </summary>
+    private readonly int _numResBlocksPerLevel;
+
+    /// <summary>
+    /// Encoder layers.
+    /// </summary>
+    private List<ILayer<T>> _encoderLayers;
+
+    /// <summary>
+    /// Decoder layers.
+    /// </summary>
+    private List<ILayer<T>> _decoderLayers;
+
+    /// <summary>
+    /// Mean projection layer for latent distribution.
+    /// </summary>
+    private ConvolutionalLayer<T>? _meanConv;
+
+    /// <summary>
+    /// Log variance projection layer for latent distribution.
+    /// </summary>
+    private ConvolutionalLayer<T>? _logVarConv;
+
+    /// <summary>
+    /// Input convolution to initial embedding.
+    /// </summary>
+    private ConvolutionalLayer<T>? _inputConv;
+
+    /// <summary>
+    /// Quant convolution from latent to decoder.
+    /// </summary>
+    private ConvolutionalLayer<T>? _quantConv;
+
+    /// <summary>
+    /// Post-quant convolution in decoder.
+    /// </summary>
+    private ConvolutionalLayer<T>? _postQuantConv;
+
+    /// <summary>
+    /// Output convolution to RGB.
+    /// </summary>
+    private ConvolutionalLayer<T>? _outputConv;
+
+    /// <summary>
+    /// Cached mean from encoding.
+    /// </summary>
+    private Tensor<T>? _cachedMean;
+
+    /// <summary>
+    /// Cached log variance from encoding.
+    /// </summary>
+    private Tensor<T>? _cachedLogVar;
+
+    /// <summary>
+    /// True once this VAE has runtime state that a clone must preserve.
+    /// Constructor-time lazy/eager placeholders do not force default scaffold
+    /// clones to materialize the full paper-scale VAE.
+    /// </summary>
+    private bool _preserveMaterializedParameters;
+
+    /// <summary>
+    /// Input channels (3 for RGB).
+    /// </summary>
+    private readonly int _inputChannels;
+
+    /// <summary>
+    /// Latent channels.
+    /// </summary>
+    private readonly int _latentChannels;
+
+    /// <summary>
+    /// Downsampling factor.
+    /// </summary>
+    private readonly int _downsampleFactor;
+
+    /// <summary>
+    /// Latent scale factor.
+    /// </summary>
+    private readonly double _latentScaleFactor;
+
+    /// <summary>
+    /// The neural network architecture configuration, if provided.
+    /// </summary>
+    private readonly NeuralNetworkArchitecture<T>? _architecture;
+
+    /// <summary>
+    /// Tracks whether the VAE layer graph has been built. Default paper-scale
+    /// constructors defer this work until first use to keep construction cheap.
+    /// </summary>
+    private bool _layersInitialized;
+
+    /// <inheritdoc />
+    public override int InputChannels => _inputChannels;
+
+    /// <inheritdoc />
+    public override int LatentChannels => _latentChannels;
+
+    /// <inheritdoc />
+    public override int DownsampleFactor => _downsampleFactor;
+
+    /// <inheritdoc />
+    public override double LatentScaleFactor => _latentScaleFactor;
+
+    /// <inheritdoc />
+    public override long ParameterCount => CalculateParameterCount();
+
+    /// <inheritdoc />
+    public override bool SupportsTiling => true;
+
+    /// <inheritdoc />
+    public override bool SupportsSlicing => true;
+
+    /// <summary>
+    /// Initializes a new instance of the StandardVAE class with full customization support.
+    /// </summary>
+    /// <param name="architecture">
+    /// Optional neural network architecture with custom layers. If the architecture's Layers
+    /// list contains layers, those will be used directly for the encoder. If null or empty,
+    /// industry-standard layers from the Stable Diffusion paper are created automatically.
+    /// </param>
+    /// <param name="inputChannels">Number of input image channels (default: 3 for RGB).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 128).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numResBlocksPerLevel">Residual blocks per level (default: 2).</param>
+    /// <param name="latentScaleFactor">Scale factor for latents (default: 0.18215).</param>
+    /// <param name="encoderLayers">
+    /// Optional custom encoder layers. If provided, these layers are used instead of creating
+    /// default layers. This allows full customization of the encoder architecture.
+    /// </param>
+    /// <param name="decoderLayers">
+    /// Optional custom decoder layers. If provided, these layers are used instead of creating
+    /// default layers. This allows full customization of the decoder architecture.
+    /// </param>
+    /// <param name="lossFunction">Optional loss function (default: MSE).</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> All parameters are optional with industry-standard defaults
+    /// from the original Stable Diffusion paper. You can create a ready-to-use VAE
+    /// with no arguments, or customize any component:
+    ///
+    /// <code>
+    /// // Default configuration (recommended for most users)
+    /// var vae = new StandardVAE&lt;float&gt;();
+    ///
+    /// // Custom layers via NeuralNetworkArchitecture
+    /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
+    /// var vae = new StandardVAE&lt;float&gt;(architecture: arch);
+    ///
+    /// // Custom encoder/decoder layers directly
+    /// var vae = new StandardVAE&lt;float&gt;(
+    ///     encoderLayers: myEncoderLayers,
+    ///     decoderLayers: myDecoderLayers);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public StandardVAE(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        int inputChannels = 3,
+        int latentChannels = 4,
+        int baseChannels = 128,
+        int[]? channelMultipliers = null,
+        int numResBlocksPerLevel = 2,
+        double? latentScaleFactor = null,
+        List<ILayer<T>>? encoderLayers = null,
+        List<ILayer<T>>? decoderLayers = null,
+        ILossFunction<T>? lossFunction = null,
+        int? seed = null)
+        : base(lossFunction, seed)
+    {
+        _architecture = architecture;
+        _inputChannels = inputChannels;
+        _latentChannels = latentChannels;
+        _baseChannels = baseChannels;
+        _channelMultipliers = channelMultipliers ?? [1, 2, 4, 4];
+        _numResBlocksPerLevel = numResBlocksPerLevel;
+        _latentScaleFactor = latentScaleFactor ?? SD_LATENT_SCALE;
+
+        // Calculate downsampling factor (2^numLevels where numLevels = multipliers.Length)
+        _downsampleFactor = (int)Math.Pow(2, _channelMultipliers.Length - 1);
+        _numEncoderBlocks = _channelMultipliers.Length * numResBlocksPerLevel;
+        _numDecoderBlocks = _channelMultipliers.Length * numResBlocksPerLevel;
+
+        _encoderLayers = new List<ILayer<T>>();
+        _decoderLayers = new List<ILayer<T>>();
+
+        bool hasCustomLayers =
+            encoderLayers is { Count: > 0 } &&
+            decoderLayers is { Count: > 0 };
+        bool hasCustomArchitecture = architecture?.Layers is { Count: > 0 };
+
+        if (hasCustomLayers || hasCustomArchitecture)
+        {
+            InitializeLayers(architecture, encoderLayers, decoderLayers);
+        }
+    }
+
+    [MemberNotNull(nameof(_encoderLayers), nameof(_decoderLayers))]
+    private void EnsureLayersInitialized()
+    {
+        if (!_layersInitialized)
+        {
+            InitializeLayers(_architecture, null, null);
+        }
+
+        if (_encoderLayers is null || _decoderLayers is null)
+        {
+            throw new InvalidOperationException("VAE layer initialization completed without encoder and decoder layers.");
+        }
+    }
+
+    /// <summary>
+    /// Initializes encoder and decoder layers, using custom layers from the user
+    /// if provided or creating industry-standard layers from the Stable Diffusion paper.
+    /// </summary>
+    /// <param name="architecture">Optional architecture with custom layers.</param>
+    /// <param name="customEncoderLayers">Optional custom encoder layers.</param>
+    /// <param name="customDecoderLayers">Optional custom decoder layers.</param>
+    /// <remarks>
+    /// <para>
+    /// Layer resolution order:
+    /// 1. If custom encoder/decoder layers are provided directly, use those
+    /// 2. If a NeuralNetworkArchitecture with layers is provided, use those for the encoder
+    /// 3. Otherwise, create industry-standard layers from the Stable Diffusion VAE paper
+    ///
+    /// When default layers are created, the architecture follows:
+    /// - Encoder: InputConv -> [ResBlock + Downsample] per level -> MeanConv + LogVarConv -> QuantConv
+    /// - Decoder: PostQuantConv -> [ResBlock + Upsample] per level -> OutputConv
+    ///
+    /// The default configuration matches the Stable Diffusion 1.5 VAE:
+    /// - Base channels: 128, multipliers [1, 2, 4, 4]
+    /// - 2 ResBlocks per level with GroupNorm and SiLU activation
+    /// - Strided convolution for downsampling, transposed convolution for upsampling
+    /// </para>
+    /// </remarks>
+    private void InitializeLayers(
+        NeuralNetworkArchitecture<T>? architecture,
+        List<ILayer<T>>? customEncoderLayers,
+        List<ILayer<T>>? customDecoderLayers)
+    {
+        if (_layersInitialized)
+        {
+            return;
+        }
+
+        // Priority 1: Use custom encoder/decoder layers passed directly
+        if (customEncoderLayers != null && customEncoderLayers.Count > 0 &&
+            customDecoderLayers != null && customDecoderLayers.Count > 0)
+        {
+            _encoderLayers = new List<ILayer<T>>(customEncoderLayers);
+            _decoderLayers = new List<ILayer<T>>(customDecoderLayers);
+            _layersInitialized = true;
+            return;
+        }
+
+        // Priority 2: Use layers from NeuralNetworkArchitecture
+        if (architecture?.Layers != null && architecture.Layers.Count > 0)
+        {
+            // Architecture layers are used as encoder; decoder is auto-created
+            _encoderLayers = new List<ILayer<T>>(architecture.Layers);
+            _decoderLayers = new List<ILayer<T>>();
+            AssignDecoderLayers();
+            _layersInitialized = true;
+            return;
+        }
+
+        // Priority 3: Create industry-standard layers via LayerHelper
+        _encoderLayers = new List<ILayer<T>>();
+        _decoderLayers = new List<ILayer<T>>();
+        AssignEncoderLayers();
+        AssignDecoderLayers();
+        _layersInitialized = true;
+    }
+
+    /// <summary>
+    /// Assigns encoder layers from LayerHelper, extracting special layers by position.
+    /// </summary>
+    private void AssignEncoderLayers()
+    {
+        var allEncoderLayers = LayerHelper<T>.CreateStandardVAEEncoderLayers(
+            _inputChannels, _latentChannels, _baseChannels,
+            _channelMultipliers, _numResBlocksPerLevel).ToList();
+
+        // First layer is the input convolution
+        _inputConv = (ConvolutionalLayer<T>)allEncoderLayers[0];
+
+        // Last 3 layers are latent projections: MeanConv, LogVarConv, QuantConv
+        _quantConv = (ConvolutionalLayer<T>)allEncoderLayers[^1];
+        _logVarConv = (ConvolutionalLayer<T>)allEncoderLayers[^2];
+        _meanConv = (ConvolutionalLayer<T>)allEncoderLayers[^3];
+
+        // Middle layers are the encoder ResBlocks and downsamples
+        _encoderLayers = allEncoderLayers.GetRange(1, allEncoderLayers.Count - 4);
+    }
+
+    /// <summary>
+    /// Assigns decoder layers from LayerHelper, extracting special layers by position.
+    /// </summary>
+    private void AssignDecoderLayers()
+    {
+        var allDecoderLayers = LayerHelper<T>.CreateStandardVAEDecoderLayers(
+            _inputChannels, _latentChannels, _baseChannels,
+            _channelMultipliers, _numResBlocksPerLevel).ToList();
+
+        // First layer is the post-quant convolution
+        _postQuantConv = (ConvolutionalLayer<T>)allDecoderLayers[0];
+
+        // Last layer is the output convolution
+        _outputConv = (ConvolutionalLayer<T>)allDecoderLayers[^1];
+
+        // Middle layers are the decoder ResBlocks and upsamples
+        _decoderLayers = allDecoderLayers.GetRange(1, allDecoderLayers.Count - 2);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Encode(Tensor<T> image, bool sampleMode = true)
+    {
+        EnsureLayersInitialized();
+        _preserveMaterializedParameters = true;
+        var (mean, logVar) = EncodeWithDistribution(image);
+
+        if (sampleMode)
+        {
+            return Sample(mean, logVar);
+        }
+
+        return mean;
+    }
+
+    /// <inheritdoc />
+    public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> image)
+    {
+        EnsureLayersInitialized();
+        if (_inputConv == null || _meanConv == null || _logVarConv == null || _quantConv == null)
+        {
+            throw new InvalidOperationException("Encoder layers not initialized.");
+        }
+
+        // The encode path produces TWO outputs (mean + logVar) but the compile
+        // host's single-output Predict surface fits only one tensor. Route the
+        // shared backbone (input conv + encoder blocks) through the compile
+        // cache and run the divergent (mean, logVar, quant) tail eagerly. The
+        // backbone is what dominates the encode forward — multi-second on
+        // 512×512 input — so caching just the backbone captures the bulk of
+        // the speedup. (#1272 W1.)
+        var x = EncodeCompiled(image, () =>
+        {
+            var y = _inputConv.Forward(image);
+            foreach (var layer in _encoderLayers)
+                y = layer.Forward(y);
+            return y;
+        });
+
+        // Project to mean and log variance (divergent tail, runs eagerly)
+        var mean = _meanConv.Forward(x);
+        var logVar = _logVarConv.Forward(x);
+
+        // Cache for potential backward pass
+        _cachedMean = mean;
+        _cachedLogVar = logVar;
+
+        // Apply quant conv and return
+        mean = _quantConv.Forward(mean);
+
+        return (mean, logVar);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Decode(Tensor<T> latent)
+    {
+        EnsureLayersInitialized();
+        _preserveMaterializedParameters = true;
+        if (_postQuantConv == null || _outputConv == null)
+        {
+            throw new InvalidOperationException("Decoder layers not initialized.");
+        }
+
+        // Route the decoder body through the inherited compile host so the
+        // second + Nth call at the same latent shape (every step of an SDXL
+        // generation that decodes once at the end at the same
+        // [B, latentChannels, H/8, W/8]) replays a cached compiled plan
+        // instead of re-tracing the entire ResBlock + Conv stack. (#1272 W1.)
+        return DecodeCompiled(latent, () =>
+        {
+            // Post-quant convolution
+            var x = _postQuantConv.Forward(latent);
+
+            // Apply decoder blocks
+            foreach (var layer in _decoderLayers)
+            {
+                x = layer.Forward(x);
+            }
+
+            // Output convolution
+            x = _outputConv.Forward(x);
+
+            return x;
+        });
+    }
+
+    /// <summary>
+    /// Encodes an image and applies latent scaling for use in diffusion.
+    /// </summary>
+    /// <param name="image">The input image tensor.</param>
+    /// <param name="sampleMode">Whether to sample from the distribution.</param>
+    /// <returns>Scaled latent representation.</returns>
+    public Tensor<T> EncodeForDiffusion(Tensor<T> image, bool sampleMode = true)
+    {
+        var latent = Encode(image, sampleMode);
+        return ScaleLatent(latent);
+    }
+
+    /// <summary>
+    /// Decodes a diffusion latent back to image space.
+    /// </summary>
+    /// <param name="latent">The latent from diffusion (already scaled).</param>
+    /// <returns>The decoded image.</returns>
+    public Tensor<T> DecodeFromDiffusion(Tensor<T> latent)
+    {
+        var unscaled = UnscaleLatent(latent);
+        return Decode(unscaled);
+    }
+
+    /// <summary>
+    /// Computes the VAE loss (reconstruction + KL divergence).
+    /// </summary>
+    /// <param name="image">Original input image.</param>
+    /// <param name="reconstruction">Reconstructed image.</param>
+    /// <param name="klWeight">Weight for KL divergence term (default: 1e-6).</param>
+    /// <returns>Combined loss value.</returns>
+    public T ComputeVAELoss(Tensor<T> image, Tensor<T> reconstruction, double klWeight = 1e-6)
+    {
+        // Reconstruction loss
+        var reconLoss = LossFunction.CalculateLoss(reconstruction.ToVector(), image.ToVector());
+
+        // KL divergence loss (if we have cached distribution)
+        if (_cachedMean != null && _cachedLogVar != null)
+        {
+            var klLoss = ComputeKLDivergence(_cachedMean, _cachedLogVar);
+            var weightedKL = NumOps.Multiply(klLoss, NumOps.FromDouble(klWeight));
+            return NumOps.Add(reconLoss, weightedKL);
+        }
+
+        return reconLoss;
+    }
+
+    #region Layer Factory Methods
+    // Layer creation has been moved to LayerHelper<T>.CreateStandardVAEEncoderLayers()
+    // and LayerHelper<T>.CreateStandardVAEDecoderLayers() following the golden pattern.
+    #endregion
+
+    #region Parameter Management
+
+    private int CalculateParameterCount()
+    {
+        EnsureLayersInitialized();
+        // Resolve lazy layer shapes so the count matches GetParameters().Length even
+        // pre-forward (lazy layers otherwise report their architectural count here
+        // but an empty GetParameters() vector — the count-equality failure source).
+        TriggerLazyShapeResolution();
+
+        // Walk the same layers GetParameters walks and sum their actual ParameterCount.
+        // Must match GetParameters().Length exactly — earlier "approximate" formulas
+        // diverged from the real per-layer count and broke contract tests asserting
+        // ParameterCount == GetParameters().Length.
+        long count = 0;
+        AddLayerCount(ref count, _inputConv);
+        for (int i = 0; i < _encoderLayers.Count; i++) AddLayerCount(ref count, _encoderLayers[i]);
+        AddLayerCount(ref count, _meanConv);
+        AddLayerCount(ref count, _logVarConv);
+        AddLayerCount(ref count, _quantConv);
+        AddLayerCount(ref count, _postQuantConv);
+        for (int i = 0; i < _decoderLayers.Count; i++) AddLayerCount(ref count, _decoderLayers[i]);
+        AddLayerCount(ref count, _outputConv);
+        return (int)Math.Min(count, int.MaxValue);
+    }
+
+    private static void AddLayerCount(ref long count, ILayer<T>? layer)
+    {
+        if (layer != null) count += (int)layer.ParameterCount;
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        EnsureLayersInitialized();
+        // Resolve lazy layer shapes so the vector matches ParameterCount even
+        // before the first real forward (lazy layers otherwise contribute 0).
+        TriggerLazyShapeResolution();
+
+        // Single-allocation concat over the same layers GetParameterChunks walks.
+        // The previous List<T> + per-element Add + ToArray triple-copied the whole
+        // parameter vector (~3x), OOM'ing the runner when a paper-scale VAE is
+        // materialised (e.g. during a foundation model's Clone). Vector<T>.Concatenate
+        // pre-sizes one result and vectorized-copies each layer's params in once.
+        var parts = new List<Vector<T>>();
+        foreach (var layer in EnumerateAllLayers())
+        {
+            if (layer == null) continue;
+            parts.Add(layer.GetParameters());
+        }
+
+        return Vector<T>.Concatenate(parts.ToArray());
+    }
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        EnsureLayersInitialized();
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private IEnumerable<ILayer<T>?> EnumerateAllLayers()
+    {
+        yield return _inputConv;
+
+        foreach (var layer in _encoderLayers)
+            yield return layer;
+
+        yield return _meanConv;
+        yield return _logVarConv;
+        yield return _quantConv;
+        yield return _postQuantConv;
+
+        foreach (var layer in _decoderLayers)
+            yield return layer;
+
+        yield return _outputConv;
+    }
+
+    private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) yield break;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                yield return parameter;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(subLayer))
+                yield return parameter;
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        EnsureLayersInitialized();
+        // Resolve lazy layer shapes first so each layer's slice is sized to its
+        // real parameter count; otherwise lazy layers size to 0 and incoming
+        // values are silently dropped (the round-trip bug).
+        _preserveMaterializedParameters = true;
+        TriggerLazyShapeResolution();
+
+        var index = 0;
+
+        SetLayerParameters(_inputConv, parameters, ref index);
+
+        foreach (var layer in _encoderLayers)
+        {
+            SetLayerParameters(layer, parameters, ref index);
+        }
+
+        SetLayerParameters(_meanConv, parameters, ref index);
+        SetLayerParameters(_logVarConv, parameters, ref index);
+        SetLayerParameters(_quantConv, parameters, ref index);
+        SetLayerParameters(_postQuantConv, parameters, ref index);
+
+        foreach (var layer in _decoderLayers)
+        {
+            SetLayerParameters(layer, parameters, ref index);
+        }
+
+        SetLayerParameters(_outputConv, parameters, ref index);
+    }
+
+    private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)
+    {
+        if (layer == null) return;
+        var layerParams = layer.GetParameters();
+        var newParams = new Vector<T>(layerParams.Length);
+        for (int i = 0; i < layerParams.Length && index < parameters.Length; i++)
+        {
+            newParams[i] = parameters[index++];
+        }
+        layer.SetParameters(newParams);
+    }
+
+    #endregion
+
+    #region ICloneable Implementation
+
+    /// <inheritdoc />
+    public override IVAEModel<T> Clone()
+    {
+        var clone = new StandardVAE<T>(
+            architecture: _architecture,
+            inputChannels: _inputChannels,
+            latentChannels: _latentChannels,
+            baseChannels: _baseChannels,
+            channelMultipliers: _channelMultipliers,
+            numResBlocksPerLevel: _numResBlocksPerLevel,
+            latentScaleFactor: _latentScaleFactor,
+            lossFunction: LossFunction);
+
+        // Keep untouched default VAEs structural. Already-materialized eager
+        // tensors are still copied, but lazy tensors are resolved only after
+        // Encode/Decode or SetParameters has established runtime weight state.
+        if (_preserveMaterializedParameters)
+        {
+            TriggerLazyShapeResolution();
+            var parameters = GetParameters();
+            clone.TriggerLazyShapeResolution();
+            clone.SetParameters(parameters);
+        }
+        else
+        {
+            if (_layersInitialized)
+            {
+                clone.EnsureLayersInitialized();
+            }
+
+            CopyMaterializedParametersTo(clone);
+        }
+        return clone;
+    }
+
+    private void CopyMaterializedParametersTo(StandardVAE<T> clone)
+    {
+        using var source = EnumerateMaterializedModelParameters().GetEnumerator();
+        using var target = clone.EnumerateMaterializedModelParameters().GetEnumerator();
+
+        while (source.MoveNext())
+        {
+            if (!target.MoveNext())
+            {
+                throw new InvalidOperationException(
+                    "Clone has fewer materialized tensors than the source VAE. " +
+                    "Architectures may differ or a lazy tensor was materialized without " +
+                    "marking runtime state.");
+            }
+
+            CopyTensorData(source.Current, target.Current);
+        }
+
+        if (target.MoveNext())
+        {
+            throw new InvalidOperationException(
+                "Clone has more materialized tensors than the source VAE. " +
+                "Architectures may differ.");
+        }
+    }
+
+    private IEnumerable<Tensor<T>> EnumerateMaterializedModelParameters()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private static void CopyTensorData(Tensor<T> source, Tensor<T> target)
+    {
+        if (source.Length != target.Length)
+        {
+            throw new InvalidOperationException(
+                $"Cannot copy tensor with {source.Length} elements into tensor " +
+                $"with {target.Length} elements.");
+        }
+
+        source.Data.Span.CopyTo(target.Data.Span);
+    }
+
+    /// <summary>
+    /// Runs one dummy Encode + Decode pass through the network at a
+    /// small spatial size so every lazy layer resolves its weight
+    /// shapes. Used by <see cref="Clone"/> to make the clone's layer
+    /// parameter counts match the original's before
+    /// <see cref="SetParameters"/> copies weights across.
+    /// </summary>
+    /// <remarks>
+    /// Dummy spatial size = <c>2 ^ (channelMultipliers.Length - 1)</c>
+    /// — just enough for every downsampling level to produce a ≥ 1×1
+    /// feature map without aliasing. Spatial dim only affects activation
+    /// shapes, not weight shapes (Conv kernels are translation-
+    /// invariant), so any size works as long as the conv stack doesn't
+    /// underflow.
+    /// </remarks>
+    private bool _lazyShapesResolved;
+
+    internal void TriggerLazyShapeResolution()
+    {
+        EnsureLayersInitialized();
+        // Idempotent: one tiny encode+decode resolves every lazy layer's weight
+        // shapes (channel-based, so a minimal spatial extent suffices); shapes
+        // never change afterwards. Guard set before the forward to block
+        // re-entrant parameter access during resolution. Without this, the VAE's
+        // GetParameters / SetParameters / ParameterCount disagreed pre-forward
+        // (lazy layers reported architectural ParameterCount but an empty
+        // GetParameters() vector), which propagated to every latent diffusion
+        // model's ParameterCount == GetParameters().Length contract (SD1.5, SDXL,
+        // TripoSR, …) since those sum _unet + _vae.
+        if (_lazyShapesResolved) return;
+        _lazyShapesResolved = true;
+        int downsamples = _channelMultipliers.Length - 1;
+        int dummySpatial = 1 << Math.Max(downsamples, 1);
+        var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, dummySpatial, dummySpatial });
+        var dummyLatent = Encode(dummyImage, sampleMode: false);
+        _ = Decode(dummyLatent);
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        return Clone();
+    }
+
+    #endregion
+
+    #region Layer-Level Backpropagation
+
+    /// <inheritdoc />
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+
+        AddLayerGradients(gradients, _inputConv);
+        foreach (var layer in _encoderLayers)
+            AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _meanConv);
+        AddLayerGradients(gradients, _logVarConv);
+        AddLayerGradients(gradients, _quantConv);
+        AddLayerGradients(gradients, _postQuantConv);
+        foreach (var layer in _decoderLayers)
+            AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _outputConv);
+
+        return new Vector<T>(gradients.ToArray());
+    }
+
+    private static void AddLayerGradients(List<T> gradients, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++)
+            gradients.Add(g[i]);
+    }
+
+    #endregion
+    /// <inheritdoc />
+    /// <remarks>
+    /// This concrete VAE does not implement layer-level backprop yet, so the
+    /// exact-gradient path is unsupported. The base class catches this and falls
+    /// through to SPSA in ComputeGradients.
+    /// </remarks>
+    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
+            "implemented. ComputeGradients will fall through to SPSA.");
+    }
+
+}

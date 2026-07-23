@@ -1,0 +1,152 @@
+
+
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
+namespace AiDotNet.LossFunctions;
+
+/// <summary>
+/// Implements the Cosine Similarity Loss between two vectors.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Cosine Similarity measures how similar two vectors are in terms of their orientation,
+/// regardless of their magnitude (size).
+/// 
+/// The formula for cosine similarity is: cos(θ) = (A·B)/(||A||×||B||)
+/// Where:
+/// - A·B is the dot product of vectors A and B
+/// - ||A|| and ||B|| are the magnitudes (lengths) of vectors A and B
+/// - θ is the angle between vectors A and B
+/// 
+/// The loss is calculated as 1 - cosine similarity, so:
+/// - A value of 0 means the vectors are perfectly aligned (very similar)
+/// - A value of 1 means they are perpendicular (no similarity)
+/// - A value of 2 means they point in exactly opposite directions
+/// 
+/// Cosine similarity loss is particularly useful for:
+/// - Text similarity tasks (comparing document vectors)
+/// - Recommendation systems
+/// - Image retrieval
+/// - Any task where the direction of vectors matters more than their magnitude
+/// 
+/// It's often preferred over Euclidean distance when working with high-dimensional sparse vectors.
+/// </para>
+/// </remarks>
+[LossCategory(LossCategory.Contrastive)]
+[LossTask(LossTask.Embedding)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsSymmetric = true, ExpectedOutput = OutputType.Continuous)]
+public class CosineSimilarityLoss<T> : LossFunctionBase<T>
+{
+    /// <summary>
+    /// Initializes a new instance of the CosineSimilarityLoss class.
+    /// </summary>
+    public CosineSimilarityLoss()
+    {
+    }
+
+    /// <summary>
+    /// Calculates the Cosine Similarity Loss between two vectors.
+    /// </summary>
+    /// <param name="predicted">The predicted vector from the model.</param>
+    /// <param name="actual">The actual (target) vector.</param>
+    /// <returns>A scalar value representing the cosine similarity loss.</returns>
+    public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
+    {
+        ValidateVectorLengths(predicted, actual);
+
+        T dotProduct = Engine.DotProduct(predicted, actual);
+        // Regularize the squared norms with eps INSIDE the sqrt (sqrt(sum(x^2) + eps)), matching
+        // ComputeTapeLoss. A bare sqrt(sum(x^2)) has an unbounded gradient as the norm -> 0; adding
+        // eps before the sqrt bounds it to 1/(2*sqrt(eps)) and keeps this vector API numerically
+        // consistent with the tape path (same loss definition on both surfaces).
+        T sqEps = NumOps.FromDouble(1e-12);
+        T normPredicted = NumOps.Add(Engine.DotProduct(predicted, predicted), sqEps);
+        T normActual = NumOps.Add(Engine.DotProduct(actual, actual), sqEps);
+
+        T cosineSimilarity = NumericalStabilityHelper.SafeDiv(
+            dotProduct,
+            NumOps.Multiply(NumOps.Sqrt(normPredicted), NumOps.Sqrt(normActual)),
+            NumericalStabilityHelper.SmallEpsilon
+        );
+
+        // Loss is 1 - similarity
+        return NumOps.Subtract(NumOps.One, cosineSimilarity);
+    }
+
+    /// <summary>
+    /// Calculates the derivative of the Cosine Similarity Loss with respect to the predicted values.
+    /// </summary>
+    /// <param name="predicted">The predicted vector from the model.</param>
+    /// <param name="actual">The actual (target) vector.</param>
+    /// <returns>A vector containing the gradient of the loss with respect to each prediction.</returns>
+    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
+    {
+        ValidateVectorLengths(predicted, actual);
+
+        T dotProduct = Engine.DotProduct(predicted, actual);
+        // Same eps-inside-sqrt regularization as CalculateLoss/ComputeTapeLoss. The gradient below is
+        // exact for cos = dot / (||p||*||a||) with ||p|| = sqrt(sum(p^2) + eps): the regularized
+        // squared norm flows through both the numerator's ||p||^2 term and the ||p||^3*||a|| denominator.
+        T sqEps = NumOps.FromDouble(1e-12);
+        T normPredicted = NumOps.Add(Engine.DotProduct(predicted, predicted), sqEps);
+        T normActual = NumOps.Add(Engine.DotProduct(actual, actual), sqEps);
+
+        T normPredSqrt = NumOps.Sqrt(normPredicted);
+        T normProduct = NumOps.Multiply(normPredSqrt, NumOps.Sqrt(normActual));
+
+        Vector<T> derivative = new Vector<T>(predicted.Length);
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            // ?(cos similarity)/?p_i = (a_i*||p||^2 - p_i*(p·a)) / (||p||^3 * ||a||)
+            T numerator = NumOps.Subtract(
+                NumOps.Multiply(actual[i], normPredicted),
+                NumOps.Multiply(predicted[i], dotProduct)
+            );
+
+            // ||p||^3 * ||a|| = ||p|| * ||p||^2 * ||a|| / ||p|| ...
+            // normPredSqrt = ||p||, normPredicted = ||p||^2
+            // normPredSqrt * normPredicted = ||p||^3
+            T normPredCubed = NumOps.Multiply(normPredSqrt, normPredicted);
+            T denominator = NumOps.Multiply(normPredCubed, NumOps.Sqrt(normActual));
+
+            // Derivative of the loss is negative of the derivative of cosine similarity
+            derivative[i] = NumOps.Negate(NumericalStabilityHelper.SafeDiv(numerator, denominator, NumericalStabilityHelper.SmallEpsilon));
+        }
+
+        return derivative;
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Cosine similarity targets are continuous vectors, not class indices.
+        // Only align when predicted has a trailing singleton dim (e.g., [B] → [B,1]).
+        if (target.Shape.Length == predicted.Shape.Length - 1
+            && predicted.Shape[predicted.Shape.Length - 1] == 1
+            && target.Length == predicted.Length)
+        {
+            target = Engine.Reshape(target, predicted.Shape.ToArray());
+        }
+        // CosineSimilarity = 1 - dot(p,t) / (||p|| * ||t|| + eps)
+        var dotProduct = Engine.TensorMultiply(predicted, target);
+        var allAxes = Enumerable.Range(0, dotProduct.Shape.Length).ToArray();
+        var dot = Engine.ReduceSum(dotProduct, allAxes, keepDims: false);
+        var predSq = Engine.TensorMultiply(predicted, predicted);
+        var targSq = Engine.TensorMultiply(target, target);
+        // Epsilon goes INSIDE the sqrt: sqrt(sum(x^2) + eps). d/dx sqrt(s) = 1/(2*sqrt(s)), so a bare
+        // sqrt(sum(x^2)) has an UNBOUNDED gradient as the norm -> 0 and produces a NaN/Inf gradient the
+        // moment an embedding underflows to (near-)zero norm — the classic contrastive-loss training
+        // blow-up (and it only surfaces on the runner whose FMA/SIMD trajectory drives the norm that
+        // low). Adding eps before the sqrt bounds the gradient to 1/(2*sqrt(eps)); the earlier +1e-8 on
+        // the PRODUCT below only guarded the division, not these sqrt backward passes.
+        var sqEps = NumOps.FromDouble(1e-12);
+        var predNorm = Engine.TensorSqrt(Engine.TensorAddScalar(Engine.ReduceSum(predSq, allAxes, keepDims: false), sqEps));
+        var targNorm = Engine.TensorSqrt(Engine.TensorAddScalar(Engine.ReduceSum(targSq, allAxes, keepDims: false), sqEps));
+        var normProduct = Engine.TensorMultiply(predNorm, targNorm);
+        var safeNorm = Engine.TensorAddScalar(normProduct, NumOps.FromDouble(1e-8));
+        var similarity = Engine.TensorDivide(dot, safeNorm);
+        return Engine.ScalarMinusTensor(NumOps.One, similarity);
+    }
+}

@@ -1,0 +1,74 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Optimizers"
+  seoTitle="40+ Optimizers for .NET - AiDotNet"
+  seoDescription="Every optimization algorithm from SGD to Lion. Adam, AdamW, LAMB, LARS, Prodigy, Sophia, and 40+ optimizers in pure C#."
+  count="40+"
+  tagline="Every optimization algorithm you need for training neural networks"
+  description="From classic SGD with momentum to cutting-edge optimizers like Lion and Sophia. All 40+ optimizers support learning rate scheduling, weight decay, gradient clipping, and mixed-precision training out of the box."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>'
+  useCases={['Neural Network Training', 'Fine-Tuning', 'Large-Scale Training', 'Edge Deployment', 'Research', 'AutoML']}
+  subcategories={[
+    {
+      name: 'Adaptive Learning Rate',
+      description: 'Optimizers that automatically adjust learning rates per-parameter.',
+      items: [
+        { name: 'Adam', detail: 'Adaptive Moment Estimation combining first and second moment estimates.' },
+        { name: 'AdamW', detail: 'Adam with decoupled weight decay regularization (the standard for transformers).' },
+        { name: 'RAdam', detail: 'Rectified Adam with variance-adaptive learning rate warmup.' },
+        { name: 'NAdam', detail: 'Nesterov-accelerated Adam combining Nesterov momentum with Adam.' },
+        { name: 'Adan', detail: 'Adaptive Nesterov Momentum for faster convergence.' },
+        { name: 'Lion', detail: 'Evolved Sign Momentum optimizer found by program search, more memory efficient than Adam.' },
+        { name: 'Prodigy', detail: 'Automatic learning rate estimation requiring zero LR tuning.' },
+        { name: 'Sophia', detail: 'Second-order optimizer using diagonal Hessian for faster LLM training.' },
+        { name: 'CAME', detail: 'Confidence-guided Adaptive Memory Efficient optimizer for LLMs.' },
+        { name: 'AdaBelief', detail: 'Adapting step sizes by the belief in observed gradients.' },
+      ]
+    },
+    {
+      name: 'Large-Batch Optimizers',
+      description: 'Designed for distributed training with large batch sizes.',
+      items: [
+        { name: 'LAMB', detail: 'Layer-wise Adaptive Moments for scaling BERT training to batch size 65K.' },
+        { name: 'LARS', detail: 'Layer-wise Adaptive Rate Scaling for large-batch SGD training.' },
+        { name: 'NovoGrad', detail: 'Stochastic gradient descent with layer-wise gradient normalization.' },
+      ]
+    },
+    {
+      name: 'Memory-Efficient',
+      description: 'Optimizers that reduce memory footprint for training large models.',
+      items: [
+        { name: 'Adafactor', detail: 'Row/column factored second moments reducing memory from O(mn) to O(m+n).' },
+        { name: 'SM3', detail: 'Memory-efficient adaptive optimization with cover-based second moments.' },
+        { name: '8-bit Adam', detail: 'Quantized optimizer states for 75% memory reduction.' },
+        { name: 'GaLore Optimizer', detail: 'Gradient low-rank projection for full-rank training at LoRA-level memory.' },
+      ]
+    },
+    {
+      name: 'Classic Optimizers',
+      description: 'Foundational optimization algorithms with proven convergence.',
+      items: [
+        { name: 'SGD + Momentum', detail: 'Stochastic gradient descent with momentum for accelerated convergence.' },
+        { name: 'Nesterov', detail: 'Nesterov accelerated gradient with look-ahead momentum.' },
+        { name: 'RMSProp', detail: 'Root mean square propagation with per-parameter learning rates.' },
+        { name: 'Rprop', detail: 'Resilient backpropagation using only gradient signs.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train with a specific optimizer using AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 784, hiddenSize: 128, outputSize: 10))
+    .ConfigureOptimizer(new AdamWOptimizer<float>(
+        learningRate: 1e-3f, weightDecay: 0.01f))
+    .ConfigurePreprocessing()
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(newSample);`}
+  codeTitle="Optimizers with AiModelBuilder"
+/>

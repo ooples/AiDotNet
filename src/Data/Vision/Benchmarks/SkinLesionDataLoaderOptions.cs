@@ -1,0 +1,42 @@
+using AiDotNet.Data.Geometry;
+
+namespace AiDotNet.Data.Vision.Benchmarks;
+
+/// <summary>
+/// Configuration options for the ISIC Skin Lesion data loader.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The ISIC (International Skin Imaging Collaboration) Skin Lesion dataset is used for
+/// dermoscopic image classification. The 2019 challenge version contains ~25K training images
+/// across 8 diagnostic categories (e.g., melanoma, basal cell carcinoma, dermatofibroma).
+/// </para>
+/// </remarks>
+public sealed class SkinLesionDataLoaderOptions
+{
+    /// <summary>Dataset split to load. Default is Train.</summary>
+    public DatasetSplit Split { get; set; } = DatasetSplit.Train;
+
+    /// <summary>Root data path. When null, uses default cache path.</summary>
+    public string? DataPath { get; set; }
+
+    /// <summary>Automatically download if not present. Default is true.</summary>
+    public bool AutoDownload { get; set; } = true;
+
+    /// <summary>Normalize pixel values to [0, 1]. Default is true.</summary>
+    public bool Normalize { get; set; } = true;
+
+    /// <summary>Optional maximum number of samples to load.</summary>
+    public int? MaxSamples { get; set; }
+
+    /// <summary>Target image size. Default is 224.</summary>
+    public int ImageSize { get; set; } = 224;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (ImageSize <= 0) throw new ArgumentOutOfRangeException(nameof(ImageSize), "ImageSize must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
+}

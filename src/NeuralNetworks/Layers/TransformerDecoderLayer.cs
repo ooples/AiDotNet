@@ -1,0 +1,1362 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a transformer decoder layer that processes sequences using self-attention, cross-attention, and feed-forward networks.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A transformer decoder layer is a fundamental building block of transformer-based models for sequence-to-sequence tasks.
+/// It consists of three main components: a masked self-attention mechanism that processes the target sequence, a cross-attention
+/// mechanism that attends to the encoder's output, and a feed-forward network for additional transformation. Each component
+/// is followed by layer normalization and residual connections to facilitate training of deep networks.
+/// </para>
+/// <para><b>For Beginners:</b> This layer helps the network generate sequences while considering both what it has generated so far and input from another source.
+/// 
+/// Think of it like a writer who is translating a book:
+/// - First, the writer looks at what they've translated so far to maintain consistency (self-attention)
+/// - Then they look at the original text to understand what to translate next (cross-attention)
+/// - Finally, they process all this information to produce the next part of the translation (feed-forward network)
+/// 
+/// For example, in machine translation, the decoder generates each word of the target language by:
+/// - Looking at the words it has already generated (to maintain grammatical coherence)
+/// - Looking at the encoded source sentence (to understand what content to translate)
+/// - Combining this information to produce the most appropriate next word
+/// 
+/// This architecture is powerful for tasks like translation, summarization, and text generation.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, ApiShape = LayerApiShape.DualTensor, TestInputShape = "4, 8", TestConstructorArgs = "2, 16, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+{
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer aggregates auxiliary losses from its attention sublayers (both self-attention and cross-attention).
+    /// This helps regularize attention patterns and prevents issues like attention collapse.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses additional learning signals.
+    ///
+    /// When enabled (true):
+    /// - The layer collects extra penalties from both self-attention and cross-attention mechanisms
+    /// - This helps the attention heads learn diverse and focused patterns
+    /// - Training may be more stable and produce better results
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the aggregated auxiliary losses contribute to the total loss.
+    /// The default value of 0.005 provides a good balance between the main task and regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the attention regularization.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.01) make the network prioritize better attention patterns more strongly
+    /// - Lower values (e.g., 0.001) make the regularization less important
+    /// - The default (0.005) works well for most transformer tasks
+    ///
+    /// If your attention is collapsing (all heads learning the same thing), you might increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed auxiliary loss for diagnostic purposes.
+    /// </summary>
+    private T _lastAuxiliaryLoss;
+
+    /// <summary>
+    /// The size of the embeddings for queries, keys, values, and outputs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the dimensionality of the embedding vectors used throughout the transformer decoder layer.
+    /// It determines the size of the attention heads and the input/output dimensions of the various sublayers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This represents how many features or dimensions each word or token has.
+    /// 
+    /// Think of it as the "richness" of information for each element in the sequence:
+    /// - Larger values (like 768 or 1024) give more capacity to represent complex patterns
+    /// - Common values range from 128 for simple tasks to 1024+ for complex language models
+    /// - This value stays constant throughout the entire transformer layer
+    /// 
+    /// For example, in a language model, this might be 512 dimensions to capture various
+    /// aspects of each word like its meaning, grammatical role, and context.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// Initialized to <c>-1</c> when the lazy ctor is used; resolved from
+    /// <c>input.Shape[^1]</c> on first <see cref="Forward(Tensor{T})"/>.
+    /// </remarks>
+    private int _embeddingSize;
+
+    /// <summary>
+    /// The number of attention heads for the self-attention and cross-attention mechanisms.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the number of attention heads used in the multi-head attention layers. Multiple heads allow
+    /// the model to jointly attend to information from different representation subspaces at different positions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This represents how many different perspectives the model can consider simultaneously.
+    /// 
+    /// Multi-head attention is like having multiple people look at the same text:
+    /// - Each "head" focuses on different relationships in the data
+    /// - One head might focus on subject-verb relationships
+    /// - Another might focus on adjective-noun relationships
+    /// - Together they capture a richer understanding of the context
+    /// 
+    /// Common values range from 8-16 heads, with larger models using more heads.
+    /// This allows the model to "pay attention" to different aspects of the input at the same time.
+    /// </para>
+    /// </remarks>
+    private readonly int _numHeads;
+
+    /// <summary>
+    /// The inner dimension of the feed-forward network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the dimensionality of the inner layer in the feed-forward network. This is typically
+    /// larger than the embedding size, allowing the network to project into a higher-dimensional space for more
+    /// expressive transformations before projecting back to the embedding size.
+    /// </para>
+    /// <para><b>For Beginners:</b> This represents how much information the network can process internally after attention.
+    /// 
+    /// The feed-forward network:
+    /// - Takes the output from the attention layers
+    /// - Expands it to this larger dimension for more complex processing
+    /// - Then compresses it back to the original embedding size
+    /// 
+    /// It's typically 4 times larger than the embedding size (e.g., 2048 for a 512 embedding size).
+    /// This expanded dimension gives the network more capacity to transform the information.
+    /// </para>
+    /// </remarks>
+    private readonly int _feedForwardDim;
+
+    /// <summary>
+    /// The maximum length of the input and output sequences.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the maximum sequence length that the transformer decoder layer can process. It determines
+    /// the size of position embeddings and attention matrices.
+    /// </para>
+    /// <para><b>For Beginners:</b> This represents the maximum number of elements (like words) the model can process at once.
+    /// 
+    /// Sequence length determines:
+    /// - How much context the model can consider at once
+    /// - The maximum length of inputs and outputs
+    /// - Memory usage during processing (longer sequences use more memory)
+    /// 
+    /// For example, in a language model, this might be 512 tokens (roughly equivalent to paragraphs of text).
+    /// This limit exists because the attention mechanism needs to compare each element with every other element,
+    /// which becomes computationally expensive for very long sequences.
+    /// </para>
+    /// </remarks>
+    private readonly int _sequenceLength;
+
+    /// <summary>
+    /// The self-attention mechanism for processing the decoder input sequence.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field contains the multi-head self-attention layer that allows the decoder to attend to its own previous outputs.
+    /// In practice, this is usually implemented with masking to prevent attending to future positions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This component helps the model consider what it has generated so far.
+    /// 
+    /// Self-attention works by:
+    /// - Looking at the sequence the decoder has generated so far
+    /// - Determining which previous elements are most relevant to the current position
+    /// - Using this information to maintain consistency and coherence
+    /// 
+    /// In text generation, this is how the model makes sure that what it's generating now makes sense
+    /// with what it has already generated, maintaining grammar, style, and topic consistency.
+    /// </para>
+    /// </remarks>
+    private MultiHeadAttentionLayer<T> _selfAttention;
+
+    /// <summary>
+    /// The layer normalization applied after self-attention.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field contains the layer normalization that is applied to the output of the self-attention sublayer
+    /// (after adding the residual connection). Layer normalization helps stabilize the learning process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This component helps keep the values in a reasonable range after self-attention.
+    /// 
+    /// Layer normalization:
+    /// - Adjusts the scale of the values to prevent them from growing too large or too small
+    /// - Helps the network train more stably and quickly
+    /// - Is applied after each major component in the transformer
+    /// 
+    /// Think of it like keeping the volume at a consistent level while listening to music -
+    /// it prevents sudden spikes or drops that might disrupt the learning process.
+    /// </para>
+    /// </remarks>
+    private LayerNormalizationLayer<T> _norm1;
+
+    /// <summary>
+    /// The cross-attention mechanism for attending to the encoder output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field contains the multi-head cross-attention layer that allows the decoder to attend to the output of the encoder.
+    /// This enables the decoder to focus on relevant parts of the input sequence when generating the output sequence.
+    /// </para>
+    /// <para><b>For Beginners:</b> This component helps the model consider the input sequence (from the encoder) when generating output.
+    /// 
+    /// Cross-attention works by:
+    /// - Looking at the entire input sequence (processed by the encoder)
+    /// - Determining which parts of the input are most relevant for generating the current output
+    /// - Focusing on those relevant parts to produce appropriate output
+    /// 
+    /// For example, in translation, this is how the model decides which words in the source language
+    /// are most important when generating the next word in the target language.
+    /// </para>
+    /// </remarks>
+    private MultiHeadAttentionLayer<T> _crossAttention;
+
+    /// <summary>
+    /// The layer normalization applied after cross-attention.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field contains the layer normalization that is applied to the output of the cross-attention sublayer
+    /// (after adding the residual connection). Layer normalization helps stabilize the learning process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This component helps keep the values in a reasonable range after cross-attention.
+    /// 
+    /// Like the first normalization layer, this:
+    /// - Standardizes the output of the cross-attention component
+    /// - Prevents extreme values that could disrupt training
+    /// - Helps the network converge faster during training
+    /// 
+    /// Each normalization layer in the transformer acts as a stabilizing force,
+    /// helping maintain consistent signal strength throughout the network.
+    /// </para>
+    /// </remarks>
+    private LayerNormalizationLayer<T> _norm2;
+
+    /// <summary>
+    /// The feed-forward network for additional transformation of the sequence.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field contains the first layer of the feed-forward network that projects from embedding size to a larger hidden dimension.
+    /// It applies a non-linear transformation with an activation function.
+    /// </para>
+    /// <para><b>For Beginners:</b> This component expands the representation to a larger dimension.
+    ///
+    /// The first feed-forward layer:
+    /// - Takes the attention output (embedding size)
+    /// - Expands it to a larger hidden dimension
+    /// - Applies an activation function for non-linearity
+    ///
+    /// This expansion gives the network more capacity to learn complex transformations.
+    /// </para>
+    /// </remarks>
+    private FeedForwardLayer<T> _feedForward;
+
+    /// <summary>
+    /// The projection layer that maps back from the feed-forward hidden dimension to the embedding size.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field contains the second layer of the feed-forward network that projects from the hidden dimension back to the embedding size.
+    /// This ensures the output has the same dimension as the input for residual connections.
+    /// </para>
+    /// <para><b>For Beginners:</b> This component compresses the expanded representation back to the original size.
+    ///
+    /// The projection layer:
+    /// - Takes the expanded hidden representation
+    /// - Compresses it back to the embedding size
+    /// - Ensures the output can be added to the residual connection
+    ///
+    /// This is the standard FFN architecture in transformers: expand → activate → project back.
+    /// </para>
+    /// </remarks>
+    private FeedForwardLayer<T> _feedForwardProjection;
+
+    /// <summary>
+    /// The layer normalization applied after the feed-forward network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field contains the layer normalization that is applied to the output of the feed-forward sublayer
+    /// (after adding the residual connection). Layer normalization helps stabilize the learning process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This component helps keep the values in a reasonable range after the feed-forward processing.
+    /// 
+    /// Like the previous normalization layers, this:
+    /// - Standardizes the output of the feed-forward component
+    /// - Ensures the final output of the decoder layer has a consistent scale
+    /// - Makes it easier for the next layer to process the output
+    /// 
+    /// This final normalization helps prepare the output for either the next decoder layer
+    /// or for the final output projection in the complete transformer model.
+    /// </para>
+    /// </remarks>
+    private LayerNormalizationLayer<T> _norm3;
+
+    /// <summary>
+    /// The input tensor from the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the decoder input tensor from the most recent forward pass, which is needed during the backward
+    /// pass to compute gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the decoder input (target sequence) from the last calculation.
+    /// 
+    /// Storing the input is necessary because:
+    /// - During training, the layer needs to remember what decoder input it processed
+    /// - This helps calculate the correct gradients during backpropagation
+    /// - It's part of the layer's "memory" for the learning process
+    /// 
+    /// This cached input helps the layer understand how to adjust its parameters
+    /// to improve its performance on future inputs.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// The encoder output tensor from the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the encoder output tensor from the most recent forward pass, which is needed during the backward
+    /// pass to compute gradients for the cross-attention mechanism.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the encoder's output (source sequence information) from the last calculation.
+    /// 
+    /// Storing the encoder output is necessary because:
+    /// - The cross-attention mechanism needs this information during both forward and backward passes
+    /// - It represents the source sequence that the decoder is conditioning its generation on
+    /// - It needs to be available during training to compute proper gradients
+    /// 
+    /// For example, in translation, this would contain the processed representation of
+    /// the source language sentence that the decoder is translating.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastEncoderOutput;
+
+    /// <summary>
+    /// The output tensor of the self-attention sublayer from the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output tensor of the self-attention sublayer from the most recent forward pass,
+    /// which is needed during the backward pass to compute gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the result after the self-attention step from the last calculation.
+    /// 
+    /// Storing the self-attention output:
+    /// - Helps track the information flow through the network
+    /// - Is used to compute accurate gradients during training
+    /// - Forms part of the computational graph needed for backpropagation
+    /// 
+    /// These intermediate results are necessary for the layer to learn effectively,
+    /// as they show how each component contributed to the final output.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastSelfAttentionOutput;
+
+    /// <summary>
+    /// The output tensor after the first normalization from the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output tensor after the first layer normalization from the most recent forward pass,
+    /// which is needed during the backward pass to compute gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the result after normalizing the self-attention output.
+    /// 
+    /// Like other intermediate results, this:
+    /// - Tracks the data flow through the layer
+    /// - Helps compute the correct gradients during training
+    /// - Is part of the chain of calculations needed for learning
+    /// 
+    /// These saved states form a kind of "memory" that allows the network to understand
+    /// how it arrived at its final output, so it can learn to improve.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastNormalized1;
+
+    /// <summary>
+    /// The output tensor of the cross-attention sublayer from the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output tensor of the cross-attention sublayer from the most recent forward pass,
+    /// which is needed during the backward pass to compute gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the result after the cross-attention step from the last calculation.
+    /// 
+    /// Similar to the self-attention output, this:
+    /// - Records how the decoder attended to the encoder output
+    /// - Is used in training to calculate how parameters should be updated
+    /// - Helps track information flow between the encoder and decoder
+    /// 
+    /// This represents the information extracted from the source sequence that
+    /// was deemed relevant for generating the target sequence.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastCrossAttentionOutput;
+
+    /// <summary>
+    /// The output tensor after the second normalization from the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output tensor after the second layer normalization from the most recent forward pass,
+    /// which is needed during the backward pass to compute gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the result after normalizing the cross-attention output.
+    /// 
+    /// This intermediate result:
+    /// - Captures the state after cross-attention and before feed-forward processing
+    /// - Forms another link in the chain of computations
+    /// - Helps the network understand how information flowed through the layer
+    /// 
+    /// During training, these stored states help the network reconstruct exactly
+    /// how it arrived at its final output, enabling precise learning.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastNormalized2;
+
+    /// <summary>
+    /// The output tensor of the feed-forward sublayer from the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output tensor of the feed-forward sublayer from the most recent forward pass,
+    /// which is needed during the backward pass to compute gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the result after the feed-forward processing step from the last calculation.
+    /// 
+    /// Like other intermediate results, this:
+    /// - Tracks how the final transformation affected the output
+    /// - Helps compute gradients for the feed-forward network during training
+    /// - Contributes to the layer's ability to learn from its mistakes
+    /// 
+    /// This represents the final processing step before the last normalization
+    /// and output of the complete decoder layer.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastFeedForwardOutput;
+
+    // GPU cached tensors for backward pass
+    private Tensor<T>? _gpuNormalized1;
+    private Tensor<T>? _gpuNormalized2;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> for this layer, as it contains trainable parameters.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the transformer decoder layer can be trained through backpropagation.
+    /// Since this layer has trainable parameters in its sublayers, it supports training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
+    /// 
+    /// A value of true means:
+    /// - The layer has internal values that can be adjusted during training
+    /// - It will improve its performance as it sees more data
+    /// - It participates in the learning process
+    /// 
+    /// For this layer, the value is always true because it contains multiple sublayers
+    /// with trainable parameters that need to be optimized during training.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => true;
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (!_isInitialized)
+        {
+            throw new InvalidOperationException(
+                "TransformerDecoderLayer.SetParameters cannot run before sublayers are " +
+                "constructed. Run a Forward pass (or call EnsureInitialized via reflection) " +
+                "first so _embeddingSize is resolved and the sublayers exist.");
+        }
+        int idx = 0;
+        void Set(ILayer<T> layer) { int c = (int)layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
+        Set(_selfAttention); Set(_norm1); Set(_crossAttention); Set(_norm2);
+        Set(_feedForward); Set(_feedForwardProjection); Set(_norm3);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (!_isInitialized) return new Vector<T>(0);
+        return Vector<T>.Concatenate(
+            _selfAttention.GetParameterGradients(), _norm1.GetParameterGradients(),
+            _crossAttention.GetParameterGradients(), _norm2.GetParameterGradients(),
+            _feedForward.GetParameterGradients(), _feedForwardProjection.GetParameterGradients(),
+            _norm3.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        // Sublayers do not exist on a lazy decoder until first Forward; nothing to clear.
+        if (!_isInitialized) return;
+        _selfAttention.ClearGradients(); _norm1.ClearGradients();
+        _crossAttention.ClearGradients(); _norm2.ClearGradients();
+        _feedForward.ClearGradients(); _feedForwardProjection.ClearGradients(); _norm3.ClearGradients();
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer can execute on GPU.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <remarks>
+    /// This returns the sum of all parameters from sublayers: self-attention, cross-attention,
+    /// layer norms, feed-forward layer, and feed-forward projection layer.
+    /// </remarks>
+    public override long ParameterCount =>
+        _isInitialized
+            ? _selfAttention.ParameterCount +
+              _norm1.ParameterCount +
+              _crossAttention.ParameterCount +
+              _norm2.ParameterCount +
+              _feedForward.ParameterCount +
+              _feedForwardProjection.ParameterCount +
+              _norm3.ParameterCount
+            : 0;
+
+
+    /// <summary>
+    /// Lazy ctor: <see cref="_embeddingSize"/> is resolved from <c>input.Shape[^1]</c>
+    /// on first <see cref="Forward(Tensor{T})"/>; the inner attention/cross-attention/
+    /// FFN/norm sublayers are constructed then.
+    /// </summary>
+    /// <param name="numHeads">Number of attention heads (default 8).</param>
+    /// <param name="feedForwardDim">Hidden dimension of the FFN (default 2048).</param>
+    /// <param name="sequenceLength">Maximum sequence length (default 512).</param>
+    /// <param name="ffnActivation">FFN activation (default GELU).</param>
+    public TransformerDecoderLayer(int numHeads, int feedForwardDim,
+        int sequenceLength = 512,
+        IActivationFunction<T>? ffnActivation = null)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
+    {
+        if (numHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "numHeads must be positive.");
+        if (feedForwardDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(feedForwardDim), "feedForwardDim must be positive.");
+
+        _embeddingSize = -1;
+        _numHeads = numHeads;
+        _feedForwardDim = feedForwardDim;
+        _sequenceLength = sequenceLength;
+        _lazyFfnActivation = ffnActivation;
+
+        _selfAttention = null!;
+        _norm1 = null!;
+        _crossAttention = null!;
+        _norm2 = null!;
+        _feedForward = null!;
+        _feedForwardProjection = null!;
+        _norm3 = null!;
+
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAuxiliaryLoss = NumOps.Zero;
+
+        _isInitialized = false;
+    }
+
+    /// <summary>True once the lazy sublayers have been constructed.</summary>
+    private bool _isInitialized;
+
+    /// <summary>FFN activation captured by the lazy ctor for later sublayer construction.</summary>
+    private IActivationFunction<T>? _lazyFfnActivation;
+
+    /// <summary>
+    /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c>.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (IsShapeResolved) return;
+        if (input.Shape.Length < 1)
+            throw new ArgumentException(
+                $"TransformerDecoderLayer requires rank>=1 input; got rank {input.Shape.Length}.",
+                nameof(input));
+
+        if (_embeddingSize < 0)
+        {
+            _embeddingSize = input.Shape[input.Shape.Length - 1];
+            if (_embeddingSize % _numHeads != 0)
+                throw new ArgumentException(
+                    $"Resolved embeddingSize ({_embeddingSize}) must be evenly divisible by " +
+                    $"numHeads ({_numHeads}); got remainder {_embeddingSize % _numHeads}.");
+        }
+
+        var resolved = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
+        ResolveShapes(resolved, resolved);
+    }
+
+    /// <summary>
+    /// Constructs the sublayers using the resolved <see cref="_embeddingSize"/>.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+            if (_embeddingSize <= 0)
+                throw new InvalidOperationException(
+                    "TransformerDecoderLayer.EnsureInitialized called before _embeddingSize was resolved.");
+
+            var activation = _lazyFfnActivation ?? new GELUActivation<T>();
+
+            _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
+            _norm1 = new LayerNormalizationLayer<T>();
+            _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
+            _norm2 = new LayerNormalizationLayer<T>();
+            _feedForward = new FeedForwardLayer<T>(_feedForwardDim, activation);
+            _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);
+            _norm3 = new LayerNormalizationLayer<T>();
+
+            RegisterSubLayer(_selfAttention);
+            RegisterSubLayer(_norm1);
+            RegisterSubLayer(_crossAttention);
+            RegisterSubLayer(_norm2);
+            RegisterSubLayer(_feedForward);
+            RegisterSubLayer(_feedForwardProjection);
+            RegisterSubLayer(_norm3);
+
+            // Eagerly resolve each sub-layer with its CORRECT input shape so
+            // its ParameterCount reflects the real weight count before its
+            // first Forward fires. The previous foreach-loop used the same
+            // {1, _embeddingSize} shape for every sub-layer, which silently
+            // resolved _feedForwardProjection as (in=embed, out=embed) — the
+            // wrong shape (the projection's real input is _feedForwardDim).
+            // That bug caused SetParameters' parent-side slicing to be off
+            // by 2304×768 elements after the FFN expand, and Clone produced
+            // divergent outputs even though every byte copied identically.
+            // Mirror TransformerEncoderLayer.EnsureInitialized's exact per-
+            // sub-layer ResolveFromShape pattern (which already gets this
+            // right).
+            int[] subInputShape = new[] { _embeddingSize };
+            _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+            _norm1.ResolveFromShape(subInputShape);
+            _crossAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+            _norm2.ResolveFromShape(subInputShape);
+            _feedForward.ResolveFromShape(subInputShape);
+            _feedForwardProjection.ResolveFromShape(new[] { _feedForwardDim });
+            _norm3.ResolveFromShape(subInputShape);
+
+            _isInitialized = true;
+        }
+    }
+
+
+    /// <summary>
+    /// Declares named input ports for this multi-input layer.
+    /// </summary>
+    public override IReadOnlyList<LayerPort> InputPorts =>
+    [
+        new LayerPort("decoder_input", GetInputShape()),
+        new LayerPort("encoder_output", GetInputShape(), Required: false)
+    ];
+
+    /// <summary>
+    /// Named multi-input forward pass.
+    /// </summary>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        if (!inputs.TryGetValue("decoder_input", out var decoderInput) || decoderInput == null)
+            throw new ArgumentException("TransformerDecoderLayer requires 'decoder_input'.", nameof(inputs));
+        // encoder_output optional — falls back to decoder-only mode
+        if (!inputs.TryGetValue("encoder_output", out var encoderOutput) || encoderOutput == null)
+            return Forward(decoderInput, decoderInput);
+        return Forward(decoderInput, encoderOutput);
+    }
+
+    /// <summary>
+    /// Not supported for this layer. Use Forward(Tensor&lt;T&gt; input, Tensor&lt;T&gt; encoderOutput) instead.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>Never returns as this method throws an exception.</returns>
+    /// <exception cref="InvalidOperationException">Always thrown, as this method is not supported for this layer.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method is not supported for the transformer decoder layer, as it requires both a decoder input and an encoder output.
+    /// Use the overloaded Forward method that accepts both inputs instead.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method is a placeholder that shows an error if used incorrectly.
+    /// 
+    /// The transformer decoder needs two inputs:
+    /// - The decoder's own input (what it has generated so far)
+    /// - The encoder's output (information from the source sequence)
+    /// 
+    /// This method exists only to satisfy the base class requirements, but will show an error
+    /// if someone tries to use it. The correct method to use is the one that accepts both inputs.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Decoder-only mode (GPT-style): use self-attention only, skip cross-attention
+        // Per Vaswani et al. 2017, the decoder can operate without encoder output
+        // for autoregressive language models
+        return Forward(input, input);
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the transformer decoder layer.
+    /// </summary>
+    /// <param name="input">The decoder input tensor.</param>
+    /// <param name="encoderOutput">The encoder output tensor.</param>
+    /// <returns>The output tensor after processing through the transformer decoder layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the transformer decoder layer. It processes the decoder input through
+    /// the self-attention mechanism, applies layer normalization and a residual connection, then passes the result through
+    /// the cross-attention mechanism (attending to the encoder output), applies another layer normalization and residual
+    /// connection, and finally processes the result through the feed-forward network followed by a final layer normalization
+    /// and residual connection.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method processes the inputs through all components of the decoder layer.
+    /// 
+    /// The forward pass follows these steps:
+    /// 
+    /// 1. Self-Attention:
+    ///    - The decoder looks at its own input to understand the context of what it has generated so far
+    ///    - The result is added to the original input (residual connection)
+    ///    - Layer normalization is applied to stabilize the values
+    /// 
+    /// 2. Cross-Attention:
+    ///    - The decoder looks at the encoder output to gather information from the source sequence
+    ///    - The result is added to the output from step 1 (residual connection)
+    ///    - Layer normalization is applied again
+    /// 
+    /// 3. Feed-Forward Network:
+    ///    - The output from step 2 is processed through a feed-forward network
+    ///    - The result is added to the output from step 2 (residual connection)
+    ///    - A final layer normalization is applied
+    /// 
+    /// These steps allow the decoder to generate output that is coherent with both
+    /// what it has generated so far and the information from the source sequence.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> Forward(Tensor<T> input, Tensor<T> encoderOutput)
+    {
+        // Lazy ctor path: resolve _embeddingSize from input.Shape[^1] and construct
+        // sublayers on first call.
+        EnsureInitializedFromInput(input);
+
+        // Cross-attention requires encoderOutput's last dim to match the resolved
+        // embedding dim; otherwise the attention math fails deep inside MHA with
+        // a less-helpful error. Surface the mismatch at the layer boundary.
+        if (encoderOutput is null)
+        {
+            throw new ArgumentNullException(nameof(encoderOutput));
+        }
+        if (encoderOutput.Shape.Length >= 1
+            && encoderOutput.Shape[encoderOutput.Shape.Length - 1] != _embeddingSize)
+        {
+            throw new ArgumentException(
+                $"encoderOutput last dim ({encoderOutput.Shape[encoderOutput.Shape.Length - 1]}) " +
+                $"must match the decoder's resolved embedding size ({_embeddingSize}). " +
+                "Cross-attention requires the encoder and decoder to share their feature dim.",
+                nameof(encoderOutput));
+        }
+
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        _lastEncoderOutput = encoderOutput;
+
+        _lastSelfAttentionOutput = _selfAttention.Forward(input);
+
+        // residual1 = input + selfAttentionOutput
+        var residual1 = Engine.TensorAdd(input, _lastSelfAttentionOutput);
+        _lastNormalized1 = _norm1.Forward(residual1);
+
+        _lastCrossAttentionOutput = _crossAttention.Forward(_lastNormalized1, encoderOutput);
+
+        // residual2 = normalized1 + crossAttentionOutput
+        var residual2 = Engine.TensorAdd(_lastNormalized1, _lastCrossAttentionOutput);
+        _lastNormalized2 = _norm2.Forward(residual2);
+
+        var feedForwardHidden = _feedForward.Forward(_lastNormalized2);
+        _lastFeedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
+
+        // residual3 = normalized2 + feedForwardOutput
+        var residual3 = Engine.TensorAdd(_lastNormalized2, _lastFeedForwardOutput);
+        var output = _norm3.Forward(residual3);
+
+        return output;
+    }
+
+    /// <summary>
+    /// GPU-resident forward pass for the transformer decoder layer.
+    /// Performs self-attention, cross-attention, and feed-forward operations entirely on GPU.
+    /// </summary>
+    /// <param name="inputs">Array containing [decoderInput, encoderOutput] GPU tensors.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    /// <exception cref="ArgumentException">Thrown when inputs array doesn't contain exactly 2 tensors.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs the entire transformer decoder forward pass on the GPU without downloading
+    /// intermediate results to CPU. All sublayer operations (self-attention, cross-attention, layer normalization,
+    /// feed-forward networks, residual connections) remain GPU-resident for maximum performance.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length < 2)
+            throw new ArgumentException("TransformerDecoderLayer requires two inputs: [decoderInput, encoderOutput]");
+
+        // Lazy ctor path: resolve _embeddingSize from decoder input.Shape[^1] and
+        // construct sublayers before any GPU code dereferences them.
+        EnsureInitializedFromInput(inputs[0]);
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        Tensor<T> decoderInput = inputs[0];
+        Tensor<T> encoderOutput = inputs[1];
+
+        // 1. Self-attention sublayer
+        var selfAttentionOutput = _selfAttention.ForwardGpu(decoderInput);
+
+        // 2. First residual connection: input + selfAttentionOutput
+        var residual1 = gpuEngine.AddGpu(decoderInput, selfAttentionOutput);
+
+        // 3. First layer normalization
+        var (normalized1, _, _) = gpuEngine.LayerNormGpu(residual1, _norm1.GetGammaTensor(), _norm1.GetBetaTensor(), Convert.ToDouble(_norm1.GetEpsilon()));
+
+        // 4. Cross-attention sublayer (decoder attends to encoder output)
+        var crossAttentionOutput = _crossAttention.ForwardGpu(normalized1, encoderOutput);
+
+        // 5. Second residual connection: normalized1 + crossAttentionOutput
+        var residual2 = gpuEngine.AddGpu(normalized1, crossAttentionOutput);
+
+        // 6. Second layer normalization
+        var (normalized2, _, _) = gpuEngine.LayerNormGpu(residual2, _norm2.GetGammaTensor(), _norm2.GetBetaTensor(), Convert.ToDouble(_norm2.GetEpsilon()));
+
+        // 7. Feed-forward network (two layers)
+        var ffHidden = _feedForward.ForwardGpu(normalized2);
+        var ffProjected = _feedForwardProjection.ForwardGpu(ffHidden);
+
+        // 8. Third residual connection: normalized2 + ffProjected
+        var residual3 = gpuEngine.AddGpu(normalized2, ffProjected);
+
+        // 9. Third layer normalization (final output)
+        var (output, _, _) = gpuEngine.LayerNormGpu(residual3, _norm3.GetGammaTensor(), _norm3.GetBetaTensor(), Convert.ToDouble(_norm3.GetEpsilon()));
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            _gpuNormalized1 = normalized1;
+            _gpuNormalized2 = normalized2;
+            _lastInput = decoderInput;
+            _lastEncoderOutput = encoderOutput;
+            _lastSelfAttentionOutput = selfAttentionOutput;
+            _lastNormalized1 = normalized1;
+            _lastCrossAttentionOutput = crossAttentionOutput;
+            _lastNormalized2 = normalized2;
+            _lastFeedForwardOutput = ffProjected;
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Updates the parameters of all sublayers using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method updates the parameters of all sublayers in the transformer decoder layer based on the gradients
+    /// calculated during the backward pass. It delegates the update process to each sublayer, passing the learning rate.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts all the internal values of the layer to improve its performance.
+    /// 
+    /// During parameter updates:
+    /// - The learning rate controls how big each adjustment is
+    /// - Every sublayer gets updated based on what was learned in the backward pass
+    /// - This helps the entire decoder layer gradually improve its performance
+    /// 
+    /// Think of it like fine-tuning all the components of the decoder based on feedback:
+    /// - The self-attention mechanism learns to focus on more relevant parts of what's been generated
+    /// - The cross-attention mechanism learns to extract more useful information from the source
+    /// - The feed-forward network learns to better transform this information into the next output
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Sublayers do not exist on a lazy decoder until first Forward.
+        if (!_isInitialized) return;
+        _selfAttention.UpdateParameters(learningRate);
+        _norm1.UpdateParameters(learningRate);
+        _crossAttention.UpdateParameters(learningRate);
+        _norm2.UpdateParameters(learningRate);
+        _feedForward.UpdateParameters(learningRate);
+        _feedForwardProjection.UpdateParameters(learningRate);
+        _norm3.UpdateParameters(learningRate);
+    }
+
+    /// <summary>
+    /// Updates layer parameters using GPU-resident optimizer.
+    /// </summary>
+    /// <param name="config">The GPU optimizer configuration.</param>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to each sublayer's UpdateParametersGpu method.
+    /// All sublayers (self-attention, cross-attention, layer norms, feed-forward) are updated.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        // Sublayers do not exist on a lazy decoder until first Forward.
+        if (!_isInitialized) return;
+
+        // Update parameters for each sub-layer using GPU optimizer
+        _selfAttention.UpdateParametersGpu(config);
+        _norm1.UpdateParametersGpu(config);
+        _crossAttention.UpdateParametersGpu(config);
+        _norm2.UpdateParametersGpu(config);
+        _feedForward.UpdateParametersGpu(config);
+        _feedForwardProjection.UpdateParametersGpu(config);
+        _norm3.UpdateParametersGpu(config);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the transformer decoder layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters from all sublayers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters from all sublayers of the transformer decoder layer and combines
+    /// them into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
+    /// or for saving and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learnable values from all parts of the decoder.
+    /// 
+    /// The parameters:
+    /// - Are the numbers that the neural network learns during training
+    /// - Include weights from attention mechanisms, normalization layers, and the feed-forward network
+    /// - Are combined into a single long list (vector)
+    /// 
+    /// This is useful for:
+    /// - Saving the model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques that need access to all parameters
+    /// 
+    /// A transformer decoder layer typically has millions of parameters, all of which
+    /// contribute to its ability to generate high-quality sequences.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Sublayers do not exist on a lazy decoder until first Forward.
+        if (!_isInitialized) return new Vector<T>(0);
+
+        // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
+        // Collect parameters from all sublayers
+        var selfAttentionParams = _selfAttention.GetParameters();
+        var norm1Params = _norm1.GetParameters();
+        var crossAttentionParams = _crossAttention.GetParameters();
+        var norm2Params = _norm2.GetParameters();
+        var feedForwardParams = _feedForward.GetParameters();
+        var feedForwardProjectionParams = _feedForwardProjection.GetParameters();
+        var norm3Params = _norm3.GetParameters();
+
+        // Concatenate all parameter vectors efficiently
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(
+                Vector<T>.Concatenate(
+                    Vector<T>.Concatenate(
+                        Vector<T>.Concatenate(
+                            Vector<T>.Concatenate(selfAttentionParams, norm1Params),
+                            crossAttentionParams),
+                        norm2Params),
+                    feedForwardParams),
+                feedForwardProjectionParams),
+            norm3Params);
+    }
+
+    /// <summary>
+    /// Resets the internal state of the transformer decoder layer and all its sublayers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the transformer decoder layer and all its sublayers. It clears the cached
+    /// tensors from the forward pass and delegates the reset operation to each sublayer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    ///
+    /// When resetting the state:
+    /// - All sublayers are reset to their initial condition
+    /// - Stored inputs and outputs are cleared
+    /// - The layer forgets all intermediate results from previous processing
+    ///
+    /// This is important for:
+    /// - Processing a new, unrelated sequence
+    /// - Starting a new training episode
+    /// - Testing the layer with fresh inputs
+    ///
+    /// Think of it like clearing the entire team's mind before starting a completely new task,
+    /// ensuring no residual information affects the processing of new inputs.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Sublayers do not exist on a lazy decoder until first Forward — nothing
+        // to reset on a never-used instance.
+        if (!_isInitialized) return;
+
+        // Reset all sublayers
+        _selfAttention.ResetState();
+        _norm1.ResetState();
+        _crossAttention.ResetState();
+        _norm2.ResetState();
+        _feedForward.ResetState();
+        _feedForwardProjection.ResetState();
+        _norm3.ResetState();
+
+        // Clear GPU cached tensors
+        _gpuNormalized1 = null;
+        _gpuNormalized2 = null;
+
+        // Clear cached tensors
+        _lastInput = null;
+        _lastEncoderOutput = null;
+        _lastSelfAttentionOutput = null;
+        _lastNormalized1 = null;
+        _lastCrossAttentionOutput = null;
+        _lastNormalized2 = null;
+        _lastFeedForwardOutput = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer by aggregating losses from sublayers.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the auxiliary loss by aggregating losses from sublayers that implement IAuxiliaryLossLayer.
+    /// For the decoder layer, this includes both self-attention and cross-attention mechanisms, which provide
+    /// attention entropy and head diversity regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects additional learning signals from the layer's components.
+    ///
+    /// Auxiliary loss aggregation:
+    /// - Checks each attention sublayer to see if it has auxiliary losses
+    /// - Collects those losses from both self-attention and cross-attention
+    /// - Combines them and returns the total for use in training
+    ///
+    /// Why this is useful:
+    /// - Both attention mechanisms benefit from regularization to prevent all heads from learning the same patterns
+    /// - Self-attention regularization helps the decoder maintain coherent generation patterns
+    /// - Cross-attention regularization helps the decoder focus on relevant parts of the source
+    /// - Aggregating losses at the decoder level provides a unified view of attention quality
+    ///
+    /// Example: If the self-attention has an entropy loss (to keep attention focused) and a diversity loss
+    /// (to prevent heads from being redundant), and the cross-attention has similar losses, this method
+    /// adds all of them together and returns the total.
+    ///
+    /// The aggregated loss helps ensure:
+    /// - Both attention mechanisms learn diverse patterns
+    /// - Attention is focused rather than diffuse
+    /// - The decoder uses its capacity efficiently for both understanding context and attending to source
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss)
+        {
+            _lastAuxiliaryLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Sublayers do not exist on a lazy decoder until first Forward — there is no
+        // auxiliary loss to aggregate from a never-trained instance.
+        if (!_isInitialized)
+        {
+            _lastAuxiliaryLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        T totalAuxLoss = NumOps.Zero;
+        int auxLayerCount = 0;
+
+        // Aggregate auxiliary loss from self-attention if it implements IAuxiliaryLossLayer
+        if (_selfAttention is IAuxiliaryLossLayer<T> auxSelfAttention && auxSelfAttention.UseAuxiliaryLoss)
+        {
+            T selfAttentionAuxLoss = auxSelfAttention.ComputeAuxiliaryLoss();
+            totalAuxLoss = NumOps.Add(totalAuxLoss, selfAttentionAuxLoss);
+            auxLayerCount++;
+        }
+
+        // Aggregate auxiliary loss from cross-attention if it implements IAuxiliaryLossLayer
+        if (_crossAttention is IAuxiliaryLossLayer<T> auxCrossAttention && auxCrossAttention.UseAuxiliaryLoss)
+        {
+            T crossAttentionAuxLoss = auxCrossAttention.ComputeAuxiliaryLoss();
+            totalAuxLoss = NumOps.Add(totalAuxLoss, crossAttentionAuxLoss);
+            auxLayerCount++;
+        }
+
+        // Average the auxiliary losses if any were computed
+        if (auxLayerCount > 0)
+        {
+            totalAuxLoss = NumericalStabilityHelper.SafeDiv(totalAuxLoss, NumOps.FromDouble(auxLayerCount));
+        }
+
+        _lastAuxiliaryLoss = totalAuxLoss;
+        return _lastAuxiliaryLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total auxiliary loss, the weight applied to it, whether auxiliary loss is enabled,
+    /// and detailed diagnostics from both self-attention and cross-attention sublayers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalAuxiliaryLoss: The combined penalty from all attention sublayers
+    /// - AuxiliaryWeight: How much this penalty affects the overall training
+    /// - UseAuxiliaryLoss: Whether this penalty is currently enabled
+    /// - SelfAttentionDiagnostics: Detailed information from the self-attention mechanism
+    /// - CrossAttentionDiagnostics: Detailed information from the cross-attention mechanism
+    ///
+    /// You can use this information to:
+    /// - Monitor if attention patterns are healthy (diverse and focused) in both mechanisms
+    /// - Debug training issues related to attention
+    /// - Understand how the decoder is learning both context and source information
+    ///
+    /// Example: If you see that self-attention entropy is very low, it might mean the decoder isn't
+    /// maintaining good coherence with its own generated output. If cross-attention diversity is low,
+    /// it might mean all heads are looking at the same part of the source, wasting capacity.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>
+        {
+            { "TotalAuxiliaryLoss", _lastAuxiliaryLoss?.ToString() ?? "0" },
+            { "AuxiliaryWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
+            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
+        };
+
+        // Include diagnostics from self-attention if available
+        if (_selfAttention is IAuxiliaryLossLayer<T> auxSelfAttention)
+        {
+            var selfAttentionDiagnostics = auxSelfAttention.GetAuxiliaryLossDiagnostics();
+            foreach (var kvp in selfAttentionDiagnostics)
+            {
+                diagnostics[$"SelfAttention_{kvp.Key}"] = kvp.Value;
+            }
+        }
+
+        // Include diagnostics from cross-attention if available
+        if (_crossAttention is IAuxiliaryLossLayer<T> auxCrossAttention)
+        {
+            var crossAttentionDiagnostics = auxCrossAttention.GetAuxiliaryLossDiagnostics();
+            foreach (var kvp in crossAttentionDiagnostics)
+            {
+                diagnostics[$"CrossAttention_{kvp.Key}"] = kvp.Value;
+            }
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Persists ctor parameters that DeserializationHelper needs to reconstruct
+    /// an identical layer post-clone. Without this override, the deserializer
+    /// falls back to <c>ResolveDefaultHeadCount(embeddingSize)</c> — which for
+    /// the SGPT/embed=768 case picks 8 heads instead of the source's 12, splits
+    /// Q/K/V into different per-head subspaces, and produces divergent
+    /// attention outputs even though every weight tensor copies identically.
+    /// (#1279 SGPT Clone_ShouldProduceIdenticalOutput: cloned output[1] = 0.)
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["FeedForwardDim"] = _feedForwardDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["SequenceLength"] = _sequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        // Persist the FFN activation type so DeserializationHelper can
+        // re-instantiate it via TryCreateActivationInstance. Without this,
+        // any non-default FFN activation (anything other than
+        // GELUActivation<T>) silently round-trips to the ctor default on
+        // Clone / Deserialize, producing behaviourally divergent models
+        // (the symptom CodeRabbit flagged on PR #1290 / PR #1299).
+        if (_lazyFfnActivation is not null)
+        {
+            var aqn = _lazyFfnActivation.GetType().AssemblyQualifiedName;
+            if (!string.IsNullOrWhiteSpace(aqn))
+            {
+                metadata["FfnActivationType"] = aqn;
+            }
+        }
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Applies multi-head attention graph to input nodes (supports both self-attention and cross-attention).
+    /// </summary>
+    private ComputationNode<T> ApplyMultiHeadAttentionGraph(
+        MultiHeadAttentionLayer<T> attentionLayer,
+        ComputationNode<T> query,
+        ComputationNode<T> key,
+        ComputationNode<T> value)
+    {
+        // Get attention projection weights
+        var queryWeights = attentionLayer.GetQueryWeights();
+        var keyWeights = attentionLayer.GetKeyWeights();
+        var valueWeights = attentionLayer.GetValueWeights();
+        var outputWeights = attentionLayer.GetOutputWeights();
+
+        if (queryWeights == null || keyWeights == null || valueWeights == null || outputWeights == null)
+            throw new InvalidOperationException("Attention weights not initialized.");
+
+        // Create constant nodes for projection weights (already Tensor<T>)
+        var wqNode = TensorOperations<T>.Constant(queryWeights, "Wq");
+        var wkNode = TensorOperations<T>.Constant(keyWeights, "Wk");
+        var wvNode = TensorOperations<T>.Constant(valueWeights, "Wv");
+        var woNode = TensorOperations<T>.Constant(outputWeights, "Wo");
+
+        // Apply multi-head attention
+        return TensorOperations<T>.MultiHeadAttention(
+            query: query,
+            key: key,
+            value: value,
+            numHeads: attentionLayer.HeadCount,
+            wQ: wqNode,
+            wK: wkNode,
+            wV: wvNode,
+            wO: woNode);
+    }
+
+    /// <summary>
+    /// Applies layer normalization graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyLayerNormGraph(LayerNormalizationLayer<T> normLayer, ComputationNode<T> input)
+    {
+        // Get normalization parameters directly as tensors
+        var gamma = normLayer.GetGammaTensor();
+        var beta = normLayer.GetBetaTensor();
+        var normalizedShape = normLayer.GetNormalizedShape();
+        var epsilon = Convert.ToDouble(normLayer.GetEpsilon());
+
+        // Create constant nodes for gamma and beta
+        var gammaNode = TensorOperations<T>.Constant(gamma, "gamma");
+        var betaNode = TensorOperations<T>.Constant(beta, "beta");
+
+        return TensorOperations<T>.LayerNorm(input, normalizedShape, gammaNode, betaNode, epsilon);
+    }
+
+    /// <summary>
+    /// Applies feed-forward graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyFeedForwardGraph(FeedForwardLayer<T> ffLayer, ComputationNode<T> input)
+    {
+        // Get feed-forward weights and biases directly as tensors (first layer: expand to hidden dim)
+        var weightsTensor = ffLayer.GetWeightsTensor();
+        var biasTensor = ffLayer.GetBiasesTensor();
+
+        if (weightsTensor == null || biasTensor == null)
+            throw new InvalidOperationException("Feed-forward layer weights not initialized.");
+
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "ff_weights");
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "ff_bias");
+
+        // Linear transformation: hidden = input @ weights^T + bias
+        var weightsT = TensorOperations<T>.Transpose(weightsNode);
+        var linear = TensorOperations<T>.MatrixMultiply(input, weightsT);
+        var withBias = TensorOperations<T>.Add(linear, biasNode);
+
+        // Apply activation if present using the activation's own ApplyToGraph method
+        ComputationNode<T> hidden = withBias;
+        var activation = ffLayer.ScalarActivation;
+        if (activation != null)
+        {
+            hidden = activation.ApplyToGraph(withBias);
+        }
+
+        // Apply projection layer (second layer: project back to embedding size)
+        var projWeightsTensor = _feedForwardProjection.GetWeightsTensor();
+        var projBiasTensor = _feedForwardProjection.GetBiasesTensor();
+
+        if (projWeightsTensor == null || projBiasTensor == null)
+            throw new InvalidOperationException("Feed-forward projection layer weights not initialized.");
+
+        var projWeightsNode = TensorOperations<T>.Constant(projWeightsTensor, "ff_proj_weights");
+        var projBiasNode = TensorOperations<T>.Constant(projBiasTensor, "ff_proj_bias");
+
+        // Linear transformation: output = hidden @ projWeights^T + projBias
+        var projWeightsT = TensorOperations<T>.Transpose(projWeightsNode);
+        var projLinear = TensorOperations<T>.MatrixMultiply(hidden, projWeightsT);
+        var output = TensorOperations<T>.Add(projLinear, projBiasNode);
+
+        return output;
+    }
+
+}

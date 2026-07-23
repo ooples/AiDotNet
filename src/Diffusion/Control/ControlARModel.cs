@@ -1,0 +1,196 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+
+namespace AiDotNet.Diffusion.Control;
+
+/// <summary>
+/// ControlAR model combining autoregressive generation with spatial control.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// ControlAR adapts ControlNet-style spatial conditioning for autoregressive image
+/// generation models. It enables token-level control where spatial conditions are
+/// mapped to discrete token sequences for AR model consumption.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> While standard ControlNet works with diffusion models,
+/// ControlAR brings the same "follow my reference image" capability to autoregressive
+/// (token-based) image generators, bridging the two main approaches to image generation.
+/// </para>
+/// <para>
+/// Reference: Li et al., "ControlAR: Controllable Image Generation with Autoregressive Models", 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a ControlAR model for edge-guided image generation
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 16,
+///     Height = 256,
+///     Width = 256,
+///     NumInferenceSteps = 30
+/// };
+/// var model = new ControlARModel&lt;float&gt;(options, ControlType.Canny);
+///
+/// // Generate an image guided by an edge map
+/// var edgeMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 256, 256 });
+/// var result = model.Predict(edgeMap);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("ControlAR: Controllable Image Generation with Autoregressive Models", "https://arxiv.org/abs/2410.02705", Year = 2024, Authors = "Li et al.")]
+public class ControlARModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 16;
+    private const int AR_VOCAB_SIZE = 8192;
+
+    private UNetNoisePredictor<T> _baseUNet;
+    private StandardVAE<T> _vae;
+    private ControlNetEncoder<T> _controlEncoder;
+    private readonly IConditioningModule<T>? _conditioner;
+    private readonly ControlType _controlType;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _baseUNet;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount =>
+        _baseUNet.ParameterCount + _vae.ParameterCount + _controlEncoder.ParameterCount;
+
+    public ControlARModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? baseUNet = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        ControlType controlType = ControlType.Canny,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.0001, BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _controlType = controlType;
+        _conditioner = conditioner;
+        InitializeLayers(baseUNet, vae, seed);
+    }
+
+    [MemberNotNull(nameof(_baseUNet), nameof(_vae), nameof(_controlEncoder))]
+    private void InitializeLayers(UNetNoisePredictor<T>? baseUNet, StandardVAE<T>? vae, int? seed)
+    {
+        _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture, inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
+            baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocks: 2,
+            attentionResolutions: new[] { 4, 2, 1 }, contextDim: 4096, seed: seed);
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS, baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
+        _controlEncoder = new ControlNetEncoder<T>(
+            inputChannels: 3, baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        int c1 = checked((int)_baseUNet.ParameterCount);
+        int c2 = checked((int)_vae.ParameterCount);
+        int c3 = checked((int)_controlEncoder.ParameterCount);
+        long expectedTotal = (long)c1 + c2 + c3;
+        var result = new Vector<T>(checked((int)expectedTotal));
+        var p1 = _baseUNet.GetParameters();
+        for (int i = 0; i < p1.Length; i++) result[i] = p1[i];
+        var p2 = _vae.GetParameters();
+        for (int i = 0; i < p2.Length; i++) result[c1 + i] = p2[i];
+        var p3 = _controlEncoder.GetParameters();
+        for (int i = 0; i < p3.Length; i++) result[c1 + c2 + i] = p3[i];
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int c1 = checked((int)_baseUNet.ParameterCount);
+        int c2 = checked((int)_vae.ParameterCount);
+        int c3 = checked((int)_controlEncoder.ParameterCount);
+        long expectedTotal = (long)c1 + c2 + c3;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+        int o = 0;
+        var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
+        var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _vae.SetParameters(new Vector<T>(a2)); o += c2;
+        var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a3));
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Clone the ACTUAL baseUNet/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
+        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
+        // shapes no longer lined up 1:1 and Clone diverged. Cloning the resolved baseUNet/VAE (+ same
+        // architecture/options/scheduler) makes the clone structurally identical.
+        var clone = new ControlARModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            controlType: _controlType,
+            conditioner: _conditioner,
+            seed: null);
+        // Copy-on-write: share weight tensors with the clone (O(1)-until-write) via the global helper;
+        // fall back to the eager flat copy only if the trainable-layer structure doesn't line up 1:1.
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "ControlAR", Version = "1.0",
+            Description = "Spatial control for autoregressive image generation via token-level conditioning",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        metadata.SetProperty("architecture", "ar-controlnet");
+        metadata.SetProperty("base_model", "Autoregressive Image Generator");
+        metadata.SetProperty("context_dim", 4096);
+        metadata.SetProperty("control_type", _controlType.ToString());
+        metadata.SetProperty("ar_vocab_size", AR_VOCAB_SIZE);
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("guidance_scale", 7.5);
+        return metadata;
+    }
+}

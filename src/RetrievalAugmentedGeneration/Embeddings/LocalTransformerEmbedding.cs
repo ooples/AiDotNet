@@ -1,0 +1,52 @@
+using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+
+namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
+{
+    /// <summary>
+    /// Local transformer embedding model for generating embeddings using ONNX Runtime without external API calls.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    public class LocalTransformerEmbedding<T> : EmbeddingModelBase<T>
+    {
+        private readonly ONNXSentenceTransformer<T> _onnxTransformer;
+
+        public override int EmbeddingDimension => _onnxTransformer.EmbeddingDimension;
+        public override int MaxTokens => _onnxTransformer.MaxTokens;
+
+        public LocalTransformerEmbedding(string modelPath, int dimension = 384, int maxTokens = 512)
+        {
+            _onnxTransformer = new ONNXSentenceTransformer<T>(modelPath, dimension, maxTokens);
+        }
+
+        protected override Vector<T> EmbedCore(string text)
+        {
+            return _onnxTransformer.Embed(text);
+        }
+
+        private bool _disposed;
+
+        protected override void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    _onnxTransformer.Dispose();
+                }
+
+                _disposed = true;
+            }
+
+            base.Dispose(disposing);
+        }
+    }
+}

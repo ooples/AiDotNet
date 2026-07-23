@@ -1,0 +1,287 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Finance.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Finance.Base;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+
+namespace AiDotNet.Finance.Portfolio;
+
+/// <summary>
+/// Deep Portfolio Manager for end-to-end portfolio weight optimization.
+/// </summary>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// DeepPortfolioManager uses deep learning to directly map market input data
+/// to optimal portfolio weights, typically maximizing a risk-adjusted return metric.
+/// </para>
+/// <para><b>For Beginners:</b> Managing a portfolio means deciding exactly what percentage 
+/// of your money should go into each stock (e.g., 10% Apple, 5% Microsoft). 
+/// While traditional methods use complex math formulas, this AI model looks 
+/// at historical performance and current trends to "guess" the best weights 
+/// that will give you the most profit with the least risk.
+/// </para>
+/// <para>
+/// Reference: Zhang et al., "Deep Learning for Portfolio Management", 2020.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Deep Portfolio Manager for end-to-end weight optimization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 10, inputDepth: 1, outputSize: 10);
+/// var model = new DeepPortfolioManager&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for portfolio weight prediction
+/// var onnxModel = new DeepPortfolioManager&lt;double&gt;(architecture, "deepportfolio.onnx");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.ReinforcementLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("A Deep Reinforcement Learning Framework for the Financial Portfolio Management Problem", "https://arxiv.org/abs/1706.10059")]
+public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
+{
+    #region Shared Fields
+
+    private readonly DeepPortfolioManagerOptions<T> _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly bool _allowShortSelling;
+    private readonly double _maxWeight;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    #endregion
+
+    #region Interface Properties
+
+    /// <inheritdoc/>
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates a DeepPortfolioManager using a pretrained ONNX model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the DeepPortfolioManager model, DeepPortfolioManager sets up the architecture and options. This prepares the model for training or inference.
+    /// </para>
+    /// </remarks>
+    public DeepPortfolioManager(
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
+        DeepPortfolioManagerOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, onnxModelPath, options?.NumAssets ?? 10, architecture.InputSize)
+    {
+        options ??= new DeepPortfolioManagerOptions<T>();
+        _options = options;
+        Options = _options;
+        options.Validate();
+
+        _allowShortSelling = options.AllowShortSelling;
+        _maxWeight = options.MaxWeight;
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates a DeepPortfolioManager in native mode for training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the DeepPortfolioManager model, DeepPortfolioManager sets up the architecture and options. This prepares the model for training or inference.
+    /// </para>
+    /// </remarks>
+    public DeepPortfolioManager(
+        NeuralNetworkArchitecture<T> architecture,
+        DeepPortfolioManagerOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, options?.NumAssets ?? 10, architecture.InputSize, lossFunction)
+    {
+        options ??= new DeepPortfolioManagerOptions<T>();
+        _options = options;
+        Options = _options;
+        options.Validate();
+
+        _allowShortSelling = options.AllowShortSelling;
+        _maxWeight = options.MaxWeight;
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        InitializeLayers();
+    }
+
+    #endregion
+
+    #region Initialization
+
+    /// <summary>
+    /// Executes InitializeLayers for the DeepPortfolioManager.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the DeepPortfolioManager model, InitializeLayers builds and wires up model components. This sets up the DeepPortfolioManager architecture before use.
+    /// </para>
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else if (UseNativeMode)
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultDeepPortfolioLayers(Architecture, _numAssets));
+        }
+    }
+
+    #endregion
+
+    #region Portfolio Optimization
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the DeepPortfolioManager model, OptimizePortfolio computes portfolio weights. This is the decision output the DeepPortfolioManager architecture is designed to learn.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> OptimizePortfolio(Tensor<T> marketData)
+    {
+        var output = Predict(marketData);
+        var weights = output.ToVector();
+
+        // For Beginners: Ensure weights are valid (e.g., no single stock > maxWeight)
+        if (_maxWeight < 1.0)
+        {
+            // Simple clipping logic (would need re-normalization in real implementation)
+            for (int i = 0; i < weights.Length; i++)
+            {
+                if (NumOps.ToDouble(weights[i]) > _maxWeight)
+                    weights[i] = NumOps.FromDouble(_maxWeight);
+            }
+        }
+
+        return weights;
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Executes Predict for the DeepPortfolioManager.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the DeepPortfolioManager model, Predict produces predictions from input data. This is the main inference step of the DeepPortfolioManager architecture.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in Layers) current = layer.Forward(current);
+        return current;
+    }
+
+    /// <summary>
+    /// Executes Train for the DeepPortfolioManager.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the DeepPortfolioManager model, Train performs a training step. This updates the DeepPortfolioManager architecture so it learns from data.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> target)
+    {
+        if (!UseNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
+    }
+
+    /// <summary>
+    /// Executes UpdateParameters for the DeepPortfolioManager.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the DeepPortfolioManager model, UpdateParameters updates internal parameters or state. This keeps the DeepPortfolioManager architecture aligned with the latest values.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
+            offset += layerParams.Length;
+        }
+    }
+
+    /// <summary>
+    /// Executes GetModelMetadata for the DeepPortfolioManager.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the DeepPortfolioManager model, GetModelMetadata performs a supporting step in the workflow. It keeps the DeepPortfolioManager architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ModelType", "DeepPortfolioManager" },
+                { "NumAssets", _numAssets },
+                { "AllowShortSelling", _allowShortSelling },
+                { "ParameterCount", GetParameterCount() }
+            }
+        };
+    }
+
+    /// <summary>
+    /// Executes CreateNewInstance for the DeepPortfolioManager.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the DeepPortfolioManager model, CreateNewInstance builds and wires up model components. This sets up the DeepPortfolioManager architecture before use.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new DeepPortfolioManagerOptions<T> { NumAssets = _numAssets, AllowShortSelling = _allowShortSelling, MaxWeight = _maxWeight };
+        return new DeepPortfolioManager<T>(Architecture, options, _optimizer, LossFunction);
+    }
+
+    #endregion
+}

@@ -1,0 +1,649 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents an expert module in a Mixture-of-Experts architecture, containing a sequence of layers.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <remarks>
+/// <para>
+/// An Expert is a container for a sequence of neural network layers that are executed sequentially.
+/// In a Mixture-of-Experts (MoE) architecture, multiple experts process the same input, and their outputs
+/// are combined based on learned routing weights. Each expert can specialize in processing different
+/// types of inputs or patterns.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Think of an Expert as a mini neural network that specializes in a particular task.
+///
+/// In a Mixture-of-Experts system:
+/// - You have multiple "experts" (mini-networks), each with their own layers
+/// - Each expert learns to be good at handling certain types of inputs
+/// - A routing mechanism decides which experts should process each input
+/// - The final output combines the predictions from the selected experts
+///
+/// For example, in a language model:
+/// - One expert might specialize in technical vocabulary
+/// - Another might handle conversational language
+/// - Another might focus on formal writing
+/// - The router learns to send each input to the most appropriate expert(s)
+///
+/// This allows the model to scale to very large sizes while keeping computation efficient,
+/// since only a subset of experts are activated for each input.
+/// </para>
+/// </remarks>
+[LayerCategory(LayerCategory.MixtureOfExperts)]
+[LayerTask(LayerTask.Routing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
+public class ExpertLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// The sequence of layers that make up this expert.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These layers are executed in order during the forward pass and in reverse order during backpropagation.
+    /// Each layer processes the output from the previous layer, creating a pipeline of transformations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the list of layers that define what this expert does.
+    ///
+    /// Think of it as a recipe:
+    /// - Each layer is a step in the recipe
+    /// - Data flows through each step in order
+    /// - The output of one step becomes the input to the next
+    ///
+    /// For example, an expert might have:
+    /// 1. A dense layer to extract features
+    /// 2. An activation layer to add non-linearity
+    /// 3. Another dense layer to produce the final output
+    /// </para>
+    /// </remarks>
+    private readonly List<ILayer<T>> _layers;
+
+    /// <summary>
+    /// Stores the pre-activation output for use in backpropagation.
+    /// </summary>
+    private Tensor<T>? _lastPreActivationOutput;
+
+    /// <summary>
+    /// Gets a value indicating whether this expert supports training through backpropagation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if any of the contained layers support training; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// An expert supports training if at least one of its layers has trainable parameters.
+    /// This determines whether gradients will be computed during the backward pass.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you whether this expert can learn from data.
+    ///
+    /// An expert can learn if:
+    /// - At least one of its layers has adjustable parameters
+    /// - Those parameters can be updated during training
+    ///
+    /// If all layers in an expert are fixed (like certain activation layers), the expert
+    /// won't be trainable, but it can still process data.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _layers.Any(l => l.SupportsTraining);
+
+    /// <summary>
+    /// Gets a value indicating whether this expert supports GPU execution.
+    /// Returns true if all contained layers support GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution =>
+        _layers.All(l => l is LayerBase<T> lb && lb.CanExecuteOnGpu);
+
+    /// <summary>
+    /// Gets the total number of trainable parameters across all layers in this expert.
+    /// </summary>
+    /// <value>
+    /// The sum of parameter counts from all contained layers.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property calculates the total number of trainable parameters by summing the
+    /// parameter counts of all layers in the expert's sequence.
+    /// </para>
+    /// <para><b>For Beginners:</b> This counts all the numbers that can be adjusted during training.
+    ///
+    /// The total includes:
+    /// - Weights from all dense layers
+    /// - Biases from all layers that use them
+    /// - Any other learnable parameters in the layers
+    ///
+    /// A higher parameter count means the expert can represent more complex patterns,
+    /// but also requires more memory and computation.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount => (int)_layers.Sum(l => l.ParameterCount);
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExpertLayer{T}"/> class with the specified layers.
+    /// </summary>
+    /// <param name="layers">The sequence of layers that make up this expert.</param>
+    /// <param name="inputShape">The shape of the input tensor.</param>
+    /// <param name="outputShape">The shape of the output tensor.</param>
+    /// <param name="activationFunction">Optional activation function to apply after all layers (defaults to identity).</param>
+    /// <exception cref="ArgumentException">Thrown when the layers list is empty.</exception>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates an expert module from a sequence of layers. The layers are executed
+    /// in the order provided during forward pass, and in reverse order during backpropagation.
+    /// The input and output shapes should match the first layer's input shape and last layer's output shape.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new expert by chaining together multiple layers.
+    ///
+    /// When creating an expert:
+    /// - Provide a list of layers in the order they should execute
+    /// - The first layer should accept your input shape
+    /// - The last layer should produce your desired output shape
+    /// - Each intermediate layer's output should match the next layer's expected input
+    ///
+    /// For example, to create an expert that reduces dimensions:
+    /// <code>
+    /// var layers = new List&lt;ILayer&lt;float&gt;&gt;
+    /// {
+    ///     new DenseLayer&lt;float&gt;(100, 50, new ReLUActivation&lt;float&gt;()),
+    ///     new DenseLayer&lt;float&gt;(50, 25, new ReLUActivation&lt;float&gt;())
+    /// };
+    /// var expert = new ExpertLayer&lt;float&gt;(layers, new[] { 100 }, new[] { 25 });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ExpertLayer(List<ILayer<T>> layers, int[] inputShape, int[] outputShape, IActivationFunction<T>? activationFunction = null)
+        : base(inputShape, outputShape, activationFunction ?? new IdentityActivation<T>())
+    {
+        if (layers == null || layers.Count == 0)
+        {
+            throw new ArgumentException("Expert must contain at least one layer.", nameof(layers));
+        }
+
+        _layers = layers;
+
+        // Register inner layers so the tape autograd CollectParameters walk
+        // discovers their weights via GetSubLayers().
+        foreach (var layer in _layers)
+        {
+            RegisterSubLayer(layer);
+        }
+
+        // Eagerly chain-resolve lazy inner layers so ParameterCount works before first Forward.
+        if (inputShape.Length > 0 && inputShape.All(d => d > 0))
+        {
+            int[] runningShape = inputShape;
+            foreach (var layer in _layers)
+            {
+                if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    lb.ResolveFromShape(runningShape);
+                }
+                runningShape = layer.GetOutputShape();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Processes the input data through all layers in sequence.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after processing through all layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs the forward pass by sequentially passing the input through each layer.
+    /// The output of each layer becomes the input to the next layer. After all layers have processed
+    /// the data, the expert's activation function (if any) is applied to the final output.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method runs the data through all the expert's layers in order.
+    ///
+    /// The forward pass works like an assembly line:
+    /// 1. Start with the input data
+    /// 2. Pass it through the first layer
+    /// 3. Take that output and pass it to the second layer
+    /// 4. Continue until all layers have processed the data
+    /// 5. Apply the expert's activation function (if specified)
+    /// 6. Return the final result
+    ///
+    /// Each layer transforms the data in some way, building up more complex representations
+    /// as the data flows through the expert.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Lazy-shape support: if construction-time inputShape contained
+        // sentinel -1 dims, the chain-resolve in the ctor was skipped
+        // and inner lazy layers (Dense / Conv / Attention) are still
+        // unresolved. Walk the chain now using the actual input.Shape
+        // so each lazy sub-layer's OnFirstForward fires with a real
+        // shape on its own first Forward — and propagate the resolved
+        // input/output to the outer ExpertLayer so IsShapeResolved
+        // flips to true.
+        if (!IsShapeResolved) OnFirstForward(input);
+
+        var output = input;
+
+        // Pass through each layer sequentially
+        foreach (var layer in _layers)
+        {
+            output = layer.Forward(output);
+        }
+
+        // Store pre-activation output for backpropagation
+        _lastPreActivationOutput = output;
+
+        // Apply the expert's activation function if specified
+        return ApplyActivation(output);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Chain-resolves each inner layer's input shape from the actual
+    /// runtime input. This is the lazy counterpart to the ctor's eager
+    /// resolution path — it runs only when at least one inner layer is
+    /// still unresolved (ie ctor was passed a -1 sentinel input shape).
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (input._shape.Length == 0)
+            throw new ArgumentException("ExpertLayer requires non-empty input shape.", nameof(input));
+
+        // Determine whether axis 0 is a batch dimension. The eager
+        // constructor receives a per-sample feature shape (no batch),
+        // so sub-layers are configured against that. The lazy path has
+        // to disambiguate at first forward:
+        //
+        //  * If any inner layer is already shape-resolved, its
+        //    expected InputShape tells us the per-sample rank; axis 0
+        //    is batch iff the actual input has exactly one extra
+        //    leading dim.
+        //  * Otherwise, default to the convention that axis 0 is
+        //    batch (rank>=2). For rank-1 unbatched, treat the whole
+        //    shape as features. We can't reliably distinguish a
+        //    truly unbatched [H, W, C] from a batched [B=H, W, C]
+        //    without a hint, so we document the contract: lazy
+        //    ExpertLayers expect a batch axis on first forward, OR
+        //    at least one eagerly-constructed inner layer to anchor
+        //    the per-sample rank.
+        int inputRank = input._shape.Length;
+        int? perSampleRank = null;
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> lb && lb.IsShapeResolved)
+            {
+                var resolved = lb.GetInputShape();
+                if (resolved != null && resolved.Length > 0 && resolved.All(d => d > 0))
+                {
+                    perSampleRank = resolved.Length;
+                    break;
+                }
+            }
+        }
+
+        bool stripBatch;
+        if (perSampleRank.HasValue)
+        {
+            if (inputRank == perSampleRank.Value)
+            {
+                stripBatch = false;
+            }
+            else if (inputRank == perSampleRank.Value + 1)
+            {
+                stripBatch = true;
+            }
+            else
+            {
+                throw new ArgumentException(
+                    $"ExpertLayer's first inner layer expects rank-{perSampleRank.Value} " +
+                    $"per-sample input, but the runtime input has rank {inputRank}. " +
+                    $"Expected rank {perSampleRank.Value} (unbatched) or rank " +
+                    $"{perSampleRank.Value + 1} (batched).", nameof(input));
+            }
+        }
+        else
+        {
+            stripBatch = inputRank > 1;
+        }
+
+        int[] runningShape;
+        if (stripBatch)
+        {
+            runningShape = new int[inputRank - 1];
+            for (int i = 0; i < runningShape.Length; i++) runningShape[i] = input._shape[i + 1];
+        }
+        else
+        {
+            runningShape = new int[inputRank];
+            for (int i = 0; i < runningShape.Length; i++) runningShape[i] = input._shape[i];
+        }
+
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                lb.ResolveFromShape(runningShape);
+            }
+            runningShape = layer.GetOutputShape();
+        }
+
+        // Outer-layer shapes: input is the per-sample shape we just
+        // resolved (regardless of whether axis 0 was batch), output is
+        // the last sub-layer's resolved output.
+        int[] outerInput;
+        if (stripBatch)
+        {
+            outerInput = new int[inputRank - 1];
+            for (int i = 0; i < outerInput.Length; i++) outerInput[i] = input._shape[i + 1];
+        }
+        else
+        {
+            outerInput = new int[inputRank];
+            for (int i = 0; i < outerInput.Length; i++) outerInput[i] = input._shape[i];
+        }
+        ResolveShapes(outerInput, runningShape);
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors by chaining through all layers.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after processing through all layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method executes the GPU forward pass by sequentially passing the input through each layer's
+    /// ForwardGpu method. If any layer doesn't support GPU execution, falls back to CPU.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, an
+        // ExpertLayer constructed with [-1] inputShape that takes the GPU
+        // path on first use would chain into unresolved child layers and
+        // either throw or silently produce wrong output. OnFirstForward
+        // chain-resolves inner sub-layers from input.Shape; subsequent
+        // calls short-circuit via IsShapeResolved.
+        if (!IsShapeResolved) OnFirstForward(inputs[0]);
+
+        var output = inputs[0];
+
+        // Chain through each layer's ForwardGpu
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> layerBase && layerBase.CanExecuteOnGpu)
+            {
+                output = layerBase.ForwardGpu(output);
+            }
+            else
+            {
+                // Fall back to CPU for this layer
+                var cpuInput = output;
+                var cpuOutput = layer.Forward(cpuInput);
+                output = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+            }
+        }
+
+        // Store pre-activation output for backpropagation
+        _lastPreActivationOutput = output;
+
+        // Apply the expert's activation function if specified
+        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            // Apply activation on GPU if possible
+            var activationType = GetActivationType();
+            if (activationType != FusedActivationType.None)
+            {
+                output = gpuEngine.ActivationGpu(output, activationType);
+            }
+            else
+            {
+                // CPU fallback for unsupported activations
+                var cpuOutput = output;
+                var activated = ApplyActivation(cpuOutput);
+                output = gpuEngine.UploadToGpu(activated, GpuTensorRole.Activation);
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets the FusedActivationType for the expert's activation function.
+    /// </summary>
+    private FusedActivationType GetActivationType()
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+            return FusedActivationType.ReLU;
+        if (ScalarActivation is TanhActivation<T>)
+            return FusedActivationType.Tanh;
+        if (ScalarActivation is SigmoidActivation<T>)
+            return FusedActivationType.Sigmoid;
+        if (ScalarActivation is GELUActivation<T>)
+            return FusedActivationType.GELU;
+        if (ScalarActivation is IdentityActivation<T>)
+            return FusedActivationType.None;
+        return FusedActivationType.None;
+    }
+
+
+    /// <summary>
+    /// Updates all trainable parameters in all layers using the specified learning rate.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method updates the parameters of all layers that support training. The learning rate
+    /// controls the step size of the updates - larger values make bigger changes but may cause instability,
+    /// while smaller values make more gradual, stable updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies all the learned improvements to every layer.
+    ///
+    /// After the backward pass has calculated how each layer should change:
+    /// - This method actually makes those changes
+    /// - It goes through each layer in order
+    /// - Each layer updates its weights and biases
+    /// - The learning rate controls how big the changes are
+    ///
+    /// Think of it like this:
+    /// - Small learning rate = careful, small adjustments (slower but safer)
+    /// - Large learning rate = bold, big adjustments (faster but riskier)
+    ///
+    /// After calling this method, the expert should perform slightly better than before.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        foreach (var layer in _layers.Where(l => l.SupportsTraining))
+        {
+            layer.UpdateParameters(learningRate);
+        }
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters from all layers as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all parameters from all layers, concatenated in layer order.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method extracts all trainable parameters from all layers and concatenates them into
+    /// a single vector. The parameters are ordered by layer (first layer's parameters, then second layer's, etc.).
+    /// This is useful for optimization algorithms that operate on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learned values from every layer into one list.
+    ///
+    /// The returned vector contains:
+    /// - All parameters from the first layer
+    /// - Then all parameters from the second layer
+    /// - And so on for all layers
+    ///
+    /// This is useful for:
+    /// - Saving the expert's knowledge to disk
+    /// - Transferring learned parameters to another expert
+    /// - Advanced optimization techniques
+    /// - Analyzing what the expert has learned
+    ///
+    /// You can think of it as packaging up everything the expert knows into one container.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Use Vector<T>.Concatenate for production-grade parameter collection
+        var layerParams = _layers
+            .Where(l => l.ParameterCount > 0)
+            .Select(l => l.GetParameters())
+            .ToArray();
+
+        return layerParams.Length > 0 ? Vector<T>.Concatenate(layerParams) : new Vector<T>(0);
+    }
+
+    /// <summary>
+    /// Sets all trainable parameters in all layers from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters for all layers, concatenated in layer order.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameter vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method distributes parameters from a single vector to all layers. The parameters should be
+    /// in the same order as returned by GetParameters() - first layer's parameters, then second layer's, etc.
+    /// This is useful for loading pre-trained models or implementing advanced optimization algorithms.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads previously saved knowledge back into all the layers.
+    ///
+    /// When setting parameters:
+    /// - The vector must contain exactly the right number of parameters
+    /// - Parameters are distributed to layers in order (first layer first, etc.)
+    /// - Each layer receives its parameters and updates its weights and biases
+    ///
+    /// This is the opposite of GetParameters() - instead of collecting knowledge, it distributes it.
+    ///
+    /// Use cases:
+    /// - Loading a saved model from disk
+    /// - Transferring knowledge from one expert to another
+    /// - Initializing an expert with pre-trained parameters
+    /// - Implementing custom optimization algorithms
+    ///
+    /// If the parameter count doesn't match, an error will be thrown to prevent corruption.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradVectors = _layers
+            .Where(l => l.ParameterCount > 0)
+            .Select(l => l.GetParameterGradients())
+            .ToArray();
+        return gradVectors.Length > 0 ? Vector<T>.Concatenate(gradVectors) : new Vector<T>(0);
+    }
+
+    public override void ClearGradients()
+    {
+        foreach (var layer in _layers)
+            layer.ClearGradients();
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        // === Vectorized Parameter Distribution (Phase B: US-GPU-015) ===
+        int offset = 0;
+        foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
+        {
+            int layerParamCount = checked((int)layer.ParameterCount);
+            var layerParamsVec = parameters.Slice(offset, layerParamCount);
+            layer.SetParameters(layerParamsVec);
+            offset += layerParamCount;
+        }
+    }
+
+    /// <summary>
+    /// Resets the internal state of all layers, clearing any cached values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method calls ResetState() on all contained layers, clearing any cached values from
+    /// forward/backward passes. This should be called between different training batches or when
+    /// switching between training and inference modes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the expert's "short-term memory".
+    ///
+    /// During processing, layers remember:
+    /// - Recent inputs they processed
+    /// - Intermediate calculations
+    /// - Gradients from backpropagation
+    ///
+    /// ResetState() clears all of this temporary information:
+    /// - Frees up memory
+    /// - Prevents information from one batch affecting another
+    /// - Prepares the expert for processing new data
+    ///
+    /// Think of it like cleaning a whiteboard before starting a new problem - you want a
+    /// fresh start without old information interfering.
+    ///
+    /// When to call this:
+    /// - Between different training batches
+    /// - When switching from training to testing
+    /// - Before processing a completely new input
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        foreach (var layer in _layers)
+        {
+            layer.ResetState();
+        }
+    }
+
+    /// <summary>
+    /// Creates a deep copy of this expert, including all contained layers.
+    /// </summary>
+    /// <returns>A new Expert instance with the same configuration and parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a complete copy of the expert, including all layers and their parameters.
+    /// The clone is independent of the original - changes to one won't affect the other.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an identical copy of the expert.
+    ///
+    /// Cloning is useful when you want to:
+    /// - Experiment with different training approaches on the same starting point
+    /// - Create an ensemble of similar but independent experts
+    /// - Save a checkpoint while continuing to train
+    /// - Implement certain training algorithms that need multiple copies
+    ///
+    /// The clone has:
+    /// - The same layer structure
+    /// - The same parameter values
+    /// - But is completely independent (changes to one don't affect the other)
+    ///
+    /// It's like photocopying a document - you get an identical copy that you can
+    /// modify without changing the original.
+    /// </para>
+    /// </remarks>
+    public override LayerBase<T> Clone()
+    {
+        // Clone all layers
+        var clonedLayers = _layers.Select(l =>
+        {
+            if (l is LayerBase<T> layerBase)
+            {
+                return (ILayer<T>)layerBase.Clone();
+            }
+            return l; // If not cloneable, use the same reference (not ideal but safe for most cases)
+        }).ToList();
+
+        return new ExpertLayer<T>(clonedLayers, InputShape, OutputShape, ScalarActivation);
+    }
+
+}

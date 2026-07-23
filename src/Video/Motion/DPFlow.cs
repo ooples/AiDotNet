@@ -1,0 +1,321 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+
+namespace AiDotNet.Video.Motion;
+
+/// <summary>
+/// DPFlow dual-pyramid framework combining image and feature pyramid advantages.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "DPFlow: Dual-Pyramid Optical Flow" (Morimitsu et al., CVPR 2025)</item>
+/// </list></para>
+/// <para><b>For Beginners:</b> DPFlow (Dual-Path Flow) estimates optical flow using parallel spatial and temporal processing paths. The dual-path design captures both fine spatial detail and broad temporal motion patterns.</para>
+/// <para>
+/// DPFlow combines the advantages of image pyramids (capturing large motions) and feature pyramids (rich semantics) in a unified dual-pyramid framework.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a DPFlow model for dual-pyramid optical flow estimation
+/// var dpFlow = new DPFlow&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new DPFlow&lt;double&gt;(architecture);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("DPFlow: Deformable Patches for Optical Flow Estimation",
+    "https://arxiv.org/abs/2501.10440",
+    Year = 2025,
+    Authors = "Donghao Zhang, Yibing Song")]
+public class DPFlow<T> : OpticalFlowBase<T>
+{
+    private readonly DPFlowOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private int _numFeatures;
+    private int _numLayers;
+    private ConvolutionalLayer<T>? _featureExtract;
+    private readonly List<ConvolutionalLayer<T>> _processingBlocks;
+    private ConvolutionalLayer<T>? _outputConv;
+
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public DPFlow()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            // 2 frames stacked channel-wise (2×3=6): the lazy _featureExtract conv is sized from
+            // InputDepth by ResolveLazyLayerShapes, and EstimateFlow feeds it the concatenated pair,
+            // so it must be 6 not 3. Single-encoder flow models only (RAFT/GMFlow have a separate
+            // 3-channel context encoder and are excluded). PredictCore splits per-frame via Shape[1]/2.
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
+            outputSize: 2))
+    {
+    }
+
+    /// <summary>
+    /// Creates a new DPFlow model for native training and inference.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
+    /// <param name="numLayers">Number of processing layers. Default: 8.</param>
+    /// <param name="options">Optional configuration options.</param>
+    public DPFlow(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 64,
+        int numLayers = 8,
+        DPFlowOptions? options = null)
+        : base(architecture, new MeanSquaredErrorLoss<T>())
+    {
+        if (numFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), numFeatures, "Number of features must be positive.");
+        if (numLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be positive.");
+        _options = options ?? new DPFlowOptions();
+        Options = _options;
+
+        _numFeatures = numFeatures;
+        _numLayers = numLayers;
+        _processingBlocks = [];
+
+        InitializeNativeLayers(architecture);
+    }
+
+    private void InitializeNativeLayers(NeuralNetworkArchitecture<T> arch)
+    {
+        _featureExtract = new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1);
+
+        for (int i = 0; i < _numLayers; i++)
+        {
+            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1));
+        }
+
+        _outputConv = new ConvolutionalLayer<T>(2, 3, 1, 1);
+
+        InitializeLayers();
+        WarmUpLazyLayers(arch);
+    }
+
+    private void WarmUpLazyLayers(NeuralNetworkArchitecture<T> arch)
+    {
+        int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
+        int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
+        // InputDepth is ALREADY the two-frames-stacked channel count (2×3=6 — see the ctor comment),
+        // which is exactly what _featureExtract consumes: PredictCore splits the stacked input into two
+        // half-depth frames and EstimateFlow re-concatenates them back to InputDepth before the conv.
+        // Warming up with 2×InputDepth resolved the conv to 12 while the real path feeds it 6
+        // ("Expected input depth 12, but got 6"). Use InputDepth directly.
+        int channels = arch.InputDepth > 0 ? arch.InputDepth : 6;
+        var dummy = new Tensor<T>([1, channels, height, width]);
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            _ = Forward(dummy);
+            ResetState();
+            InvalidateParameterCountCache();
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        // Register all layers in the unified Layers list for proper
+        // parameter management, tape-based training, and serialization
+        if (_featureExtract is not null)
+            Layers.Add(_featureExtract);
+        foreach (var block in _processingBlocks)
+            Layers.Add(block);
+        if (_outputConv is not null)
+            Layers.Add(_outputConv);
+    }
+
+    /// <summary>
+    /// DPFlow's architecture stores the per-frame channel count, while the
+    /// first model layer consumes the two-frame concatenation.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> EstimateFlow(Tensor<T> frame0, Tensor<T> frame1)
+    {
+        if (frame0.Rank < 3)
+            throw new ArgumentException($"frame0 must be at least rank 3 [C,H,W], got rank {frame0.Rank}.", nameof(frame0));
+        if (frame1.Rank < 3)
+            throw new ArgumentException($"frame1 must be at least rank 3 [C,H,W], got rank {frame1.Rank}.", nameof(frame1));
+        if (frame0.Shape[0] != frame1.Shape[0] || frame0.Shape[1] != frame1.Shape[1] || frame0.Shape[2] != frame1.Shape[2])
+            throw new ArgumentException(
+                $"Frame shapes must match. frame0: [{string.Join(",", frame0._shape)}], frame1: [{string.Join(",", frame1._shape)}].",
+                nameof(frame1));
+        int height = frame0.Shape[1];
+        int width = frame0.Shape[2];
+
+        // Concatenate frames as input pair
+        var concat = ConcatenateFeatures(frame0, frame1);
+        if (_featureExtract is null || _outputConv is null)
+            throw new InvalidOperationException("Model layers not initialized.");
+
+        var feat = _featureExtract.Forward(concat);
+        foreach (var block in _processingBlocks)
+        {
+            feat = block.Forward(feat);
+        }
+        var rawFlow = _outputConv.Forward(feat);
+
+        // Extract 2-channel flow field
+        var flow = new Tensor<T>([2, height, width]);
+        if (rawFlow.Length < flow.Length)
+            throw new InvalidOperationException($"Raw flow output ({rawFlow.Length} elements) is smaller than expected flow field ({flow.Length} elements).");
+        for (int i = 0; i < flow.Length; i++)
+        {
+            flow.Data.Span[i] = rawFlow.Data.Span[i];
+        }
+
+        return flow;
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int required = 0;
+        if (_featureExtract is not null) required += _featureExtract.GetParameters().Length;
+        foreach (var block in _processingBlocks) required += block.GetParameters().Length;
+        if (_outputConv is not null) required += _outputConv.GetParameters().Length;
+        if (parameters.Length < required)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
+        int offset = 0;
+        if (_featureExtract is not null)
+        {
+            var p = _featureExtract.GetParameters();
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            _featureExtract.SetParameters(sub);
+            offset += p.Length;
+        }
+        foreach (var block in _processingBlocks)
+        {
+            var p = block.GetParameters();
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            block.SetParameters(sub);
+            offset += p.Length;
+        }
+        if (_outputConv is not null)
+        {
+            var p = _outputConv.GetParameters();
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            _outputConv.SetParameters(sub);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ModelName", "DPFlow" },
+                { "NumFeatures", _numFeatures },
+                { "NumLayers", _numLayers }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_numFeatures);
+        writer.Write(_numLayers);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _numFeatures = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+
+        if (Layers.Count < _numLayers + 2)
+            throw new InvalidDataException(
+                $"DPFlow serialized layer count {Layers.Count} is too small for {_numLayers} processing blocks.");
+
+        _featureExtract = Layers[0] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("DPFlow feature extractor layer is missing or has the wrong type.");
+
+        _processingBlocks.Clear();
+        for (int i = 0; i < _numLayers; i++)
+        {
+            var layer = Layers[i + 1] as ConvolutionalLayer<T>
+                ?? throw new InvalidDataException($"DPFlow processing block {i} is missing or has the wrong type.");
+            _processingBlocks.Add(layer);
+        }
+
+        _outputConv = Layers[_numLayers + 1] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("DPFlow output layer is missing or has the wrong type.");
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new DPFlow<T>(Architecture, _numFeatures, _numLayers, _options);
+    }
+}

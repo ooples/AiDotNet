@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Isolate this project's package graph from the repo's central package management: it pulls in
+         Semantic Kernel (a competitor framework) purely for the head-to-head benchmark and must not add SK
+         to the shipped library's dependency set. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <!-- SK.Core carries an unpatched advisory (GHSA-2ww3-72rp-wpp4) across all current versions. This is a
+         benchmark-only, never-shipped project that the library and serving host never reference, so the
+         advisory does not reach any production artifact. Suppress so the comparison harness builds clean. -->
+    <NoWarn>$(NoWarn);NU1904;NU1903;NU1603</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.65.0" />
+    <PackageReference Include="Microsoft.SemanticKernel.Agents.Core" Version="1.65.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="langgraph_sidecar.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,215 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.Video.VideoEditing;
+
+/// <summary>
+/// FlowVid optical flow guided video-to-video synthesis.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet"><item>Paper: "FlowVid: Taming Imperfect Optical Flows for Consistent Video-to-Video Synthesis" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> FlowVid uses optical flow (tracking pixel movement between frames) to guide video-to-video synthesis. This ensures that edits follow the natural motion in the original video for temporal consistency.</para>
+/// <para>
+/// FlowVid uses optical flow to guide video-to-video synthesis, maintaining temporal consistency by
+/// warping features along motion trajectories. The method handles imperfect optical flows through
+/// a flow-guided attention mechanism that adaptively weighs contributions from neighboring frames.
+/// </para>
+/// <para>
+/// Technical specifications:
+/// - Architecture: Optical Flow Guidance + Flow-Guided Attention
+/// - Latent channels: 4
+/// - Default: 24 frames at 8 FPS
+/// - Supports I2V: No | T2V: Yes | V2V: Yes
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new FlowVidModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 24, 64, 64 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelTask(ModelTask.VideoToVideo)]
+[ModelTask(ModelTask.TextToVideo)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("FlowVid: Taming Imperfect Optical Flows for Consistent Video-to-Video Synthesis", "https://arxiv.org/abs/2312.17681", Year = 2023, Authors = "Liang et al.")]
+public class FlowVidModel<T> : VideoDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 4;
+    private const int CONTEXT_DIM = 768;
+    private const int DEFAULT_NUM_FRAMES = 24;
+    private const int DEFAULT_FPS = 8;
+
+    private VideoUNetPredictor<T>? _predictor;
+    private TemporalVAE<T>? _temporalVAE;
+    private readonly IConditioningModule<T>? _conditioner;
+    // Captured seed for the DEFERRED (lazy) initialization path: the constructor only eagerly builds the
+    // sub-models when an explicit predictor/VAE is supplied, so without storing the seed the lazy
+    // EnsureInitialized() built them with a null seed — silently dropping seed:42 and giving every
+    // construction different weights (the systemic reproducibility bug). The sub-models themselves honor
+    // the seed correctly; it just was not reaching this path.
+    private readonly int? _seed;
+
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _predictor; } }
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _temporalVAE; } }
+    public override IVAEModel<T>? TemporalVAE { get { EnsureInitialized(); return _temporalVAE; } }
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    public override int LatentChannels => LATENT_CHANNELS;
+    public override bool SupportsImageToVideo => false;
+    public override bool SupportsTextToVideo => true;
+    public override bool SupportsVideoToVideo => true;
+    public override long ParameterCount { get { EnsureInitialized(); return _predictor.ParameterCount + _temporalVAE.GetParameters().Length; } }
+
+    /// <summary>
+    /// Initializes a new instance of FlowVidModel with full customization support.
+    /// </summary>
+    public FlowVidModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        VideoUNetPredictor<T>? predictor = null,
+        TemporalVAE<T>? temporalVAE = null,
+        IConditioningModule<T>? conditioner = null,
+        int defaultNumFrames = DEFAULT_NUM_FRAMES,
+        int defaultFPS = DEFAULT_FPS,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateDefault()),
+            defaultNumFrames,
+            defaultFPS,
+            architecture)
+    {
+        _conditioner = conditioner;
+        _seed = seed;
+        if (predictor is not null || temporalVAE is not null)
+            InitializeLayers(predictor, temporalVAE, seed);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
+    private void EnsureInitialized()
+    {
+        if (_predictor is null || _temporalVAE is null)
+            InitializeLayers(null, null, _seed);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
+    private void InitializeLayers(
+        VideoUNetPredictor<T>? predictor,
+        TemporalVAE<T>? temporalVAE,
+        int? seed)
+    {
+        // Thread the seed through to BOTH sub-models instead of dropping it — a prerequisite for
+        // reproducible construction. (NOTE: the shared diffusion weight-init path still draws from a
+        // process-global RNG, so seeded construction is not yet fully deterministic library-wide; that is
+        // a separate systemic fix. Passing the seed here is correct and required for that fix to take.)
+        _predictor = predictor ?? new VideoUNetPredictor<T>(
+            inputChannels: LATENT_CHANNELS,
+            baseChannels: 320,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocks: 2,
+            numHeads: 8,
+            contextDim: CONTEXT_DIM,
+            seed: seed);
+
+        _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
+            inputChannels: 3,
+            latentChannels: LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numTemporalLayers: 3,
+            temporalKernelSize: 3,
+            causalMode: false,
+            latentScaleFactor: 0.18215,
+            seed: seed);
+    }
+
+    protected override Tensor<T> PredictVideoNoise(
+        Tensor<T> latents,
+        int timestep,
+        Tensor<T> imageEmbedding,
+        Tensor<T> motionEmbedding)
+    {
+        EnsureInitialized();
+        return _predictor.PredictNoise(latents, timestep, imageEmbedding);
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        EnsureInitialized();
+        var predParams = _predictor.GetParameters();
+        var vaeParams = _temporalVAE.GetParameters();
+        var combined = new Vector<T>(predParams.Length + vaeParams.Length);
+        for (int i = 0; i < predParams.Length; i++) combined[i] = predParams[i];
+        for (int i = 0; i < vaeParams.Length; i++) combined[predParams.Length + i] = vaeParams[i];
+        return combined;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        EnsureInitialized();
+        int predCount = checked((int)_predictor.ParameterCount);
+        var vaeCount = _temporalVAE.GetParameters().Length;
+        if (parameters.Length != predCount + vaeCount)
+            throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
+        var predParams = new Vector<T>(predCount);
+        var vaeParams = new Vector<T>(vaeCount);
+        for (int i = 0; i < predCount; i++) predParams[i] = parameters[i];
+        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[predCount + i];
+        _predictor.SetParameters(predParams);
+        _temporalVAE.SetParameters(vaeParams);
+    }
+
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    public override IDiffusionModel<T> Clone()
+    {
+        EnsureInitialized();
+                return new FlowVidModel<T>(
+            predictor: (VideoUNetPredictor<T>)_predictor.Clone(),
+            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
+            conditioner: _conditioner,
+            defaultNumFrames: DefaultNumFrames,
+            defaultFPS: DefaultFPS);
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "FlowVid",
+            Version = "1.0",
+            Description = "FlowVid optical flow guided video-to-video synthesis.",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
+            Complexity = ParameterCount
+        };
+        metadata.SetProperty("architecture", "optical-flow-v2v");
+        metadata.SetProperty("open_source", true);
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("default_frames", DEFAULT_NUM_FRAMES);
+        return metadata;
+    }
+}

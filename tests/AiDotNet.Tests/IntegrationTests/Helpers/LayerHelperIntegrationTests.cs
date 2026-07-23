@@ -1,0 +1,1277 @@
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.PhysicsInformed.NeuralOperators;
+using AiDotNet.UncertaintyQuantification.Layers;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.IntegrationTests.Helpers;
+
+/// <summary>
+/// Integration tests for LayerHelper to verify layer creation operations for various neural network architectures.
+/// Tests verify layer counts, types, shapes, parameter counts, and architectural properties.
+/// </summary>
+public class LayerHelperIntegrationTests
+{
+    [Fact(Timeout = 120000)]
+    public async Task VisionLanguagePatchFactories_InvalidPatchSize_ThrowAtFactoryBoundary()
+    {
+        var factories = new Action[]
+        {
+            () => LayerHelper<double>.CreateDefaultLLaVAMLPProjectorLayers(patchSize: 0).ToList(),
+            () => LayerHelper<double>.CreateDefaultPixelShuffleProjectorLayers(patchSize: 0).ToList(),
+            () => LayerHelper<double>.CreateDefaultCrossAttentionResamplerVLMLayers(patchSize: 0).ToList(),
+            () => LayerHelper<double>.CreateDefaultVisionAdapterLayers(patchSize: 0).ToList()
+        };
+
+        foreach (var factory in factories)
+        {
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(factory);
+            Assert.Equal("patchSize", ex.ParamName);
+        }
+
+        await Task.CompletedTask;
+    }
+
+    #region CreateDefaultLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_BasicArchitecture_CreatesCorrectLayerStructure()
+    {
+        // CreateDefaultLayers(arch, hiddenLayerCount=1, hiddenLayerSize=64, outputSize=1)
+        // Expected: DenseLayer(10,64) + DenseLayer(64,1) = 2 layers
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultLayers(architecture).ToList();
+
+        Assert.Equal(2, layers.Count);
+        Assert.IsType<DenseLayer<double>>(layers[0]);
+        Assert.IsType<DenseLayer<double>>(layers[1]);
+
+        // First layer: input to hidden
+        var firstLayer = (DenseLayer<double>)layers[0];
+        Assert.True(firstLayer.ParameterCount > 0, "First layer should have trainable parameters");
+
+        // All layers should have valid output shapes
+        Assert.All(layers, layer =>
+        {
+            var outputShape = layer.GetOutputShape();
+            Assert.True(outputShape.Length > 0, "Output shape should have at least 1 dimension");
+            Assert.All(outputShape, dim => Assert.True(dim > 0, $"Each dimension should be positive, got {dim}"));
+        });
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_ClassificationTask_CreatesCorrectLayerStructure()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 10,
+            outputSize: 5);
+
+        var layers = LayerHelper<double>.CreateDefaultLayers(architecture).ToList();
+
+        Assert.Equal(2, layers.Count);
+
+        // Last layer output should match the requested output size
+        var lastLayer = layers[^1];
+        var lastOutputShape = lastLayer.GetOutputShape();
+        int lastOutputSize = lastOutputShape.Aggregate(1, (a, b) => a * b);
+        Assert.Equal(5, lastOutputSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_Float_WorksWithDifferentNumericType()
+    {
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<float>.CreateDefaultLayers(architecture).ToList();
+
+        Assert.Equal(2, layers.Count);
+        Assert.IsType<DenseLayer<float>>(layers[0]);
+        Assert.True(layers[0].ParameterCount > 0, "Float layer should have parameters");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_CustomHiddenLayers_CreatesCorrectCount()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 100,
+            outputSize: 10);
+
+        // hiddenLayerCount=3 -> input + 2 hidden + output = 4 layers
+        var layers = LayerHelper<double>.CreateDefaultLayers(architecture, hiddenLayerCount: 3).ToList();
+
+        Assert.Equal(4, layers.Count);
+        Assert.All(layers, layer => Assert.IsType<DenseLayer<double>>(layer));
+    }
+
+    #endregion
+
+    #region CreateDefaultCNNLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultCNNLayers_TwoDimensionalInput_NormalizesTo3DAndCreatesLayers()
+    {
+        // 2D input should be normalized to [1, height, width] internally
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 28,
+            inputWidth: 28,
+            inputDepth: 1,
+            outputSize: 10);
+
+        var layers = LayerHelper<double>.CreateDefaultCNNLayers(architecture).ToList();
+
+        // Default: 2 conv layers, each with conv+pool = 4, then flatten + 1 dense + output = 7
+        Assert.True(layers.Count >= 6, $"Expected at least 6 CNN layers, got {layers.Count}");
+
+        // Should contain ConvolutionalLayer and MaxPoolingLayer
+        Assert.Contains(layers, l => l is ConvolutionalLayer<double>);
+        Assert.Contains(layers, l => l is MaxPoolingLayer<double>);
+        Assert.Contains(layers, l => l is FlattenLayer<double>);
+
+        // Last layer should be dense (output)
+        Assert.IsType<DenseLayer<double>>(layers[^1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultCNNLayers_ThreeDimensionalColorImage_CreatesCorrectStructure()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var layers = LayerHelper<double>.CreateDefaultCNNLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 6, $"Expected at least 6 CNN layers, got {layers.Count}");
+        Assert.Contains(layers, l => l is ConvolutionalLayer<double>);
+        Assert.Contains(layers, l => l is MaxPoolingLayer<double>);
+
+        // Count conv layers - should match convLayerCount=2
+        int convCount = layers.Count(l => l is ConvolutionalLayer<double>);
+        Assert.Equal(2, convCount);
+    }
+
+    #endregion
+
+    #region CreateDefaultResNetLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultResNetLayers_OneDimensionalInput_CreatesMLPResNet()
+    {
+        // 1D input uses Dense layers with residual connections
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 32,
+            outputSize: 10);
+
+        var layers = LayerHelper<double>.CreateDefaultResNetLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 4, $"Expected at least 4 ResNet1D layers, got {layers.Count}");
+
+        // Should contain ResidualLayer and DenseLayer
+        Assert.Contains(layers, l => l is ResidualLayer<double>);
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+
+        // Last layer should be Dense (output)
+        Assert.IsType<DenseLayer<double>>(layers[^1]);
+    }
+
+    #endregion
+
+    #region CreateDefaultAttentionLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultAttentionLayers_SequenceInput_CreatesTransformerArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 50,
+            inputWidth: 64,
+            outputSize: 10);
+
+        var layers = LayerHelper<double>.CreateDefaultAttentionLayers(architecture).ToList();
+
+        // Paper-faithful Vaswani et al. 2017 ("Attention Is All You Need" §3.1)
+        // stack: Input + Embedding + PositionalEncoding + 3 × TransformerEncoderLayer
+        // + DenseLayer. Each TransformerEncoderLayer is a SELF-CONTAINED composite
+        // implementing the paper's sub-layer residuals (LayerNorm(x + SelfAttention(x))
+        // then LayerNorm(h + FFN(h))) and serializes / clones as one layer. Earlier
+        // assertion counted MHA + LayerNorm + Dense sub-layers individually under
+        // the assumption they were emitted flat at the top level; with the encoder
+        // composite that flat structure is gone and MHA / LayerNorm live INSIDE
+        // each TransformerEncoderLayer. The invariants worth asserting at this
+        // level are the layer-stack shape and the presence of the paper-canonical
+        // composite — internal MHA / LayerNorm counts are covered by
+        // TransformerEncoderLayer's own tests.
+        // Input + Embedding + PositionalEncoding + 3 × TransformerEncoderLayer
+        // + DenseLayer = 7 layers.
+        Assert.Equal(7, layers.Count);
+        Assert.IsType<InputLayer<double>>(layers[0]);
+        Assert.IsType<EmbeddingLayer<double>>(layers[1]);
+        Assert.IsType<PositionalEncodingLayer<double>>(layers[2]);
+        Assert.Equal(3, layers.Count(l => l is TransformerEncoderLayer<double>));
+        Assert.IsType<DenseLayer<double>>(layers[^1]);
+    }
+
+    #endregion
+
+    #region CreateDefaultAutoEncoderLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultAutoEncoderLayers_StandardInput_CreatesSymmetricArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 784,
+            outputSize: 784);
+
+        var layers = LayerHelper<double>.CreateDefaultAutoEncoderLayers(architecture).ToList();
+
+        // Default: [784, 392, 196, 392, 784] -> 4 transitions
+        // Each transition: DenseLayer + ActivationLayer = 2 layers per transition
+        // Total: 8 layers
+        Assert.True(layers.Count >= 4, $"Expected at least 4 autoencoder layers, got {layers.Count}");
+
+        // Should contain DenseLayer (encoder and decoder)
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+
+        // Should contain ActivationLayer
+        Assert.Contains(layers, l => l is ActivationLayer<double>);
+
+        // Count Dense layers (should be symmetric: 2 encoder + 2 decoder)
+        int denseCount = layers.Count(l => l is DenseLayer<double>);
+        Assert.True(denseCount >= 4, $"Expected at least 4 dense layers (encoder+decoder), got {denseCount}");
+    }
+
+    #endregion
+
+    #region CreateDefaultVAELayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultVAELayers_StandardInput_CreatesEncoderDecoderWithLatent()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 784,
+            outputSize: 784);
+
+        var layers = LayerHelper<double>.CreateDefaultVAELayers(architecture, latentSize: 32).ToList();
+
+        // 1D VAE: 3 encoder dense + MeanLayer + LogVarianceLayer + 2 decoder dense + output = 8
+        Assert.True(layers.Count >= 7, $"Expected at least 7 VAE layers, got {layers.Count}");
+
+        // Should contain encoder dense layers
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+
+        // Should contain MeanLayer and LogVarianceLayer
+        Assert.Contains(layers, l => l is MeanLayer<double>);
+        Assert.Contains(layers, l => l is LogVarianceLayer<double>);
+    }
+
+    #endregion
+
+    #region CreateDefaultDeepBeliefNetworkLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepBeliefNetworkLayers_StandardInput_CreatesRBMStack()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 784,
+            outputSize: 10);
+
+        var layers = LayerHelper<double>.CreateDefaultDeepBeliefNetworkLayers(architecture).ToList();
+
+        // Per Hinton 2006 / Hinton & Salakhutdinov 2006, the RBM stack is
+        // strictly [inputSize, 500, 500, 2000] (three RBMs forming the deep
+        // feature-extraction tower); the supervised projection head sits on
+        // top as a SEPARATE DenseLayer — the paper does not fold the
+        // classification head into the RBM tower. Total: 3 RBM + 1 Dense = 4.
+        // Earlier revisions of CreateDefaultDeepBeliefNetworkLayers appended
+        // architecture.OutputSize into the RBM stack itself, producing a
+        // 4-RBM tower whose final RBM was RBM(2000 → outputSize) — for the
+        // common regression / single-scalar head that reduces to a 1-unit
+        // sigmoid bottleneck which destroys all input-dependent information
+        // before the supervised head ever sees it (the L2-collapse signature
+        // the DBN.DifferentInputs_AfterTraining invariant catches). This
+        // test was updated to assert the paper-faithful 3-RBM-plus-Dense
+        // layout when the architecture factory was corrected.
+        Assert.Equal(4, layers.Count);
+
+        // Should contain RBM layers (core of DBN)
+        Assert.Contains(layers, l => l is RBMLayer<double>);
+
+        // Count RBM layers (one per transition in the rbmStackSizes chain).
+        int rbmCount = layers.Count(l => l is RBMLayer<double>);
+        Assert.Equal(3, rbmCount);
+
+        // Final layer must be the dense classifier head.
+        Assert.IsType<DenseLayer<double>>(layers[^1]);
+    }
+
+    #endregion
+
+    #region CreateDefaultDeepQNetworkLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepQNetworkLayers_ReinforcementLearning_CreatesMLPForQValues()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2);
+
+        var layers = LayerHelper<double>.CreateDefaultDeepQNetworkLayers(architecture).ToList();
+
+        // 2 hidden layers: Dense+Act, Dense+Act, output Dense = 5
+        Assert.Equal(5, layers.Count);
+
+        // All dense layers should be DenseLayer
+        int denseCount = layers.Count(l => l is DenseLayer<double>);
+        Assert.Equal(3, denseCount);
+
+        // Output layer should produce Q-values for each action
+        var lastDenseLayer = layers.OfType<DenseLayer<double>>().Last();
+        var outputShape = lastDenseLayer.GetOutputShape();
+        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
+        Assert.Equal(2, outputSize);
+    }
+
+    #endregion
+
+    #region CreateDefaultESNLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultESNLayers_StandardParams_CreatesReservoirArchitecture()
+    {
+        var layers = LayerHelper<double>.CreateDefaultESNLayers(
+            inputSize: 10,
+            outputSize: 5,
+            reservoirSize: 100).ToList();
+
+        // Per Jaeger (2001), ReservoirLayer applies tanh internally —
+        // no extra ActivationLayer between it and the output Dense
+        // (double-tanh would compress the output range). Total:
+        // Dense(10→100) + ReservoirLayer(100→100) + Dense(100→5) +
+        // ActivationLayer(identity output) = 4 layers.
+        Assert.Equal(4, layers.Count);
+
+        // Should contain a ReservoirLayer
+        Assert.Contains(layers, l => l is ReservoirLayer<double>);
+
+        // First layer is Dense (input to reservoir)
+        Assert.IsType<DenseLayer<double>>(layers[0]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultESNLayers_CustomSpectralRadius_CreatesValidReservoir()
+    {
+        var layers = LayerHelper<double>.CreateDefaultESNLayers(
+            inputSize: 10,
+            outputSize: 5,
+            reservoirSize: 100,
+            spectralRadius: 0.8,
+            sparsity: 0.2).ToList();
+
+        // See StandardParams test for the 4-layer rationale.
+        Assert.Equal(4, layers.Count);
+        Assert.Contains(layers, l => l is ReservoirLayer<double>);
+
+        // ReservoirLayer should have parameters
+        var reservoirLayer = layers.OfType<ReservoirLayer<double>>().Single();
+        Assert.True(reservoirLayer.ParameterCount > 0,
+            $"Reservoir layer should have parameters, got {reservoirLayer.ParameterCount}");
+    }
+
+    #endregion
+
+    #region CreateDefaultGRULayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGRULayers_SequenceInput_CreatesGRUArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 50,
+            inputWidth: 10,
+            outputSize: 5);
+
+        var layers = LayerHelper<double>.CreateDefaultGRULayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 2, $"Expected at least 2 GRU layers, got {layers.Count}");
+
+        // Should contain GRULayer
+        Assert.Contains(layers, l => l is GRULayer<double>);
+
+        // Should contain a DenseLayer for output projection
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+    }
+
+    #endregion
+
+    #region CreateDefaultLSTMNetworkLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLSTMNetworkLayers_SequenceInput_CreatesLSTMArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 50,
+            inputWidth: 10,
+            outputSize: 5);
+
+        var layers = LayerHelper<double>.CreateDefaultLSTMNetworkLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 2, $"Expected at least 2 LSTM layers, got {layers.Count}");
+
+        // Should contain LSTMLayer
+        Assert.Contains(layers, l => l is LSTMLayer<double>);
+
+        // Should contain a DenseLayer for output projection
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+    }
+
+    #endregion
+
+    #region CreateDefaultRNNLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultRNNLayers_SequenceInput_CreatesRNNArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 50,
+            inputWidth: 10,
+            outputSize: 5);
+
+        var layers = LayerHelper<double>.CreateDefaultRNNLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 2, $"Expected at least 2 RNN layers, got {layers.Count}");
+
+        // Should contain RecurrentLayer
+        Assert.Contains(layers, l => l is RecurrentLayer<double>);
+
+        // Should contain a DenseLayer for output projection
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+    }
+
+    #endregion
+
+    #region CreateDefaultGNNLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGNNLayers_GraphInput_CreatesGNNArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 100,
+            inputWidth: 16,
+            outputSize: 7);
+
+        var layers = LayerHelper<double>.CreateDefaultGNNLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 GNN layers, got {layers.Count}");
+
+        // Should contain graph convolution layers
+        Assert.Contains(layers, l => l is GraphConvolutionalLayer<double>);
+
+        // GNN ends with ActivationLayer for task-specific activation
+        Assert.Contains(layers, l => l is ActivationLayer<double>);
+    }
+
+    #endregion
+
+    #region CreateDefaultFeedForwardLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultFeedForwardLayers_StandardInput_CreatesMLPStructure()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1);
+
+        // hiddenLayerCount=2, hiddenLayerSize=64
+        var layers = LayerHelper<double>.CreateDefaultFeedForwardLayers(architecture).ToList();
+
+        // 2 hidden + output = 3 dense layers
+        Assert.Equal(3, layers.Count);
+        Assert.All(layers, layer => Assert.IsType<DenseLayer<double>>(layer));
+
+        // Total parameters should be non-zero
+        int totalParams = (int)layers.Sum(l => l.ParameterCount);
+        Assert.True(totalParams > 0, $"Total parameter count should be positive, got {totalParams}");
+    }
+
+    #endregion
+
+    #region CreateDefaultNeuralNetworkLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_Classification_CreatesLayersWithActivations()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 100,
+            outputSize: 10);
+
+        var layers = LayerHelper<double>.CreateDefaultNeuralNetworkLayers(architecture).ToList();
+
+        // Default complexity (Medium): 2 hidden layers
+        // Dense + Activation per hidden layer + output Dense + output Activation
+        Assert.True(layers.Count >= 4, $"Expected at least 4 layers, got {layers.Count}");
+
+        // Should contain both DenseLayer and ActivationLayer
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+        Assert.Contains(layers, l => l is ActivationLayer<double>);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_Regression_NoOutputActivation()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 50,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultNeuralNetworkLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 layers, got {layers.Count}");
+
+        // For regression, no output activation (identity/null), so last layer is Dense
+        var lastLayer = layers[^1];
+        Assert.IsType<DenseLayer<double>>(lastLayer);
+    }
+
+    #endregion
+
+    #region CreateDefaultBayesianNeuralNetworkLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultBayesianNeuralNetworkLayers_StandardInput_CreatesBayesianLayers()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultBayesianNeuralNetworkLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 2, $"Expected at least 2 Bayesian layers, got {layers.Count}");
+
+        // Should contain Bayesian dense layers
+        Assert.Contains(layers, l => l is BayesianDenseLayer<double>);
+
+        // Bayesian layers should have parameters (weight distributions)
+        var bayesianLayers = layers.OfType<BayesianDenseLayer<double>>().ToList();
+        Assert.True(bayesianLayers.Count >= 1,
+            "Expected at least 1 BayesianDenseLayer");
+        Assert.All(bayesianLayers, bl =>
+            Assert.True(bl.ParameterCount > 0, "Bayesian layer should have parameters"));
+    }
+
+    #endregion
+
+    #region CreateDefaultRBFNetworkLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultRBFNetworkLayers_StandardInput_CreatesRBFArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultRBFNetworkLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 2, $"Expected at least 2 RBF layers, got {layers.Count}");
+
+        // Should contain RBFLayer
+        Assert.Contains(layers, l => l is RBFLayer<double>);
+    }
+
+    #endregion
+
+    #region CreateDefaultELMLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultELMLayers_StandardInput_CreatesELMArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultELMLayers(architecture, hiddenLayerSize: 50).ToList();
+
+        Assert.True(layers.Count >= 2, $"Expected at least 2 ELM layers, got {layers.Count}");
+
+        // ELM uses Dense layers
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+
+        // All layers should have non-negative parameter count
+        Assert.All(layers, layer =>
+            Assert.True(layer.ParameterCount >= 0,
+                $"Parameter count should be non-negative, got {layer.ParameterCount}"));
+    }
+
+    #endregion
+
+    #region CreateDefaultPINNLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultPINNLayers_StandardInput_CreatesPINNArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 2,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultPINNLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 PINN layers, got {layers.Count}");
+
+        // PINNs use Dense layers with smooth activations
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+
+        // All layers should have valid output shapes
+        Assert.All(layers, layer =>
+        {
+            var shape = layer.GetOutputShape();
+            Assert.True(shape.Length > 0, "Output shape should have dimensions");
+        });
+    }
+
+    #endregion
+
+    #region CreateDefaultDeepRitzLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepRitzLayers_StandardInput_CreatesResidualStructure()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 2,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultDeepRitzLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 Deep Ritz layers, got {layers.Count}");
+
+        // Deep Ritz uses residual connections
+        Assert.Contains(layers, l => l is ResidualLayer<double>);
+    }
+
+    #endregion
+
+    #region CreateDefaultCapsuleNetworkLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultCapsuleNetworkLayers_ImageInput_CreatesCapsuleArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 28,
+            inputWidth: 28,
+            inputDepth: 1,
+            outputSize: 10);
+
+        var layers = LayerHelper<double>.CreateDefaultCapsuleNetworkLayers(architecture).ToList();
+
+        // Conv + PrimaryCapsule + DigitCapsule + Reconstruction = 4
+        Assert.Equal(4, layers.Count);
+
+        // Should contain capsule-specific layers
+        Assert.Contains(layers, l => l is ConvolutionalLayer<double>);
+        Assert.Contains(layers, l => l is PrimaryCapsuleLayer<double>);
+        Assert.Contains(layers, l => l is DigitCapsuleLayer<double>);
+        Assert.Contains(layers, l => l is ReconstructionLayer<double>);
+    }
+
+    #endregion
+
+    #region CreateDefaultNodeClassificationLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNodeClassificationLayers_GraphInput_CreatesGCNArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 100,
+            inputWidth: 16,
+            outputSize: 7);
+
+        var layers = LayerHelper<double>.CreateDefaultNodeClassificationLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 node classification layers, got {layers.Count}");
+
+        // Should contain graph convolution layers (GCN)
+        Assert.Contains(layers, l => l is GraphConvolutionalLayer<double>);
+    }
+
+    #endregion
+
+    #region CreateDefaultLinkPredictionLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLinkPredictionLayers_GraphInput_CreatesEncoderStructure()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.BinaryClassification,
+            inputHeight: 100,
+            inputWidth: 16,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultLinkPredictionLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 link prediction layers, got {layers.Count}");
+
+        // Should contain graph convolution layers
+        Assert.Contains(layers, l => l is GraphConvolutionalLayer<double>);
+
+        // Link prediction ends with GraphConvolutionalLayer (embedding output)
+        Assert.IsType<GraphConvolutionalLayer<double>>(layers[^1]);
+    }
+
+    #endregion
+
+    #region CreateDefaultGraphClassificationLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGraphClassificationLayers_GraphInput_CreatesPoolingArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 100,
+            inputWidth: 16,
+            outputSize: 7);
+
+        var layers = LayerHelper<double>.CreateDefaultGraphClassificationLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 graph classification layers, got {layers.Count}");
+
+        Assert.Contains(layers, l => l is GraphConvolutionalLayer<double>);
+        // Graph classification ends with GraphConvolutionalLayer (embedding output)
+        Assert.IsType<GraphConvolutionalLayer<double>>(layers[^1]);
+    }
+
+    #endregion
+
+    #region CreateDefaultDeepOperatorNetworkLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepOperatorNetworkLayers_StandardParams_CreatesBranchAndTrunk()
+    {
+        var (branchLayers, trunkLayers) = LayerHelper<double>.CreateDefaultDeepOperatorNetworkLayers(
+            branchInputSize: 10,
+            trunkInputSize: 2,
+            outputSize: 1);
+
+        var branchList = branchLayers.ToList();
+        var trunkList = trunkLayers.ToList();
+
+        Assert.True(branchList.Count >= 2, $"Expected at least 2 branch layers, got {branchList.Count}");
+        Assert.True(trunkList.Count >= 2, $"Expected at least 2 trunk layers, got {trunkList.Count}");
+
+        // Both branches should end with Dense layers
+        Assert.IsType<DenseLayer<double>>(branchList[^1]);
+        Assert.IsType<DenseLayer<double>>(trunkList[^1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepOperatorNetworkLayers_CustomHiddenLayers_ScalesCorrectly()
+    {
+        var (branchLayers, trunkLayers) = LayerHelper<double>.CreateDefaultDeepOperatorNetworkLayers(
+            branchInputSize: 20,
+            trunkInputSize: 3,
+            outputSize: 2,
+            hiddenLayerCount: 5,
+            hiddenLayerSize: 128);
+
+        var branchList = branchLayers.ToList();
+        var trunkList = trunkLayers.ToList();
+
+        // With 5 hidden layers, should have more layers than default
+        Assert.True(branchList.Count >= 6, $"Expected at least 6 branch layers for 5 hidden, got {branchList.Count}");
+        Assert.True(trunkList.Count >= 6, $"Expected at least 6 trunk layers for 5 hidden, got {trunkList.Count}");
+    }
+
+    #endregion
+
+    #region CreateDefaultFourierNeuralOperatorLayers Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultFourierNeuralOperatorLayers_StandardInput_CreatesFNOArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 64,
+            outputSize: 64);
+
+        var layers = LayerHelper<double>.CreateDefaultFourierNeuralOperatorLayers(
+            architecture,
+            spatialDimensions: new[] { 64 }).ToList();
+
+        Assert.True(layers.Count >= 4, $"Expected at least 4 FNO layers, got {layers.Count}");
+
+        // Should contain FourierLayer (spectral convolution)
+        Assert.Contains(layers, l => l is FourierLayer<double>);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultFourierNeuralOperatorLayers_CustomParams_ScalesFourierLayers()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 128);
+
+        var layers = LayerHelper<double>.CreateDefaultFourierNeuralOperatorLayers(
+            architecture,
+            spatialDimensions: new[] { 64, 64 },
+            numFourierLayers: 6,
+            hiddenChannels: 128,
+            numModes: 16).ToList();
+
+        // 6 Fourier layers requested
+        int fourierCount = layers.Count(l => l is FourierLayer<double>);
+        Assert.Equal(6, fourierCount);
+    }
+
+    #endregion
+
+    #region NetworkComplexity Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_SimpleComplexity_HasFewerLayersThanDeep()
+    {
+        var simpleArch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 10,
+            outputSize: 1);
+
+        var deepArch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Deep,
+            inputSize: 10,
+            outputSize: 1);
+
+        var simpleLayers = LayerHelper<double>.CreateDefaultNeuralNetworkLayers(simpleArch).ToList();
+        var deepLayers = LayerHelper<double>.CreateDefaultNeuralNetworkLayers(deepArch).ToList();
+
+        // Simple should have fewer layers than Deep
+        Assert.True(simpleLayers.Count < deepLayers.Count,
+            $"Simple ({simpleLayers.Count} layers) should have fewer layers than Deep ({deepLayers.Count} layers)");
+
+        // Deep should have more parameters
+        int simpleParams = (int)simpleLayers.Sum(l => l.ParameterCount);
+        int deepParams = (int)deepLayers.Sum(l => l.ParameterCount);
+        Assert.True(deepParams > simpleParams,
+            $"Deep ({deepParams} params) should have more parameters than Simple ({simpleParams} params)");
+    }
+
+    #endregion
+
+    #region Different Numeric Types Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_Double_HasTrainableParameters()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultNeuralNetworkLayers(architecture).ToList();
+
+        Assert.All(layers, layer => Assert.NotNull(layer));
+
+        // At least some layers should support training
+        Assert.Contains(layers, l => l.SupportsTraining);
+
+        // Total parameters should be positive
+        int totalParams = (int)layers.Sum(l => l.ParameterCount);
+        Assert.True(totalParams > 0, $"Total parameters should be positive, got {totalParams}");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultNeuralNetworkLayers_Float_HasTrainableParameters()
+    {
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<float>.CreateDefaultNeuralNetworkLayers(architecture).ToList();
+
+        Assert.All(layers, layer => Assert.NotNull(layer));
+        Assert.Contains(layers, l => l.SupportsTraining);
+    }
+
+    #endregion
+
+    #region Sequence Models Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLSTMNetworkLayers_ReturnSequence_ContainsLSTM()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 50,
+            inputWidth: 10,
+            outputSize: 5,
+            shouldReturnFullSequence: true);
+
+        var layers = LayerHelper<double>.CreateDefaultLSTMNetworkLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 2, $"Expected at least 2 layers, got {layers.Count}");
+        Assert.Contains(layers, l => l is LSTMLayer<double>);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGRULayers_ReturnSequence_ContainsGRU()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 50,
+            inputWidth: 10,
+            outputSize: 5,
+            shouldReturnFullSequence: true);
+
+        var layers = LayerHelper<double>.CreateDefaultGRULayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 2, $"Expected at least 2 layers, got {layers.Count}");
+        Assert.Contains(layers, l => l is GRULayer<double>);
+    }
+
+    #endregion
+
+    #region Edge Cases Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_MinimalInput_ProducesValidOutputShape()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 1,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultLayers(architecture).ToList();
+
+        Assert.Equal(2, layers.Count);
+
+        // Output shape of last layer should produce scalar output
+        var lastOutputShape = layers[^1].GetOutputShape();
+        int totalOutput = lastOutputShape.Aggregate(1, (a, b) => a * b);
+        Assert.Equal(1, totalOutput);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_LargeInput_ScalesParametersAppropriately()
+    {
+        var smallArch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1);
+
+        var largeArch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10000,
+            outputSize: 100);
+
+        var smallLayers = LayerHelper<double>.CreateDefaultLayers(smallArch).ToList();
+        var largeLayers = LayerHelper<double>.CreateDefaultLayers(largeArch).ToList();
+
+        // Large input should have more parameters
+        int smallParams = (int)smallLayers.Sum(l => l.ParameterCount);
+        int largeParams = (int)largeLayers.Sum(l => l.ParameterCount);
+        Assert.True(largeParams > smallParams,
+            $"Large input ({largeParams} params) should have more parameters than small ({smallParams} params)");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLayers_BinaryClassification_OutputsSingleValue()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.BinaryClassification,
+            inputSize: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 2, $"Expected at least 2 layers, got {layers.Count}");
+
+        // Output should be single value
+        var lastOutput = layers[^1].GetOutputShape();
+        int totalOutput = lastOutput.Aggregate(1, (a, b) => a * b);
+        Assert.Equal(1, totalOutput);
+    }
+
+    #endregion
+
+    #region Additional Architecture Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultOccupancyLayers_StandardInput_CreatesDenseStack()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.BinaryClassification,
+            inputSize: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultOccupancyLayers(architecture).ToList();
+
+        // Paper-faithful Occupancy Network decoder per Mescheder et al.
+        // CVPR 2019 ("Occupancy Networks: Learning 3D Reconstruction in
+        // Function Space", arXiv:1812.03828): a single composite
+        // OccupancyNetworkDecoder layer carrying the linear point
+        // embedding, pre-activation Conditional-ResNet blocks, and the
+        // conditional-norm → ReLU → sigmoid occupancy head. The decoder
+        // is intentionally one layer (not a flat Dense+BN+Dropout stack);
+        // each Conditional-ResNet block is internal to the composite so
+        // the per-point evaluation gets the paper's full sub-layer
+        // structure without the stack-level layers losing the
+        // conditioning. The earlier assertion (`Equal(8, layers.Count)`
+        // — Dense+BN+Dropout × 2 + Dense + Dense) was from the
+        // pre-paper-rewrite default stack.
+        Assert.Single(layers);
+        var decoder = Assert.IsType<OccupancyNetworkDecoder<double>>(layers[0]);
+        var outputShape = decoder.GetOutputShape();
+        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
+        Assert.Equal(1, outputSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultOccupancyTemporalLayers_StandardInput_CreatesTemporalArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.BinaryClassification,
+            inputHeight: 24,
+            inputWidth: 10,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultOccupancyTemporalLayers(architecture, historyWindowSize: 24).ToList();
+
+        Assert.True(layers.Count >= 5, $"Expected at least 5 temporal layers, got {layers.Count}");
+
+        // Should contain LSTM layers for temporal processing
+        Assert.Contains(layers, l => l is LSTMLayer<double>);
+
+        // Should contain multi-head attention
+        Assert.Contains(layers, l => l is MultiHeadAttentionLayer<double>);
+
+        // Normalization is LayerNormalization (Ba et al. 2016, NIPS-LLD),
+        // not BatchNormalization — LayerNorm normalizes a single sample's
+        // hidden dim and stays well-defined at batch size 1, where BN's
+        // batch-statistics collapse (σ² = 0) and divide-by-eps produces
+        // nonsense activations. Memorization-style training runs at
+        // batch = 1 so the head MUST use LayerNorm to remain trainable.
+        // Dropout is intentionally removed from the head: per-step mask
+        // randomness exceeds the gradient signal on the 100-iter
+        // memorization probe and stalls loss at the BCE-ln(2) baseline
+        // (#1304 cluster-6 follow-up). Earlier assertion (BatchNorm +
+        // Dropout) was for the pre-paper-rewrite default stack.
+        Assert.Contains(layers, l => l is LayerNormalizationLayer<double>);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultDeepBoltzmannMachineLayers_StandardInput_CreatesRBMStack()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 784,
+            outputSize: 10);
+
+        var layers = LayerHelper<double>.CreateDefaultDeepBoltzmannMachineLayers(architecture).ToList();
+
+        // Per Salakhutdinov & Hinton 2009, a DBM uses 2 hidden layers
+        // — RBM(visible→hidden1) + RBM(hidden1→hidden2) + Dense(hidden2→
+        // output). DBMs use contrastive-divergence pretraining (not
+        // BatchNorm), so no BatchNormalizationLayer is interleaved.
+        // Total: 2 RBM + 1 Dense = 3 layers.
+        Assert.Equal(3, layers.Count);
+
+        // Should contain RBM layers (the core DBM hidden representations)
+        Assert.Contains(layers, l => l is RBMLayer<double>);
+
+        int rbmCount = layers.Count(l => l is RBMLayer<double>);
+        Assert.Equal(2, rbmCount);
+
+        // Final layer is the projection head from hidden2 to output dim.
+        Assert.IsType<DenseLayer<double>>(layers[^1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultVariationalPINNLayers_StandardInput_CreatesValidArchitecture()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 2,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultVariationalPINNLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 V-PINN layers, got {layers.Count}");
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultGraphGenerationLayers_StandardInput_CreatesGraphGenerativeModel()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 50,
+            inputWidth: 16,
+            outputSize: 10);
+
+        var layers = LayerHelper<double>.CreateDefaultGraphGenerationLayers(architecture).ToList();
+
+        // Default numEncoderLayers=2, so exactly 2 GCN layers
+        Assert.Equal(2, layers.Count);
+        Assert.All(layers, l => Assert.IsType<GraphConvolutionalLayer<double>>(l));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultHamiltonianLayers_StandardInput_CreatesPhysicsInformedModel()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultHamiltonianLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 Hamiltonian layers, got {layers.Count}");
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+
+        // Should have substantial parameter count for physics modeling
+        int totalParams = (int)layers.Sum(l => l.ParameterCount);
+        Assert.True(totalParams > 0, $"Should have parameters, got {totalParams}");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultLagrangianLayers_StandardInput_CreatesPhysicsInformedModel()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 1);
+
+        var layers = LayerHelper<double>.CreateDefaultLagrangianLayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 Lagrangian layers, got {layers.Count}");
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CreateDefaultUniversalDELayers_StandardInput_CreatesDiffEqSolver()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 2,
+            outputSize: 2);
+
+        var layers = LayerHelper<double>.CreateDefaultUniversalDELayers(architecture).ToList();
+
+        Assert.True(layers.Count >= 3, $"Expected at least 3 Universal DE layers, got {layers.Count}");
+        Assert.Contains(layers, l => l is DenseLayer<double>);
+    }
+
+    #endregion
+
+    #region Cross-Architecture Consistency Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task AllLayerCreators_ProduceLayersWithValidOutputShapes()
+    {
+        // Verify all non-buggy architectures produce layers with valid output shapes
+        var architectures = new Dictionary<string, List<ILayer<double>>>();
+
+        var arch1d = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 10, outputSize: 1);
+
+        architectures["DefaultLayers"] = LayerHelper<double>.CreateDefaultLayers(arch1d).ToList();
+        architectures["FeedForward"] = LayerHelper<double>.CreateDefaultFeedForwardLayers(arch1d).ToList();
+        architectures["NeuralNetwork"] = LayerHelper<double>.CreateDefaultNeuralNetworkLayers(arch1d).ToList();
+        architectures["Bayesian"] = LayerHelper<double>.CreateDefaultBayesianNeuralNetworkLayers(arch1d).ToList();
+        architectures["RBF"] = LayerHelper<double>.CreateDefaultRBFNetworkLayers(arch1d).ToList();
+
+        foreach (var (name, layers) in architectures)
+        {
+            Assert.True(layers.Count >= 2, $"{name} should have at least 2 layers, got {layers.Count}");
+            Assert.All(layers, layer =>
+            {
+                var shape = layer.GetOutputShape();
+                Assert.True(shape.Length > 0, $"{name}: layer output shape should have dimensions");
+                Assert.All(shape, d => Assert.True(d > 0, $"{name}: each dimension should be positive, got {d}"));
+            });
+        }
+    }
+
+    #endregion
+}

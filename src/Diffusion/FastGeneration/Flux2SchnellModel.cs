@@ -1,0 +1,180 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.FastGeneration;
+
+/// <summary>
+/// FLUX.2 Schnell for next-generation ultra-fast 1-4 step image generation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// FLUX.2 Schnell is the speed-optimized variant of FLUX.2, featuring improved
+/// distillation from the enhanced FLUX.2 architecture. Produces higher quality
+/// images than FLUX.1 Schnell at the same 1-4 step count due to the improved
+/// teacher model and refined distillation process.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Just as FLUX.1 Schnell was the fast version of FLUX.1,
+/// FLUX.2 Schnell is the fast version of FLUX.2. It benefits from all FLUX.2
+/// improvements (better anatomy, text rendering, composition) while still generating
+/// images in just 1-4 steps.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
+/// var model = new Flux2SchnellModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("FLUX.2 Schnell", "https://blackforestlabs.ai/flux-2/", Year = 2025, Authors = "Black Forest Labs")]
+public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 16;
+    private const int FLUX_CONTEXT_DIM = 4096;
+    private const double DEFAULT_GUIDANCE = 0.0;
+    private const int DEFAULT_STEPS = 4;
+
+    private FluxDoubleStreamPredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+
+    public Flux2SchnellModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        FluxDoubleStreamPredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.0001,
+                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear,
+                // FLUX.1-schnell ("schnell" = German for "fast"; Black Forest
+                // Labs 2024) is a Latent Adversarial Diffusion Distillation
+                // (LADD) student distilled to 1-4 sampling steps. The
+                // model card and XML example in this file's class docs both
+                // specify `NumInferenceSteps = 4` as the canonical default;
+                // override the DiffusionModelOptions default of 10 so
+                // `Predict()` doesn't burn 6 extra UNet evaluations the
+                // distillation was specifically trained to skip — the
+                // ScaledInput_ShouldChangeOutput test's two Predict calls
+                // at 10 steps were OOM-timeout-ing at the 120s budget.
+                DefaultInferenceSteps = 4
+            },
+            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(FluxDoubleStreamPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new FluxDoubleStreamPredictor<T>(
+            variant: FluxPredictorVariant.Schnell,
+            inputChannels: LATENT_CHANNELS,
+            contextDim: 4096,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2, latentScaleFactor: 0.3611, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        var combined = new Vector<T>(pp.Length + vp.Length);
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // #1711: delegate to predictor/VAE Clone (probe-forward + copy); DiT LazyDense weights resolve
+        // via the FORWARD path so a model-level SetParameters(GetParameters()) clone re-RNG-initialized.
+        var clone = new Flux2SchnellModel<T>(
+            conditioner: _conditioner,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            seed: null);
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "FLUX.2 Schnell", Version = "2.0",
+            Description = "Next-gen ultra-fast FLUX generation in 1-4 steps with improved quality",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "flux2-double-stream-distilled");
+        m.SetProperty("base_model", "FLUX.2");
+        m.SetProperty("text_encoder", "CLIP-L + T5-XXL");
+        m.SetProperty("context_dim", FLUX_CONTEXT_DIM);
+        m.SetProperty("distillation_method", "guidance-distillation");
+        m.SetProperty("optimal_steps", DEFAULT_STEPS);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        return m;
+    }
+}

@@ -1,0 +1,302 @@
+using AiDotNet.Document;
+using AiDotNet.Document.GraphBased;
+using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Helpers;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.IntegrationTests.Document;
+
+/// <summary>
+/// Integration tests for graph-based document models.
+/// </summary>
+public class GraphBasedDocumentTests
+{
+    private static NeuralNetworkArchitecture<double> CreateArchitecture()
+    {
+        return new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 64,
+            inputWidth: 64,
+            inputDepth: 3,
+            outputSize: 9);
+    }
+
+    private static Tensor<double> CreateSmallImage(int size = 64)
+    {
+        int totalSize = 1 * 3 * size * size;
+        var data = new Vector<double>(totalSize);
+        for (int i = 0; i < totalSize; i++)
+            data[i] = 0.5;
+        return new Tensor<double>(new[] { 1, 3, size, size }, data);
+    }
+
+    // A rank-2 [N, F] node-feature matrix (one row per document node/segment).
+    private static Tensor<double> CreateNodeFeatures(int numNodes, int featureDim)
+    {
+        var data = new Vector<double>(numNodes * featureDim);
+        for (int i = 0; i < data.Length; i++)
+            data[i] = 0.01 * ((i % 11) + 1);
+        return new Tensor<double>(new[] { numNodes, featureDim }, data);
+    }
+
+    #region DocGCN Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DocGCN_NativeConstruction_Succeeds()
+    {
+        var arch = CreateArchitecture();
+        var model = new DocGCN<double>(arch);
+        Assert.NotNull(model);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DocGCN_Predict_ReturnsOutput()
+    {
+        var arch = CreateArchitecture();
+        var model = new DocGCN<double>(arch);
+        var input = CreateSmallImage();
+        var output = model.Predict(input);
+        Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DocGCN_GetModelMetadata_ReturnsValidData()
+    {
+        var arch = CreateArchitecture();
+        var model = new DocGCN<double>(arch);
+        var meta = model.GetModelMetadata();
+        Assert.Equal("DocGCN", meta.Name);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DocGCN_FusedMultimodal_CombinesHeterogeneousNodes()
+    {
+        await Task.Yield();
+        var model = new DocGCN<double>(CreateArchitecture());
+        var textNodes = CreateNodeFeatures(6, 128);
+        var visualNodes = CreateNodeFeatures(10, 128);
+
+        var textOnly = model.PredictMultimodal(textNodes, null);        // graceful degradation
+        var visualOnly = model.PredictMultimodal(null, visualNodes);    // graceful degradation
+        var fused = model.PredictMultimodal(textNodes, visualNodes);    // heterogeneous joint graph
+
+        AssertAllFinite(textOnly, "DocGCN text-only");
+        AssertAllFinite(visualOnly, "DocGCN visual-only");
+        AssertAllFinite(fused, "DocGCN fused");
+
+        Assert.Equal(textNodes.Shape[0] + visualNodes.Shape[0], fused.Shape[0]);
+        Assert.True(fused.Shape[0] > textOnly.Shape[0] && fused.Shape[0] > visualOnly.Shape[0],
+            "Fused heterogeneous node count should exceed each single modality.");
+    }
+
+    #endregion
+
+    #region PICK Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task PICK_NativeConstruction_Succeeds()
+    {
+        var arch = CreateArchitecture();
+        var model = new PICK<double>(arch);
+        Assert.NotNull(model);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PICK_Predict_ReturnsOutput()
+    {
+        var arch = CreateArchitecture();
+        var model = new PICK<double>(arch);
+        var input = CreateSmallImage();
+        var output = model.Predict(input);
+        Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PICK_GetModelMetadata_ReturnsValidData()
+    {
+        var arch = CreateArchitecture();
+        var model = new PICK<double>(arch);
+        var meta = model.GetModelMetadata();
+        Assert.Equal("PICK", meta.Name);
+    }
+
+    private static Tensor<double> CreateTokenIds(int numTokens)
+    {
+        var data = new Vector<double>(numTokens);
+        for (int i = 0; i < numTokens; i++)
+            data[i] = (i % 20) + 1;
+        return new Tensor<double>(new[] { numTokens }, data);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PICK_FusedMultimodal_CombinesTextAndVisualSegments()
+    {
+        await Task.Yield();
+        var model = new PICK<double>(CreateArchitecture());
+        var tokens = CreateTokenIds(6);
+        var visualNodes = CreateNodeFeatures(10, 256);
+
+        var textOnly = model.PredictMultimodal(tokens, null);
+        var visualOnly = model.PredictMultimodal(null, visualNodes);
+        var fused = model.PredictMultimodal(tokens, visualNodes);
+
+        AssertAllFinite(textOnly, "PICK text-only");
+        AssertAllFinite(visualOnly, "PICK visual-only");
+        AssertAllFinite(fused, "PICK fused");
+
+        Assert.True(fused.Shape[0] > textOnly.Shape[0] && fused.Shape[0] > visualOnly.Shape[0],
+            $"Fused segment count ({fused.Shape[0]}) should exceed text-only ({textOnly.Shape[0]}) and visual-only ({visualOnly.Shape[0]}).");
+    }
+
+    #endregion
+
+    #region TRIE Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_NativeConstruction_Succeeds()
+    {
+        var arch = CreateArchitecture();
+        var model = new TRIE<double>(arch);
+        Assert.NotNull(model);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_Predict_ReturnsOutput()
+    {
+        var arch = CreateArchitecture();
+        var model = new TRIE<double>(arch);
+        var input = CreateSmallImage();
+        var output = model.Predict(input);
+        Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_GetModelMetadata_ReturnsValidData()
+    {
+        var arch = CreateArchitecture();
+        var model = new TRIE<double>(arch);
+        var meta = model.GetModelMetadata();
+        Assert.Equal("TRIE", meta.Name);
+    }
+
+    // ===== Modality-robust fusion (task #48): text-only, image-only, and fused inference. =====
+
+    private static Tensor<double> CreateTextTokens(int numTokens = 8, int featureDim = 128)
+    {
+        var data = new Vector<double>(numTokens * featureDim);
+        for (int i = 0; i < data.Length; i++)
+            data[i] = 0.01 * ((i % 7) + 1);
+        return new Tensor<double>(new[] { numTokens, featureDim }, data);
+    }
+
+    private static void AssertAllFinite(Tensor<double> t, string ctx)
+    {
+        for (int i = 0; i < t.Length; i++)
+        {
+            Assert.False(double.IsNaN(t[i]), $"{ctx}: output[{i}] is NaN");
+            Assert.False(double.IsInfinity(t[i]), $"{ctx}: output[{i}] is Infinity");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_TextOnly_ProducesFiniteOutput()
+    {
+        await Task.Yield();
+        var model = new TRIE<double>(CreateArchitecture());
+        var output = model.Predict(CreateTextTokens());   // rank-2 -> text stream (graceful single-modality)
+        Assert.True(output.Length > 0);
+        AssertAllFinite(output, "TRIE text-only");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_FusedMultimodal_CombinesTextAndVisualNodes()
+    {
+        await Task.Yield();
+        var model = new TRIE<double>(CreateArchitecture());
+        var tokens = CreateTextTokens();
+        var image = CreateSmallImage();
+
+        var textOnly = model.PredictMultimodal(tokens, null);   // graceful degradation
+        var imageOnly = model.PredictMultimodal(null, image);   // graceful degradation
+        var fused = model.PredictMultimodal(tokens, image);     // joint reasoning
+
+        AssertAllFinite(textOnly, "TRIE fused-text-only");
+        AssertAllFinite(imageOnly, "TRIE fused-image-only");
+        AssertAllFinite(fused, "TRIE fused");
+
+        // The fused node set is the union of text nodes and visual nodes, so it must have strictly
+        // more nodes than either single modality — proof the streams were actually concatenated.
+        Assert.True(fused.Shape[0] > textOnly.Shape[0],
+            $"Fused node count ({fused.Shape[0]}) should exceed text-only ({textOnly.Shape[0]}).");
+        Assert.True(fused.Shape[0] > imageOnly.Shape[0],
+            $"Fused node count ({fused.Shape[0]}) should exceed image-only ({imageOnly.Shape[0]}).");
+    }
+
+    #endregion
+
+    #region LayoutGraph Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task LayoutGraph_NativeConstruction_Succeeds()
+    {
+        var arch = CreateArchitecture();
+        var model = new LayoutGraph<double>(arch);
+        Assert.NotNull(model);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LayoutGraph_Predict_ReturnsOutput()
+    {
+        var arch = CreateArchitecture();
+        var model = new LayoutGraph<double>(arch);
+        var input = CreateSmallImage();
+        var output = model.Predict(input);
+        Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LayoutGraph_GetModelMetadata_ReturnsValidData()
+    {
+        var arch = CreateArchitecture();
+        var model = new LayoutGraph<double>(arch);
+        var meta = model.GetModelMetadata();
+        Assert.Equal("LayoutGraph", meta.Name);
+    }
+
+    #endregion
+
+    #region Cross-Model Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task AllGraphBasedModels_SupportsTraining_InNativeMode()
+    {
+        var arch = CreateArchitecture();
+        var models = new DocumentNeuralNetworkBase<double>[]
+        {
+            new DocGCN<double>(arch),
+            new PICK<double>(arch),
+            new TRIE<double>(arch),
+            new LayoutGraph<double>(arch),
+        };
+
+        foreach (var model in models)
+        {
+            // All native mode models support training
+            Assert.True(model.SupportsTraining);
+        }
+    }
+
+    #endregion
+}

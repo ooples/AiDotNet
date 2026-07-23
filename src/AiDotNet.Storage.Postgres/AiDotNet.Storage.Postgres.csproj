@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Opt-in PostgreSQL backend for AiDotNet. Carries the Npgsql dependency so the
+      core package stays free of it. Provides PostgresGraphCheckpointer for durable,
+      cross-process graph checkpointing. net10.0 only: modern Npgsql does not ship
+      a net471-compatible target, so this package intentionally supports a subset
+      of the core package's TFMs.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Version>0.204.0</Version>
+    <Title>AiDotNet.Storage.Postgres</Title>
+    <Description>PostgreSQL-backed services for AiDotNet. Provides PostgresGraphCheckpointer (IGraphCheckpointer) for durable agentic-graph checkpointing. Opt-in: reference this package to keep Npgsql out of the core package. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
+    <Company>Ooples Finance</Company>
+    <Authors>ooples</Authors>
+    <Copyright>Ooples Finance LLC 2023</Copyright>
+    <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
+    <PackageTags>ai; aidotnet; postgres; postgresql; npgsql; checkpoint; storage</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AiDotNet.Agentic.Graph.Checkpointing</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiDotNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="True" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

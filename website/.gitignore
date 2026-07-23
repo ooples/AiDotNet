@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.astro/
+.vercel
+playwright-report/
+test-results/
+tests/e2e/.auth/

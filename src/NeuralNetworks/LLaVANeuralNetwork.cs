@@ -1,0 +1,1785 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Models;
+using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+namespace AiDotNet.NeuralNetworks;
+
+/// <summary>
+/// LLaVA (Large Language and Vision Assistant) neural network for visual instruction following.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// LLaVA connects a vision encoder (CLIP ViT) with a large language model (LLaMA/Vicuna)
+/// through a simple projection layer, enabling visual conversations and instruction following.
+/// </para>
+/// <para><b>For Beginners:</b> LLaVA is like giving eyes to ChatGPT!
+///
+/// Architecture overview:
+/// 1. Vision Encoder (CLIP ViT-L/14): Extracts image patch features
+/// 2. Projection Layer (MLP): Maps visual features to LLM's embedding space
+/// 3. Large Language Model (LLaMA/Vicuna): Generates text responses
+///
+/// Key capabilities:
+/// - Visual conversations: "What's in this image?" followed by "What color is the car?"
+/// - Visual reasoning: Understanding relationships, counting, spatial awareness
+/// - Instruction following: "Describe this image as if you were a poet"
+/// - Multi-turn dialogue: Context-aware conversations about images
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LLaVAOptions { ImageSize = 336, MaxTextLength = 512 };
+/// var model = new LLaVANeuralNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 336, 336 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Visual Instruction Tuning", "https://arxiv.org/abs/2304.08485", Year = 2023, Authors = "Haotian Liu, Chunyuan Li, Qingyang Wu, Yong Jae Lee")]
+public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
+{
+    private readonly LLaVAOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    #region Execution Mode
+
+    private readonly bool _useNativeMode;
+
+    #endregion
+
+    #region ONNX Mode Fields
+
+    private readonly InferenceSession? _visionEncoder;
+    private readonly InferenceSession? _languageModel;
+    private readonly string? _visionEncoderPath;
+    private readonly string? _languageModelPath;
+
+    #endregion
+
+    #region Native Mode Fields
+
+    private readonly List<ILayer<T>> _visionEncoderLayers = [];
+    private readonly List<ILayer<T>> _projectionLayers = [];
+    private readonly List<ILayer<T>> _languageModelLayers = [];
+    // Registered trainable tensors (surfaced via GetExtraTrainableTensors). They are used DIRECTLY in the
+    // tape-aware vision forward (PrependClsToken / AddPositionalEmbeddings), so gradients reach them and
+    // the tape optimizer updates them. Kept as Tensor<T> (not Matrix<T>) precisely so the concat/add ops
+    // treat them as tape leaves rather than copying detached values.
+    private Tensor<T>? _visionClsToken;
+    private Tensor<T>? _visionPositionalEmbeddings;
+    private ILayer<T>? _patchEmbedding;
+    private ILayer<T>? _textTokenEmbedding;
+    private Matrix<T>? _textPositionalEmbeddings;
+    private ILayer<T>? _outputProjection;
+    private ILayer<T>? _groundingHead;
+
+    #endregion
+
+    #region Shared Fields
+
+    private readonly ITokenizer _tokenizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly int _embeddingDimension;
+    private readonly int _maxSequenceLength;
+    private readonly int _imageSize;
+    private readonly int _visionHiddenDim;
+    private readonly int _lmHiddenDim;
+    private readonly int _numVisionLayers;
+    private readonly int _numLmLayers;
+    private readonly int _numHeads;
+    private readonly int _patchSize;
+    private readonly int _vocabularySize;
+    private readonly LanguageModelBackbone _languageModelBackbone;
+    private readonly string _visionEncoderType;
+    private readonly int _numVisualTokens;
+
+    #endregion
+
+    #region IMultimodalEmbedding Properties
+
+    /// <inheritdoc/>
+    public int EmbeddingDimension => _embeddingDimension;
+
+    /// <inheritdoc/>
+    public int MaxSequenceLength => _maxSequenceLength;
+
+    /// <inheritdoc/>
+    public int ImageSize => _imageSize;
+
+    #endregion
+
+    #region ILLaVAModel Properties
+
+    /// <inheritdoc/>
+    public LanguageModelBackbone LanguageModelBackbone => _languageModelBackbone;
+
+    /// <inheritdoc/>
+    public string VisionEncoderType => _visionEncoderType;
+
+    /// <inheritdoc/>
+    public int NumVisualTokens => _numVisualTokens;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates a LLaVA network using pretrained ONNX models.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For ONNX mode, you MUST provide a tokenizer that matches your language model backbone.
+    /// Use <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> to load
+    /// the correct pretrained tokenizer.
+    /// </para>
+    /// </remarks>
+    public LLaVANeuralNetwork(
+        NeuralNetworkArchitecture<T> architecture,
+        string visionEncoderPath,
+        string languageModelPath,
+        ITokenizer tokenizer,
+        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.LLaMA,
+        string visionEncoderType = "clip-vit-l",
+        int embeddingDimension = 4096,
+        int maxSequenceLength = 2048,
+        int imageSize = 336,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        LLaVAOptions? options = null)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+    {
+        _options = options ?? new LLaVAOptions();
+        Options = _options;
+        if (string.IsNullOrWhiteSpace(visionEncoderPath))
+            throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
+        if (string.IsNullOrWhiteSpace(languageModelPath))
+            throw new ArgumentException("Language model path cannot be null or empty.", nameof(languageModelPath));
+        if (!File.Exists(visionEncoderPath))
+            throw new FileNotFoundException($"Vision encoder model not found: {visionEncoderPath}");
+        if (!File.Exists(languageModelPath))
+            throw new FileNotFoundException($"Language model not found: {languageModelPath}");
+
+        _useNativeMode = false;
+        _visionEncoderPath = visionEncoderPath;
+        _languageModelPath = languageModelPath;
+        _languageModelBackbone = languageModelBackbone;
+        _visionEncoderType = visionEncoderType.ToLowerInvariant();
+        _embeddingDimension = embeddingDimension;
+        _maxSequenceLength = maxSequenceLength;
+        _imageSize = imageSize;
+        _patchSize = 14;
+        _numVisualTokens = (imageSize / _patchSize) * (imageSize / _patchSize);
+        _visionHiddenDim = 1024;
+        _lmHiddenDim = embeddingDimension;
+        _numVisionLayers = 24;
+        _numLmLayers = 32;
+        _numHeads = 16;
+        _vocabularySize = 32000;
+
+        InferenceSession? visionEncoder = null;
+        InferenceSession? languageModel = null;
+
+        try
+        {
+            visionEncoder = new InferenceSession(visionEncoderPath);
+            languageModel = new InferenceSession(languageModelPath);
+            _visionEncoder = visionEncoder;
+            _languageModel = languageModel;
+            // Tokenizer is required for ONNX mode - must match the language model backbone
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
+            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+            InitializeLayers();
+        }
+        catch
+        {
+            visionEncoder?.Dispose();
+            languageModel?.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Creates a LLaVA network using native library layers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In native training mode, a default tokenizer appropriate for the language model backbone
+    /// will be created if not provided. For production inference, consider using
+    /// <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> with the model name
+    /// from <see cref="Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName(LanguageModelBackbone)"/>.
+    /// </para>
+    /// </remarks>
+    public LLaVANeuralNetwork(
+        NeuralNetworkArchitecture<T> architecture,
+        int imageSize = 336,
+        int channels = 3,
+        int patchSize = 14,
+        int vocabularySize = 32000,
+        int maxSequenceLength = 2048,
+        int embeddingDimension = 4096,
+        int visionHiddenDim = 1024,
+        int numVisionLayers = 24,
+        int numLmLayers = 32,
+        int numHeads = 16,
+        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.LLaMA,
+        string visionEncoderType = "clip-vit-l",
+        ITokenizer? tokenizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        LLaVAOptions? options = null)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+    {
+        _options = options ?? new LLaVAOptions();
+        Options = _options;
+        _useNativeMode = true;
+        _embeddingDimension = embeddingDimension;
+        _maxSequenceLength = maxSequenceLength;
+        _imageSize = imageSize;
+        _visionHiddenDim = visionHiddenDim;
+        _lmHiddenDim = embeddingDimension;
+        _numVisionLayers = numVisionLayers;
+        _numLmLayers = numLmLayers;
+        _numHeads = numHeads;
+        _patchSize = patchSize;
+        _vocabularySize = vocabularySize;
+        _languageModelBackbone = languageModelBackbone;
+        _visionEncoderType = visionEncoderType.ToLowerInvariant();
+        _numVisualTokens = (imageSize / patchSize) * (imageSize / patchSize);
+
+        // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
+        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+
+        InitializeNativeLayers(channels);
+    }
+
+    #endregion
+
+    #region Initialization
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        // ONNX mode initialization
+    }
+
+    private void InitializeNativeLayers(int channels)
+    {
+        int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
+
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateLLaVALayers(
+                _imageSize, channels, _patchSize, _visionHiddenDim, _lmHiddenDim,
+                _numVisionLayers, _numLmLayers, _numHeads, _vocabularySize, _maxSequenceLength));
+        }
+
+        // Distribute layers to internal sub-lists
+        int idx = 0;
+        _patchEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numVisionLayers; i++)
+            _visionEncoderLayers.Add(Layers[idx++]);
+
+        _projectionLayers.Add(Layers[idx++]); // GELU projection
+        _projectionLayers.Add(Layers[idx++]); // Linear projection
+
+        _textTokenEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numLmLayers; i++)
+            _languageModelLayers.Add(Layers[idx++]);
+
+        _outputProjection = Layers[idx++];
+        _groundingHead = Layers[idx++];
+
+        // Initialize positional embeddings
+        _visionClsToken = new Tensor<T>(new[] { 1, _visionHiddenDim });
+        _visionPositionalEmbeddings = new Tensor<T>(new[] { numPatches + 1, _visionHiddenDim });
+        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _lmHiddenDim, NumOps.Zero);
+
+        InitializeWeights();
+    }
+
+    private void InitializeWeights()
+    {
+        var random = RandomHelper.CreateSeededRandom(42);
+        double scale = 0.02;
+
+        if (_visionClsToken is not null)
+        {
+            for (int j = 0; j < _visionClsToken.Shape[1]; j++)
+            {
+                _visionClsToken[0, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
+            }
+        }
+
+        if (_visionPositionalEmbeddings is not null)
+        {
+            for (int i = 0; i < _visionPositionalEmbeddings.Shape[0]; i++)
+            {
+                for (int j = 0; j < _visionPositionalEmbeddings.Shape[1]; j++)
+                {
+                    _visionPositionalEmbeddings[i, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
+                }
+            }
+        }
+
+        if (_textPositionalEmbeddings is not null)
+        {
+            for (int i = 0; i < _textPositionalEmbeddings.Rows; i++)
+            {
+                for (int j = 0; j < _textPositionalEmbeddings.Columns; j++)
+                {
+                    _textPositionalEmbeddings[i, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
+                }
+            }
+        }
+    }
+
+    #endregion
+
+    #region IMultimodalEmbedding Implementation
+
+    /// <inheritdoc/>
+    public Vector<T> GetTextEmbedding(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Text cannot be null or empty.", nameof(text));
+
+        return GetTextEmbeddings([text]).First();
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<Vector<T>> GetTextEmbeddings(IEnumerable<string> texts)
+    {
+        var results = new List<Vector<T>>();
+
+        foreach (var text in texts)
+        {
+            var encoded = _tokenizer.Encode(text);
+            var inputIds = encoded.TokenIds;
+
+            // Truncate or pad
+            var paddedIds = new List<int>();
+            for (int i = 0; i < _maxSequenceLength; i++)
+            {
+                paddedIds.Add(i < inputIds.Count ? inputIds[i] : 0);
+            }
+
+            var embedded = EmbedTextTokens(paddedIds);
+            var embedding = MeanPool(embedded);
+            var normalized = Normalize(embedding);
+            results.Add(normalized);
+        }
+
+        return results;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> GetImageEmbedding(Tensor<T> image)
+    {
+        return GetImageEmbeddings([image]).First();
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<Vector<T>> GetImageEmbeddings(IEnumerable<Tensor<T>> images)
+    {
+        var results = new List<Vector<T>>();
+
+        foreach (var image in images)
+        {
+            var features = ExtractVisualFeatures(image);
+            var embedding = MeanPool(features);
+            var normalized = Normalize(embedding);
+            results.Add(normalized);
+        }
+
+        return results;
+    }
+
+    /// <inheritdoc/>
+    public T ComputeSimilarity(Vector<T> textEmbedding, Vector<T> imageEmbedding)
+    {
+        // Use the minimum length to avoid out-of-range access when embeddings have different dimensions
+        int length = Math.Min(textEmbedding.Length, imageEmbedding.Length);
+
+        T similarity = NumOps.Zero;
+        for (int i = 0; i < length; i++)
+        {
+            similarity = NumOps.Add(similarity,
+                NumOps.Multiply(textEmbedding[i], imageEmbedding[i]));
+        }
+        return similarity;
+    }
+
+    /// <inheritdoc/>
+    public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, IEnumerable<string> classLabels)
+    {
+        if (classLabels is null)
+        {
+            throw new ArgumentNullException(nameof(classLabels));
+        }
+
+        var labels = classLabels.ToList();
+        if (labels.Count == 0)
+        {
+            throw new ArgumentException("At least one class label must be provided.", nameof(classLabels));
+        }
+
+        var imageEmbedding = GetImageEmbedding(image);
+        var textEmbeddings = GetTextEmbeddings(labels.Select(l => $"a photo of {l}")).ToList();
+
+        var similarities = new List<T>();
+        foreach (var textEmb in textEmbeddings)
+        {
+            similarities.Add(ComputeSimilarity(textEmb, imageEmbedding));
+        }
+
+        var probabilities = Softmax(similarities);
+
+        var result = new Dictionary<string, T>();
+        for (int i = 0; i < labels.Count; i++)
+        {
+            result[labels[i]] = probabilities[i];
+        }
+
+        return result;
+    }
+
+    #endregion
+
+    #region ILLaVAModel Implementation
+
+    /// <inheritdoc/>
+    public string Generate(
+        Tensor<T> image,
+        string prompt,
+        int maxLength = 512,
+        double temperature = 0.7,
+        double topP = 0.9)
+    {
+        var visualFeatures = ExtractVisualFeatures(image);
+        var projectedFeatures = ProjectToLanguageSpace(visualFeatures);
+
+        var encoded = _tokenizer.Encode(prompt);
+        var promptTokens = encoded.TokenIds;
+        var promptEmbeddings = EmbedTextTokens(promptTokens);
+
+        var combinedInput = ConcatenateSequences(projectedFeatures, promptEmbeddings);
+
+        var generatedTokens = new List<int>();
+        var currentInput = combinedInput;
+
+        for (int step = 0; step < maxLength; step++)
+        {
+            var output = ForwardLLM(currentInput);
+            var logits = GetNextTokenLogits(output, temperature);
+            int nextToken = SampleToken(logits, topP);
+
+            var specialTokens = _tokenizer.SpecialTokens;
+            var eosTokenStr = specialTokens?.EosToken ?? "[SEP]";
+            var eosEncoded = _tokenizer.Encode(eosTokenStr);
+            if (eosEncoded.TokenIds.Count > 0 && nextToken == eosEncoded.TokenIds[0])
+                break;
+
+            generatedTokens.Add(nextToken);
+            currentInput = AppendToken(currentInput, nextToken);
+        }
+
+        return _tokenizer.Decode(generatedTokens);
+    }
+
+    /// <inheritdoc/>
+    public string Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage,
+        int maxLength = 512,
+        double temperature = 0.7)
+    {
+        var conversationPrompt = BuildConversationPrompt(conversationHistory, userMessage);
+        return Generate(image, conversationPrompt, maxLength, temperature);
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<(string Response, T Score)> GenerateMultiple(
+        Tensor<T> image,
+        string prompt,
+        int numResponses = 5,
+        double temperature = 0.9)
+    {
+        var results = new List<(string Response, T Score)>();
+
+        // Cap maximum temperature to prevent degenerate outputs
+        const double maxTemperature = 1.2;
+        const double tempIncrement = 0.05;
+
+        for (int i = 0; i < numResponses; i++)
+        {
+            // Calculate temperature with upper bound to prevent sampling issues
+            double adjustedTemp = Math.Min(temperature + (i * tempIncrement), maxTemperature);
+            var response = Generate(image, prompt, 256, adjustedTemp);
+            var score = NumOps.FromDouble(Math.Min(response.Length / 100.0, 1.0));
+            results.Add((response, score));
+        }
+
+        return results.OrderByDescending(r => NumOps.ToDouble(r.Score));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ExtractVisualFeatures(Tensor<T> image)
+    {
+        if (_useNativeMode)
+        {
+            return ExtractVisualFeaturesNative(image);
+        }
+        else
+        {
+            return ExtractVisualFeaturesOnnx(image);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ProjectToLanguageSpace(Tensor<T> visualFeatures)
+    {
+        if (_useNativeMode)
+        {
+            Tensor<T> output = visualFeatures;
+            foreach (var layer in _projectionLayers)
+            {
+                output = layer.Forward(output);
+            }
+            return output;
+        }
+        else
+        {
+            return visualFeatures;
+        }
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> GroundObject(Tensor<T> image, string description)
+    {
+        var visualFeatures = ExtractVisualFeatures(image);
+        var projectedFeatures = ProjectToLanguageSpace(visualFeatures);
+
+        var encoded = _tokenizer.Encode(description);
+        var descEmbeddings = EmbedTextTokens(encoded.TokenIds);
+
+        var combinedInput = ConcatenateSequences(projectedFeatures, descEmbeddings);
+        var output = ForwardLLM(combinedInput);
+
+        if (_groundingHead is not null)
+        {
+            int seqLen = output.Shape[0];
+            int hiddenDim = output.Shape[1];
+
+            var lastHidden = Tensor<T>.CreateDefault([1, hiddenDim], NumOps.Zero);
+            for (int i = 0; i < hiddenDim; i++)
+            {
+                lastHidden[0, i] = output[seqLen - 1, i];
+            }
+
+            var bbox = _groundingHead.Forward(lastHidden);
+
+            var bboxVector = new Vector<T>(4);
+            bboxVector[0] = bbox[0, 0];
+            bboxVector[1] = bbox[0, 1];
+            bboxVector[2] = bbox[0, 2];
+            bboxVector[3] = bbox[0, 3];
+            return bboxVector;
+        }
+
+        return new Vector<T>([NumOps.Zero, NumOps.Zero, NumOps.One, NumOps.One]);
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<string> DescribeRegions(Tensor<T> image, IEnumerable<Vector<T>> regions)
+    {
+        var descriptions = new List<string>();
+
+        foreach (var region in regions)
+        {
+            var croppedImage = CropImageToRegion(image, region);
+            var description = Generate(croppedImage, "Describe what is in this region of the image:", 128, 0.7);
+            descriptions.Add(description);
+        }
+
+        return descriptions;
+    }
+
+    /// <inheritdoc/>
+    public string CompareImages(
+        Tensor<T> image1,
+        Tensor<T> image2,
+        IEnumerable<string>? aspectsToCompare = null)
+    {
+        var prompt = "Compare these two images";
+        if (aspectsToCompare is not null && aspectsToCompare.Any())
+        {
+            prompt += $" focusing on: {string.Join(", ", aspectsToCompare)}";
+        }
+        prompt += ". Describe the similarities and differences.";
+
+        var features1 = ExtractVisualFeatures(image1);
+        var features2 = ExtractVisualFeatures(image2);
+        var projected1 = ProjectToLanguageSpace(features1);
+        var projected2 = ProjectToLanguageSpace(features2);
+
+        var combinedVisual = ConcatenateSequences(projected1, projected2);
+
+        var encoded = _tokenizer.Encode(prompt);
+        var promptEmbeddings = EmbedTextTokens(encoded.TokenIds);
+
+        var combinedInput = ConcatenateSequences(combinedVisual, promptEmbeddings);
+
+        var generatedTokens = new List<int>();
+        var currentInput = combinedInput;
+
+        for (int step = 0; step < 256; step++)
+        {
+            var output = ForwardLLM(currentInput);
+            var logits = GetNextTokenLogits(output, 0.7);
+            int nextToken = SampleToken(logits, 0.9);
+
+            var specialTokens = _tokenizer.SpecialTokens;
+            var eosTokenStr = specialTokens?.EosToken ?? "[SEP]";
+            var eosEncoded = _tokenizer.Encode(eosTokenStr);
+            if (eosEncoded.TokenIds.Count > 0 && nextToken == eosEncoded.TokenIds[0])
+                break;
+
+            generatedTokens.Add(nextToken);
+            currentInput = AppendToken(currentInput, nextToken);
+        }
+
+        return _tokenizer.Decode(generatedTokens);
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    private Tensor<T> ExtractVisualFeaturesNative(Tensor<T> image)
+    {
+        if (_patchEmbedding is null)
+            throw new InvalidOperationException("Patch embedding layer not initialized.");
+
+        var output = _patchEmbedding.Forward(image);
+
+        if (_visionClsToken is not null)
+        {
+            output = PrependClsToken(output, _visionClsToken);
+        }
+
+        if (_visionPositionalEmbeddings is not null)
+        {
+            output = AddPositionalEmbeddings(output, _visionPositionalEmbeddings);
+        }
+
+        foreach (var layer in _visionEncoderLayers)
+        {
+            output = layer.Forward(output);
+        }
+
+        return output;
+    }
+
+    private Tensor<T> ExtractVisualFeaturesOnnx(Tensor<T> image)
+    {
+        if (_visionEncoder is null)
+            throw new InvalidOperationException("Vision encoder not initialized.");
+
+        var onnxTensor = PrepareImageForOnnx(image);
+
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor("pixel_values", onnxTensor)
+        };
+
+        using var results = _visionEncoder.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var output = Tensor<T>.CreateDefault(outputShape, NumOps.Zero);
+        var flatOutput = outputTensor.ToArray();
+        for (int i = 0; i < flatOutput.Length; i++)
+        {
+            output[i] = NumOps.FromDouble(flatOutput[i]);
+        }
+
+        return output;
+    }
+
+    private OnnxTensors.DenseTensor<float> PrepareImageForOnnx(Tensor<T> image)
+    {
+        bool is3D = image.Shape.Length == 3;
+        int channels = is3D ? image.Shape[0] : image.Shape[1];
+        int height = is3D ? image.Shape[1] : image.Shape[2];
+        int width = is3D ? image.Shape[2] : image.Shape[3];
+
+        var onnxTensor = new OnnxTensors.DenseTensor<float>([1, channels, height, width]);
+
+        for (int c = 0; c < channels; c++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    T value = is3D ? image[c, h, w] : image[0, c, h, w];
+                    onnxTensor[0, c, h, w] = (float)NumOps.ToDouble(value);
+                }
+            }
+        }
+
+        return onnxTensor;
+    }
+
+    private Tensor<T> EmbedTextTokens(IList<int> tokenIds)
+    {
+        if (_textTokenEmbedding is null)
+            throw new InvalidOperationException("Text embedding layer not initialized.");
+
+        var inputTensor = Tensor<T>.CreateDefault([tokenIds.Count], NumOps.Zero);
+        for (int i = 0; i < tokenIds.Count; i++)
+        {
+            inputTensor[i] = NumOps.FromDouble(tokenIds[i]);
+        }
+
+        var embedded = _textTokenEmbedding.Forward(inputTensor);
+
+        if (_textPositionalEmbeddings is not null && tokenIds.Count <= _textPositionalEmbeddings.Rows)
+        {
+            for (int i = 0; i < tokenIds.Count && i < _textPositionalEmbeddings.Rows; i++)
+            {
+                for (int j = 0; j < _lmHiddenDim && j < _textPositionalEmbeddings.Columns; j++)
+                {
+                    embedded[i, j] = NumOps.Add(embedded[i, j], _textPositionalEmbeddings[i, j]);
+                }
+            }
+        }
+
+        return embedded;
+    }
+
+    private Tensor<T> ForwardLLM(Tensor<T> input)
+    {
+        if (_useNativeMode)
+        {
+            var output = input;
+            foreach (var layer in _languageModelLayers)
+            {
+                output = layer.Forward(output);
+            }
+            return output;
+        }
+        else
+        {
+            return ForwardLLMOnnx(input);
+        }
+    }
+
+    private Tensor<T> ForwardLLMOnnx(Tensor<T> input)
+    {
+        if (_languageModel is null)
+            throw new InvalidOperationException("Language model not initialized.");
+
+        int seqLen = input.Shape[0];
+        int hiddenDim = input.Shape[1];
+
+        var onnxTensor = new OnnxTensors.DenseTensor<float>([1, seqLen, hiddenDim]);
+        for (int i = 0; i < seqLen; i++)
+        {
+            for (int j = 0; j < hiddenDim; j++)
+            {
+                onnxTensor[0, i, j] = (float)NumOps.ToDouble(input[i, j]);
+            }
+        }
+
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor("inputs_embeds", onnxTensor)
+        };
+
+        using var results = _languageModel.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var output = Tensor<T>.CreateDefault([outputShape[1], outputShape[2]], NumOps.Zero);
+        for (int i = 0; i < outputShape[1]; i++)
+        {
+            for (int j = 0; j < outputShape[2]; j++)
+            {
+                output[i, j] = NumOps.FromDouble(outputTensor[0, i, j]);
+            }
+        }
+
+        return output;
+    }
+
+    private Tensor<T> ConcatenateSequences(Tensor<T> seq1, Tensor<T> seq2)
+    {
+        int seq1Len = seq1.Shape[0];
+        int seq2Len = seq2.Shape[0];
+        int hiddenDim = seq1.Shape[1];
+
+        var result = Tensor<T>.CreateDefault([seq1Len + seq2Len, hiddenDim], NumOps.Zero);
+
+        for (int i = 0; i < seq1Len; i++)
+        {
+            for (int j = 0; j < hiddenDim; j++)
+            {
+                result[i, j] = seq1[i, j];
+            }
+        }
+
+        for (int i = 0; i < seq2Len; i++)
+        {
+            for (int j = 0; j < hiddenDim; j++)
+            {
+                result[seq1Len + i, j] = seq2[i, j];
+            }
+        }
+
+        return result;
+    }
+
+    private Vector<T> GetNextTokenLogits(Tensor<T> output, double temperature)
+    {
+        int seqLen = output.Shape[0];
+        int hiddenDim = output.Shape[1];
+
+        var lastHidden = new Vector<T>(hiddenDim);
+        for (int i = 0; i < hiddenDim; i++)
+        {
+            lastHidden[i] = output[seqLen - 1, i];
+        }
+
+        if (_outputProjection is not null)
+        {
+            var inputTensor = Tensor<T>.CreateDefault([1, hiddenDim], NumOps.Zero);
+            for (int i = 0; i < hiddenDim; i++)
+            {
+                inputTensor[0, i] = lastHidden[i];
+            }
+
+            var logitsTensor = _outputProjection.Forward(inputTensor);
+
+            var logits = new Vector<T>(_vocabularySize);
+            for (int i = 0; i < _vocabularySize; i++)
+            {
+                var logit = logitsTensor[0, i];
+                logits[i] = NumOps.Divide(logit, NumOps.FromDouble(temperature));
+            }
+            return logits;
+        }
+
+        return new Vector<T>(_vocabularySize);
+    }
+
+    private int SampleToken(Vector<T> logits, double topP)
+    {
+        var probabilities = Softmax(logits.ToList());
+
+        var indexed = probabilities.Select((p, i) => (Prob: p, Index: i))
+            .OrderByDescending(x => NumOps.ToDouble(x.Prob))
+            .ToList();
+
+        double cumProb = 0;
+        var nucleus = new List<(T Prob, int Index)>();
+        foreach (var item in indexed)
+        {
+            nucleus.Add(item);
+            cumProb += NumOps.ToDouble(item.Prob);
+            if (cumProb >= topP)
+                break;
+        }
+
+        double totalProb = nucleus.Sum(x => NumOps.ToDouble(x.Prob));
+        // Use thread-safe random instead of creating RandomHelper.CreateSecureRandom() per call
+        // (RandomHelper.CreateSecureRandom() produces identical sequences when called rapidly)
+        double rand = Tensors.Helpers.RandomHelper.ThreadSafeRandom.NextDouble() * totalProb;
+
+        double runningSum = 0;
+        foreach (var item in nucleus)
+        {
+            runningSum += NumOps.ToDouble(item.Prob);
+            if (runningSum >= rand)
+                return item.Index;
+        }
+
+        return nucleus.Last().Index;
+    }
+
+    private Tensor<T> AppendToken(Tensor<T> input, int tokenId)
+    {
+        if (_textTokenEmbedding is null)
+            return input;
+
+        var tokenTensor = Tensor<T>.CreateDefault([1], NumOps.Zero);
+        tokenTensor[0] = NumOps.FromDouble(tokenId);
+        var tokenEmbedding = _textTokenEmbedding.Forward(tokenTensor);
+
+        return ConcatenateSequences(input, tokenEmbedding);
+    }
+
+    private string BuildConversationPrompt(
+        IEnumerable<(string Role, string Content)> history,
+        string userMessage)
+    {
+        var prompt = new System.Text.StringBuilder();
+
+        foreach (var (role, content) in history)
+        {
+            prompt.AppendLine($"{role}: {content}");
+        }
+
+        prompt.AppendLine($"User: {userMessage}");
+        prompt.Append("Assistant: ");
+
+        return prompt.ToString();
+    }
+
+    private Tensor<T> CropImageToRegion(Tensor<T> image, Vector<T> region)
+    {
+        int channels = image.Shape[0];
+        int height = image.Shape[1];
+        int width = image.Shape[2];
+
+        int x1 = (int)(NumOps.ToDouble(region[0]) * width);
+        int y1 = (int)(NumOps.ToDouble(region[1]) * height);
+        int x2 = (int)(NumOps.ToDouble(region[2]) * width);
+        int y2 = (int)(NumOps.ToDouble(region[3]) * height);
+
+        x1 = Math.Max(0, Math.Min(x1, width - 1));
+        y1 = Math.Max(0, Math.Min(y1, height - 1));
+        x2 = Math.Max(x1 + 1, Math.Min(x2, width));
+        y2 = Math.Max(y1 + 1, Math.Min(y2, height));
+
+        int cropWidth = x2 - x1;
+        int cropHeight = y2 - y1;
+
+        var cropped = Tensor<T>.CreateDefault([channels, cropHeight, cropWidth], NumOps.Zero);
+
+        for (int c = 0; c < channels; c++)
+        {
+            for (int y = 0; y < cropHeight; y++)
+            {
+                for (int x = 0; x < cropWidth; x++)
+                {
+                    cropped[c, y, x] = image[c, y1 + y, x1 + x];
+                }
+            }
+        }
+
+        return ResizeImage(cropped, _imageSize, _imageSize);
+    }
+
+    private Tensor<T> ResizeImage(Tensor<T> image, int targetHeight, int targetWidth)
+    {
+        int channels = image.Shape[0];
+        int srcHeight = image.Shape[1];
+        int srcWidth = image.Shape[2];
+
+        var result = Tensor<T>.CreateDefault([channels, targetHeight, targetWidth], NumOps.Zero);
+
+        double scaleY = (double)srcHeight / targetHeight;
+        double scaleX = (double)srcWidth / targetWidth;
+
+        for (int c = 0; c < channels; c++)
+        {
+            for (int y = 0; y < targetHeight; y++)
+            {
+                for (int x = 0; x < targetWidth; x++)
+                {
+                    int srcY = Math.Min((int)(y * scaleY), srcHeight - 1);
+                    int srcX = Math.Min((int)(x * scaleX), srcWidth - 1);
+                    result[c, y, x] = image[c, srcY, srcX];
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private Tensor<T> PrependClsToken(Tensor<T> sequence, Tensor<T> clsToken)
+    {
+        // Concatenate the registered trainable CLS tensor [1, hiddenDim] DIRECTLY onto the sequence.
+        // TensorConcatenate is tape-tracked, so the gradient now flows into BOTH the patch-embedding
+        // side AND _visionClsToken — and the tape optimizer (which sees it via GetExtraTrainableTensors)
+        // updates it. The previous body copied clsToken's values into a fresh constant tensor, which
+        // detached it: it was counted/serialized as a parameter but training could never move it.
+        return Engine.TensorConcatenate(new[] { clsToken, sequence }, axis: 0);
+    }
+
+    private Tensor<T> AddPositionalEmbeddings(Tensor<T> sequence, Tensor<T> posEmbeddings)
+    {
+        int seqLen = sequence.Shape[0];
+
+        // Add the registered trainable positional table DIRECTLY with a tape-aware op so the gradient
+        // reaches _visionPositionalEmbeddings (updated by the tape optimizer via GetExtraTrainableTensors).
+        // When the sequence is shorter than the table (fewer patches than the configured maximum), narrow
+        // the table to the used rows first — still tape-connected — so shapes line up for the add.
+        var pos = posEmbeddings.Shape[0] == seqLen
+            ? posEmbeddings
+            : Engine.TensorNarrow(posEmbeddings, dim: 0, start: 0, length: seqLen);
+
+        return Engine.TensorAdd(sequence, pos);
+    }
+
+    private Vector<T> MeanPool(Tensor<T> tensor)
+    {
+        int seqLen = tensor.Shape[0];
+        int hiddenDim = tensor.Shape[1];
+
+        var result = new Vector<T>(hiddenDim);
+
+        for (int j = 0; j < hiddenDim; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < seqLen; i++)
+            {
+                sum = NumOps.Add(sum, tensor[i, j]);
+            }
+            result[j] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
+        }
+
+        return result;
+    }
+
+    private Vector<T> Normalize(Vector<T> vector)
+    {
+        return VectorHelper.Normalize(vector);
+    }
+
+    private List<T> Softmax(List<T> values)
+    {
+        double maxVal = values.Max(v => NumOps.ToDouble(v));
+        var expValues = values.Select(v => Math.Exp(NumOps.ToDouble(v) - maxVal)).ToList();
+        double sumExp = expValues.Sum();
+        return expValues.Select(e => NumOps.FromDouble(e / sumExp)).ToList();
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Implementation
+
+    /// <inheritdoc/>
+    public override long ParameterCount
+    {
+        get
+        {
+            if (!_useNativeMode)
+            {
+                return 0;
+            }
+
+            int count = 0;
+
+            // Vision encoder layers
+            foreach (var layer in _visionEncoderLayers)
+            {
+                count += (int)layer.ParameterCount;
+            }
+
+            // Projection layers
+            foreach (var layer in _projectionLayers)
+            {
+                count += (int)layer.ParameterCount;
+            }
+
+            // Language model layers
+            foreach (var layer in _languageModelLayers)
+            {
+                count += (int)layer.ParameterCount;
+            }
+
+            // Single layers
+            if (_patchEmbedding is not null)
+            {
+                count += (int)_patchEmbedding.ParameterCount;
+            }
+
+            if (_textTokenEmbedding is not null)
+            {
+                count += (int)_textTokenEmbedding.ParameterCount;
+            }
+
+            if (_outputProjection is not null)
+            {
+                count += (int)_outputProjection.ParameterCount;
+            }
+
+            if (_groundingHead is not null)
+            {
+                count += (int)_groundingHead.ParameterCount;
+            }
+
+            // Positional embeddings
+            if (_visionClsToken is not null)
+            {
+                count += _visionClsToken.Length;
+            }
+
+            if (_visionPositionalEmbeddings is not null)
+            {
+                count += _visionPositionalEmbeddings.Length;
+            }
+
+            if (_textPositionalEmbeddings is not null)
+            {
+                count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
+            }
+
+            return count;
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        SetTrainingMode(false);
+        return Accelerate(input, () =>
+        {
+            var features = ExtractVisualFeatures(input);
+            return ProjectToLanguageSpace(features);
+        });
+    }
+
+    /// <summary>
+    /// Training forward pass. Routes through the SAME path as <see cref="PredictCore"/>
+    /// (vision encoder -> visual projection), NOT the base sequential walk of <c>Layers</c>.
+    /// </summary>
+    /// <remarks>
+    /// The base <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> pushes the input through
+    /// every layer in <c>Layers</c> in series. For LLaVA that list is
+    /// [patch-embedding, vision encoder..., visual projection..., text-token-embedding,
+    /// language-model..., output-projection, grounding-head], so the base walk would feed the
+    /// projected visual features straight into the text token embedding and the language model —
+    /// layers that expect token ids, not dense features. That mismatched path produces non-finite
+    /// activations and an exploding parameter norm under training, and it disagrees with what
+    /// <see cref="PredictCore"/> computes at inference. Mirroring the inference forward keeps the
+    /// tape-tracked training graph consistent with Predict and numerically stable.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Wire per-layer random seeds once (dropout reproducibility / determinism), matching the
+        // base implementation, then run the real vision -> projection forward under the tape.
+        EnsureLayerRandomSeedsWired();
+        var features = ExtractVisualFeatures(input);
+        return ProjectToLanguageSpace(features);
+    }
+
+    /// <summary>
+    /// Exposes named intermediate activations along LLaVA's ACTUAL inference forward path
+    /// (CLIP-ViT vision encoder -> visual projection), mirroring <see cref="PredictCore"/> and
+    /// <see cref="ForwardForTraining"/>.
+    /// </summary>
+    /// <remarks>
+    /// The base implementation walks <c>Layers</c> strictly in order. For LLaVA that list is
+    /// [patch-embedding, vision encoder..., visual projection..., text-token-embedding,
+    /// language-model..., output-projection, grounding-head], so the sequential walk would feed the
+    /// dense projected visual features into the text <see cref="Layers.EmbeddingLayer{T}"/> (which
+    /// expects integer token ids, not a [seq, hidden] float tensor) — throwing — and would also force
+    /// lazy-allocation of the entire language-model decoder + vocab head, which this inference path
+    /// never touches (at paper scale that is a multi-billion-parameter stack that OOMs). We therefore
+    /// walk only the vision encoder -> projection path, exactly the tensors <see cref="PredictCore"/>
+    /// produces, so the reported activations stay consistent with Predict and remain non-empty.
+    /// We deliberately do NOT call the network-level <c>SetTrainingMode</c> here: on a foundation-scale
+    /// configuration that triggers the weight-streaming schedule to resolve every lazy layer (including
+    /// the unused LLM decoder), which OOMs. This method only reads activations, so leaving the layers'
+    /// mode untouched is safe.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        if (!_useNativeMode)
+        {
+            // ONNX mode has an empty native layer list; surface the vision-encoder and projected
+            // features so callers still receive non-empty, meaningful named activations.
+            var onnxFeatures = ExtractVisualFeatures(input);
+            activations["VisionEncoderOutput"] = onnxFeatures.Clone();
+            activations["ProjectedFeatures"] = ProjectToLanguageSpace(onnxFeatures).Clone();
+            return activations;
+        }
+
+        if (_patchEmbedding is null)
+            throw new InvalidOperationException("Patch embedding layer not initialized.");
+
+        var current = _patchEmbedding.Forward(input);
+        activations["PatchEmbedding"] = current.Clone();
+
+        if (_visionClsToken is not null)
+            current = PrependClsToken(current, _visionClsToken);
+        if (_visionPositionalEmbeddings is not null)
+            current = AddPositionalEmbeddings(current, _visionPositionalEmbeddings);
+        activations["VisionEmbeddings"] = current.Clone();
+
+        for (int i = 0; i < _visionEncoderLayers.Count; i++)
+        {
+            current = _visionEncoderLayers[i].Forward(current);
+            activations[$"VisionEncoderLayer_{i}_{_visionEncoderLayers[i].GetType().Name}"] = current.Clone();
+        }
+
+        for (int i = 0; i < _projectionLayers.Count; i++)
+        {
+            current = _projectionLayers[i].Forward(current);
+            activations[$"Projection_{i}_{_projectionLayers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <summary>
+    /// Surfaces the CLS token and vision positional embeddings as trainable tensors that live OUTSIDE
+    /// <c>Layers</c>, so the base tape training path watches and updates them alongside the layer weights.
+    /// They are used directly (uncopied) in <see cref="PrependClsToken"/> / <see cref="AddPositionalEmbeddings"/>,
+    /// so the gradient reaches these exact instances and the optimizer step moves them.
+    /// </summary>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+    {
+        if (_visionClsToken is not null) yield return _visionClsToken;
+        if (_visionPositionalEmbeddings is not null) yield return _visionPositionalEmbeddings;
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        TrainWithTape(input, expectedOutput, _optimizer);
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+        {
+            if (parameters.Length != 0)
+            {
+                throw new ArgumentException(
+                    $"Expected 0 parameters, but got {parameters.Length}.",
+                    nameof(parameters));
+            }
+
+            return;
+        }
+
+        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
+        if (parameters.Length != expectedCount)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedCount} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int offset = 0;
+
+        void UpdateLayerParameters(ILayer<T> layer)
+        {
+            int layerParamCount = checked((int)layer.ParameterCount);
+            if (layerParamCount <= 0)
+            {
+                return;
+            }
+
+            var layerParams = new Vector<T>(layerParamCount);
+            for (int i = 0; i < layerParamCount; i++)
+            {
+                layerParams[i] = parameters[offset + i];
+            }
+
+            layer.UpdateParameters(layerParams);
+            offset += layerParamCount;
+        }
+
+        foreach (var layer in _visionEncoderLayers)
+        {
+            UpdateLayerParameters(layer);
+        }
+
+        foreach (var layer in _projectionLayers)
+        {
+            UpdateLayerParameters(layer);
+        }
+
+        foreach (var layer in _languageModelLayers)
+        {
+            UpdateLayerParameters(layer);
+        }
+
+        if (_patchEmbedding is not null)
+        {
+            UpdateLayerParameters(_patchEmbedding);
+        }
+
+        if (_textTokenEmbedding is not null)
+        {
+            UpdateLayerParameters(_textTokenEmbedding);
+        }
+
+        if (_outputProjection is not null)
+        {
+            UpdateLayerParameters(_outputProjection);
+        }
+
+        if (_groundingHead is not null)
+        {
+            UpdateLayerParameters(_groundingHead);
+        }
+
+        if (_visionClsToken is not null)
+        {
+            int rows = _visionClsToken.Shape[0];
+            int columns = _visionClsToken.Shape[1];
+            for (int i = 0; i < rows; i++)
+            {
+                int rowOffset = i * columns;
+                for (int j = 0; j < columns; j++)
+                {
+                    _visionClsToken[i, j] = parameters[offset + rowOffset + j];
+                }
+            }
+            offset += rows * columns;
+        }
+
+        if (_visionPositionalEmbeddings is not null)
+        {
+            int rows = _visionPositionalEmbeddings.Shape[0];
+            int columns = _visionPositionalEmbeddings.Shape[1];
+            for (int i = 0; i < rows; i++)
+            {
+                int rowOffset = i * columns;
+                for (int j = 0; j < columns; j++)
+                {
+                    _visionPositionalEmbeddings[i, j] = parameters[offset + rowOffset + j];
+                }
+            }
+            offset += rows * columns;
+        }
+
+        if (_textPositionalEmbeddings is not null)
+        {
+            int rows = _textPositionalEmbeddings.Rows;
+            int columns = _textPositionalEmbeddings.Columns;
+            for (int i = 0; i < rows; i++)
+            {
+                int rowOffset = i * columns;
+                for (int j = 0; j < columns; j++)
+                {
+                    _textPositionalEmbeddings[i, j] = parameters[offset + rowOffset + j];
+                }
+            }
+            offset += rows * columns;
+        }
+
+        if (offset != expectedCount)
+        {
+            throw new InvalidOperationException(
+                $"Parameter update consumed {offset} parameters, but expected {expectedCount}.");
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ImageSize", _imageSize },
+                { "EmbeddingDimension", _embeddingDimension },
+                { "MaxSequenceLength", _maxSequenceLength },
+                { "LanguageModelBackbone", (int)_languageModelBackbone },
+                { "VisionEncoderType", _visionEncoderType },
+                { "NumVisualTokens", _numVisualTokens },
+                { "VisionHiddenDim", _visionHiddenDim },
+                { "LMHiddenDim", _lmHiddenDim },
+                { "NumVisionLayers", _numVisionLayers },
+                { "NumLMLayers", _numLmLayers },
+                { "VocabularySize", _vocabularySize },
+                { "UseNativeMode", _useNativeMode }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_embeddingDimension);
+        writer.Write(_maxSequenceLength);
+        writer.Write(_imageSize);
+        writer.Write(_visionHiddenDim);
+        writer.Write(_lmHiddenDim);
+        writer.Write(_numVisionLayers);
+        writer.Write(_numLmLayers);
+        writer.Write(_numHeads);
+        writer.Write(_patchSize);
+        writer.Write(_vocabularySize);
+        writer.Write(_numVisualTokens);
+        writer.Write((int)_languageModelBackbone);
+        writer.Write(_visionEncoderType);
+        writer.Write(_useNativeMode);
+
+        // Persist the TRAINABLE state that lives OUTSIDE Layers: the CLS token and the vision/text
+        // positional tables. Clone() (all three paths — COW fallback, large layer-by-layer copy, and
+        // the serialize round-trip) transfers this model-level state ONLY through these hooks; the
+        // per-layer parameter copy does not cover it. Without persisting them the clone re-initialises
+        // these tensors from the fixed seed in InitializeWeights and diverges from the trained original
+        // (Clone_AfterTraining). The vision CLS + vision positional tables are also surfaced via
+        // GetExtraTrainableTensors, so the tape optimiser updates them during training — meaning their
+        // post-training values genuinely differ from the seed init and MUST be carried across a clone.
+        WriteTensor(writer, _visionClsToken);
+        WriteTensor(writer, _visionPositionalEmbeddings);
+        WriteMatrix(writer, _textPositionalEmbeddings);
+    }
+
+    private void WriteTensor(BinaryWriter writer, Tensor<T>? tensor)
+    {
+        if (tensor is null)
+        {
+            writer.Write(false);
+            return;
+        }
+
+        writer.Write(true);
+        var shape = tensor.Shape;
+        writer.Write(shape.Length);
+        for (int i = 0; i < shape.Length; i++)
+        {
+            writer.Write(shape[i]);
+        }
+
+        int length = tensor.Length;
+        writer.Write(length);
+        for (int i = 0; i < length; i++)
+        {
+            writer.Write(NumOps.ToDouble(tensor[i]));
+        }
+    }
+
+    private Tensor<T>? ReadTensor(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean())
+        {
+            return null;
+        }
+
+        int rank = reader.ReadInt32();
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++)
+        {
+            shape[i] = reader.ReadInt32();
+        }
+
+        int length = reader.ReadInt32();
+        var tensor = new Tensor<T>(shape);
+        for (int i = 0; i < length; i++)
+        {
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        return tensor;
+    }
+
+    private void WriteMatrix(BinaryWriter writer, Matrix<T>? matrix)
+    {
+        if (matrix is null)
+        {
+            writer.Write(false);
+            return;
+        }
+
+        writer.Write(true);
+        writer.Write(matrix.Rows);
+        writer.Write(matrix.Columns);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                writer.Write(NumOps.ToDouble(matrix[i, j]));
+            }
+        }
+    }
+
+    private Matrix<T>? ReadMatrix(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean())
+        {
+            return null;
+        }
+
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+        var matrix = new Matrix<T>(rows, columns);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                matrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+
+        return matrix;
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _ = reader.ReadInt32(); // embeddingDim
+        _ = reader.ReadInt32(); // maxSeqLen
+        _ = reader.ReadInt32(); // imgSize
+        _ = reader.ReadInt32(); // visionHiddenDim
+        _ = reader.ReadInt32(); // lmHiddenDim
+        _ = reader.ReadInt32(); // numVisionLayers
+        _ = reader.ReadInt32(); // numLmLayers
+        _ = reader.ReadInt32(); // numHeads
+        _ = reader.ReadInt32(); // patchSize
+        _ = reader.ReadInt32(); // vocabularySize
+        _ = reader.ReadInt32(); // numVisualTokens
+        _ = reader.ReadInt32(); // languageModelBackbone (enum as int)
+        _ = reader.ReadString(); // visionEncoderType
+        _ = reader.ReadBoolean(); // useNativeMode
+
+        // Re-wire the role sub-lists (_patchEmbedding, _visionEncoderLayers, _projectionLayers, ...) to
+        // the freshly DESERIALIZED layer objects now sitting in Layers. Deserialization runs
+        // ClearLayers() and rebuilds Layers with NEW layer instances (carrying the trained weights),
+        // but the sub-list fields still reference the seed-initialised layers that CreateNewInstance()
+        // wired up. LLaVA's forward path (ExtractVisualFeaturesNative / ProjectToLanguageSpace / ...)
+        // reads those sub-lists directly, so without re-deriving them the clone would run the
+        // random-initialised layers while the trained weights sit unused in Layers — producing output
+        // uncorrelated with the trained original (Clone_AfterTraining). This mirrors the same
+        // distribution InitializeNativeLayers performs at construction.
+        RewireNativeSubLayersFromLayers();
+
+        // Restore the trained out-of-Layers state (CLS token + positional tables) written above,
+        // overwriting the seed-initialised tensors that CreateNewInstance() produced. This is what
+        // makes a clone (and a save/load round-trip) reproduce the trained model's predictions.
+        _visionClsToken = ReadTensor(reader);
+        _visionPositionalEmbeddings = ReadTensor(reader);
+        _textPositionalEmbeddings = ReadMatrix(reader);
+    }
+
+    /// <summary>
+    /// Re-derives the native-mode role sub-lists from the current <c>Layers</c> collection using the
+    /// exact ordering <see cref="InitializeNativeLayers"/> established at construction. Called after
+    /// deserialization (which replaces every layer instance in <c>Layers</c>) so the forward path runs
+    /// the trained/deserialized layers rather than the stale ones captured at construction time.
+    /// </summary>
+    private void RewireNativeSubLayersFromLayers()
+    {
+        if (!_useNativeMode || Layers.Count == 0)
+        {
+            return;
+        }
+
+        int expected = 1 /* patch embedding */
+            + _numVisionLayers
+            + 2 /* projection MLP */
+            + 1 /* text token embedding */
+            + _numLmLayers
+            + 1 /* output projection */
+            + 1 /* grounding head */;
+
+        // If the structure does not match (e.g. custom architecture supplied via Architecture.Layers),
+        // leave the sub-lists as they are rather than mis-assigning by index.
+        if (Layers.Count != expected)
+        {
+            return;
+        }
+
+        _visionEncoderLayers.Clear();
+        _projectionLayers.Clear();
+        _languageModelLayers.Clear();
+
+        int idx = 0;
+        _patchEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numVisionLayers; i++)
+            _visionEncoderLayers.Add(Layers[idx++]);
+
+        _projectionLayers.Add(Layers[idx++]); // GELU projection
+        _projectionLayers.Add(Layers[idx++]); // Linear projection
+
+        _textTokenEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numLmLayers; i++)
+            _languageModelLayers.Add(Layers[idx++]);
+
+        _outputProjection = Layers[idx++];
+        _groundingHead = Layers[idx++];
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new LLaVANeuralNetwork<T>(
+            Architecture,
+            _imageSize,
+            channels: 3,
+            _patchSize,
+            _vocabularySize,
+            _maxSequenceLength,
+            _embeddingDimension,
+            _visionHiddenDim,
+            _numVisionLayers,
+            _numLmLayers,
+            _numHeads,
+            _languageModelBackbone,
+            _visionEncoderType);
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _visionEncoder?.Dispose();
+            _languageModel?.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    #endregion
+
+    #region IMultimodalEmbedding Interface (Standard API)
+
+    /// <inheritdoc/>
+    public Vector<T> EncodeText(string text)
+    {
+        return GetTextEmbedding(text);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> EncodeTextBatch(IEnumerable<string> texts)
+    {
+        var embeddings = GetTextEmbeddings(texts).ToList();
+        if (embeddings.Count == 0)
+        {
+            return new Matrix<T>(0, EmbeddingDimension);
+        }
+
+        var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        for (int i = 0; i < embeddings.Count; i++)
+        {
+            for (int j = 0; j < embeddings[i].Length; j++)
+            {
+                matrix[i, j] = embeddings[i][j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> EncodeImage(double[] imageData)
+    {
+        // Convert double[] to Tensor<T> in CHW format
+        var tensor = ConvertToTensor(imageData);
+        return GetImageEmbedding(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch)
+    {
+        var tensors = imageDataBatch.Select(ConvertToTensor);
+        var embeddings = GetImageEmbeddings(tensors).ToList();
+        if (embeddings.Count == 0)
+        {
+            return new Matrix<T>(0, EmbeddingDimension);
+        }
+
+        var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        for (int i = 0; i < embeddings.Count; i++)
+        {
+            for (int j = 0; j < embeddings[i].Length; j++)
+            {
+                matrix[i, j] = embeddings[i][j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <inheritdoc/>
+    public Dictionary<string, T> ZeroShotClassify(double[] imageData, IEnumerable<string> labels)
+    {
+        var tensor = ConvertToTensor(imageData);
+        return ZeroShotClassify(tensor, labels);
+    }
+
+    /// <summary>
+    /// Converts a double[] image to Tensor format.
+    /// </summary>
+    private Tensor<T> ConvertToTensor(double[] imageData)
+    {
+        if (imageData == null || imageData.Length == 0)
+        {
+            throw new ArgumentException("Image data cannot be null or empty.", nameof(imageData));
+        }
+
+        int channels = 3;
+        if (imageData.Length % channels != 0)
+        {
+            throw new ArgumentException($"Image data length ({imageData.Length}) must be divisible by {channels} channels.", nameof(imageData));
+        }
+
+        int pixels = imageData.Length / channels;
+        int size = (int)Math.Sqrt(pixels);
+        if (size * size != pixels)
+        {
+            throw new ArgumentException($"Image must be square. Got {pixels} pixels which is not a perfect square.", nameof(imageData));
+        }
+
+        var tensor = new Tensor<T>(new[] { channels, size, size });
+        int idx = 0;
+        for (int c = 0; c < channels; c++)
+        {
+            for (int h = 0; h < size; h++)
+            {
+                for (int w = 0; w < size; w++)
+                {
+                    tensor[c, h, w] = NumOps.FromDouble(imageData[idx++]);
+                }
+            }
+        }
+        return tensor;
+    }
+
+    #endregion
+
+}

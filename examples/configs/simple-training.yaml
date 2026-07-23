@@ -1,0 +1,36 @@
+# Simple Training Recipe - ExponentialSmoothing with MSE loss
+#
+# This YAML file defines a complete training pipeline that can be loaded
+# and executed by the AiDotNet Trainer class:
+#
+#   var trainer = new Trainer<double>("examples/configs/simple-training.yaml");
+#   var result = trainer.Run();
+#
+# For more information, see: https://github.com/ooples/AiDotNet/issues/283
+
+model:
+  name: "ExponentialSmoothing"
+  params:
+    seasonalPeriod: 12
+    useTrend: true
+    useSeasonal: false
+
+dataset:
+  name: "sample-data"
+  # Replace with the path to your own CSV file (features + label columns)
+  path: "path/to/your-data.csv"
+  batchSize: 32
+  hasHeader: true
+  labelColumn: -1
+
+optimizer:
+  name: "Normal"
+  learningRate: 0.001
+
+lossFunction:
+  name: "MeanSquaredError"
+
+trainer:
+  epochs: 50
+  enableLogging: true
+  seed: 42

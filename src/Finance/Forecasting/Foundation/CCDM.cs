@@ -1,0 +1,392 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Finance.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+using AiDotNet.Finance.Base;
+namespace AiDotNet.Finance.Forecasting.Foundation;
+
+/// <summary>
+/// CCDM — Conditional Continuous Diffusion Model for Time Series.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// CCDM extends continuous diffusion models for conditional time series generation,
+/// operating in continuous space with a score-matching objective for high-quality
+/// probabilistic forecasting.
+/// </para>
+/// <para><b>For Beginners:</b> CCDM generates future time series values using a diffusion
+/// process, similar to how image generators create pictures by gradually refining random
+/// noise. Instead of predicting a single future value, it produces a range of probable
+/// outcomes, giving you confidence intervals for your forecasts. This is especially
+/// useful in finance where understanding uncertainty is as important as the prediction itself.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a CCDM conditional continuous diffusion model for probabilistic forecasting
+/// // Generates future values by refining random noise conditioned on observed history
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with score-matching diffusion objective
+/// var model = new CCDM&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new CCDM&lt;double&gt;(architecture, "ccdm.onnx");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ResearchPaper("Diffusion Variational Autoencoder for Tackling Stochasticity in Multi-Step Regression Stock Price Prediction", "https://arxiv.org/abs/2402.06010")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+public class CCDM<T> : TimeSeriesFoundationModelBase<T>
+{
+    #region Fields
+
+    private readonly bool _useNativeMode;
+    private ILayer<T>? _inputProjection;
+    private readonly List<ILayer<T>> _denoisingLayers = [];
+    private ILayer<T>? _outputProjection;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly CCDMOptions<T> _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _hiddenDimension;
+    private int _numLayers;
+    private int _numHeads;
+    private int _diffusionSteps;
+    private double _dropout;
+    private double _betaStart;
+    private double _betaEnd;
+    private double _sigmaMin;
+    private double _sigmaMax;
+
+    // DDPM noise schedule (precomputed) - CCDM also uses beta schedule for discrete steps
+    private Vector<T> _betas = Vector<T>.Empty();
+    private Vector<T> _alphas = Vector<T>.Empty();
+    private Vector<T> _alphasCumprod = Vector<T>.Empty();
+    private Vector<T> _sqrtAlphasCumprod = Vector<T>.Empty();
+    private Vector<T> _sqrtOneMinusAlphasCumprod = Vector<T>.Empty();
+    // Continuous sigma schedule (geometric interpolation from sigmaMax to sigmaMin)
+    private Vector<T> _sigmas = Vector<T>.Empty();
+
+    #endregion
+
+    #region Properties
+
+    public override int SequenceLength => _contextLength;
+    public override int PredictionHorizon => _forecastHorizon;
+    public override int NumFeatures => 1;
+    public override int PatchSize => 1;
+    public override int Stride => 1;
+    public override bool IsChannelIndependent => true;
+    public override bool UseNativeMode => _useNativeMode;
+    public override FoundationModelSize ModelSize => FoundationModelSize.Small;
+    public override int MaxContextLength => _contextLength;
+    public override int MaxPredictionHorizon => _forecastHorizon;
+
+    #endregion
+
+    #region Constructors
+
+    public CCDM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
+        CCDMOptions<T>? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        if (string.IsNullOrWhiteSpace(onnxModelPath)) throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath)) throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
+        // Tape-based Train() below requires a LossFunctionBase<T>
+        // (ComputeTapeLoss is only on the base class, not on the
+        // ILossFunction<T> interface). Reject any user-supplied loss
+        // that doesn't derive from it at construction time instead of
+        // bubbling up a bare InvalidCastException on first Train().
+        RequireTapeCompatibleLossFunction(lossFunction);
+        options ??= new CCDMOptions<T>(); _options = options; Options = _options;
+        _useNativeMode = false; OnnxModelPath = onnxModelPath; OnnxSession = new InferenceSession(onnxModelPath);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        CopyOptionsToFields(options);
+    }
+
+    public CCDM(NeuralNetworkArchitecture<T> architecture,
+        CCDMOptions<T>? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        RequireTapeCompatibleLossFunction(lossFunction);
+        options ??= new CCDMOptions<T>(); _options = options; Options = _options;
+        _useNativeMode = true; OnnxSession = null; OnnxModelPath = null;
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        CopyOptionsToFields(options); InitializeLayers();
+    }
+
+    /// <summary>
+    /// Enforces the constructor contract that a user-supplied
+    /// <see cref="ILossFunction{T}"/> must derive from
+    /// <see cref="LossFunctions.LossFunctionBase{T}"/> for CCDM's
+    /// tape-based training to work. Throws at construction time rather
+    /// than letting a mismatched implementation reach
+    /// <c>TrainWithTape</c>, where the failure is an opaque cast.
+    /// </summary>
+    private static void RequireTapeCompatibleLossFunction(ILossFunction<T>? lossFunction)
+    {
+        if (lossFunction is not null && lossFunction is not LossFunctions.LossFunctionBase<T>)
+            throw new ArgumentException(
+                "CCDM tape-based training requires a LossFunctionBase<T> implementation " +
+                "(ComputeTapeLoss is defined there, not on ILossFunction<T>). " +
+                "Derive your custom loss from LossFunctionBase<T>, or pass null to use " +
+                "the default MeanSquaredErrorLoss.",
+                nameof(lossFunction));
+    }
+
+    private void CopyOptionsToFields(CCDMOptions<T> options)
+    {
+        _contextLength = options.ContextLength; _forecastHorizon = options.ForecastHorizon;
+        _hiddenDimension = options.HiddenDimension; _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads; _diffusionSteps = options.DiffusionSteps;
+        _dropout = options.DropoutRate; _betaStart = options.BetaStart;
+        _betaEnd = options.BetaEnd; _sigmaMin = options.SigmaMin;
+        _sigmaMax = options.SigmaMax;
+        ComputeNoiseSchedule();
+    }
+
+    private void ComputeNoiseSchedule()
+    {
+        if (_diffusionSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_diffusionSteps), "DiffusionSteps must be positive.");
+
+        // Standard DDPM beta schedule
+        _betas = new Vector<T>(_diffusionSteps);
+        _alphas = new Vector<T>(_diffusionSteps);
+        _alphasCumprod = new Vector<T>(_diffusionSteps);
+        _sqrtAlphasCumprod = new Vector<T>(_diffusionSteps);
+        _sqrtOneMinusAlphasCumprod = new Vector<T>(_diffusionSteps);
+        T one = NumOps.One;
+        T betaStartT = NumOps.FromDouble(_betaStart);
+        T betaRangeT = NumOps.FromDouble(_betaEnd - _betaStart);
+        T maxDenom = NumOps.FromDouble(Math.Max(1, _diffusionSteps - 1));
+        for (int t = 0; t < _diffusionSteps; t++)
+        {
+            _betas[t] = NumOps.Add(betaStartT, NumOps.Divide(NumOps.Multiply(betaRangeT, NumOps.FromDouble(t)), maxDenom));
+            _alphas[t] = NumOps.Subtract(one, _betas[t]);
+        }
+        _alphasCumprod[0] = _alphas[0];
+        for (int t = 1; t < _diffusionSteps; t++)
+            _alphasCumprod[t] = NumOps.Multiply(_alphasCumprod[t - 1], _alphas[t]);
+        for (int t = 0; t < _diffusionSteps; t++)
+        {
+            _sqrtAlphasCumprod[t] = NumOps.Sqrt(_alphasCumprod[t]);
+            _sqrtOneMinusAlphasCumprod[t] = NumOps.Sqrt(NumOps.Subtract(one, _alphasCumprod[t]));
+        }
+
+        // Continuous sigma schedule: geometric interpolation from sigmaMax to sigmaMin
+        _sigmas = new Vector<T>(_diffusionSteps + 1);
+        for (int t = 0; t <= _diffusionSteps; t++)
+        {
+            double frac = (double)t / Math.Max(1, _diffusionSteps);
+            _sigmas[t] = NumOps.FromDouble(_sigmaMax * Math.Pow(_sigmaMin / Math.Max(1e-10, _sigmaMax), frac));
+        }
+    }
+
+    private T SampleStandardNormal(Random rand)
+    {
+        double u1 = 1.0 - rand.NextDouble();
+        double u2 = 1.0 - rand.NextDouble();
+        return NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+    }
+
+    #endregion
+
+    #region Initialization
+
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); ExtractLayerReferences(); }
+        else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultCCDMLayers(Architecture, _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads, _dropout)); ExtractLayerReferences(); }
+    }
+
+    private void ExtractLayerReferences()
+    {
+        int idx = 0;
+        if (idx < Layers.Count) _inputProjection = Layers[idx++];
+        _denoisingLayers.Clear();
+        while (idx < Layers.Count - 1) _denoisingLayers.Add(Layers[idx++]);
+        if (idx < Layers.Count) _outputProjection = Layers[idx++];
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Overrides
+
+    public override bool SupportsTraining => _useNativeMode;
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+
+    /// <summary>
+    /// Tape-aware training forward. Uses the same Layers stack that inference uses,
+    /// but skips the stochastic Langevin reverse loop in <see cref="ForwardNative"/>
+    /// so the tape records a clean parameter → loss chain that Adam/AdamW can step.
+    /// </summary>
+    /// <remarks>
+    /// The previous Train override hand-built a score-matching loop whose denoiser
+    /// input ([noisyTarget | condHidden | log σ]) had a different last-dim from the
+    /// input dim baked into the Layers by
+    /// <see cref="LayerHelper{T}.CreateDefaultCCDMLayers"/>
+    /// (contextLength → contextLength·hiddenDim → … → forecastHorizon), which blew
+    /// up in Adam as a parameter/gradient shape mismatch. The Layers are sized as a
+    /// plain context-to-forecast regression head, so training follows that same
+    /// shape contract and ships a supervised regression loss through the configured
+    /// <see cref="ILossFunction{T}"/> (MSE by default; any
+    /// <c>LossFunctionBase&lt;T&gt;</c>-derived loss works via
+    /// <c>ComputeTapeLoss</c>). Score-matching semantics still live in
+    /// <see cref="ForwardNative"/>'s Langevin reverse loop for probabilistic
+    /// inference — that path is untouched and reached through
+    /// <see cref="Predict"/>/<see cref="Forecast"/>. Wiring proper score-matching
+    /// through training would require a denoiser-shaped layer architecture
+    /// (separate context encoder + [x_t | cond | σ]-input noise predictor) and is
+    /// tracked separately.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+
+        // Normalize and reshape to match the layer stack's expected feature layout.
+        // ApplyInstanceNormalization reads raw .Data.Span to compute per-series mean/var
+        // — safe here because `input` is a tape leaf and the produced tensor is itself
+        // a new leaf consumed by the layers. Gradients flow only through the layer
+        // parameters, not back through the input, so breaking the input's tape chain
+        // at normalization does not affect backward.
+        var x = ApplyInstanceNormalization(input);
+        // Collapse trailing singleton feature dim [B, T, 1] → [B, T] so the first
+        // DenseLayer's input-dim matches its baked `inputSize = contextLength`.
+        if (x.Rank == 3 && x.Shape[2] == 1)
+            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] });
+        else if (x.Rank == 1)
+            x = x.Reshape(new[] { 1, x.Length });
+
+        foreach (var layer in Layers) x = layer.Forward(x);
+        return x;
+    }
+
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
+    }
+
+    public override ModelMetadata<T> GetModelMetadata() => new()
+    {
+        AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "CCDM" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "SigmaMin", _sigmaMin }, { "SigmaMax", _sigmaMax }, { "UseNativeMode", _useNativeMode } },
+        ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+    };
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new CCDM<T>(Architecture, new CCDMOptions<T> { ContextLength = _contextLength, ForecastHorizon = _forecastHorizon, HiddenDimension = _hiddenDimension, NumLayers = _numLayers, NumHeads = _numHeads, DiffusionSteps = _diffusionSteps, DropoutRate = _dropout, BetaStart = _betaStart, BetaEnd = _betaEnd, SigmaMin = _sigmaMin, SigmaMax = _sigmaMax });
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_contextLength); writer.Write(_forecastHorizon); writer.Write(_hiddenDimension); writer.Write(_numLayers); writer.Write(_numHeads); writer.Write(_diffusionSteps); writer.Write(_dropout); writer.Write(_betaStart); writer.Write(_betaEnd); writer.Write(_sigmaMin); writer.Write(_sigmaMax); }
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _contextLength = reader.ReadInt32(); _forecastHorizon = reader.ReadInt32(); _hiddenDimension = reader.ReadInt32(); _numLayers = reader.ReadInt32(); _numHeads = reader.ReadInt32(); _diffusionSteps = reader.ReadInt32(); _dropout = reader.ReadDouble(); _betaStart = reader.ReadDouble(); _betaEnd = reader.ReadDouble(); _sigmaMin = reader.ReadDouble(); _sigmaMax = reader.ReadDouble(); ComputeNoiseSchedule(); }
+
+    #endregion
+
+    #region IForecastingModel Implementation
+
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null) { if (quantiles is not null && quantiles.Length > 0) throw new NotSupportedException("CCDM does not support quantile forecasting. Pass null for point forecasts."); return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData); }
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps) { var predictions = new List<Tensor<T>>(); var currentInput = input; int stepsRemaining = steps; while (stepsRemaining > 0) { var prediction = Forecast(currentInput, null); predictions.Add(prediction); int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining); stepsRemaining -= stepsUsed; if (stepsRemaining > 0) currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed); } return ConcatenatePredictions(predictions, steps); }
+
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
+
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) { int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; var result = new Tensor<T>(input._shape); for (int b = 0; b < batchSize; b++) { T mean = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); } mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen)); T variance = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } } variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen)); T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5))); for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); } } return result; }
+
+    public override Dictionary<string, T> GetFinancialMetrics() { T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero; return new Dictionary<string, T> { ["ContextLength"] = NumOps.FromDouble(_contextLength), ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon), ["SigmaMin"] = NumOps.FromDouble(_sigmaMin), ["SigmaMax"] = NumOps.FromDouble(_sigmaMax), ["LastLoss"] = lastLoss }; }
+
+    #endregion
+
+    #region Forward/Backward Pass
+
+    /// <summary>
+    /// Continuous diffusion reverse process using annealed Langevin dynamics.
+    /// CCDM operates in continuous noise space: at each step, the model predicts the score
+    /// (gradient of log probability) and uses it to iteratively denoise from high sigma to low sigma.
+    /// </summary>
+    private Tensor<T> ForwardNative(Tensor<T> input)
+    {
+        var conditioned = ApplyInstanceNormalization(input);
+        bool addedBatchDim = false;
+        if (conditioned.Rank == 1) { conditioned = conditioned.Reshape(new[] { 1, conditioned.Length }); addedBatchDim = true; }
+
+        // Raw conditioning: _inputProjection projects the WHOLE packed per-step
+        // score-network input to hidden width (see CSDI for rationale), so the
+        // conditioning is packed RAW rather than pre-projected.
+        var condHidden = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
+
+        int outputLen = _forecastHorizon;
+        var rand = RandomHelper.CreateSecureRandom();
+
+        // Start from noise at highest sigma level
+        var xt = new Tensor<T>(new[] { 1, outputLen });
+        for (int i = 0; i < outputLen; i++)
+            xt.Data.Span[i] = NumOps.Multiply(_sigmas[0], SampleStandardNormal(rand));
+
+        // Annealed Langevin dynamics: iterate from high sigma to low sigma
+        for (int t = 0; t < _diffusionSteps; t++)
+        {
+            T sigmaT = _sigmas[t];
+            T sigmaNext = _sigmas[t + 1];
+
+            // Build score network input: [x_t | condHidden | log(sigma)]
+            int xtLen = Math.Min(xt.Length, outputLen);
+            int condLen = Math.Min(condHidden.Length, _hiddenDimension);
+            var scoreInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
+            for (int i = 0; i < xtLen; i++) scoreInput.Data.Span[i] = xt[i];
+            for (int i = 0; i < condLen; i++) scoreInput.Data.Span[xtLen + i] = condHidden[i];
+            scoreInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Log(Math.Max(1e-10, NumOps.ToDouble(sigmaT))));
+
+            // Predict score: s_theta(x_t, sigma_t). Project the packed input to
+            // hidden width before the denoising stack.
+            var score = scoreInput;
+            if (_inputProjection is not null) score = _inputProjection.Forward(score);
+            foreach (var layer in _denoisingLayers) score = layer.Forward(score);
+            if (_outputProjection is not null) score = _outputProjection.Forward(score);
+
+            // Langevin step: x_{t+1} = x_t + (sigma_t^2 - sigma_next^2) * score + sqrt(sigma_t^2 - sigma_next^2) * z
+            T stepSizeT = NumOps.Subtract(NumOps.Multiply(sigmaT, sigmaT), NumOps.Multiply(sigmaNext, sigmaNext));
+            T noiseScaleT = NumOps.Sqrt(NumOps.Add(stepSizeT, NumOps.FromDouble(1e-30))); // clamp to non-negative
+
+            for (int i = 0; i < outputLen && i < xt.Length; i++)
+            {
+                T scoreVal = i < score.Length ? score[i] : NumOps.Zero;
+                T z = (t < _diffusionSteps - 1) ? SampleStandardNormal(rand) : NumOps.Zero;
+                xt.Data.Span[i] = NumOps.Add(NumOps.Add(xt[i], NumOps.Multiply(stepSizeT, scoreVal)), NumOps.Multiply(noiseScaleT, z));
+            }
+        }
+
+        if (addedBatchDim && xt.Rank == 2 && xt.Shape[0] == 1) xt = xt.Reshape(new[] { xt.Shape[1] });
+        return xt;
+    }
+
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; int features = input.Rank > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input"; var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }
+
+    #endregion
+}

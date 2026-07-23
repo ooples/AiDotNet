@@ -1,0 +1,584 @@
+using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Classification;
+using AiDotNet.Classification.Trees;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+namespace AiDotNet.Classification.Ensemble;
+
+/// <summary>
+/// AdaBoost (Adaptive Boosting) classifier that combines weak learners.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// AdaBoost iteratively trains weak classifiers on re-weighted versions of the data,
+/// where incorrectly classified samples receive higher weights in subsequent iterations.
+/// The final prediction is a weighted vote of all weak learners.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b>
+/// AdaBoost works like a learning system that focuses on its mistakes:
+///
+/// 1. Train a simple classifier on the data
+/// 2. See which samples were misclassified
+/// 3. Give those samples higher importance
+/// 4. Train another classifier with the new importance weights
+/// 5. Repeat many times
+/// 6. Combine all classifiers with voting
+///
+/// This creates a powerful classifier from many weak ones.
+/// </para>
+/// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create AdaBoost classifier that combines weak learners
+/// var options = new AdaBoostClassifierOptions&lt;double&gt;();
+/// var classifier = new AdaBoostClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train by iteratively re-weighting misclassified samples
+/// classifier.Train(features, labels);
+///
+/// // Predict using weighted vote of all weak learners
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ResearchPaper("A Decision-Theoretic Generalization of On-Line Learning and an Application to Boosting", "https://doi.org/10.1006/jcss.1997.1504", Year = 1997, Authors = "Yoav Freund, Robert E. Schapire")]
+public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
+{
+    /// <summary>
+    /// Gets the AdaBoost specific options.
+    /// </summary>
+    protected new AdaBoostClassifierOptions<T> Options => (AdaBoostClassifierOptions<T>)base.Options;
+
+    /// <summary>
+    /// Weights for each estimator (based on their accuracy).
+    /// </summary>
+    private Vector<T>? _estimatorWeights;
+
+    /// <summary>
+    /// Random number generator.
+    /// </summary>
+    private Random? _random;
+
+    /// <summary>
+    /// Initializes a new instance of the AdaBoostClassifier class.
+    /// </summary>
+    /// <param name="options">Configuration options for AdaBoost.</param>
+    /// <param name="regularization">Optional regularization strategy.</param>
+    public AdaBoostClassifier(AdaBoostClassifierOptions<T>? options = null,
+        IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        // PR #1404 review: AdaBoostClassifier outputs probabilities via
+        // PredictProbabilities() (weighted normalized votes). Pass the
+        // probability-input cross-entropy so any future code path that
+        // evaluates DefaultLossFunction against the classifier's outputs
+        // gets the right gradient. AdaBoost's own training doesn't consume
+        // this loss but design-time consistency matters.
+        : base(options ?? new AdaBoostClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+    {
+    }
+
+    /// <summary>
+    /// Returns the model type identifier for this classifier.
+    /// </summary>
+
+    /// <summary>
+    /// Trains the AdaBoost classifier on the provided data.
+    /// </summary>
+    public override void Train(Matrix<T> x, Vector<T> y)
+    {
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException("Number of samples in X must match length of y.");
+        }
+
+        NumFeatures = x.Columns;
+        ClassLabels = ExtractClassLabels(y);
+        NumClasses = ClassLabels.Length;
+        TaskType = InferTaskType(y);
+
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
+            : RandomHelper.CreateSeededRandom(42);
+
+        // Clear existing estimators
+        Estimators.Clear();
+        _estimatorWeights = new Vector<T>(Options.NEstimators);
+
+        // Initialize sample weights uniformly
+        int n = x.Rows;
+        var sampleWeights = new Vector<T>(n);
+        T initialWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
+        for (int i = 0; i < n; i++)
+        {
+            sampleWeights[i] = initialWeight;
+        }
+
+        // Train estimators
+        for (int m = 0; m < Options.NEstimators; m++)
+        {
+            // Create and train a weak learner (decision stump)
+            var stumpOptions = new DecisionTreeClassifierOptions<T>
+            {
+                MaxDepth = 1, // Decision stump
+                Seed = _random.Next()
+            };
+
+            var stump = new DecisionTreeClassifier<T>(stumpOptions);
+
+            // Sample with replacement based on weights
+            var (xSample, ySample) = SampleWithWeights(x, y, sampleWeights);
+            stump.Train(xSample, ySample);
+
+            // Get predictions on full training set
+            var predictions = stump.Predict(x);
+
+            // Calculate weighted error
+            T error = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                if (NumOps.Compare(predictions[i], y[i]) != 0)
+                {
+                    error = NumOps.Add(error, sampleWeights[i]);
+                }
+            }
+
+            // Check if error is too high (random guessing or worse)
+            double errorDouble = NumOps.ToDouble(error);
+            if (errorDouble >= 0.5)
+            {
+                // Skip this estimator - it's not better than random
+                continue;
+            }
+
+            // Calculate estimator weight: alpha = 0.5 * ln((1 - error) / error)
+            T oneMinusError = NumOps.Subtract(NumOps.One, error);
+            T ratio = NumOps.Divide(oneMinusError, NumOps.Add(error, NumOps.FromDouble(1e-10)));
+            T logRatio = NumOps.Log(ratio);
+            T alpha = NumOps.Multiply(NumOps.FromDouble(0.5), logRatio);
+            alpha = NumOps.Multiply(alpha, NumOps.FromDouble(Options.LearningRate));
+
+            _estimatorWeights[Estimators.Count] = alpha;
+            Estimators.Add(stump);
+
+            // Update sample weights
+            T sumWeights = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                T yi = y[i];
+                T pred = predictions[i];
+
+                // exp(-alpha * y * h(x))
+                // For correct predictions: y * h(x) > 0 (same sign)
+                // For incorrect predictions: y * h(x) < 0 (different signs)
+                T indicator = NumOps.Compare(yi, pred) == 0
+                    ? NumOps.Negate(NumOps.One)
+                    : NumOps.One;
+                T exponent = NumOps.Multiply(alpha, indicator);
+                sampleWeights[i] = NumOps.Multiply(sampleWeights[i], NumOps.Exp(exponent));
+                sumWeights = NumOps.Add(sumWeights, sampleWeights[i]);
+            }
+
+            // Normalize weights
+            for (int i = 0; i < n; i++)
+            {
+                sampleWeights[i] = NumOps.Divide(sampleWeights[i], sumWeights);
+            }
+        }
+
+        // Aggregate feature importances
+        AggregateFeatureImportances();
+    }
+
+    /// <summary>
+    /// Samples data with replacement based on weights.
+    /// </summary>
+    private (Matrix<T> x, Vector<T> y) SampleWithWeights(Matrix<T> x, Vector<T> y, Vector<T> weights)
+    {
+        if (_random is null)
+        {
+            throw new InvalidOperationException("Random number generator not initialized.");
+        }
+
+        int n = x.Rows;
+        var indices = new int[n];
+
+        // Build cumulative distribution
+        var cumWeights = new double[n];
+        cumWeights[0] = NumOps.ToDouble(weights[0]);
+        for (int i = 1; i < n; i++)
+        {
+            cumWeights[i] = cumWeights[i - 1] + NumOps.ToDouble(weights[i]);
+        }
+
+        // Sample indices
+        for (int i = 0; i < n; i++)
+        {
+            double r = _random.NextDouble();
+            int idx = Array.BinarySearch(cumWeights, r);
+            if (idx < 0) idx = ~idx;
+            if (idx >= n) idx = n - 1;
+            indices[i] = idx;
+        }
+
+        // Create sampled data
+        var xSample = new Matrix<T>(n, x.Columns);
+        var ySample = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            int srcIdx = indices[i];
+            for (int j = 0; j < x.Columns; j++)
+            {
+                xSample[i, j] = x[srcIdx, j];
+            }
+            ySample[i] = y[srcIdx];
+        }
+
+        return (xSample, ySample);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        if (Estimators.Count == 0 || _estimatorWeights is null || ClassLabels is null)
+        {
+            throw new InvalidOperationException("Model has not been trained.");
+        }
+
+        var predictions = new Vector<T>(input.Rows);
+
+        for (int i = 0; i < input.Rows; i++)
+        {
+            // For each sample, compute weighted votes for each class
+            var classVotes = new Dictionary<int, T>();
+            for (int c = 0; c < NumClasses; c++)
+            {
+                classVotes[c] = NumOps.Zero;
+            }
+
+            // Accumulate weighted votes from each estimator
+            for (int m = 0; m < Estimators.Count; m++)
+            {
+                var estimator = Estimators[m];
+                var sample = new Matrix<T>(1, input.Columns);
+                for (int j = 0; j < input.Columns; j++)
+                {
+                    sample[0, j] = input[i, j];
+                }
+
+                var pred = estimator.Predict(sample);
+                T weight = _estimatorWeights[m];
+
+                // Find which class was predicted
+                for (int c = 0; c < NumClasses; c++)
+                {
+                    if (NumOps.Compare(pred[0], ClassLabels[c]) == 0)
+                    {
+                        classVotes[c] = NumOps.Add(classVotes[c], weight);
+                        break;
+                    }
+                }
+            }
+
+            // Find class with maximum vote
+            int bestClass = 0;
+            T bestVote = classVotes[0];
+            for (int c = 1; c < NumClasses; c++)
+            {
+                if (NumOps.Compare(classVotes[c], bestVote) > 0)
+                {
+                    bestVote = classVotes[c];
+                    bestClass = c;
+                }
+            }
+
+            predictions[i] = ClassLabels[bestClass];
+        }
+
+        return predictions;
+    }
+
+    /// <inheritdoc/>
+    public override Matrix<T> PredictProbabilities(Matrix<T> input)
+    {
+        if (Estimators.Count == 0 || _estimatorWeights is null || ClassLabels is null)
+        {
+            throw new InvalidOperationException("Model has not been trained.");
+        }
+
+        var probabilities = new Matrix<T>(input.Rows, NumClasses);
+
+        for (int i = 0; i < input.Rows; i++)
+        {
+            // Compute weighted votes for each class
+            var classVotes = new T[NumClasses];
+            for (int c = 0; c < NumClasses; c++)
+            {
+                classVotes[c] = NumOps.Zero;
+            }
+
+            T totalWeight = NumOps.Zero;
+
+            // Accumulate weighted votes
+            for (int m = 0; m < Estimators.Count; m++)
+            {
+                var estimator = Estimators[m];
+                var sample = new Matrix<T>(1, input.Columns);
+                for (int j = 0; j < input.Columns; j++)
+                {
+                    sample[0, j] = input[i, j];
+                }
+
+                var pred = estimator.Predict(sample);
+                T weight = _estimatorWeights[m];
+                totalWeight = NumOps.Add(totalWeight, NumOps.Abs(weight));
+
+                for (int c = 0; c < NumClasses; c++)
+                {
+                    if (NumOps.Compare(pred[0], ClassLabels[c]) == 0)
+                    {
+                        classVotes[c] = NumOps.Add(classVotes[c], weight);
+                        break;
+                    }
+                }
+            }
+
+            // Normalize to get probabilities
+            for (int c = 0; c < NumClasses; c++)
+            {
+                if (NumOps.Compare(totalWeight, NumOps.Zero) > 0)
+                {
+                    probabilities[i, c] = NumOps.Divide(classVotes[c], totalWeight);
+                    // Ensure non-negative
+                    if (NumOps.Compare(probabilities[i, c], NumOps.Zero) < 0)
+                    {
+                        probabilities[i, c] = NumOps.Zero;
+                    }
+                }
+                else
+                {
+                    probabilities[i, c] = NumOps.Divide(NumOps.One, NumOps.FromDouble(NumClasses));
+                }
+            }
+        }
+
+        return probabilities;
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        return new AdaBoostClassifier<T>(new AdaBoostClassifierOptions<T>
+        {
+            NEstimators = Options.NEstimators,
+            LearningRate = Options.LearningRate,
+            Algorithm = Options.Algorithm,
+            Seed = Options.Seed
+        });
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new AdaBoostClassifier<T>(new AdaBoostClassifierOptions<T>
+        {
+            NEstimators = Options.NEstimators,
+            LearningRate = Options.LearningRate,
+            Algorithm = Options.Algorithm,
+            Seed = Options.Seed
+        });
+
+        clone.NumFeatures = NumFeatures;
+        clone.NumClasses = NumClasses;
+        clone.TaskType = TaskType;
+
+        if (ClassLabels is not null)
+        {
+            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
+            for (int i = 0; i < ClassLabels.Length; i++)
+            {
+                clone.ClassLabels[i] = ClassLabels[i];
+            }
+        }
+
+        if (_estimatorWeights is not null)
+        {
+            clone._estimatorWeights = new Vector<T>(_estimatorWeights.Length);
+            for (int i = 0; i < _estimatorWeights.Length; i++)
+            {
+                clone._estimatorWeights[i] = _estimatorWeights[i];
+            }
+        }
+
+        if (FeatureImportances is not null)
+        {
+            clone.FeatureImportances = new Vector<T>(FeatureImportances.Length);
+            for (int i = 0; i < FeatureImportances.Length; i++)
+            {
+                clone.FeatureImportances[i] = FeatureImportances[i];
+            }
+        }
+
+        // Clone all estimators
+        foreach (var estimator in Estimators)
+        {
+            if (estimator is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
+            {
+                clone.Estimators.Add((IClassifier<T>)fullModel.Clone());
+            }
+        }
+
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = base.GetModelMetadata();
+        metadata.AdditionalInfo["NEstimators"] = Options.NEstimators;
+        metadata.AdditionalInfo["LearningRate"] = Options.LearningRate;
+        metadata.AdditionalInfo["Algorithm"] = Options.Algorithm.ToString();
+        metadata.AdditionalInfo["ActualEstimators"] = Estimators.Count;
+        return metadata;
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "RegularizationOptions", Regularization.GetOptions() }
+        };
+
+        // Serialize estimator weights
+        if (_estimatorWeights is not null)
+        {
+            var weightsArray = new double[_estimatorWeights.Length];
+            for (int i = 0; i < _estimatorWeights.Length; i++)
+                weightsArray[i] = NumOps.ToDouble(_estimatorWeights[i]);
+            modelData["EstimatorWeights"] = weightsArray;
+        }
+
+        // Serialize FeatureImportances
+        if (FeatureImportances is not null)
+        {
+            var fiArray = new double[FeatureImportances.Length];
+            for (int i = 0; i < FeatureImportances.Length; i++)
+                fiArray[i] = NumOps.ToDouble(FeatureImportances[i]);
+            modelData["FeatureImportances"] = fiArray;
+        }
+
+        // Serialize each estimator as base64
+        modelData["EstimatorCount"] = Estimators.Count;
+        for (int i = 0; i < Estimators.Count; i++)
+        {
+            if (Estimators[i] is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
+            {
+                modelData[$"Estimator_{i}"] = Convert.ToBase64String(fullModel.Serialize());
+            }
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null || modelMetadata.ModelData == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
+
+        if (modelDataObj == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = modelDataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (classLabelsAsDoubles.Length > 0)
+            {
+                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
+                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
+            }
+        }
+
+        // Deserialize estimator weights
+        var weightsToken = modelDataObj["EstimatorWeights"];
+        if (weightsToken is not null)
+        {
+            var weightsArray = weightsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (weightsArray.Length > 0)
+            {
+                _estimatorWeights = new Vector<T>(weightsArray.Length);
+                for (int i = 0; i < weightsArray.Length; i++)
+                    _estimatorWeights[i] = NumOps.FromDouble(weightsArray[i]);
+            }
+        }
+
+        // Deserialize FeatureImportances
+        var fiToken = modelDataObj["FeatureImportances"];
+        if (fiToken is not null)
+        {
+            var fiArray = fiToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (fiArray.Length > 0)
+            {
+                FeatureImportances = new Vector<T>(fiArray.Length);
+                for (int i = 0; i < fiArray.Length; i++)
+                    FeatureImportances[i] = NumOps.FromDouble(fiArray[i]);
+            }
+        }
+
+        // Deserialize estimators
+        int estimatorCount = modelDataObj["EstimatorCount"]?.ToObject<int>() ?? 0;
+        Estimators.Clear();
+        for (int i = 0; i < estimatorCount; i++)
+        {
+            var estToken = modelDataObj[$"Estimator_{i}"]?.ToObject<string>();
+            if (estToken is null)
+            {
+                throw new InvalidOperationException(
+                    $"Deserialization failed: Estimator_{i} is missing (expected {estimatorCount} estimators).");
+            }
+            var estBytes = Convert.FromBase64String(estToken);
+            var tree = new DecisionTreeClassifier<T>();
+            tree.Deserialize(estBytes);
+            Estimators.Add(tree);
+        }
+    }
+}

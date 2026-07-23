@@ -1,0 +1,334 @@
+using AiDotNet.Interfaces;
+
+namespace AiDotNet.Models;
+
+/// <summary>
+/// Represents a saved checkpoint of model training state.
+/// </summary>
+/// <remarks>
+/// <b>For Beginners:</b> A checkpoint is like a save point in a video game - it captures
+/// everything needed to resume training from that exact point.
+/// </remarks>
+/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+public class Checkpoint<T, TInput, TOutput>
+{
+    /// <summary>
+    /// Gets the unique identifier for this checkpoint.
+    /// </summary>
+    public string CheckpointId { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the model at this checkpoint.
+    /// Note: The model is stored as object for serialization compatibility.
+    /// </summary>
+    public object? Model { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optimizer state as a serializable dictionary.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Instead of storing the optimizer object directly (which can
+    /// cause serialization issues with interfaces), we store its state as a dictionary.
+    /// The optimizer can be reconstructed from this state when loading the checkpoint.
+    ///
+    /// Key values typically include:
+    /// - "LearningRate": The current learning rate
+    /// - "OptimizerType": The type name of the optimizer
+    /// - "Parameters": Any additional optimizer-specific parameters
+    /// </remarks>
+    public Dictionary<string, object> OptimizerState { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the serialized optimizer payload.
+    /// </summary>
+    /// <remarks>
+    /// This stores the optimizer's full <see cref="IModelSerializer.Serialize"/>
+    /// payload, including transient state such as moment vectors, accumulators,
+    /// velocities, and scheduler counters. <see cref="OptimizerState"/> remains
+    /// as lightweight metadata for inspection and backwards compatibility.
+    /// </remarks>
+    public byte[] OptimizerData { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// Gets or sets the optimizer type name for reconstruction.
+    /// </summary>
+    public string? OptimizerTypeName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the training epoch number.
+    /// </summary>
+    public int Epoch { get; set; }
+
+    /// <summary>
+    /// Gets or sets the training step number.
+    /// </summary>
+    public int Step { get; set; }
+
+    /// <summary>
+    /// Gets or sets the performance metrics at this checkpoint.
+    /// </summary>
+    public Dictionary<string, T> Metrics { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional metadata.
+    /// </summary>
+    public Dictionary<string, object> Metadata { get; set; }
+
+    /// <summary>
+    /// Gets the timestamp when this checkpoint was created.
+    /// </summary>
+    public DateTime CreatedAt { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the file path where the checkpoint is stored.
+    /// </summary>
+    public string? FilePath { get; set; }
+
+    /// <summary>
+    /// Initializes a new instance of the Checkpoint class.
+    /// </summary>
+    public Checkpoint()
+    {
+        CheckpointId = Guid.NewGuid().ToString();
+        Metrics = new Dictionary<string, T>();
+        Metadata = new Dictionary<string, object>();
+        CreatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the Checkpoint class with specified values.
+    /// </summary>
+    /// <param name="model">The model to save.</param>
+    /// <param name="optimizerState">The optimizer state dictionary.</param>
+    /// <param name="optimizerTypeName">The optimizer type name for reconstruction.</param>
+    /// <param name="epoch">The current epoch.</param>
+    /// <param name="step">The current step.</param>
+    /// <param name="metrics">Performance metrics at this checkpoint.</param>
+    /// <param name="metadata">Additional metadata.</param>
+    public Checkpoint(
+        object model,
+        Dictionary<string, object> optimizerState,
+        string? optimizerTypeName,
+        int epoch,
+        int step,
+        Dictionary<string, T> metrics,
+        Dictionary<string, object>? metadata = null,
+        byte[]? optimizerData = null)
+        : this()
+    {
+        Model = model;
+        OptimizerState = optimizerState ?? new Dictionary<string, object>();
+        OptimizerData = optimizerData ?? Array.Empty<byte>();
+        OptimizerTypeName = optimizerTypeName;
+        Epoch = epoch;
+        Step = step;
+        Metrics = metrics ?? new Dictionary<string, T>();
+        Metadata = metadata ?? new Dictionary<string, object>();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the Checkpoint class with an optimizer object.
+    /// </summary>
+    /// <param name="model">The model to save.</param>
+    /// <param name="optimizer">The optimizer to extract state from.</param>
+    /// <param name="epoch">The current epoch.</param>
+    /// <param name="step">The current step.</param>
+    /// <param name="metrics">Performance metrics at this checkpoint.</param>
+    /// <param name="metadata">Additional metadata.</param>
+    public Checkpoint(
+        object model,
+        IOptimizer<T, TInput, TOutput> optimizer,
+        int epoch,
+        int step,
+        Dictionary<string, T> metrics,
+        Dictionary<string, object>? metadata = null)
+        : this()
+    {
+        Model = model;
+        OptimizerState = ExtractOptimizerState(optimizer);
+        OptimizerData = optimizer?.Serialize() ?? Array.Empty<byte>();
+        OptimizerState["SerializedStateLengthBytes"] = OptimizerData.Length;
+        OptimizerTypeName = optimizer?.GetType().AssemblyQualifiedName;
+        Epoch = epoch;
+        Step = step;
+        Metrics = metrics ?? new Dictionary<string, T>();
+        Metadata = metadata ?? new Dictionary<string, object>();
+    }
+
+    /// <summary>
+    /// Restores the saved optimizer state into an existing optimizer instance.
+    /// </summary>
+    /// <param name="optimizer">The optimizer instance to restore.</param>
+    public void RestoreOptimizer(IOptimizer<T, TInput, TOutput> optimizer)
+    {
+        if (!TryRestoreOptimizer(optimizer))
+        {
+            throw new InvalidOperationException(
+                $"Checkpoint '{CheckpointId}' does not contain serialized optimizer state.");
+        }
+    }
+
+    /// <summary>
+    /// Attempts to restore the saved optimizer state into an existing optimizer instance.
+    /// </summary>
+    /// <param name="optimizer">The optimizer instance to restore.</param>
+    /// <returns><c>true</c> when optimizer state was restored; otherwise <c>false</c>.</returns>
+    public bool TryRestoreOptimizer(IOptimizer<T, TInput, TOutput> optimizer)
+    {
+        if (optimizer == null)
+            throw new ArgumentNullException(nameof(optimizer));
+
+        if (OptimizerData == null || OptimizerData.Length == 0)
+            return false;
+
+        // Guard against feeding a checkpoint's bytes to a different optimizer type, which would
+        // silently restore incompatible state. OptimizerTypeName was captured (AssemblyQualifiedName)
+        // at save time; reject a mismatch before Deserialize. Resolve the stored type when possible and
+        // allow the supplied optimizer to be that type or a subclass; fall back to a string compare if
+        // the stored type can't be resolved (e.g. its assembly moved).
+        // Capture into a local and narrow with a property pattern rather than
+        // gating on string.IsNullOrEmpty(OptimizerTypeName): net471's nullable
+        // flow analysis does NOT honour the IsNullOrEmpty guard (its BCL
+        // reference lacks the [NotNullWhen] annotation) and would treat
+        // OptimizerTypeName as possibly-null at the ExtractTypeFullName(string)
+        // call. A local narrowed by `is { Length: > 0 }` stays non-null across the
+        // block on every target framework, so no null-forgiving operator is needed.
+        string? optimizerTypeName = OptimizerTypeName;
+        if (optimizerTypeName is { Length: > 0 })
+        {
+            var expectedType = Type.GetType(optimizerTypeName);
+            var actualType = optimizer.GetType();
+            // The saved name is assembly-qualified ("Ns.Type, Assembly, Version=..."); the FullName is the
+            // part before the first TOP-LEVEL comma. When Type.GetType can't resolve the saved type (the
+            // assembly was renamed or its version changed), fall back to comparing the assembly-qualified
+            // string AND the bare FullName, so a checkpoint from a since-renamed/versioned assembly whose
+            // concrete optimizer type is otherwise identical still restores instead of being rejected.
+            // NOTE: a naive Split(',')[0] is WRONG for generic types — a closed generic's assembly-
+            // qualified name embeds its type arguments' own AQNs inside "[[...]]", which contain commas;
+            // ExtractTypeFullName below skips commas nested in brackets so the FullName isn't truncated.
+            string expectedFullName = ExtractTypeFullName(optimizerTypeName);
+            bool compatible = expectedType != null
+                ? expectedType.IsInstanceOfType(optimizer)
+                : string.Equals(optimizerTypeName, actualType.AssemblyQualifiedName, StringComparison.Ordinal)
+                  || string.Equals(expectedFullName, actualType.FullName, StringComparison.Ordinal);
+
+            if (!compatible)
+            {
+                throw new InvalidOperationException(
+                    $"Checkpoint '{CheckpointId}' was saved from optimizer type '{optimizerTypeName}', but the " +
+                    $"supplied optimizer is '{optimizer.GetType().AssemblyQualifiedName}'. Restoring mismatched " +
+                    "optimizer state is unsafe.");
+            }
+        }
+
+        optimizer.Deserialize(OptimizerData);
+        return true;
+    }
+
+    /// <summary>
+    /// Extracts the type <c>FullName</c> from an assembly-qualified type name by returning the substring
+    /// before the first comma that is NOT nested inside brackets. Correct for closed generic types, whose
+    /// assembly-qualified name embeds each type argument's own assembly-qualified name inside <c>[[...]]</c>
+    /// (which contain commas) — a naive <c>Split(',')</c> would truncate at the first inner comma.
+    /// </summary>
+    internal static string ExtractTypeFullName(string assemblyQualifiedName)
+    {
+        int depth = 0;
+        for (int i = 0; i < assemblyQualifiedName.Length; i++)
+        {
+            char c = assemblyQualifiedName[i];
+            if (c == '[') depth++;
+            else if (c == ']') depth--;
+            else if (c == ',' && depth == 0) return assemblyQualifiedName.Substring(0, i).Trim();
+        }
+        return assemblyQualifiedName.Trim();
+    }
+
+    /// <summary>
+    /// Extracts serializable state from an optimizer.
+    /// </summary>
+    private static Dictionary<string, object> ExtractOptimizerState(IOptimizer<T, TInput, TOutput>? optimizer)
+    {
+        if (optimizer == null)
+            return new Dictionary<string, object>();
+
+        var state = new Dictionary<string, object>
+        {
+            ["TypeName"] = optimizer.GetType().FullName ?? "Unknown"
+        };
+
+        // Extract common optimizer properties using reflection
+        var type = optimizer.GetType();
+
+        // Try to get learning rate
+        var lrProp = type.GetProperty("LearningRate") ?? type.GetProperty("CurrentLearningRate");
+        if (lrProp != null)
+        {
+            var value = lrProp.GetValue(optimizer);
+            if (value != null)
+                state["LearningRate"] = value;
+        }
+
+        // Try to get momentum
+        var momentumProp = type.GetProperty("Momentum");
+        if (momentumProp != null)
+        {
+            var value = momentumProp.GetValue(optimizer);
+            if (value != null)
+                state["Momentum"] = value;
+        }
+
+        // Try to get weight decay
+        var wdProp = type.GetProperty("WeightDecay") ?? type.GetProperty("L2Regularization");
+        if (wdProp != null)
+        {
+            var value = wdProp.GetValue(optimizer);
+            if (value != null)
+                state["WeightDecay"] = value;
+        }
+
+        return state;
+    }
+}
+
+/// <summary>
+/// Contains metadata about a checkpoint without loading the full checkpoint data.
+/// </summary>
+/// <typeparam name="T">The numeric data type.</typeparam>
+public class CheckpointMetadata<T>
+{
+    /// <summary>
+    /// Gets or sets the checkpoint ID.
+    /// </summary>
+    public string CheckpointId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the epoch number.
+    /// </summary>
+    public int Epoch { get; set; }
+
+    /// <summary>
+    /// Gets or sets the step number.
+    /// </summary>
+    public int Step { get; set; }
+
+    /// <summary>
+    /// Gets or sets the metrics.
+    /// </summary>
+    public Dictionary<string, T> Metrics { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the creation timestamp.
+    /// </summary>
+    public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the file path.
+    /// </summary>
+    public string? FilePath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the file size in bytes.
+    /// </summary>
+    public long FileSizeBytes { get; set; }
+}

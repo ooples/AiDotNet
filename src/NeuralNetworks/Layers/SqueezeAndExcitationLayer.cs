@@ -1,0 +1,1579 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a Squeeze-and-Excitation layer that recalibrates channel-wise feature responses adaptively.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A Squeeze-and-Excitation layer enhances the representational power of a network by explicitly modeling the 
+/// interdependencies between channels. It does this by performing two operations:
+/// 1. "Squeeze" - aggregating feature maps across spatial dimensions to produce a channel descriptor
+/// 2. "Excitation" - using this descriptor to recalibrate the original feature maps channel-wise
+/// </para>
+/// <para><b>For Beginners:</b> This layer helps the neural network focus on the most important features.
+/// 
+/// Think of it like how your brain works when looking at a picture:
+/// - First, you get a rough idea of what's in the image (the "squeeze" step)
+/// - Then, you decide which parts to pay more attention to (the "excitation" step)
+/// - Finally, you look at the image again with this focused attention
+/// 
+/// For example, if the network is processing an image of a cat, the Squeeze-and-Excitation layer might:
+/// - First compress all the information to understand "this is probably a cat"
+/// - Then decide to pay more attention to features that look like ears, whiskers, and fur
+/// - Finally enhance those important features in the original image data
+/// 
+/// This helps the network become more accurate and efficient by focusing on what matters most.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+{
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes a channel attention regularization loss that encourages balanced
+    /// channel importance. This helps prevent the layer from over-relying on specific channels.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses an additional learning signal.
+    ///
+    /// When enabled (true):
+    /// - The layer encourages balanced attention across channels
+    /// - This helps prevent over-reliance on specific features
+    /// - Training may be more stable and produce more robust representations
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the channel attention regularization contributes to the total loss.
+    /// The default value of 0.01 provides a good balance between the main task and regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the channel attention regularization.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.05) make the network prioritize balanced channel attention more strongly
+    /// - Lower values (e.g., 0.001) make the regularization less important
+    /// - The default (0.01) works well for most computer vision tasks
+    ///
+    /// If your network is over-fitting to specific channels, increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed channel attention regularization loss for diagnostic purposes.
+    /// </summary>
+    private T _lastChannelAttentionLoss;
+
+    /// <summary>
+    /// Caches the excitation weights from the forward pass for auxiliary loss computation.
+    /// Shape: [batchSize, channels]
+    /// </summary>
+    private Tensor<T>? _lastExcitationWeights;
+    private Tensor<T>? _lastSqueezed;
+    private Tensor<T>? _lastFc1Biased;
+    private Tensor<T>? _lastFc1Activated;
+    private Tensor<T>? _lastFc2Biased;
+
+    /// <summary>
+    /// The number of input and output channels in the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds the number of channels in the input tensor, which also corresponds to the number of output channels.
+    /// In neural networks, channels typically represent different feature maps or types of information.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of channels as different types of information.
+    /// 
+    /// For example, in an image:
+    /// - One channel might detect edges
+    /// - Another might detect colors
+    /// - Another might detect textures
+    /// 
+    /// The neural network processes each of these information types separately before combining them.
+    /// </para>
+    /// </remarks>
+    private readonly int _channels;
+
+    /// <summary>
+    /// The number of channels in the bottleneck (reduced dimension).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds the reduced number of channels used in the intermediate representation of the Squeeze-and-Excitation block.
+    /// It is calculated as _channels divided by the reduction ratio, creating a bottleneck that forces the network to focus on the most important features.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like a compression rate for information.
+    /// 
+    /// If you have 64 channels (types of information) and _reducedChannels is 16:
+    /// - The layer has to compress all 64 types down to just 16
+    /// - This forces it to keep only the most important information
+    /// - It's like summarizing a long story into a few key points
+    /// 
+    /// The smaller this number, the more aggressive the compression, which can help the network
+    /// focus but might also cause it to miss some details.
+    /// </para>
+    /// </remarks>
+    private readonly int _reducedChannels;
+
+    /// <summary>
+    /// The weights for the first fully connected layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This matrix contains the weights that transform the squeezed representation from _channels dimensions to _reducedChannels dimensions.
+    /// These weights are learned during training to identify important patterns in the feature maps.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are the adjustable values that transform the compressed information.
+    /// 
+    /// Think of these weights like knobs that the network can turn:
+    /// - Each weight determines how much influence one feature has on another
+    /// - The network adjusts these values during training to get better results
+    /// - This matrix helps reduce the information from many channels to fewer channels
+    /// 
+    /// This is part of the "squeeze" operation that compresses information.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _weights1;
+
+    /// <summary>
+    /// The bias values for the first fully connected layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor contains the bias values that are added after applying the _weights1 transformation.
+    /// Biases allow the network to shift the activation function, providing more flexibility in learning.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are baseline values added after the transformation.
+    ///
+    /// Think of biases like default settings:
+    /// - They provide starting values that get added regardless of the input
+    /// - They help the network represent patterns more easily
+    /// - Without biases, every feature would have to start from zero
+    ///
+    /// For example, if a certain feature should usually be active, a positive bias
+    /// means it starts with some activation even before the input is considered.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _bias1;
+
+    /// <summary>
+    /// The weights for the second fully connected layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor contains the weights that transform from the reduced representation back to the original channel dimensions.
+    /// These weights determine how much attention to give to each channel in the original input.
+    /// </para>
+    /// <para><b>For Beginners:</b> These values determine how important each feature is.
+    ///
+    /// After compressing the information:
+    /// - These weights expand it back to the original size
+    /// - However, they now contain "importance scores" for each feature
+    /// - Features deemed more important get higher weights
+    ///
+    /// This is part of the "excitation" operation that decides which features to emphasize.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> _weights2;
+
+    /// <summary>
+    /// The bias values for the second fully connected layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor contains the bias values that are added after applying the _weights2 transformation.
+    /// These biases help determine the baseline attention given to each channel.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are baseline attention values for each feature.
+    ///
+    /// Similar to the first set of biases:
+    /// - They provide default attention levels for each feature
+    /// - They're added to the calculated importance scores
+    /// - They help ensure certain features get at least some attention
+    ///
+    /// For example, if color information is usually important, its bias might be higher
+    /// so it receives attention even when the specific input doesn't strongly suggest it.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> _bias2;
+
+    /// <summary>
+    /// The input tensor from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the input tensor from the most recent forward pass. It is used during the backward pass
+    /// to calculate gradients. The value is null if no forward pass has been performed yet or after ResetState is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like short-term memory of what the layer just processed.
+    /// 
+    /// During training:
+    /// - The layer needs to remember what input it received
+    /// - This helps it calculate how to improve itself
+    /// - It's like keeping your work when solving a math problem, so you can check your steps
+    /// 
+    /// This value is temporarily stored during training and is cleared when moving to a new sample.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// The output tensor from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output tensor from the most recent forward pass. It is used during the backward pass
+    /// to calculate gradients. The value is null if no forward pass has been performed yet or after ResetState is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a record of what the layer just produced.
+    /// 
+    /// Similar to remembering the input:
+    /// - The layer also needs to remember what output it generated
+    /// - This helps determine how far off its prediction was
+    /// - It's needed to calculate how to improve the weights and biases
+    /// 
+    /// This is another piece of temporary memory used during training.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// The gradient of the loss with respect to _weights1 from the most recent backward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the gradient of the loss function with respect to _weights1. It indicates how _weights1
+    /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This shows how the first set of weights should change to improve performance.
+    /// 
+    /// During training:
+    /// - The network calculates how much each weight contributed to any errors
+    /// - This gradient indicates the direction and amount each weight should change
+    /// - Larger values mean the weight needs more adjustment
+    /// 
+    /// Think of it like feedback saying "this weight should be a little higher" or
+    /// "that weight should be much lower" to get better results next time.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _weights1Gradient;
+
+    /// <summary>
+    /// The gradient of the loss with respect to _bias1 from the most recent backward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the gradient of the loss function with respect to _bias1. It indicates how _bias1
+    /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This shows how the first set of biases should change.
+    ///
+    /// Similar to the weight gradients:
+    /// - This indicates how each bias value should be adjusted
+    /// - It helps fine-tune the default settings for each feature
+    /// - The network uses this to update the biases during learning
+    ///
+    /// These gradients help the network gradually improve its performance over time.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _bias1Gradient;
+
+    /// <summary>
+    /// The gradient of the loss with respect to _weights2 from the most recent backward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the gradient of the loss function with respect to _weights2. It indicates how _weights2
+    /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This shows how the second set of weights should change.
+    ///
+    /// This is crucial because:
+    /// - These weights determine which features get more attention
+    /// - Adjusting them helps the network focus on the right things
+    /// - It's like learning which parts of a picture are most important for identifying what's in it
+    ///
+    /// The network uses these gradients to gradually improve its "attention mechanism" over time.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _weights2Gradient;
+
+    /// <summary>
+    /// The gradient of the loss with respect to _bias2 from the most recent backward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the gradient of the loss function with respect to _bias2. It indicates how _bias2
+    /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This shows how the second set of biases should change.
+    ///
+    /// These gradients:
+    /// - Help adjust the default attention given to each feature
+    /// - Allow the network to learn which features are generally more important
+    /// - Fine-tune the "excitation" part of the layer
+    ///
+    /// Along with the other gradients, these help the network improve through training.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _bias2Gradient;
+
+    /// <summary>
+    /// Gets or sets the weight for L1 sparsity regularization on attention weights.
+    /// </summary>
+    /// <value>
+    /// The weight to apply to the L1 sparsity loss. Default is 0.0001.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property controls the strength of L1 sparsity regularization applied to
+    /// the channel attention weights. Higher values encourage more sparse attention
+    /// (fewer active channels), while lower values allow more distributed attention.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how strongly to encourage sparse attention.
+    ///
+    /// Sparsity regularization:
+    /// - Encourages the network to focus on fewer, more important channels
+    /// - Helps prevent overfitting by reducing model complexity
+    /// - Can improve interpretability by making channel selection clearer
+    ///
+    /// Typical values range from 0.0001 to 0.01. Set to 0 to disable sparsity regularization.
+    /// </para>
+    /// </remarks>
+    public T SparsityWeight { get; set; }
+
+    /// <summary>
+    /// The activation function applied after the first fully connected layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds the scalar activation function that is applied element-wise after the first fully connected layer.
+    /// The default is ReLU, which keeps positive values unchanged and sets negative values to zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a mathematical function that adds non-linearity after the first transformation.
+    /// 
+    /// Activation functions:
+    /// - Add non-linearity, allowing the network to learn complex patterns
+    /// - ReLU (the default) keeps positive values and changes negative values to zero
+    /// - This helps the network focus on active features and ignore inactive ones
+    /// 
+    /// Without activation functions, neural networks would only be able to learn linear relationships,
+    /// severely limiting what they can do.
+    /// </para>
+    /// </remarks>
+    private readonly IActivationFunction<T>? _firstActivation;
+
+    /// <summary>
+    /// The activation function applied after the second fully connected layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds the scalar activation function that is applied element-wise after the second fully connected layer.
+    /// The default is Sigmoid, which squashes values to be between 0 and 1, making them appropriate for channel attention weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This transforms the output into attention scores between 0 and 1.
+    /// 
+    /// The Sigmoid function (default):
+    /// - Squashes any number to be between 0 and 1
+    /// - 0 means "ignore this feature completely"
+    /// - 1 means "give this feature full attention"
+    /// - Values in between provide partial attention
+    /// 
+    /// This is perfect for the "excitation" step because we need to decide how much
+    /// attention to give each feature, which is naturally expressed as a percentage.
+    /// </para>
+    /// </remarks>
+    private readonly IActivationFunction<T>? _secondActivation;
+
+    /// <summary>
+    /// The vector activation function applied after the first fully connected layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds the vector activation function that is applied to entire vectors after the first fully connected layer.
+    /// It is used instead of _firstActivation when a vector activation is provided in the constructor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the scalar activation, but works on entire groups of values at once.
+    /// 
+    /// Vector activations:
+    /// - Process entire rows of numbers together
+    /// - Can capture relationships between different elements
+    /// - Might normalize or transform values based on the entire group
+    /// 
+    /// This allows for more sophisticated transformations that consider how different
+    /// features relate to each other, rather than processing each feature independently.
+    /// </para>
+    /// </remarks>
+    private readonly IVectorActivationFunction<T>? _firstVectorActivation;
+
+    /// <summary>
+    /// The vector activation function applied after the second fully connected layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field holds the vector activation function that is applied to entire vectors after the second fully connected layer.
+    /// It is used instead of _secondActivation when a vector activation is provided in the constructor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This transforms groups of values into attention scores.
+    /// 
+    /// Similar to scalar activation, but:
+    /// - It can consider relationships between different channels
+    /// - It might use competition between features to determine attention
+    /// - It could normalize attention so the total adds up to 100%
+    /// 
+    /// For example, it might increase attention on texture features while decreasing
+    /// attention on color features if it determines texture is more important for this specific input.
+    /// </para>
+    /// </remarks>
+    private readonly IVectorActivationFunction<T>? _secondVectorActivation;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> for this layer, as it contains trainable parameters (weights and biases).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the Squeeze-and-Excitation layer can be trained through backpropagation.
+    /// Since this layer has trainable parameters (weights and biases), it supports training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
+    /// 
+    /// A value of true means:
+    /// - The layer has internal values (weights and biases) that can be adjusted during training
+    /// - It will improve its performance as it sees more data
+    /// - It participates in the learning process
+    /// 
+    /// For this layer, the value is always true because it needs to learn which features 
+    /// are most important to pay attention to.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <remarks>
+    /// This returns the total count of weights and biases in both fully connected layers.
+    /// </remarks>
+    public override long ParameterCount =>
+        _weights1.Shape[0] * _weights1.Shape[1] +   // FC1 weights
+        _bias1.Shape[0] +                            // FC1 biases
+        _weights2.Shape[0] * _weights2.Shape[1] +   // FC2 weights
+        _bias2.Shape[0];                             // FC2 biases
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SqueezeAndExcitationLayer{T}"/> class with scalar activation functions.
+    /// </summary>
+    /// <param name="channels">The number of input and output channels.</param>
+    /// <param name="reductionRatio">The ratio by which to reduce the number of channels in the bottleneck.</param>
+    /// <param name="firstActivation">The activation function for the first fully connected layer. Defaults to ReLU if not specified.</param>
+    /// <param name="secondActivation">The activation function for the second fully connected layer. Defaults to Sigmoid if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a Squeeze-and-Excitation layer with the specified number of channels and reduction ratio.
+    /// The reduction ratio determines how much the channel dimension is compressed in the bottleneck.
+    /// The activation functions control the non-linearities applied after each fully connected layer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor creates a new Squeeze-and-Excitation layer.
+    /// 
+    /// The parameters you provide determine:
+    /// - channels: How many different feature types the layer will process
+    /// - reductionRatio: How much to compress the information (higher means more compression)
+    /// - firstActivation: How to process information after the first step (defaults to ReLU, which keeps only positive values)
+    /// - secondActivation: How to determine importance of each feature (defaults to Sigmoid, which outputs values between 0 and 1)
+    /// 
+    /// Think of it like this: if you have 64 channels (different types of features) and a reduction ratio of 16,
+    /// the layer will compress those 64 channels down to just 4 during the middle step, forcing it to focus
+    /// on only the most important patterns.
+    /// </para>
+    /// </remarks>
+    public SqueezeAndExcitationLayer(int channels, int reductionRatio,
+        IActivationFunction<T>? firstActivation = null,
+        IActivationFunction<T>? secondActivation = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base([[channels]], [channels])
+    {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastChannelAttentionLoss = NumOps.Zero;
+
+        _channels = channels;
+        _reducedChannels = channels / reductionRatio;
+        _firstActivation = firstActivation ?? new ReLUActivation<T>();
+        _secondActivation = secondActivation ?? new SigmoidActivation<T>();
+
+        _weights1 = new Tensor<T>([_channels, _reducedChannels]);
+        _bias1 = new Tensor<T>([_reducedChannels]);
+        _weights2 = new Tensor<T>([_reducedChannels, _channels]);
+        _bias2 = new Tensor<T>([_channels]);
+
+        SparsityWeight = NumOps.FromDouble(0.0001);
+
+        InitializeWeights();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SqueezeAndExcitationLayer{T}"/> class with vector activation functions.
+    /// </summary>
+    /// <param name="channels">The number of input and output channels.</param>
+    /// <param name="reductionRatio">The ratio by which to reduce the number of channels in the bottleneck.</param>
+    /// <param name="firstVectorActivation">The vector activation function for the first fully connected layer. Defaults to ReLU if not specified.</param>
+    /// <param name="secondVectorActivation">The vector activation function for the second fully connected layer. Defaults to Sigmoid if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a Squeeze-and-Excitation layer with the specified number of channels and reduction ratio.
+    /// It uses vector activation functions, which operate on entire vectors rather than individual elements.
+    /// The reduction ratio determines how much the channel dimension is compressed in the bottleneck.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor is similar to the previous one, but uses vector activations.
+    ///
+    /// Vector activations:
+    /// - Process entire groups of numbers at once, rather than one at a time
+    /// - Can capture relationships between different elements
+    /// - Allow for more complex transformations
+    ///
+    /// This version is useful when you need more sophisticated processing that considers
+    /// how different features relate to each other, rather than treating each feature independently.
+    /// </para>
+    /// </remarks>
+    public SqueezeAndExcitationLayer(int channels, int reductionRatio,
+        IVectorActivationFunction<T>? firstVectorActivation = null,
+        IVectorActivationFunction<T>? secondVectorActivation = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base([[channels]], [channels])
+    {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastChannelAttentionLoss = NumOps.Zero;
+
+        _channels = channels;
+        _reducedChannels = channels / reductionRatio;
+        _firstVectorActivation = firstVectorActivation ?? new ReLUActivation<T>();
+        _secondVectorActivation = secondVectorActivation ?? new SigmoidActivation<T>();
+
+        _weights1 = new Tensor<T>([_channels, _reducedChannels]);
+        _bias1 = new Tensor<T>([_reducedChannels]);
+        _weights2 = new Tensor<T>([_reducedChannels, _channels]);
+        _bias2 = new Tensor<T>([_channels]);
+
+        SparsityWeight = NumOps.FromDouble(0.0001);
+
+        InitializeWeights();
+    }
+
+    /// <summary>
+    /// Initializes the weights and biases of the layer with small random values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method initializes all weights and biases of the layer with small random values scaled by 0.1.
+    /// Proper initialization is important for training neural networks effectively.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets the starting values for the layer's parameters.
+    /// 
+    /// Good initialization is important because:
+    /// - Starting with all zeros would make learning impossible
+    /// - Starting with values that are too large can slow down or prevent learning
+    /// - Small random values help the network start learning efficiently
+    /// 
+    /// The values are set to small random numbers (between -0.05 and 0.05) to give the
+    /// network a good starting point for learning.
+    /// </para>
+    /// </remarks>
+    private void InitializeWeights()
+    {
+        T scale = NumOps.FromDouble(0.1);
+        InitializeTensor2D(_weights1, scale);
+        InitializeTensor2D(_weights2, scale);
+        InitializeTensor1D(_bias1, scale);
+        InitializeTensor1D(_bias2, scale);
+
+        RegisterTrainableParameter(_weights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_weights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias2, PersistentTensorRole.Biases);
+    }
+
+    /// <summary>
+    /// Initializes a 2D tensor with small random values scaled by the specified factor.
+    /// </summary>
+    /// <param name="tensor">The tensor to initialize.</param>
+    /// <param name="scale">The scaling factor for the random values.</param>
+    private void InitializeTensor2D(Tensor<T> tensor, T scale)
+    {
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
+    }
+
+    /// <summary>
+    /// Initializes a 1D tensor with small random values scaled by the specified factor.
+    /// </summary>
+    /// <param name="tensor">The tensor to initialize.</param>
+    /// <param name="scale">The scaling factor for the random values.</param>
+    private void InitializeTensor1D(Tensor<T> tensor, T scale)
+    {
+        InitializeLayerBiases(tensor);
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the Squeeze-and-Excitation layer.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after Squeeze-and-Excitation processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the Squeeze-and-Excitation layer. It first applies global average pooling
+    /// to "squeeze" spatial information into a channel descriptor. Then it passes this descriptor through two fully connected
+    /// layers with activations to produce channel-wise scaling factors. Finally, it multiplies the original input by these
+    /// scaling factors to recalibrate the feature maps.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method processes the input data through the Squeeze-and-Excitation steps.
+    /// 
+    /// The process works in three main steps:
+    /// 
+    /// 1. Squeeze: Compresses all spatial information into a single value per channel
+    ///    - For each channel, all values are averaged together
+    ///    - This creates a "summary" of each feature type
+    /// 
+    /// 2. Excitation: Determines the importance of each channel
+    ///    - The summary passes through two neural layers with activations
+    ///    - This produces an "importance score" between 0 and 1 for each channel
+    /// 
+    /// 3. Scaling: Adjusts the original input based on importance
+    ///    - Each feature map is multiplied by its importance score
+    ///    - Important features are kept or enhanced
+    ///    - Less important features are reduced
+    /// 
+    /// This helps the network focus attention on the most useful features for the current input.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+
+        Tensor<T> squeezed;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            // 1D: [C] -> add batch dim -> [1, C]
+            batchSize = 1;
+            // No spatial dims to squeeze, just reshape to [1, C]
+            squeezed = Engine.Reshape(input, [1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // 2D: [B, C] - no spatial dims, already in "squeezed" form
+            batchSize = input.Shape[0];
+            squeezed = input;
+        }
+        else if (rank == 4)
+        {
+            // 4D: Standard SE block case [B, H, W, C]
+            batchSize = input.Shape[0];
+            // Squeeze: Global Average Pooling [B, H, W, C] -> [B, C]
+            squeezed = Engine.ReduceMean(input, new[] { 1, 2 }, keepDims: false);
+        }
+        else if (rank == 3)
+        {
+            // 3D: [B, L, C] - could be sequence data
+            batchSize = input.Shape[0];
+            // Squeeze over dim 1 (sequence length)
+            squeezed = Engine.ReduceMean(input, new[] { 1 }, keepDims: false);
+        }
+        else
+        {
+            // Higher-rank: [B, D1, D2, ..., C]
+            // Squeeze over all spatial dimensions (1 to rank-2)
+            batchSize = input.Shape[0];
+            var spatialAxes = Enumerable.Range(1, rank - 2).ToArray();
+            squeezed = Engine.ReduceMean(input, spatialAxes, keepDims: false);
+        }
+
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        _lastSqueezed = squeezed;
+
+        // 2. Excitation: FC1 + Activation
+        // squeezed: [batchSize, channels], weights1: [channels, reducedChannels]
+        var fc1Output = Engine.TensorMatMul(squeezed, _weights1);
+        var fc1BiasReshaped = Engine.Reshape(_bias1, new[] { 1, _reducedChannels });
+        var fc1Biased = Engine.TensorBroadcastAdd(fc1Output, fc1BiasReshaped);
+        _lastFc1Biased = fc1Biased;
+
+        var activated1 = ApplyTensorActivation(fc1Biased, isFirstActivation: true);
+        _lastFc1Activated = activated1;
+
+        // Excitation: FC2 + Activation
+        // activated1: [batchSize, reducedChannels], weights2: [reducedChannels, channels]
+        var fc2Output = Engine.TensorMatMul(activated1, _weights2);
+        var fc2BiasReshaped = Engine.Reshape(_bias2, new[] { 1, _channels });
+        var fc2Biased = Engine.TensorBroadcastAdd(fc2Output, fc2BiasReshaped);
+        _lastFc2Biased = fc2Biased;
+
+        var excitation = ApplyTensorActivation(fc2Biased, isFirstActivation: false);
+
+        // Cache excitation weights for auxiliary loss computation
+        _lastExcitationWeights = excitation;
+
+        // 3. Scale: input * excitation
+        // Reshape excitation to match input rank for broadcasting
+        Tensor<T> excitationReshaped;
+        if (rank == 1)
+        {
+            // [1, C] -> [C] for element-wise multiply with [C]
+            excitationReshaped = Engine.Reshape(excitation, [_channels]);
+        }
+        else if (rank == 2)
+        {
+            // [B, C] - already correct shape for [B, C] input
+            excitationReshaped = excitation;
+        }
+        else if (rank == 4)
+        {
+            // [B, C] -> [B, 1, 1, C] for broadcasting with [B, H, W, C]
+            excitationReshaped = Engine.Reshape(excitation, [batchSize, 1, 1, _channels]);
+        }
+        else if (rank == 3)
+        {
+            // [B, C] -> [B, 1, C] for broadcasting with [B, L, C]
+            excitationReshaped = Engine.Reshape(excitation, [batchSize, 1, _channels]);
+        }
+        else
+        {
+            // Higher-rank: expand dims for all spatial dimensions
+            var shape = new int[rank];
+            shape[0] = batchSize;
+            for (int i = 1; i < rank - 1; i++)
+                shape[i] = 1;
+            shape[rank - 1] = _channels;
+            excitationReshaped = Engine.Reshape(excitation, shape);
+        }
+
+        var output = Engine.TensorBroadcastMultiply(input, excitationReshaped);
+
+        _lastOutput = output;
+        return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the Squeeze-and-Excitation layer on GPU tensors.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs.</param>
+    /// <returns>GPU tensor output after SE processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the GPU-accelerated forward pass of the SE layer.
+    /// All tensor ranks are handled natively on GPU using GlobalAvgPool2D for squeeze,
+    /// FusedLinearGpu for excitation, and BroadcastMultiplyFirstAxis for scaling.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        var shape = input._shape;
+        int rank = shape.Length;
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        // Transpose weights for FusedLinearGpu: [in, out] -> [out, in] for proper matrix multiply
+        var weights1T = Engine.TensorTranspose(_weights1);
+        var weights2T = Engine.TensorTranspose(_weights2);
+
+        // For 2D inputs [B, C], we can run entirely on GPU without squeeze step
+        if (rank == 2)
+        {
+            return ForwardGpu2D(input, weights1T, weights2T, backend, gpuEngine);
+        }
+
+        // For 4D inputs [B, H, W, C], use full GPU path with permute + GlobalAvgPool2D
+        if (rank == 4)
+        {
+            return ForwardGpu4D(input, weights1T, weights2T, backend, gpuEngine);
+        }
+
+        // For 3D inputs [B, L, C], use GPU path with MeanAxis
+        if (rank == 3)
+        {
+            return ForwardGpu3D(input, weights1T, weights2T, backend, gpuEngine);
+        }
+
+        // For 1D inputs [C], reshape to [1, C] and process
+        if (rank == 1)
+        {
+            return ForwardGpu1D(input, weights1T, weights2T, backend, gpuEngine);
+        }
+
+        // For higher-rank tensors [B, D1, D2, ..., C], flatten spatial dims and process
+        return ForwardGpuND(input, weights1T, weights2T, backend, gpuEngine);
+    }
+
+    /// <summary>
+    /// GPU forward pass for 2D inputs [B, C] - no squeeze needed.
+    /// </summary>
+    private Tensor<T> ForwardGpu2D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input._shape;
+        int batchSize = shape[0];
+
+        // FC1 + activation
+        var fc1Type = GetFirstActivationType();
+        var fc1Output = gpuEngine.FusedLinearGpu(input, weights1T, _bias1, fc1Type);
+
+        // FC2 + activation (sigmoid)
+        var fc2Type = GetSecondActivationType();
+        var excitation = gpuEngine.FusedLinearGpu(fc1Output, weights2T, _bias2, fc2Type);
+
+        // Scale: input * excitation (element-wise for same shape)
+        int size = batchSize * _channels;
+        var outputBuffer = backend.AllocateBuffer(size);
+        backend.Multiply(input.Buffer, excitation.Buffer, outputBuffer, size);
+
+        // Cache for backward pass if training
+        if (IsTrainingMode)
+        {
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
+        }
+
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU forward pass for 4D inputs [B, H, W, C] - uses GlobalAvgPool2D.
+    /// </summary>
+    private Tensor<T> ForwardGpu4D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input._shape;
+        int batchSize = shape[0];
+        int height = shape[1];
+        int width = shape[2];
+        int channels = shape[3];
+        int spatialSize = height * width;
+        int totalSize = batchSize * spatialSize * channels;
+
+        // Step 1: Permute from [B, H, W, C] to [B, C, H, W] for GlobalAvgPool2D
+        var permutedBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(input.Buffer, permutedBuffer, shape, [0, 3, 1, 2]);
+        var permutedShape = new[] { batchSize, channels, height, width };
+
+        // Step 2: Global Average Pooling [B, C, H, W] -> [B, C]
+        int squeezedSize = batchSize * channels;
+        var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
+        backend.GlobalAvgPool2D(permutedBuffer, squeezedBuffer, batchSize, channels, height, width);
+        var squeezedGpu = GpuTensorHelper.UploadToGpu<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Step 3: Excitation - FC1 + activation + FC2 + sigmoid
+        var fc1Type = GetFirstActivationType();
+        var fc1Output = gpuEngine.FusedLinearGpu(squeezedGpu, weights1T, _bias1, fc1Type);
+
+        var fc2Type = GetSecondActivationType();
+        var excitation = gpuEngine.FusedLinearGpu(fc1Output, weights2T, _bias2, fc2Type);
+
+        // Step 4: Scale with broadcasting
+        // We need to multiply [B, C, H, W] by [B, C] broadcast over [H, W]
+        // Reshape permuted to [B*C, H*W] and excitation to [B*C]
+        // Then BroadcastMultiplyFirstAxis: C[i,j] = A[i,j] * B[i]
+        var scaledBuffer = backend.AllocateBuffer(totalSize);
+        backend.BroadcastMultiplyFirstAxis(permutedBuffer, excitation.Buffer, scaledBuffer, batchSize * channels, spatialSize);
+
+        // Step 5: Permute back from [B, C, H, W] to [B, H, W, C]
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(scaledBuffer, outputBuffer, permutedShape, [0, 2, 3, 1]);
+
+        // Cleanup temporary buffers
+        permutedBuffer.Dispose();
+        scaledBuffer.Dispose();
+
+        // Cache for backward pass if training
+        if (IsTrainingMode)
+        {
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
+        }
+
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU forward pass for 3D inputs [B, L, C] - uses MeanAxis for squeeze.
+    /// </summary>
+    private Tensor<T> ForwardGpu3D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input._shape;
+        int batchSize = shape[0];
+        int seqLen = shape[1];
+        int channels = shape[2];
+        int totalSize = batchSize * seqLen * channels;
+
+        // Step 1: Squeeze - mean over sequence dimension
+        // Reshape [B, L, C] to [B, L*C] view, then MeanAxis to get [B, C]
+        // Actually we need to reduce over L for each (B, C) pair
+        // MeanAxis(A, B, outerSize, reduceSize) reduces: B[i] = mean(A[i, 0..reduceSize])
+        // For [B, L, C], we want mean over L, giving [B, C]
+        // Permute to [B, C, L], then MeanAxis with outerSize=B*C, reduceSize=L
+        var permutedBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(input.Buffer, permutedBuffer, shape, [0, 2, 1]); // [B, C, L]
+
+        int squeezedSize = batchSize * channels;
+        var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
+        backend.MeanAxis(permutedBuffer, squeezedBuffer, squeezedSize, seqLen);
+        var squeezedGpu = GpuTensorHelper.UploadToGpu<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Step 2: Excitation
+        var fc1Type = GetFirstActivationType();
+        var fc1Output = gpuEngine.FusedLinearGpu(squeezedGpu, weights1T, _bias1, fc1Type);
+
+        var fc2Type = GetSecondActivationType();
+        var excitation = gpuEngine.FusedLinearGpu(fc1Output, weights2T, _bias2, fc2Type);
+
+        // Step 3: Scale with broadcasting
+        // Multiply [B, C, L] by [B, C] broadcast over L
+        var scaledBuffer = backend.AllocateBuffer(totalSize);
+        backend.BroadcastMultiplyFirstAxis(permutedBuffer, excitation.Buffer, scaledBuffer, batchSize * channels, seqLen);
+
+        // Step 4: Permute back from [B, C, L] to [B, L, C]
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(scaledBuffer, outputBuffer, [batchSize, channels, seqLen], [0, 2, 1]);
+
+        // Cleanup
+        permutedBuffer.Dispose();
+        scaledBuffer.Dispose();
+
+        // Cache for backward pass
+        if (IsTrainingMode)
+        {
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
+        }
+
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU forward pass for 1D inputs [C] - reshape to [1, C] and process.
+    /// </summary>
+    private Tensor<T> ForwardGpu1D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input._shape;
+        int channels = shape[0];
+
+        // Treat as [1, C] batch
+        var input2D = GpuTensorHelper.UploadToGpu<T>(backend, input.Buffer, [1, channels], GpuTensorRole.Activation, ownsBuffer: false);
+        var result2D = ForwardGpu2D(input2D, weights1T, weights2T, backend, gpuEngine);
+
+        // Return with original 1D shape (the buffer is the same but we view it as 1D)
+        return GpuTensorHelper.UploadToGpu<T>(backend, result2D.Buffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU forward pass for higher-rank tensors [B, D1, D2, ..., C] - flatten spatial dims.
+    /// </summary>
+    private Tensor<T> ForwardGpuND(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+        IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
+    {
+        var shape = input._shape;
+        int batchSize = shape[0];
+        int channels = shape[shape.Length - 1];
+        int spatialSize = 1;
+        for (int i = 1; i < shape.Length - 1; i++)
+            spatialSize *= shape[i];
+        int totalSize = batchSize * spatialSize * channels;
+
+        // Flatten to [B, spatialSize, C], then treat like 3D case
+        var flatShape = new[] { batchSize, spatialSize, channels };
+
+        // Permute to [B, C, spatialSize]
+        var permutedBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(input.Buffer, permutedBuffer, flatShape, [0, 2, 1]);
+
+        // Squeeze: mean over spatialSize
+        int squeezedSize = batchSize * channels;
+        var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
+        backend.MeanAxis(permutedBuffer, squeezedBuffer, squeezedSize, spatialSize);
+        var squeezedGpu = GpuTensorHelper.UploadToGpu<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Excitation
+        var fc1Type = GetFirstActivationType();
+        var fc1Output = gpuEngine.FusedLinearGpu(squeezedGpu, weights1T, _bias1, fc1Type);
+
+        var fc2Type = GetSecondActivationType();
+        var excitation = gpuEngine.FusedLinearGpu(fc1Output, weights2T, _bias2, fc2Type);
+
+        // Scale: multiply [B, C, spatialSize] by [B, C]
+        var scaledBuffer = backend.AllocateBuffer(totalSize);
+        backend.BroadcastMultiplyFirstAxis(permutedBuffer, excitation.Buffer, scaledBuffer, batchSize * channels, spatialSize);
+
+        // Permute back to [B, spatialSize, C] then reshape to original
+        var outputBuffer = backend.AllocateBuffer(totalSize);
+        backend.Permute(scaledBuffer, outputBuffer, [batchSize, channels, spatialSize], [0, 2, 1]);
+
+        // Cleanup
+        permutedBuffer.Dispose();
+        scaledBuffer.Dispose();
+
+        // Cache
+        if (IsTrainingMode)
+        {
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
+        }
+
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Gets the FusedActivationType corresponding to the first activation function.
+    /// </summary>
+    private FusedActivationType GetFirstActivationType()
+    {
+        if (_firstActivation is ReLUActivation<T> || _firstVectorActivation is ReLUActivation<T>)
+            return FusedActivationType.ReLU;
+        if (_firstActivation is TanhActivation<T> || _firstVectorActivation is TanhActivation<T>)
+            return FusedActivationType.Tanh;
+        if (_firstActivation is SigmoidActivation<T> || _firstVectorActivation is SigmoidActivation<T>)
+            return FusedActivationType.Sigmoid;
+        if (_firstActivation is GELUActivation<T> || _firstVectorActivation is GELUActivation<T>)
+            return FusedActivationType.GELU;
+        // Default to ReLU for SE blocks
+        return FusedActivationType.ReLU;
+    }
+
+    /// <summary>
+    /// Gets the FusedActivationType corresponding to the second activation function.
+    /// </summary>
+    private FusedActivationType GetSecondActivationType()
+    {
+        if (_secondActivation is SigmoidActivation<T> || _secondVectorActivation is SigmoidActivation<T>)
+            return FusedActivationType.Sigmoid;
+        if (_secondActivation is TanhActivation<T> || _secondVectorActivation is TanhActivation<T>)
+            return FusedActivationType.Tanh;
+        if (_secondActivation is ReLUActivation<T> || _secondVectorActivation is ReLUActivation<T>)
+            return FusedActivationType.ReLU;
+        if (_secondActivation is GELUActivation<T> || _secondVectorActivation is GELUActivation<T>)
+            return FusedActivationType.GELU;
+        // Default to Sigmoid for SE blocks
+        return FusedActivationType.Sigmoid;
+    }
+
+    /// <summary>
+    /// Applies the appropriate activation function to the input tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to apply the activation to.</param>
+    /// <param name="isFirstActivation">Indicates whether to use the first or second activation function.</param>
+    /// <returns>The tensor after applying the activation function.</returns>
+    private Tensor<T> ApplyTensorActivation(Tensor<T> input, bool isFirstActivation)
+    {
+        if (isFirstActivation)
+        {
+            if (_firstVectorActivation != null) return _firstVectorActivation.Activate(input);
+            if (_firstActivation != null) return _firstActivation.Activate(input);
+        }
+        else
+        {
+            if (_secondVectorActivation != null) return _secondVectorActivation.Activate(input);
+            if (_secondActivation != null) return _secondActivation.Activate(input);
+        }
+
+        // If no activation function is set, return the input as is
+        return input;
+    }
+
+    /// <summary>
+    /// Applies the derivative of the activation function for backpropagation.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="isFirstActivation">Indicates whether to use the first or second activation function.</param>
+    /// <returns>The tensor with derivatives applied.</returns>
+    private Tensor<T> ApplyTensorActivationDerivative(Tensor<T> input, bool isFirstActivation)
+    {
+        int rows = input.Shape[0];
+        int cols = input.Shape[1];
+        var result = TensorAllocator.Rent<T>(input._shape);
+
+        if (isFirstActivation)
+        {
+            if (_firstVectorActivation != null)
+            {
+                for (int i = 0; i < rows; i++)
+                {
+                    var row = new Vector<T>(cols);
+                    for (int j = 0; j < cols; j++)
+                        row[j] = input[i, j];
+                    var gradMatrix = _firstVectorActivation.Derivative(row);
+                    for (int j = 0; j < cols; j++)
+                        result[i, j] = gradMatrix[j, j]; // Diagonal element
+                }
+                return result;
+            }
+            else if (_firstActivation != null)
+            {
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        result[i, j] = _firstActivation.Derivative(input[i, j]);
+                    }
+                }
+                return result;
+            }
+        }
+        else
+        {
+            if (_secondVectorActivation != null)
+            {
+                for (int i = 0; i < rows; i++)
+                {
+                    var row = new Vector<T>(cols);
+                    for (int j = 0; j < cols; j++)
+                        row[j] = input[i, j];
+                    var gradMatrix = _secondVectorActivation.Derivative(row);
+                    for (int j = 0; j < cols; j++)
+                        result[i, j] = gradMatrix[j, j]; // Diagonal element
+                }
+                return result;
+            }
+            else if (_secondActivation != null)
+            {
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        result[i, j] = _secondActivation.Derivative(input[i, j]);
+                    }
+                }
+                return result;
+            }
+        }
+
+        // If no activation function, derivative is 1
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                result[i, j] = NumOps.One;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Updates the layer's parameters using the calculated gradients and the specified learning rate.
+    /// </summary>
+    /// <param name="learningRate">The learning rate that controls the size of the parameter updates.</param>
+    /// <exception cref="InvalidOperationException">Thrown when trying to update parameters before calculating gradients.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates the weights and biases of the layer based on the gradients calculated during the backward pass.
+    /// The learning rate controls the size of the updates, with larger values leading to faster but potentially less stable learning.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the layer's weights and biases to improve performance.
+    /// 
+    /// During training:
+    /// - The backward pass calculates how each parameter should change to reduce errors
+    /// - This method applies those changes to the actual parameters
+    /// - The learning rate controls how big each adjustment is
+    /// 
+    /// Think of it like learning to ride a bike:
+    /// - If you make very small adjustments (small learning rate), you learn slowly but steadily
+    /// - If you make large adjustments (large learning rate), you might learn faster but risk overcorrecting
+    /// 
+    /// This process of gradual adjustment is how neural networks "learn" from examples.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_weights1Gradient == null || _bias1Gradient == null || _weights2Gradient == null || _bias2Gradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        var w1Update = Engine.TensorMultiplyScalar(_weights1Gradient, learningRate);
+        var b1Update = Engine.TensorMultiplyScalar(_bias1Gradient, learningRate);
+        var w2Update = Engine.TensorMultiplyScalar(_weights2Gradient, learningRate);
+        var b2Update = Engine.TensorMultiplyScalar(_bias2Gradient, learningRate);
+
+        _weights1 = Engine.TensorSubtract(_weights1, w1Update);
+        _bias1 = Engine.TensorSubtract(_bias1, b1Update);
+        _weights2 = Engine.TensorSubtract(_weights2, w2Update);
+        _bias2 = Engine.TensorSubtract(_bias2, b2Update);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters (weights and biases) of the layer and combines them into a single vector.
+    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
+    /// 
+    /// The parameters:
+    /// - Are the numbers that the neural network learns during training
+    /// - Include all weights and biases from both fully connected layers
+    /// - Are combined into a single long list (vector)
+    /// 
+    /// This is useful for:
+    /// - Saving the model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques that need access to all parameters
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Calculate total number of parameters
+        int totalParams = _weights1.Shape[0] * _weights1.Shape[1] +
+                          _bias1.Shape[0] +
+                          _weights2.Shape[0] * _weights2.Shape[1] +
+                          _bias2.Shape[0];
+
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+
+        // Copy weights1
+        for (int i = 0; i < _weights1.Shape[0]; i++)
+        {
+            for (int j = 0; j < _weights1.Shape[1]; j++)
+            {
+                parameters[index++] = _weights1[i, j];
+            }
+        }
+
+        // Copy bias1
+        for (int i = 0; i < _bias1.Shape[0]; i++)
+        {
+            parameters[index++] = _bias1[i];
+        }
+
+        // Copy weights2
+        for (int i = 0; i < _weights2.Shape[0]; i++)
+        {
+            for (int j = 0; j < _weights2.Shape[1]; j++)
+            {
+                parameters[index++] = _weights2[i, j];
+            }
+        }
+
+        // Copy bias2
+        for (int i = 0; i < _bias2.Shape[0]; i++)
+        {
+            parameters[index++] = _bias2[i];
+        }
+
+        return parameters;
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the layer from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets the trainable parameters (weights and biases) of the layer from a single vector.
+    /// This is useful for loading saved model weights or for implementing optimization algorithms that operate on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with the correct length
+    /// - The values are copied back into the layer's weights and biases
+    /// 
+    /// This is useful for:
+    /// - Loading a previously saved model
+    /// - Transferring parameters from another model
+    /// - Testing different parameter values
+    /// 
+    /// An error is thrown if the input vector doesn't have the expected number of parameters.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gW1 = _weights1Gradient != null
+            ? (_weights1Gradient is not null ? Vector<T>.FromMemory(_weights1Gradient.Data) : new Vector<T>(0))
+            : new Vector<T>(_weights1.Length);
+        var gB1 = _bias1Gradient != null
+            ? (_bias1Gradient is not null ? Vector<T>.FromMemory(_bias1Gradient.Data) : new Vector<T>(0))
+            : new Vector<T>(_bias1.Length);
+        var gW2 = _weights2Gradient != null
+            ? (_weights2Gradient is not null ? Vector<T>.FromMemory(_weights2Gradient.Data) : new Vector<T>(0))
+            : new Vector<T>(_weights2.Length);
+        var gB2 = _bias2Gradient != null
+            ? (_bias2Gradient is not null ? Vector<T>.FromMemory(_bias2Gradient.Data) : new Vector<T>(0))
+            : new Vector<T>(_bias2.Length);
+
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(gW1, gB1),
+            Vector<T>.Concatenate(gW2, gB2));
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int totalParams = _weights1.Shape[0] * _weights1.Shape[1] +
+                          _bias1.Shape[0] +
+                          _weights2.Shape[0] * _weights2.Shape[1] +
+                          _bias2.Shape[0];
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+
+        int index = 0;
+
+        // Set weights1
+        for (int i = 0; i < _weights1.Shape[0]; i++)
+        {
+            for (int j = 0; j < _weights1.Shape[1]; j++)
+            {
+                _weights1[i, j] = parameters[index++];
+            }
+        }
+
+        // Set bias1
+        for (int i = 0; i < _bias1.Shape[0]; i++)
+        {
+            _bias1[i] = parameters[index++];
+        }
+
+        // Set weights2
+        for (int i = 0; i < _weights2.Shape[0]; i++)
+        {
+            for (int j = 0; j < _weights2.Shape[1]; j++)
+            {
+                _weights2[i, j] = parameters[index++];
+            }
+        }
+
+        // Set bias2
+        for (int i = 0; i < _bias2.Shape[0]; i++)
+        {
+            _bias2[i] = parameters[index++];
+        }
+    }
+
+    /// <summary>
+    /// Resets the internal state of the Squeeze-and-Excitation layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the Squeeze-and-Excitation layer, including the cached inputs and outputs
+    /// from the forward pass and the gradients calculated during the backward pass. This is useful when starting to process
+    /// a new input after training or when implementing stateful networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    ///
+    /// When resetting the state:
+    /// - Stored inputs and outputs are cleared
+    /// - Calculated gradients are cleared
+    /// - The layer forgets any information from previous inputs
+    ///
+    /// This is important for:
+    /// - Processing a new, unrelated input
+    /// - Starting a new training epoch
+    /// - Preventing information from one input affecting another
+    ///
+    /// Think of it like wiping a whiteboard clean before starting a new problem.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _lastSqueezed = null;
+        _lastFc1Biased = null;
+        _lastFc1Activated = null;
+        _lastFc2Biased = null;
+        _weights1Gradient = null;
+        _bias1Gradient = null;
+        _weights2Gradient = null;
+        _bias2Gradient = null;
+        _lastExcitationWeights = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer based on channel attention regularization.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes a channel attention regularization loss. In a full implementation, this would encourage
+    /// balanced channel attention by penalizing extreme attention values (all attention on one channel or uniform
+    /// attention across all channels). The regularization can use L2 norm or entropy-based measures.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates a penalty to encourage balanced feature importance.
+    ///
+    /// Channel attention regularization:
+    /// - Prevents the layer from relying too heavily on specific channels
+    /// - Encourages the network to use information from multiple features
+    /// - Helps create more robust and generalizable models
+    ///
+    /// Why this is useful:
+    /// - In complex tasks, multiple types of features are usually important
+    /// - Over-relying on one type of feature can lead to poor generalization
+    /// - Balanced attention helps the network learn richer representations
+    ///
+    /// Example: In image classification, instead of only looking at edges (one channel),
+    /// the network should also consider colors, textures, and shapes (other channels).
+    ///
+    /// <b>Note:</b> This is a placeholder implementation. For full functionality, the layer would need to
+    /// cache the excitation weights (channel attention scores) during the forward pass. The formula would
+    /// compute a regularization term based on these attention weights, such as:
+    /// - L2 regularization: L = ||excitation||²
+    /// - Entropy regularization: L = -Σ(p * log(p)) for normalized excitation weights
+    /// - Variance penalty: encouraging variance in attention across channels
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastExcitationWeights == null)
+        {
+            _lastChannelAttentionLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute L2 regularization on excitation weights
+        // This penalizes large excitation values and encourages sparse channel attention
+        T attentionLoss = NumOps.Zero;
+        int batchSize = _lastExcitationWeights.Shape[0];
+        int channels = _lastExcitationWeights.Shape[1];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                T weight = _lastExcitationWeights[b, c];
+                // L2 regularization: sum of squared weights
+                attentionLoss = NumOps.Add(attentionLoss, NumOps.Multiply(weight, weight));
+            }
+        }
+
+        // Average across batch and channels
+        int totalElements = batchSize * channels;
+        attentionLoss = NumOps.Divide(attentionLoss, NumOps.FromDouble(totalElements));
+
+        // Store unweighted loss for diagnostics
+        _lastChannelAttentionLoss = attentionLoss;
+
+        // Return weighted auxiliary loss
+        return NumOps.Multiply(AuxiliaryLossWeight, attentionLoss);
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total channel attention loss, the weight applied to it, and whether auxiliary loss is enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalChannelAttentionLoss: The computed penalty for imbalanced channel attention
+    /// - ChannelAttentionWeight: How much this penalty affects the overall training
+    /// - UseChannelAttention: Whether this penalty is currently enabled
+    ///
+    /// You can use this information to:
+    /// - Monitor if channel attention is becoming more balanced over time
+    /// - Debug training issues related to feature selection
+    /// - Understand which features the network prioritizes
+    ///
+    /// Example: If TotalChannelAttentionLoss is high, it might indicate that the network is over-relying
+    /// on specific channels, which could be a sign of overfitting or poor feature diversity.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalChannelAttentionLoss", System.Convert.ToString(_lastChannelAttentionLoss) ?? "0" },
+            { "ChannelAttentionWeight", System.Convert.ToString(AuxiliaryLossWeight) ?? "0.01" },
+            { "UseChannelAttention", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weights1Gradient = null;
+        _bias1Gradient = null;
+        _weights2Gradient = null;
+        _bias2Gradient = null;
+    }
+
+}

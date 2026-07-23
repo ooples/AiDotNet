@@ -1,0 +1,2193 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Implements a Mixture-of-Experts (MoE) layer that routes inputs through multiple expert networks.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <remarks>
+/// <para>
+/// A Mixture-of-Experts layer contains multiple expert networks and a gating/routing network.
+/// For each input, the router determines how much weight to give each expert's output,
+/// allowing the model to specialize different experts for different types of inputs.
+/// This architecture enables models with very high capacity while remaining computationally efficient
+/// by activating only a subset of parameters per input.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Think of a Mixture-of-Experts as a team of specialists working together.
+///
+/// How it works:
+/// - You have multiple "experts" (specialized neural networks)
+/// - A "router" (gating network) decides which experts should handle each input
+/// - Each expert processes the input independently
+/// - The final output is a weighted combination of the experts' outputs
+///
+/// Why use MoE:
+/// - Scalability: Add more experts to increase model capacity without proportionally increasing computation
+/// - Specialization: Different experts learn to handle different types of inputs
+/// - Efficiency: Only activate the most relevant experts for each input (sparse MoE)
+///
+/// Real-world analogy:
+/// Imagine you're running a hospital with specialists:
+/// - A cardiologist (expert 1) handles heart problems
+/// - A neurologist (expert 2) handles brain issues
+/// - A pediatrician (expert 3) handles children's health
+/// - A triage nurse (router) directs patients to the right specialist(s)
+///
+/// The router learns to send cardiac patients to the cardiologist, neurological cases to the
+/// neurologist, etc. This is more efficient than having one doctor handle everything, and allows
+/// each specialist to become highly skilled in their area.
+/// </para>
+/// <para>
+/// <b>Key Features:</b>
+/// <list type="bullet">
+/// <item><description>Support for any number of experts</description></item>
+/// <item><description>Learned routing via a dense gating network</description></item>
+/// <item><description>Softmax routing: All experts contribute with learned weights</description></item>
+/// <item><description>Top-K routing: Only the top K experts are activated per input</description></item>
+/// <item><description>Load balancing: Optional auxiliary loss to encourage balanced expert usage</description></item>
+/// </list>
+/// </para>
+/// </remarks>
+[LayerCategory(LayerCategory.MixtureOfExperts)]
+[LayerTask(LayerTask.Routing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4")]
+public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+{
+    /// <summary>
+    /// The collection of expert networks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each expert is an independent neural network that can process inputs. Experts may have
+    /// different architectures or the same architecture with different learned parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the list of specialist networks.
+    ///
+    /// Each expert:
+    /// - Has its own weights and biases
+    /// - Can learn to specialize in different patterns
+    /// - Processes inputs independently from other experts
+    ///
+    /// You might have 4, 8, 16, or even hundreds of experts depending on your needs.
+    /// More experts = more capacity, but also more memory and computation.
+    /// </para>
+    /// </remarks>
+    private readonly List<ILayer<T>> _experts;
+
+    /// <summary>
+    /// The router/gating network that determines how to weight each expert's output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The router is typically a dense layer that takes the input and produces a score for each expert.
+    /// These scores are then converted to weights (probabilities) using softmax, determining how much
+    /// each expert contributes to the final output.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the "manager" that decides which experts should handle each input.
+    ///
+    /// The router:
+    /// - Looks at each input
+    /// - Produces a score for each expert
+    /// - Scores are converted to weights (probabilities that sum to 1)
+    /// - Higher weight = that expert's output matters more for this input
+    ///
+    /// During training, the router learns patterns like:
+    /// - "If the input has property X, send it mostly to expert 3"
+    /// - "If the input looks like Y, use experts 1 and 5 equally"
+    /// - "For input type Z, expert 2 is the best choice"
+    /// </para>
+    /// </remarks>
+    private readonly ILayer<T> _router;
+
+    /// <summary>
+    /// The number of top experts to activate for each input (0 means use all experts).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When TopK is 0, all experts process every input (soft routing).
+    /// When TopK > 0, only the K experts with the highest routing scores process each input (sparse routing).
+    /// Sparse routing significantly reduces computation while maintaining model quality.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how many experts are used for each input.
+    ///
+    /// TopK = 0 (all experts):
+    /// - Every expert processes every input
+    /// - More computation but potentially more accurate
+    /// - Good for smaller models or when you need maximum quality
+    ///
+    /// TopK = 2 (sparse, use top 2):
+    /// - Only the 2 best experts for each input are activated
+    /// - Much faster and more memory efficient
+    /// - Good for large models where you can't afford to run all experts
+    ///
+    /// For example, with 8 experts and TopK=2:
+    /// - The router scores all 8 experts
+    /// - Only the top 2 are actually used
+    /// - The other 6 are skipped for that input
+    /// - This means 75% less computation!
+    /// </para>
+    /// </remarks>
+    private readonly int _topK;
+
+    /// <summary>
+    /// Cached input from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This cached value is used during backpropagation to compute gradients for the router.
+    /// </para>
+    /// <para><b>For Beginners:</b> Stored memory of the last input, needed for learning.
+    ///
+    /// Why cache this:
+    /// - During forward pass, we process the input
+    /// - During backward pass, we need to remember what we processed
+    /// - This helps calculate how to improve the router and experts
+    ///
+    /// Think of it like taking notes during a lecture - you can't learn from the lecture
+    /// later if you don't remember what was said.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Tracks which experts were active during the most recent forward pass,
+    /// so that only those experts have their parameters updated.
+    /// </summary>
+    private HashSet<int> _activeExpertsDuringBackward = [];
+
+    /// <summary>
+    /// Cached routing weights from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the normalized probability weights (after softmax) that determined how much
+    /// each expert contributed to the output. Shape: [batch_size, num_experts].
+    /// </para>
+    /// <para><b>For Beginners:</b> Stored memory of which experts were used and how much.
+    ///
+    /// For each input in the batch, we remember:
+    /// - How much weight expert 1 had
+    /// - How much weight expert 2 had
+    /// - And so on for all experts
+    ///
+    /// This helps us learn:
+    /// - If routing decisions were good or bad
+    /// - How to adjust the router to make better decisions
+    /// - Whether experts are being used balanced or if some are overloaded
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastRoutingWeights;
+
+    /// <summary>
+    /// Cached expert outputs from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This stores the output from each expert before they are combined. During backpropagation,
+    /// these are used to compute gradients for both the router and the experts themselves.
+    /// </para>
+    /// <para><b>For Beginners:</b> Stored memory of what each expert predicted.
+    ///
+    /// We save each expert's output so we can:
+    /// - Calculate how much each expert contributed to any errors
+    /// - Adjust the router if it chose the wrong experts
+    /// - Adjust each expert to improve its predictions
+    ///
+    /// It's like keeping a record of each team member's contribution to a group project,
+    /// so you can give appropriate feedback to each person.
+    /// </para>
+    /// </remarks>
+    private List<Tensor<T>>? _lastExpertOutputs;
+
+    /// <summary>
+    /// Cached combined output before activation from the most recent forward pass.
+    /// </summary>
+    private Tensor<T>? _lastPreActivation;
+
+
+    /// <summary>
+    /// Cached routing logits (before softmax) from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the raw scores from the router before applying softmax. They're needed for
+    /// computing the gradient of softmax during backpropagation.
+    /// </para>
+    /// <para><b>For Beginners:</b> The router's raw scores before normalization.
+    ///
+    /// The router produces raw scores (logits), then we convert them to probabilities (weights).
+    /// We save the raw scores because:
+    /// - The conversion process (softmax) is nonlinear
+    /// - To compute gradients correctly, we need the pre-conversion values
+    /// - This is a technical requirement for proper backpropagation through softmax
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastRoutingLogits;
+
+    /// <summary>
+    /// Cached top-K indices for sparse routing from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When using Top-K routing, this stores which K experts were selected for each input.
+    /// Shape: [batch_size, K]. Null when using all experts (TopK = 0).
+    /// </para>
+    /// <para><b>For Beginners:</b> A record of which experts were actually used for each input.
+    ///
+    /// With sparse routing (TopK > 0), we save which experts were chosen:
+    /// - Input 1 used experts [2, 5]
+    /// - Input 2 used experts [1, 3]
+    /// - And so on
+    ///
+    /// This is important because:
+    /// - Only activated experts need to compute gradients
+    /// - We need to know which experts to update during learning
+    /// - It helps track if certain experts are being used too much or too little
+    /// </para>
+    /// </remarks>
+    private int[,]? _lastTopKIndices;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Indicates whether to compute and use the auxiliary load balancing loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes a load balancing loss that encourages balanced expert usage.
+    /// This is typically enabled during training but disabled during inference.
+    /// </para>
+    /// <para><b>For Beginners:</b> A switch to turn load balancing on or off.
+    ///
+    /// Load balancing helps ensure all experts are used roughly equally:
+    /// - Prevents some experts from being overused
+    /// - Prevents other experts from being underused
+    /// - Leads to better overall model performance
+    ///
+    /// Usually you want this ON during training and OFF during inference/testing.
+    /// </para>
+    /// </remarks>
+    private bool _useAuxiliaryLoss;
+
+    /// <summary>
+    /// The weight for the auxiliary load balancing loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This coefficient controls how much the load balancing objective influences training.
+    /// Typical values range from 0.01 to 0.1.
+    /// </para>
+    /// <para><b>For Beginners:</b> Controls how important load balancing is.
+    ///
+    /// Typical values:
+    /// - 0.01: Gentle encouragement for balance
+    /// - 0.05: Moderate encouragement (recommended starting point)
+    /// - 0.1: Strong encouragement for balance
+    ///
+    /// Higher values make experts more balanced but might reduce accuracy slightly.
+    /// Lower values prioritize accuracy over balance.
+    /// </para>
+    /// </remarks>
+    private T _auxiliaryLossWeight;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if the router or any expert supports training; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// The MoE layer supports training if either its router or any of its experts have trainable parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if the MoE layer can learn from data.
+    ///
+    /// The layer can learn if:
+    /// - The router can learn better routing decisions
+    /// - Any expert can improve its predictions
+    ///
+    /// In almost all practical cases, this will be true since both the router and experts
+    /// typically have trainable parameters.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _router.SupportsTraining || _experts.Any(e => e.SupportsTraining);
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the layer.
+    /// </summary>
+    /// <value>
+    /// The sum of the router's parameters and all experts' parameters.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This includes all parameters from the router and all experts combined. This gives you the
+    /// total model capacity and memory requirement for this layer.
+    /// </para>
+    /// <para><b>For Beginners:</b> The total count of all adjustable numbers in this layer.
+    ///
+    /// This includes:
+    /// - All weights and biases in the router
+    /// - All weights and biases in all experts
+    ///
+    /// For example, with:
+    /// - Router: 1000 parameters
+    /// - 8 experts with 5000 parameters each: 40,000 parameters
+    /// - Total: 41,000 parameters
+    ///
+    /// More parameters = more capacity to learn, but also more memory needed.
+    /// MoE shines because you can have huge capacity (many experts) but still only activate
+    /// a fraction of them per input with sparse routing.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount => _router.ParameterCount + (int)_experts.Sum(e => e.ParameterCount);
+
+    /// <summary>
+    /// Gets the number of experts in this MoE layer.
+    /// </summary>
+    /// <value>
+    /// The count of expert networks.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This is the total number of expert networks, regardless of how many are activated per input.
+    /// </para>
+    /// <para><b>For Beginners:</b> How many specialist networks are available.
+    ///
+    /// Common configurations:
+    /// - Small models: 4-8 experts
+    /// - Medium models: 8-16 experts
+    /// - Large models: 32-128+ experts
+    ///
+    /// The number of experts affects:
+    /// - Model capacity (more experts = more capacity)
+    /// - Memory usage (more experts = more memory)
+    /// - Specialization potential (more experts = more specialized roles)
+    /// </para>
+    /// </remarks>
+    public int NumExperts => _experts.Count;
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumExperts"] = _experts.Count.ToString();
+        metadata["TopK"] = _topK.ToString();
+        return metadata;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MixtureOfExpertsLayer{T}"/> class.
+    /// </summary>
+    /// <param name="experts">The list of expert networks.</param>
+    /// <param name="router">The routing/gating network.</param>
+    /// <param name="inputShape">The shape of input tensors.</param>
+    /// <param name="outputShape">The shape of output tensors.</param>
+    /// <param name="topK">Number of experts to activate per input (0 = use all experts). Default is 0.</param>
+    /// <param name="activationFunction">Optional activation function to apply after combining expert outputs.</param>
+    /// <exception cref="ArgumentException">Thrown when the experts list is empty or when topK is invalid.</exception>
+    /// <remarks>
+    /// <para>
+    /// Creates a Mixture-of-Experts layer with the specified experts and router. All experts should
+    /// have compatible input/output shapes. The router should output a tensor with one value per expert.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new MoE layer with your chosen experts and router.
+    ///
+    /// To create an MoE layer:
+    /// 1. Create your expert networks (can be any ILayer&lt;T&gt;, often Expert&lt;T&gt; or DenseLayer&lt;T&gt;)
+    /// 2. Create a router (typically a DenseLayer that outputs numExperts values)
+    /// 3. Specify input/output shapes
+    /// 4. Optionally set topK for sparse routing
+    ///
+    /// Example - MoE with 4 experts and Top-2 routing:
+    /// <code>
+    /// // Create 4 expert networks
+    /// var experts = new List&lt;ILayer&lt;float&gt;&gt;();
+    /// for (int i = 0; i &lt; 4; i++)
+    /// {
+    ///     var expertLayers = new List&lt;ILayer&lt;float&gt;&gt;
+    ///     {
+    ///         new DenseLayer&lt;float&gt;(128, 256, new ReLUActivation&lt;float&gt;()),
+    ///         new DenseLayer&lt;float&gt;(256, 128, new ReLUActivation&lt;float&gt;())
+    ///     };
+    ///     experts.Add(new ExpertLayer&lt;float&gt;(expertLayers, new[] { 128 }, new[] { 128 }));
+    /// }
+    ///
+    /// // Create router that outputs 4 scores (one per expert)
+    /// var router = new DenseLayer&lt;float&gt;(128, 4);
+    ///
+    /// // Create MoE layer with Top-2 routing
+    /// var moe = new MixtureOfExpertsLayer&lt;float&gt;(
+    ///     experts, router,
+    ///     new[] { 128 }, new[] { 128 },
+    ///     topK: 2
+    /// );
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public MixtureOfExpertsLayer(
+        List<ILayer<T>> experts,
+        ILayer<T> router,
+        int[] inputShape,
+        int[] outputShape,
+        int topK = 0,
+        IActivationFunction<T>? activationFunction = null,
+        bool useLoadBalancing = false,
+        T? loadBalancingWeight = default)
+        : base(inputShape, outputShape, activationFunction ?? new IdentityActivation<T>())
+    {
+        if (experts == null || experts.Count == 0)
+        {
+            throw new ArgumentException("Must have at least one expert.", nameof(experts));
+        }
+
+        if (router == null)
+        {
+            throw new ArgumentNullException(nameof(router), "Router cannot be null.");
+        }
+
+        if (topK < 0 || topK > experts.Count)
+        {
+            throw new ArgumentException(
+                $"TopK must be between 0 and {experts.Count} (number of experts). Got {topK}.",
+                nameof(topK));
+        }
+
+        _experts = experts;
+        _router = router;
+        _topK = topK;
+        _useAuxiliaryLoss = useLoadBalancing;
+        _auxiliaryLossWeight = loadBalancingWeight ?? NumOps.FromDouble(0.01); // Default to 0.01
+
+        RegisterSubLayer(_router);
+        foreach (var expert in _experts)
+        {
+            RegisterSubLayer(expert);
+        }
+
+        // Eagerly resolve lazy sub-layers using the known input shape so
+        // ParameterCount / GetParameters work before the first Forward.
+        bool inputResolved = inputShape.Length > 0 && inputShape.All(d => d > 0);
+        if (inputResolved)
+        {
+            ResolveSubLayer(_router, inputShape);
+            foreach (var expert in _experts)
+            {
+                ResolveSubLayer(expert, inputShape);
+            }
+        }
+    }
+
+    private static void ResolveSubLayer(ILayer<T> layer, int[] inputShape)
+    {
+        if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+        {
+            lb.ResolveFromShape(inputShape);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// MoE supports two construction patterns:
+    /// (1) <b>Eager:</b> caller passed positive <c>inputShape</c>; ctor
+    /// already eagerly resolved router and experts via <c>ResolveSubLayer</c>
+    /// and <c>IsShapeResolved</c> is true at construction time.
+    /// (2) <b>Lazy:</b> caller passed <c>[-1]</c> or any shape containing
+    /// a negative dim; sub-layers stayed unresolved. On first forward we
+    /// derive the per-sample shape (input shape minus the leading batch
+    /// axis) and propagate it to every sub-layer.
+    ///
+    /// <para>The full per-sample shape is preserved — vanilla MoE may use
+    /// a feature-vector input but the layer's existing <see cref="Forward"/>
+    /// path explicitly supports any-rank tensors, so a Switch
+    /// Transformer / per-token MoE / multi-axis use case must see the
+    /// same shape resolution that the eager constructor delivered. Pre-
+    /// fix this method collapsed every input to <c>[featureDim]</c>,
+    /// which silently broke any expert / router that expected
+    /// multi-axis per-sample inputs.</para>
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input._shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"MixtureOfExpertsLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        // Strip the leading batch axis when present — sub-layers are
+        // configured against per-sample shapes (matching the ctor's
+        // ResolveSubLayer contract where the caller passed inputShape
+        // without batch).
+        int[] resolvedInputShape;
+        if (rank == 1)
+        {
+            // [features] — no batch axis; whole shape is per-sample.
+            resolvedInputShape = new int[] { input._shape[0] };
+        }
+        else
+        {
+            resolvedInputShape = new int[rank - 1];
+            for (int i = 0; i < resolvedInputShape.Length; i++)
+                resolvedInputShape[i] = input._shape[i + 1];
+        }
+
+        for (int i = 0; i < resolvedInputShape.Length; i++)
+        {
+            if (resolvedInputShape[i] <= 0)
+                throw new ArgumentException(
+                    $"MixtureOfExpertsLayer's per-sample shape axis {i} must be positive; " +
+                    $"got {resolvedInputShape[i]} from input shape.", nameof(input));
+        }
+
+        ResolveSubLayer(_router, resolvedInputShape);
+        foreach (var expert in _experts)
+        {
+            ResolveSubLayer(expert, resolvedInputShape);
+        }
+
+        // Output shape inherits from the first expert's resolved output
+        // (all experts share the same output shape by MoE contract). Use
+        // the ILayer<T> contract directly — GetOutputShape is on the
+        // interface, so any ILayer<T> impl can report its resolved
+        // output shape, not just LayerBase<T> subclasses. Falling back
+        // to the constructor's OutputShape was unnecessary since
+        // ILayer<T> mandates GetOutputShape; the previous LayerBase
+        // typecheck rejected legitimate ILayer<T> impls.
+        int[] resolvedOutputShape = _experts[0].GetOutputShape();
+
+        ResolveShapes(resolvedInputShape, resolvedOutputShape);
+    }
+
+    /// <summary>
+    /// Performs the forward pass through the MoE layer.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>The output tensor after routing through experts and combining their outputs.</returns>
+    /// <remarks>
+    /// <para>
+    /// The forward pass:
+    /// 1. Routes the input through the gating network to get expert scores
+    /// 2. Applies softmax to convert scores to routing probabilities
+    /// 3. Optionally selects only top-K experts (sparse routing)
+    /// 4. Passes input through selected experts
+    /// 5. Combines expert outputs using routing weights
+    /// 6. Applies the layer's activation function
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where the MoE layer processes input data.
+    ///
+    /// Step-by-step process:
+    ///
+    /// 1. <b>Routing:</b> The router looks at the input and scores each expert
+    ///    - Input: data to process
+    ///    - Output: a score for each expert (raw numbers)
+    ///
+    /// 2. <b>Normalization:</b> Convert scores to probabilities using softmax
+    ///    - Scores: might be [2.1, -0.5, 1.3, 0.8]
+    ///    - Weights: becomes [0.55, 0.04, 0.26, 0.15] (sum = 1.0)
+    ///
+    /// 3. <b>Selection (if using Top-K):</b> Keep only the best K experts
+    ///    - With Top-2, keep experts with weights 0.55 and 0.26
+    ///    - Set others to 0 and renormalize: [0.68, 0, 0.32, 0]
+    ///
+    /// 4. <b>Expert Processing:</b> Run input through selected experts
+    ///    - Expert 1 produces output A
+    ///    - Expert 3 produces output B
+    ///    - Others are skipped (if using Top-K)
+    ///
+    /// 5. <b>Combination:</b> Mix expert outputs using weights
+    ///    - Output = 0.68 * A + 0.32 * B
+    ///    - This is the weighted average of expert predictions
+    ///
+    /// 6. <b>Activation:</b> Apply final transformation
+    ///    - Usually identity (no change) or ReLU
+    ///
+    /// The result is a smart combination of expert predictions, where each expert
+    /// contributes based on its relevance to the specific input.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Lazy-shape support: if the layer (or its sub-layers) wasn't
+        // eagerly resolved at construction (caller passed [-1] or
+        // shape with negative dims), resolve from input.Shape now.
+        // OnFirstForward propagates the resolved shape into router +
+        // experts, then ResolveShapes flips IsShapeResolved on the
+        // outer layer.
+        if (!IsShapeResolved) OnFirstForward(input);
+
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 2D for processing
+        Tensor<T> input2D;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            // 1D: [features] -> add batch dim (tape-tracked reshape)
+            batchSize = 1;
+            int featureSize = input.Shape[0];
+            input2D = Engine.Reshape(input, new[] { 1, featureSize });
+        }
+        else if (rank == 2)
+        {
+            // Standard 2D: [batch, features]
+            batchSize = input.Shape[0];
+            input2D = input;
+        }
+        else
+        {
+            // Higher-rank: collapse all leading dims into batch (tape-tracked reshape)
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            int featureSize = input.Shape[rank - 1];
+            input2D = Engine.Reshape(input, new[] { flatBatch, featureSize });
+        }
+
+        // Cache input for backward pass
+        _lastInput = ShouldCacheForBackward ? input2D : null; // #1668: skip in inference (arena safety)
+
+        // Step 1: Compute routing scores
+        var routingLogits = _router.Forward(input2D);
+
+        // Per Shazeer et al. 2017 §3.2: Add noisy gating during training only.
+        // H(x) = x·Wg + StandardNormal()·Softplus(x·Wnoise)
+        // During inference, use clean logits for deterministic routing.
+        if (IsTrainingMode)
+        {
+            // Softplus(x) = log(1 + exp(x)) — noise scale
+            var expLogits = Engine.TensorExp(routingLogits);
+            var onePlusExp = Engine.TensorAddScalar(expLogits, NumOps.One);
+            var noiseScale = Engine.TensorLog(onePlusExp);
+
+            // Standard normal noise via Box-Muller
+            var noiseData = new T[routingLogits.Length];
+            var rng = RandomHelper.CreateSeededRandom(42);
+            for (int i = 0; i < noiseData.Length; i++)
+            {
+                double u1 = 1.0 - rng.NextDouble();
+                double u2 = rng.NextDouble();
+                noiseData[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+            }
+            var noise = new Tensor<T>(routingLogits._shape, new Vector<T>(noiseData));
+            routingLogits = Engine.TensorAdd(routingLogits, Engine.TensorMultiply(noise, noiseScale));
+        }
+
+        _lastRoutingLogits = routingLogits;
+
+        // Step 2: Apply softmax to get routing probabilities
+        var routingWeights = ApplySoftmax(routingLogits);
+
+        // Step 3: Apply Top-K selection if enabled
+        if (_topK > 0)
+        {
+            (routingWeights, _lastTopKIndices) = ApplyTopK(routingWeights, _topK);
+        }
+        else
+        {
+            _lastTopKIndices = null;
+        }
+
+        _lastRoutingWeights = routingWeights;
+
+        // Step 4: Get outputs from all experts (or only top-K if sparse)
+        _lastExpertOutputs = new List<Tensor<T>>();
+        _activeExpertsDuringBackward = [];
+
+        if (_topK > 0)
+        {
+            // Sparse: Only compute outputs for top-K experts
+            for (int i = 0; i < _experts.Count; i++)
+            {
+                // Check if this expert is in top-K for any batch item
+                bool isActive = false;
+                for (int b = 0; b < batchSize; b++)
+                {
+                    if (IsExpertActive(b, i))
+                    {
+                        isActive = true;
+                        break;
+                    }
+                }
+
+                if (isActive)
+                {
+                    _lastExpertOutputs.Add(_experts[i].Forward(input2D));
+                    _activeExpertsDuringBackward.Add(i);
+                }
+                else
+                {
+                    // Create a zero tensor for inactive experts
+                    _lastExpertOutputs.Add(new Tensor<T>(new int[] { batchSize }.Concat(OutputShape).ToArray()));
+                }
+            }
+        }
+        else
+        {
+            // Dense: All experts process all inputs
+            for (int i = 0; i < _experts.Count; i++)
+            {
+                _lastExpertOutputs.Add(_experts[i].Forward(input2D));
+                _activeExpertsDuringBackward.Add(i);
+            }
+        }
+
+        // Step 5: Combine expert outputs using routing weights
+        var combinedOutput = CombineExpertOutputs(_lastExpertOutputs, routingWeights);
+        _lastPreActivation = combinedOutput;
+
+        // Step 6: Apply activation function
+        var output = ApplyActivation(combinedOutput);
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 2)
+        {
+            // Output shape: [...leadingDims, outputFeatures]
+            int outputFeatures = output.Shape[1];
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 1] = outputFeatures;
+            output = Engine.Reshape(output, newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            // 1D input -> 1D output (remove batch dim)
+            output = Engine.Reshape(output, new[] { output.Shape[1] });
+        }
+
+        return output;
+    }
+
+
+    /// <summary>
+    /// Updates all trainable parameters using the specified learning rate.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method updates parameters for both the router and all expert networks that support training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This applies all the learned improvements to the router and experts.
+    ///
+    /// After the backward pass calculated how everything should change:
+    /// - The router updates its weights to make better routing decisions
+    /// - Each expert updates its weights to make better predictions
+    /// - The learning rate controls how big these updates are
+    ///
+    /// Learning rate guidelines:
+    /// - Too small: Learning is very slow but stable
+    /// - Too large: Learning is fast but might be unstable
+    /// - Just right: Balances speed and stability (often 0.001 to 0.01)
+    ///
+    /// After calling this method, the MoE layer should perform slightly better than before.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Update router parameters
+        if (_router.SupportsTraining)
+        {
+            _router.UpdateParameters(learningRate);
+        }
+
+        // Update only experts that were active during the last forward/backward pass
+        for (int i = 0; i < _experts.Count; i++)
+        {
+            if (_experts[i].SupportsTraining && _activeExpertsDuringBackward.Contains(i))
+            {
+                _experts[i].UpdateParameters(learningRate);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all parameters from the router and all experts.</returns>
+    /// <remarks>
+    /// <para>
+    /// Parameters are ordered as: [router parameters] [expert1 parameters] [expert2 parameters] ...
+    /// </para>
+    /// <para><b>For Beginners:</b> Collects all learned values into one list.
+    ///
+    /// The returned vector contains:
+    /// - First, all parameters from the router
+    /// - Then, all parameters from expert 1
+    /// - Then, all parameters from expert 2
+    /// - And so on
+    ///
+    /// This is useful for:
+    /// - Saving the entire MoE model to disk
+    /// - Implementing advanced optimization algorithms
+    /// - Analyzing the model's learned parameters
+    /// - Transferring knowledge to another model
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Use Vector<T>.Concatenate for production-grade parameter collection
+        var paramVectors = new List<Vector<T>>();
+
+        // Add router parameters
+        if (_router.ParameterCount > 0)
+        {
+            paramVectors.Add(_router.GetParameters());
+        }
+
+        // Add expert parameters
+        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
+        {
+            paramVectors.Add(expert.GetParameters());
+        }
+
+        return paramVectors.Count > 0 ? Vector<T>.Concatenate(paramVectors.ToArray()) : new Vector<T>(0);
+    }
+
+    /// <summary>
+    /// Sets all trainable parameters from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing parameters for the router and all experts.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameter count doesn't match.</exception>
+    /// <remarks>
+    /// <para>
+    /// Parameters should be in the same order as returned by GetParameters():
+    /// [router parameters] [expert1 parameters] [expert2 parameters] ...
+    /// </para>
+    /// <para><b>For Beginners:</b> Loads previously saved parameters back into the model.
+    ///
+    /// This is the opposite of GetParameters():
+    /// - Takes a vector of all parameters
+    /// - Distributes them to the router and experts
+    /// - Must match the exact format returned by GetParameters()
+    ///
+    /// Use this to:
+    /// - Load a saved model from disk
+    /// - Initialize with pre-trained parameters
+    /// - Implement custom optimization algorithms
+    ///
+    /// If the parameter count doesn't match exactly, an error is thrown to prevent
+    /// accidentally corrupting the model.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradVectors = new List<Vector<T>>();
+
+        if (_router.ParameterCount > 0)
+            gradVectors.Add(_router.GetParameterGradients());
+
+        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
+            gradVectors.Add(expert.GetParameterGradients());
+
+        return gradVectors.Count > 0 ? Vector<T>.Concatenate(gradVectors.ToArray()) : new Vector<T>(0);
+    }
+
+    public override void ClearGradients()
+    {
+        _router.ClearGradients();
+        foreach (var expert in _experts)
+            expert.ClearGradients();
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        // Use Vector.Slice for production-grade parameter distribution
+        int offset = 0;
+
+        // Set router parameters
+        if (_router.ParameterCount > 0)
+        {
+            _router.SetParameters(parameters.Slice(offset, (int)_router.ParameterCount));
+            offset += (int)_router.ParameterCount;
+        }
+
+        // Set expert parameters
+        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
+        {
+            expert.SetParameters(parameters.Slice(offset, (int)expert.ParameterCount));
+            offset += (int)expert.ParameterCount;
+        }
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer, clearing all cached values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This clears cached values from forward/backward passes and resets the state of the router
+    /// and all experts. Call this between training batches or when switching between training and inference.
+    /// </para>
+    /// <para><b>For Beginners:</b> Clears the layer's "short-term memory".
+    ///
+    /// This resets:
+    /// - Cached inputs and outputs
+    /// - Routing weights and decisions
+    /// - Expert activations
+    /// - All temporary values used for learning
+    ///
+    /// When to call this:
+    /// - Between different batches of training data
+    /// - When switching from training to testing mode
+    /// - Before processing a new, unrelated input
+    ///
+    /// This ensures that information from one batch doesn't leak into the next batch,
+    /// which could cause incorrect gradient calculations or predictions.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastRoutingWeights = null;
+        _lastRoutingLogits = null;
+        _lastExpertOutputs = null;
+        _lastPreActivation = null;
+        _lastTopKIndices = null;
+        _originalInputShape = null;
+
+        // Reset router state
+        _router.ResetState();
+
+        // Reset all expert states
+        foreach (var expert in _experts)
+        {
+            expert.ResetState();
+        }
+    }
+
+    /// <summary>
+    /// Creates a deep copy of this MoE layer.
+    /// </summary>
+    /// <returns>A new MixtureOfExpertsLayer with the same configuration and parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// Creates an independent copy of this layer, including the router and all experts.
+    /// Changes to the clone won't affect the original.
+    /// </para>
+    /// <para><b>For Beginners:</b> Makes an identical copy of the entire MoE layer.
+    ///
+    /// The clone includes:
+    /// - A copy of the router
+    /// - Copies of all experts
+    /// - Same configuration (TopK, shapes, etc.)
+    /// - Same learned parameters
+    ///
+    /// Useful for:
+    /// - Creating an ensemble of similar models
+    /// - Experimenting with different training approaches
+    /// - Saving checkpoints during training
+    /// - Implementing certain meta-learning algorithms
+    ///
+    /// The clone is completely independent - training one won't affect the other.
+    /// </para>
+    /// </remarks>
+    public override LayerBase<T> Clone()
+    {
+        // Clone router
+        ILayer<T> clonedRouter = _router;
+        if (_router is LayerBase<T> routerBase)
+        {
+            clonedRouter = (ILayer<T>)routerBase.Clone();
+        }
+
+        // Clone experts
+        var clonedExperts = _experts.Select(e =>
+        {
+            if (e is LayerBase<T> expertBase)
+            {
+                return (ILayer<T>)expertBase.Clone();
+            }
+            return e;
+        }).ToList();
+
+        return new MixtureOfExpertsLayer<T>(
+            clonedExperts,
+            clonedRouter,
+            InputShape,
+            OutputShape,
+            _topK,
+            ScalarActivation,
+            _useAuxiliaryLoss,
+            _auxiliaryLossWeight);
+    }
+
+    #region IAuxiliaryLossLayer Implementation
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to use the auxiliary load balancing loss.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> to compute and apply load balancing loss during training; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes a load balancing loss that encourages balanced expert usage.
+    /// This loss is added to the primary task loss during training to prevent expert imbalance.
+    /// </para>
+    /// <para><b>For Beginners:</b> Turn load balancing on or off.
+    ///
+    /// Enable this during training to ensure all experts are used roughly equally.
+    /// Disable during inference/testing since load balancing is only needed during training.
+    ///
+    /// Benefits of load balancing:
+    /// - Prevents expert collapse (all inputs routed to the same expert)
+    /// - Encourages specialization across different experts
+    /// - Improves overall model quality and generalization
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss
+    {
+        get => _useAuxiliaryLoss;
+        set => _useAuxiliaryLoss = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary load balancing loss.
+    /// </summary>
+    /// <value>
+    /// The coefficient that determines how much the load balancing loss influences training.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This weight is multiplied by the load balancing loss before adding it to the primary loss.
+    /// Typical values range from 0.01 to 0.1. Higher values enforce stronger load balancing.
+    /// </para>
+    /// <para><b>For Beginners:</b> Controls the importance of load balancing.
+    ///
+    /// Recommended starting value: 0.01
+    ///
+    /// Tuning guidelines:
+    /// - If experts are very imbalanced: increase (e.g., 0.05 or 0.1)
+    /// - If primary task accuracy suffers: decrease (e.g., 0.005)
+    /// - Monitor both primary loss and expert usage statistics to find the right balance
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight
+    {
+        get => _auxiliaryLossWeight;
+        set => _auxiliaryLossWeight = value;
+    }
+
+    /// <summary>
+    /// Computes the load balancing auxiliary loss based on expert usage from the last forward pass.
+    /// </summary>
+    /// <returns>The load balancing loss value.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when called before a forward pass or when auxiliary loss is disabled.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// The load balancing loss encourages balanced expert usage by penalizing imbalanced routing.
+    /// It is computed as the dot product of two fractions for each expert:
+    /// - Token fraction: Proportion of tokens (inputs) routed to this expert
+    /// - Probability mass fraction: Average routing probability for this expert
+    ///
+    /// Loss = NumExperts * sum(token_fraction_i * prob_mass_fraction_i) for all experts i
+    ///
+    /// This loss is minimized when all experts receive equal numbers of tokens and equal
+    /// total probability mass, encouraging balanced utilization.
+    /// </para>
+    /// <para><b>For Beginners:</b> Calculates a penalty for imbalanced expert usage.
+    ///
+    /// How it works:
+    ///
+    /// 1. <b>Count Token Assignments:</b>
+    ///    - For each expert, count how many inputs chose it (with Top-K) or had non-zero weight
+    ///    - Example with 8 inputs and 4 experts: [3, 2, 2, 1] tokens per expert
+    ///
+    /// 2. <b>Calculate Probability Mass:</b>
+    ///    - For each expert, sum up its routing weights across all inputs
+    ///    - Example: [0.4, 0.3, 0.2, 0.1] total probability per expert
+    ///
+    /// 3. <b>Compute Load Balancing Loss:</b>
+    ///    - Convert counts to fractions: [3/8, 2/8, 2/8, 1/8] = [0.375, 0.25, 0.25, 0.125]
+    ///    - Convert probabilities to fractions: [0.4, 0.3, 0.2, 0.1]
+    ///    - Dot product: 0.375*0.4 + 0.25*0.3 + 0.25*0.2 + 0.125*0.1
+    ///    - Multiply by numExperts (4): gives load balancing loss
+    ///
+    /// Why this works:
+    /// - If all experts are used equally, both fractions are [0.25, 0.25, 0.25, 0.25]
+    /// - Dot product: 0.25*0.25 * 4 = 0.25 (minimum possible)
+    /// - If imbalanced like [0.5, 0.3, 0.15, 0.05] × [0.6, 0.25, 0.1, 0.05]
+    /// - Dot product: 0.5*0.6 + ... = higher value (penalty for imbalance)
+    ///
+    /// The loss is minimized when usage is perfectly balanced!
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!_useAuxiliaryLoss)
+        {
+            return NumOps.Zero;
+        }
+
+        if (_lastRoutingWeights == null || _lastInput == null)
+        {
+            throw new InvalidOperationException(
+                "Forward pass must be called before computing auxiliary loss.");
+        }
+
+        int batchSize = _lastInput.Shape[0];
+        int numExperts = _experts.Count;
+
+        // VECTORIZED: Use Engine operations for probability mass computation
+        // Sum routing weights along batch dimension to get probability mass per expert
+        var probMassTensor = Engine.ReduceSum(_lastRoutingWeights, new[] { 0 }, keepDims: false);
+        var probMassVec = probMassTensor.ToVector();
+
+        // VECTORIZED: Compute token counts using tensor operations
+        T threshold = NumOps.FromDouble(0.01);
+
+        Tensor<T> tokenCountsTensor;
+        if (_topK > 0 && _lastTopKIndices != null)
+        {
+            // For Top-K, sparse weights are already zero for inactive experts
+            // Count non-zero entries per expert (column-wise)
+            var isActive = Engine.TensorGreaterThan(_lastRoutingWeights, NumOps.Zero);
+            // Convert boolean-like comparison result to counts
+            tokenCountsTensor = Engine.ReduceSum(isActive, new[] { 0 }, keepDims: false);
+        }
+        else
+        {
+            // For dense routing, count where weight > threshold
+            var isActive = Engine.TensorGreaterThan(_lastRoutingWeights, threshold);
+            tokenCountsTensor = Engine.ReduceSum(isActive, new[] { 0 }, keepDims: false);
+        }
+        var tokenCountVec = tokenCountsTensor.ToVector();
+
+        // VECTORIZED: Normalize to get fractions using Vector operations
+
+        T totalTokens = tokenCountVec.Sum();
+        T totalProbMass = probMassVec.Sum();
+
+        // VECTORIZED: Compute load balancing loss using vector operations
+        T safeTokenTotal = NumOps.GreaterThan(totalTokens, NumOps.Zero) ? totalTokens : NumOps.One;
+        T safeProbTotal = NumOps.GreaterThan(totalProbMass, NumOps.Zero) ? totalProbMass : NumOps.One;
+
+        var tokenFractions = (Vector<T>)Engine.Divide(tokenCountVec, safeTokenTotal);
+        var probFractions = (Vector<T>)Engine.Divide(probMassVec, safeProbTotal);
+
+        // Element-wise multiply and sum
+        var products = (Vector<T>)Engine.Multiply(tokenFractions, probFractions);
+        T loss = products.Sum();
+
+        loss = NumOps.Multiply(NumOps.FromDouble(numExperts), loss);
+
+        return loss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about expert usage and load balancing.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including per-expert usage statistics,
+    /// load balancing metrics, and routing weight distributions.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides detailed statistics about expert usage that can be used for
+    /// monitoring training progress, debugging routing issues, and tuning load balancing parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> Gets a detailed report about how experts are being used.
+    ///
+    /// The returned dictionary includes:
+    /// - <b>expert_i_tokens:</b> How many inputs were routed to expert i
+    /// - <b>expert_i_prob_mass:</b> Total routing weight for expert i across all inputs
+    /// - <b>expert_i_avg_weight:</b> Average routing weight when expert i is selected
+    /// - <b>load_balance_loss:</b> Current load balancing loss value
+    /// - <b>usage_variance:</b> Variance in expert usage (lower is better balanced)
+    /// - <b>max_min_ratio:</b> Ratio of most-used to least-used expert (1.0 is perfect)
+    ///
+    /// Use this information to:
+    /// - Monitor if experts are being used balanced or if some are overused
+    /// - Decide if you need to adjust the load balancing weight
+    /// - Detect expert collapse (all inputs routed to one expert)
+    /// - Track training health over time
+    ///
+    /// Example output:
+    /// {
+    ///   "expert_0_tokens": "245",
+    ///   "expert_1_tokens": "198",
+    ///   "expert_2_tokens": "223",
+    ///   "expert_3_tokens": "234",
+    ///   "expert_0_prob_mass": "0.28",
+    ///   "expert_1_prob_mass": "0.22",
+    ///   ...
+    ///   "load_balance_loss": "0.253",
+    ///   "usage_variance": "0.0012",
+    ///   "max_min_ratio": "1.24"
+    /// }
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>();
+
+        if (_lastRoutingWeights == null || _lastInput == null)
+        {
+            diagnostics["status"] = "No forward pass performed yet";
+            return diagnostics;
+        }
+
+        int batchSize = _lastInput.Shape[0];
+        int numExperts = _experts.Count;
+
+        // Compute per-expert statistics
+        var tokenCounts = new T[numExperts];
+        var probabilityMass = new T[numExperts];
+        var avgWeights = new T[numExperts];
+
+        for (int i = 0; i < numExperts; i++)
+        {
+            T tokenCount = NumOps.Zero;
+            T probMass = NumOps.Zero;
+            T weightSum = NumOps.Zero;
+            T activeCount = NumOps.Zero;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                var weight = _lastRoutingWeights[b, i];
+
+                // Count token assignment
+                bool isActive = _topK > 0
+                    ? IsExpertActive(b, i)
+                    : NumOps.GreaterThan(weight, NumOps.FromDouble(0.01));
+
+                if (isActive)
+                {
+                    tokenCount = NumOps.Add(tokenCount, NumOps.One);
+                    activeCount = NumOps.Add(activeCount, NumOps.One);
+                    weightSum = NumOps.Add(weightSum, weight);
+                }
+
+                // Accumulate probability mass
+                probMass = NumOps.Add(probMass, weight);
+            }
+
+            tokenCounts[i] = tokenCount;
+            probabilityMass[i] = probMass;
+            avgWeights[i] = NumOps.GreaterThan(activeCount, NumOps.Zero)
+                ? NumOps.Divide(weightSum, activeCount)
+                : NumOps.Zero;
+
+            // Add to diagnostics
+            diagnostics[$"expert_{i}_tokens"] = Convert.ToDouble(tokenCount).ToString("F0");
+            diagnostics[$"expert_{i}_prob_mass"] = Convert.ToDouble(probMass).ToString("F4");
+            diagnostics[$"expert_{i}_avg_weight"] = Convert.ToDouble(avgWeights[i]).ToString("F4");
+        }
+
+        // Compute load balancing loss
+        if (_useAuxiliaryLoss)
+        {
+            var loadBalanceLoss = ComputeAuxiliaryLoss();
+            diagnostics["load_balance_loss"] = Convert.ToDouble(loadBalanceLoss).ToString("F6");
+        }
+
+        // VECTORIZED: Compute usage variance using Vector operations
+        var tokenCountVec = new Vector<T>(tokenCounts);
+        T meanTokens = NumOps.Divide(tokenCountVec.Sum(), NumOps.FromDouble(numExperts));
+
+        // Compute variance: E[(X - mean)^2]
+        var meanVec = Engine.Fill(numExperts, meanTokens);
+        var diffs = Engine.Subtract(tokenCountVec, meanVec);
+        var diffsSquared = Engine.Multiply(diffs, diffs);
+        T variance = NumOps.Divide(Engine.Sum(diffsSquared), NumOps.FromDouble(numExperts));
+        diagnostics["usage_variance"] = Convert.ToDouble(variance).ToString("F6");
+
+        // Compute max/min ratio (diagnostics - use indexed access)
+        T maxTokens = tokenCounts[0];
+        T minTokens = tokenCounts[0];
+        for (int i = 1; i < numExperts; i++)
+        {
+            if (NumOps.GreaterThan(tokenCounts[i], maxTokens)) maxTokens = tokenCounts[i];
+            if (NumOps.LessThan(tokenCounts[i], minTokens)) minTokens = tokenCounts[i];
+        }
+
+        T maxMinRatio = NumOps.GreaterThan(minTokens, NumOps.Zero)
+            ? NumOps.Divide(maxTokens, minTokens)
+            : NumOps.MaxValue;
+        diagnostics["max_min_ratio"] = Convert.ToDouble(maxMinRatio).ToString("F4");
+
+        diagnostics["num_experts"] = numExperts.ToString();
+        diagnostics["batch_size"] = batchSize.ToString();
+        diagnostics["top_k"] = _topK.ToString();
+
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Applies softmax to routing logits to produce normalized probability weights.
+    /// </summary>
+    /// <param name="logits">The raw routing scores from the router.</param>
+    /// <returns>Normalized probability weights that sum to 1 for each batch item.</returns>
+    /// <remarks>
+    /// <para>
+    /// Softmax converts raw scores (logits) into probabilities using the formula:
+    /// softmax(x_i) = exp(x_i) / sum(exp(x_j)) for all j
+    ///
+    /// For numerical stability, we subtract the maximum value before exponentiation:
+    /// softmax(x) = softmax(x - max(x))
+    /// </para>
+    /// <para><b>For Beginners:</b> Converts raw scores into probabilities.
+    ///
+    /// Why use softmax:
+    /// - Converts any numbers into probabilities (0 to 1)
+    /// - All probabilities sum to 1
+    /// - Larger scores become larger probabilities
+    /// - Smaller scores become smaller probabilities
+    ///
+    /// Example:
+    /// - Input scores: [2.0, 1.0, 0.1, -1.0]
+    /// - After softmax: [0.58, 0.21, 0.09, 0.03]
+    /// - Notice they sum to 1.0
+    ///
+    /// The "subtract max" trick prevents numerical overflow (very large exponentials)
+    /// without changing the final result.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ApplySoftmax(Tensor<T> logits)
+    {
+        // Fully vectorized softmax using tensor operations with broadcasting
+        // logits shape: [batchSize, numExperts]
+
+        // Step 1: Find max per row for numerical stability (axis=1)
+        var maxPerRow = Engine.ReduceMax(logits, new[] { 1 }, keepDims: true, out _); // [batchSize, 1]
+
+        // Step 2: Subtract max for numerical stability - use broadcasting
+        var shiftedLogits = Engine.TensorBroadcastSubtract<T>(logits, maxPerRow); // [batchSize, numExperts]
+
+        // Step 3: Apply exp element-wise
+        var expValues = Engine.TensorExp(shiftedLogits); // [batchSize, numExperts]
+
+        // Step 4: Sum exp values per row
+        var expSum = Engine.ReduceSum(expValues, new[] { 1 }, keepDims: true); // [batchSize, 1]
+
+        // Step 5: Normalize - divide each row by its sum (with broadcasting)
+        var softmax = Engine.TensorBroadcastDivide<T>(expValues, expSum); // [batchSize, numExperts]
+
+        return softmax;
+    }
+
+    /// <summary>
+    /// Applies Top-K selection to routing weights, keeping only the K highest weights per batch item.
+    /// </summary>
+    /// <param name="weights">The routing probability weights.</param>
+    /// <param name="k">The number of top experts to keep.</param>
+    /// <returns>A tuple of (sparse weights, top-K indices).</returns>
+    /// <remarks>
+    /// <para>
+    /// Top-K selection:
+    /// 1. Finds the K experts with the highest weights for each input
+    /// 2. Sets all other experts' weights to zero
+    /// 3. Renormalizes the remaining K weights to sum to 1
+    /// 4. Returns both the sparse weights and the indices of selected experts
+    /// </para>
+    /// <para><b>For Beginners:</b> Keeps only the best K experts for each input.
+    ///
+    /// Why use Top-K:
+    /// - Dramatically reduces computation (only K experts run instead of all N)
+    /// - Maintains model quality (the best experts are still used)
+    /// - Enables scaling to huge models (hundreds of experts, but only use 2-4)
+    ///
+    /// Example with 6 experts and K=2:
+    /// - Original weights: [0.30, 0.05, 0.25, 0.10, 0.20, 0.10]
+    /// - Top-2 are indices 0 and 2 (weights 0.30 and 0.25)
+    /// - After Top-K: [0.545, 0, 0.455, 0, 0, 0]
+    /// - Notice top-2 are renormalized to sum to 1.0
+    /// - Experts 1, 3, 4, 5 are completely skipped
+    ///
+    /// With this example, we use only 33% of experts but keep the most relevant ones!
+    /// </para>
+    /// </remarks>
+    private (Tensor<T> sparseWeights, int[,] topKIndices) ApplyTopK(Tensor<T> weights, int k)
+    {
+        int batchSize = weights.Shape[0];
+        int numExperts = weights.Shape[1];
+
+        // Step 1: Use TensorTopK ONLY for index selection (non-differentiable, indices only)
+        _ = Engine.TensorTopK(weights, k, axis: 1, out Tensor<int> topKIndicesTensor);
+
+        // Step 2: Build binary mask from top-K indices (detached from tape — treated as constant).
+        // Hard top-K masking: forward multiplies softmax weights by 0/1 mask and renormalizes.
+        // Gradients flow through the mask×weight product to the softmax weights for selected experts;
+        // non-selected experts receive zero gradient. This is not a straight-through estimator
+        // (which would use hard - soft.detach() + soft), but standard sparse gating per Shazeer et al.
+        // NOTE: The O(batchSize×k) scalar loop is intentional — TensorScatter is non-differentiable
+        // in the Tensors OpRegistry, so we must use this approach for gradient flow.
+        var mask = new Tensor<T>(weights._shape);
+        mask.Fill(NumOps.Zero);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < k; i++)
+            {
+                mask[b, topKIndicesTensor[b, i]] = NumOps.One;
+            }
+        }
+
+        // Step 3: Multiply original weights by mask using tape-tracked Engine operation
+        var maskedWeights = Engine.TensorBroadcastMultiply(weights, mask); // [batchSize, numExperts]
+
+        // Step 4: Renormalize using tape-tracked operations (epsilon scalar for numerical stability)
+        var sumPerRow = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true); // [batchSize, 1]
+        var safeSumPerRow = Engine.TensorAddScalar(sumPerRow, NumOps.FromDouble(1e-10));
+        var sparseWeights = Engine.TensorBroadcastDivide(maskedWeights, safeSumPerRow); // [batchSize, numExperts]
+
+        // Convert topKIndicesTensor to int[,] for backward compatibility
+        var topKIndices = new int[batchSize, k];
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < k; i++)
+            {
+                topKIndices[b, i] = topKIndicesTensor[b, i];
+            }
+        }
+
+        return (sparseWeights, topKIndices);
+    }
+
+    /// <summary>
+    /// Combines expert outputs using routing weights to produce the final output.
+    /// </summary>
+    /// <param name="expertOutputs">The outputs from all experts.</param>
+    /// <param name="routingWeights">The routing weights for each expert.</param>
+    /// <returns>The weighted combination of expert outputs.</returns>
+    /// <remarks>
+    /// <para>
+    /// Combines outputs as: output = sum(weight_i * expertOutput_i) for all i.
+    /// This is a weighted average where experts with higher routing weights contribute more.
+    /// </para>
+    /// <para><b>For Beginners:</b> Mixes expert predictions based on their weights.
+    ///
+    /// The combination works like voting:
+    /// - Each expert makes a prediction
+    /// - Each expert has a weight (importance)
+    /// - The final output is a weighted average
+    ///
+    /// Example with 3 experts:
+    /// - Expert 1 predicts [1.0, 2.0, 3.0] with weight 0.5
+    /// - Expert 2 predicts [2.0, 1.0, 4.0] with weight 0.3
+    /// - Expert 3 predicts [0.0, 3.0, 2.0] with weight 0.2
+    ///
+    /// Final output:
+    /// - [1.0*0.5 + 2.0*0.3 + 0.0*0.2, 2.0*0.5 + 1.0*0.3 + 3.0*0.2, 3.0*0.5 + 4.0*0.3 + 2.0*0.2]
+    /// - = [1.1, 1.9, 3.1]
+    ///
+    /// Experts with higher weights have more influence on the final prediction.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> CombineExpertOutputs(List<Tensor<T>> expertOutputs, Tensor<T> routingWeights)
+    {
+        if (expertOutputs.Count == 0)
+        {
+            throw new ArgumentException("Must have at least one expert output.", nameof(expertOutputs));
+        }
+
+        // All operations must use Engine for tape-tracked gradient flow.
+        // expertOutputs[i] shape: [batchSize, outputDim]
+        // routingWeights shape: [batchSize, numExperts]
+
+        int batchSize = routingWeights.Shape[0];
+
+        Tensor<T>? combined = null;
+
+        for (int i = 0; i < expertOutputs.Count; i++)
+        {
+            var expertOutput = expertOutputs[i];
+
+            // Tape-tracked axis=1 gather: extract the i-th column of routingWeights.
+            // routingWeights[batch, numExperts] gather idx=[i] on axis=1 -> [batch, 1].
+            var indexTensor = new Tensor<int>(new[] { i }, new[] { 1 });
+            var weightColumn2D = Engine.TensorGather(routingWeights, indexTensor, axis: 1);
+
+            // Reshape for broadcasting: [batch, 1] -> [batch, 1, ...] for higher-rank expert outputs
+            if (expertOutput.Shape.Length > 2)
+            {
+                var broadcastShape = new int[expertOutput.Shape.Length];
+                broadcastShape[0] = batchSize;
+                for (int d = 1; d < broadcastShape.Length; d++)
+                    broadcastShape[d] = 1;
+                weightColumn2D = Engine.Reshape(weightColumn2D, broadcastShape);
+            }
+
+            // Tape-tracked multiply + accumulate
+            var weightedOutput = Engine.TensorBroadcastMultiply(expertOutput, weightColumn2D);
+
+            if (combined == null)
+                combined = weightedOutput;
+            else
+                combined = Engine.TensorBroadcastAdd(combined, weightedOutput);
+        }
+
+        return combined!;
+    }
+
+    /// <summary>
+    /// Computes the gradient for the router during backpropagation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer output.</param>
+    /// <param name="expertOutputs">The cached expert outputs from the forward pass.</param>
+    /// <param name="routingWeights">The routing weights (after softmax) from the forward pass.</param>
+    /// <param name="routingLogits">The routing logits (before softmax) from the forward pass.</param>
+    /// <returns>The gradient of the loss with respect to the router's output (logits).</returns>
+    /// <remarks>
+    /// <para>
+    /// The router gradient computation involves:
+    /// 1. Computing how the loss changes with respect to routing weights
+    /// 2. Applying the Jacobian of softmax to get gradients for logits
+    ///
+    /// For each expert i: d(loss)/d(weight_i) = sum_over_output(d(loss)/d(output) * expertOutput_i)
+    /// Then apply softmax derivative to get d(loss)/d(logit_i)
+    /// </para>
+    /// <para><b>For Beginners:</b> Calculates how the router should change its decisions.
+    ///
+    /// This is the most complex part of MoE learning. Here's what happens:
+    ///
+    /// 1. <b>Assess Expert Contributions:</b>
+    ///    - For each expert, calculate: did increasing its weight help or hurt?
+    ///    - If expert's output agreed with what we wanted: increase its weight
+    ///    - If expert's output disagreed: decrease its weight
+    ///
+    /// 2. <b>Account for Softmax:</b>
+    ///    - Routing weights go through softmax, which creates dependencies
+    ///    - Increasing one weight means others must decrease (they sum to 1)
+    ///    - We need to account for this coupling in the gradients
+    ///
+    /// 3. <b>Produce Router Gradients:</b>
+    ///    - Convert weight gradients to logit gradients (pre-softmax)
+    ///    - These gradients tell the router how to adjust its parameters
+    ///
+    /// The goal: Make the router better at sending each input to the experts that will
+    /// handle it well.
+    ///
+    /// Example:
+    /// - If expert 3 made a great prediction for certain inputs
+    /// - The router should learn to route similar inputs to expert 3 in the future
+    /// - If expert 1 made poor predictions
+    /// - The router should learn to avoid expert 1 for those types of inputs
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ComputeRouterGradient(
+        Tensor<T> outputGradient,
+        List<Tensor<T>> expertOutputs,
+        Tensor<T> routingWeights,
+        Tensor<T> routingLogits)
+    {
+        int batchSize = outputGradient.Shape[0];
+        int numExperts = expertOutputs.Count;
+
+        // VECTORIZED: Compute weight gradients using tensor operations
+        // d(loss)/d(weight_i) = sum_j(d(loss)/d(output_j) * expertOutput_i_j)
+        // This is the element-wise product followed by sum over output dimension
+        var weightGradients = new Tensor<T>(new int[] { batchSize, numExperts });
+
+        for (int i = 0; i < numExperts; i++)
+        {
+            var expertOutput = expertOutputs[i];
+            if (expertOutput.Shape.Length == 2)
+            {
+                // Element-wise multiply outputGradient with expertOutput, then sum over output dim
+                var product = Engine.TensorBroadcastMultiply(outputGradient, expertOutput);
+                var summed = Engine.ReduceSum(product, new[] { 1 }, keepDims: false); // [batchSize]
+
+                // Store in weightGradients column
+                weightGradients.SetSlice(1, i, summed.Reshape([batchSize, 1]));
+            }
+        }
+
+        // VECTORIZED: Apply softmax backward using Engine operation
+        // The softmax backward formula is: grad_logits = softmax * (grad_weights - sum(grad_weights * softmax))
+        // This is equivalent to the full Jacobian application
+        var logitGradients = Engine.TensorSoftmaxBackward(routingWeights, weightGradients, axis: 1);
+
+        return logitGradients;
+    }
+
+    /// <summary>
+    /// Weights the output gradient by the routing weight for a specific expert.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer output.</param>
+    /// <param name="routingWeights">The routing weights from the forward pass.</param>
+    /// <param name="expertIndex">The index of the expert to weight for.</param>
+    /// <returns>The weighted gradient to pass to the expert.</returns>
+    /// <remarks>
+    /// <para>
+    /// Each expert's gradient is scaled by its routing weight, since it only partially
+    /// contributed to the output.
+    /// </para>
+    /// <para><b>For Beginners:</b> Adjusts error signal based on how much the expert contributed.
+    ///
+    /// If an expert contributed 70% to the output (weight = 0.7):
+    /// - It receives 70% of the error signal
+    /// - This is fair because it was 70% responsible for the output
+    ///
+    /// If an expert contributed only 5% (weight = 0.05):
+    /// - It receives only 5% of the error signal
+    /// - It had little influence, so it gets little blame/credit
+    ///
+    /// This ensures experts are updated proportionally to their contribution.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> WeightGradientByRouting(Tensor<T> outputGradient, Tensor<T> routingWeights, int expertIndex)
+    {
+        // Vectorized: Extract routing weights for this expert as a column [batchSize, 1]
+        var weightColumn = Engine.TensorSlice(routingWeights, new[] { 0, expertIndex }, new[] { routingWeights.Shape[0], 1 });
+
+        // Multiply gradient by weight (broadcasts across output dimensions)
+        // outputGradient shape: [batchSize, outputDim]
+        // weightColumn shape: [batchSize, 1] -> broadcasts to [batchSize, outputDim]
+        var weightedGradient = Engine.TensorBroadcastMultiply(outputGradient, weightColumn);
+
+        return weightedGradient;
+    }
+
+    /// <summary>
+    /// Checks if a specific expert is active for a specific batch item in Top-K routing.
+    /// </summary>
+    /// <param name="batchIndex">The batch item index.</param>
+    /// <param name="expertIndex">The expert index.</param>
+    /// <returns>True if the expert is in the top-K for this batch item, false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// When using Top-K routing, this helper checks if a specific expert was selected
+    /// for a specific input.
+    /// </para>
+    /// <para><b>For Beginners:</b> Checks if an expert was chosen for a particular input.
+    ///
+    /// With Top-K routing:
+    /// - Each input selects K experts
+    /// - This function checks if a given expert was one of them
+    ///
+    /// Used to:
+    /// - Skip computation for inactive experts
+    /// - Skip gradient updates for experts that weren't used
+    /// - Track which experts are being utilized
+    /// </para>
+    /// </remarks>
+    private Tensor<T> NormalizeOutputGradient(Tensor<T> outputGradient)
+    {
+        if (_lastPreActivation == null)
+        {
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        }
+
+        bool shapeMatches = outputGradient.Shape.Length == _lastPreActivation.Shape.Length;
+        if (shapeMatches)
+        {
+            for (int i = 0; i < _lastPreActivation.Shape.Length; i++)
+            {
+                if (outputGradient.Shape[i] != _lastPreActivation.Shape[i])
+                {
+                    shapeMatches = false;
+                    break;
+                }
+            }
+        }
+
+        if (!shapeMatches)
+        {
+            if (outputGradient.Length == _lastPreActivation.Length)
+            {
+                return outputGradient.Reshape(_lastPreActivation._shape);
+            }
+
+            throw new ArgumentException("Output gradient shape does not match layer output.");
+        }
+
+        return outputGradient;
+    }
+
+    private Tensor<T> ReshapeToOriginalInput(Tensor<T> inputGradient)
+    {
+        if (_originalInputShape == null)
+        {
+            return inputGradient;
+        }
+
+        if (_originalInputShape.Length == 1 || _originalInputShape.Length > 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
+    }
+
+    private bool IsExpertActive(int batchIndex, int expertIndex)
+    {
+        if (_lastTopKIndices == null || _topK == 0)
+        {
+            return true; // All experts active if not using Top-K
+        }
+
+        for (int k = 0; k < _topK; k++)
+        {
+            if (_lastTopKIndices[batchIndex, k] == expertIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if a specific expert was used for any batch item.
+    /// </summary>
+    /// <param name="expertIndex">The expert index.</param>
+    /// <returns>True if the expert was used in at least one batch item, false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// This determines if an expert needs to perform backpropagation - only experts that
+    /// were used in the forward pass need to compute gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> Checks if an expert was used at all in this batch.
+    ///
+    /// With sparse routing:
+    /// - Some experts might not be selected for any inputs in a batch
+    /// - Those experts can skip backpropagation entirely
+    /// - This saves computation time
+    ///
+    /// This is one of the key efficiency benefits of sparse MoE!
+    /// </para>
+    /// </remarks>
+    private bool IsExpertUsedInBatch(int expertIndex)
+    {
+        if (_lastTopKIndices == null || _topK == 0)
+        {
+            return true; // All experts used if not using Top-K
+        }
+
+        int batchSize = _lastTopKIndices.GetLength(0);
+        for (int b = 0; b < batchSize; b++)
+        {
+            if (IsExpertActive(b, expertIndex))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Comparer for sorting numeric values in descending order.
+    /// </summary>
+    private class NumericComparer : IComparer<T>
+    {
+        private readonly INumericOperations<T> _ops = MathHelper.GetNumericOperations<T>();
+
+        public int Compare(T? x, T? y)
+        {
+            if (x == null && y == null) return 0;
+            if (x == null) return 1;
+            if (y == null) return -1;
+
+            if (_ops.GreaterThan(x, y)) return -1;  // Descending order
+            if (_ops.LessThan(x, y)) return 1;
+            return 0;
+        }
+    }
+
+    #endregion
+
+    #region GPU Execution
+
+    /// <summary>
+    /// Performs the forward pass on GPU tensors by routing through experts.
+    /// All computations stay GPU-resident for maximum performance.
+    /// </summary>
+    /// <param name="inputs">GPU tensor inputs (uses first input).</param>
+    /// <returns>GPU tensor output after routing through experts and combining outputs.</returns>
+    /// <remarks>
+    /// <para>
+    /// The GPU forward pass (all operations GPU-resident):
+    /// 1. Routes input through the router network (GPU)
+    /// 2. Applies softmax to get routing probabilities (GPU)
+    /// 3. Optionally applies Top-K selection (GPU)
+    /// 4. Passes input through each expert (GPU)
+    /// 5. Combines expert outputs using routing weights (GPU)
+    /// 6. Applies activation function (GPU)
+    /// Only downloads to CPU in training mode for gradient caching.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy MoE that takes the GPU path on first use would reach
+        // _router and _experts with unresolved shapes / zero-sized
+        // parameter tensors. OnFirstForward propagates resolved feature
+        // dim into router + experts.
+        if (!IsShapeResolved) OnFirstForward(input);
+
+        // Mirror the CPU Forward's any-rank → 2D collapse contract.
+        // _router and each _expert are configured against [B, features]
+        // — feeding them a rank-1 or rank>2 tensor diverges from the
+        // CPU path (different routing batch granularity) and trips
+        // shape mismatches inside expert sub-layers. Collapse leading
+        // dims into a flat batch, run on 2D, then restore the original
+        // leading dims at the end like the CPU path does on lines
+        // 754–768.
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+        Tensor<T> input2D;
+        int batchSize;
+        if (rank == 1)
+        {
+            batchSize = 1;
+            input2D = gpuEngine.ReshapeGpu(input, new[] { 1, input.Shape[0] });
+        }
+        else if (rank == 2)
+        {
+            batchSize = input.Shape[0];
+            input2D = input;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++) flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            input2D = gpuEngine.ReshapeGpu(input, new[] { flatBatch, input.Shape[rank - 1] });
+        }
+        // From here on, treat input2D as the canonical [batch, features]
+        // tensor for routing and expert dispatch.
+        input = input2D;
+        int numExperts = _experts.Count;
+
+        // Step 1: Route input through router to get logits (GPU-resident)
+        Tensor<T> routingLogitsGpu;
+        if (_router is LayerBase<T> routerBase && routerBase.CanExecuteOnGpu)
+        {
+            routingLogitsGpu = routerBase.ForwardGpu(input);
+        }
+        else
+        {
+            // CPU fallback for router (uncommon path)
+            var cpuInput = input;
+            var cpuLogits = _router.Forward(cpuInput);
+            routingLogitsGpu = gpuEngine.UploadToGpu(cpuLogits, GpuTensorRole.Activation);
+        }
+
+        // Step 2: Apply softmax on GPU to get routing probabilities (GPU-resident)
+        var routingWeightsGpu = gpuEngine.SoftmaxGpu(routingLogitsGpu);
+
+        // Step 3: Apply Top-K selection on GPU if enabled
+        Tensor<int>? topKIndicesGpu = null;
+        Tensor<T>? topKValuesGpu = null;
+        int[]? topKIndicesFlat = null;
+
+        if (_topK > 0)
+        {
+            // GPU-resident Top-K selection
+            topKValuesGpu = gpuEngine.TopKGpu(routingWeightsGpu, _topK, out topKIndicesGpu, sorted: true);
+
+            // Renormalize top-K weights on GPU
+            var topKSumGpu = gpuEngine.SumAxisGpu(topKValuesGpu, 1); // [batchSize, 1]
+            topKValuesGpu = gpuEngine.DivideByBroadcastGpu(topKValuesGpu, topKSumGpu);
+
+            // Download indices ONCE - tiny data (~256 bytes for batch=32, topK=2)
+            // This is essential for MoE efficiency: run only selected experts, not all N
+            topKIndicesFlat = topKIndicesGpu.Data.ToArray();
+
+            // Cache 2D array for backward pass in training mode
+            if (IsTrainingMode)
+            {
+                var topKIndicesCpu = new int[batchSize, _topK];
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int k = 0; k < _topK; k++)
+                    {
+                        topKIndicesCpu[b, k] = topKIndicesFlat[b * _topK + k];
+                    }
+                }
+                _lastTopKIndices = topKIndicesCpu;
+            }
+        }
+        else
+        {
+            _lastTopKIndices = null;
+        }
+
+        // Step 4: Process through each expert on GPU (GPU-resident)
+        var expertOutputsGpu = new List<Tensor<T>>();
+
+        // Determine which experts are active using downloaded indices
+        HashSet<int> activeExperts = new HashSet<int>();
+        if (_topK > 0 && topKIndicesFlat != null)
+        {
+            // Only experts in top-K are active (sparse execution)
+            for (int i = 0; i < topKIndicesFlat.Length; i++)
+            {
+                activeExperts.Add(topKIndicesFlat[i]);
+            }
+        }
+        else
+        {
+            // All experts active (no Top-K)
+            for (int i = 0; i < numExperts; i++)
+                activeExperts.Add(i);
+        }
+
+        // Process each expert on GPU
+        for (int i = 0; i < numExperts; i++)
+        {
+            if (activeExperts.Contains(i))
+            {
+                Tensor<T> expertOutput;
+                if (_experts[i] is LayerBase<T> expertBase && expertBase.CanExecuteOnGpu)
+                {
+                    expertOutput = expertBase.ForwardGpu(input);
+                }
+                else
+                {
+                    // CPU fallback for this expert
+                    var cpuInput = input;
+                    var cpuOutput = _experts[i].Forward(cpuInput);
+                    expertOutput = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
+                }
+                expertOutputsGpu.Add(expertOutput);
+            }
+            else
+            {
+                // Create zero GPU tensor for inactive experts
+                int[] outputShape = new int[] { batchSize }.Concat(OutputShape).ToArray();
+                expertOutputsGpu.Add(gpuEngine.ZerosGpu<T>(outputShape));
+            }
+        }
+
+        // Step 5: Combine expert outputs using routing weights on GPU
+        // For Top-K: Use sparse weights from topKValuesGpu and pre-downloaded indices
+        // For dense routing: Use full routingWeightsGpu
+        Tensor<T> combinedGpu;
+        if (_topK > 0 && topKValuesGpu != null && topKIndicesFlat != null)
+        {
+            combinedGpu = CombineExpertOutputsGpuSparse(
+                gpuEngine, expertOutputsGpu, topKValuesGpu, topKIndicesFlat, batchSize, numExperts);
+        }
+        else
+        {
+            combinedGpu = CombineExpertOutputsGpuDense(
+                gpuEngine, expertOutputsGpu, routingWeightsGpu, batchSize);
+        }
+
+        // Step 6: Apply activation function on GPU
+        var activationType = MapActivationToFused();
+        Tensor<T> resultGpu;
+        if (activationType == FusedActivationType.ReLU)
+        {
+            resultGpu = gpuEngine.ReluGpu(combinedGpu);
+        }
+        else if (activationType == FusedActivationType.Tanh)
+        {
+            resultGpu = gpuEngine.TanhGpu(combinedGpu);
+        }
+        else
+        {
+            resultGpu = combinedGpu; // Identity or other activations
+        }
+
+        // Cache for backward pass (only in training mode - download to CPU)
+        if (IsTrainingMode && !InferenceMode.IsActive) // #1668: skip caches inside an InferenceMode scope
+        {
+            _lastInput = input;
+            _lastRoutingLogits = routingLogitsGpu;
+            _lastRoutingWeights = routingWeightsGpu;
+            _lastPreActivation = combinedGpu;
+            _lastExpertOutputs = expertOutputsGpu.Select(e => e).ToList();
+        }
+
+        // Restore the original leading dims to match the CPU path's
+        // contract on lines 754–768. The 2D output is [flatBatch,
+        // outputFeatures]; for rank>2 input we re-expand the batch
+        // axes, for rank-1 input we drop the synthetic batch dim.
+        if (_originalInputShape != null && _originalInputShape.Length > 2)
+        {
+            int outputFeatures = resultGpu.Shape[1];
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 1] = outputFeatures;
+            resultGpu = gpuEngine.ReshapeGpu(resultGpu, newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            resultGpu = gpuEngine.ReshapeGpu(resultGpu, new[] { resultGpu.Shape[1] });
+        }
+
+        return resultGpu;
+    }
+
+    /// <summary>
+    /// Combines expert outputs using sparse routing weights (Top-K) on GPU.
+    /// Uses pre-downloaded indices to avoid additional GPU-to-CPU transfers.
+    /// </summary>
+    private Tensor<T> CombineExpertOutputsGpuSparse(
+        DirectGpuTensorEngine gpuEngine,
+        List<Tensor<T>> expertOutputsGpu,
+        Tensor<T> topKValuesGpu,
+        int[] topKIndicesFlat,
+        int batchSize,
+        int numExperts)
+    {
+        // For sparse routing, we need to iterate through top-K and accumulate weighted outputs
+        // topKValuesGpu: [batchSize, k] - normalized weights (GPU-resident)
+        // topKIndicesFlat: [batchSize * k] - pre-downloaded expert indices
+
+        // Get first expert output to determine output shape
+        int[] outputShape = expertOutputsGpu[0].Shape.ToArray();
+
+        // Initialize combined output to zeros
+        var combinedGpu = gpuEngine.ZerosGpu<T>(outputShape);
+
+        // For each k position, weight the corresponding expert output and accumulate
+        // This is done by slicing and broadcasting on GPU
+        for (int k = 0; k < _topK; k++)
+        {
+            // Extract weight column k from GPU: [batchSize, 1]
+            var weightColumnGpu = gpuEngine.SliceColumnGpu(topKValuesGpu, k);
+
+            // For each expert that appears in this k position, add its weighted contribution
+            for (int expertIdx = 0; expertIdx < numExperts; expertIdx++)
+            {
+                // Check if this expert appears at position k for any batch item
+                // Using pre-downloaded indices (no additional GPU transfer)
+                bool expertUsedAtK = false;
+                for (int b = 0; b < batchSize; b++)
+                {
+                    if (topKIndicesFlat[b * _topK + k] == expertIdx)
+                    {
+                        expertUsedAtK = true;
+                        break;
+                    }
+                }
+
+                if (expertUsedAtK)
+                {
+                    // Multiply expert output by weight (GPU-resident), then accumulate
+                    var expertOutput = expertOutputsGpu[expertIdx];
+                    var weightedOutput = gpuEngine.BroadcastMultiplyColumnGpu(expertOutput, weightColumnGpu);
+                    combinedGpu = gpuEngine.AddGpu(combinedGpu, weightedOutput);
+                }
+            }
+        }
+
+        return combinedGpu;
+    }
+
+    /// <summary>
+    /// Combines expert outputs using dense routing weights on GPU.
+    /// </summary>
+    private Tensor<T> CombineExpertOutputsGpuDense(
+        DirectGpuTensorEngine gpuEngine,
+        List<Tensor<T>> expertOutputsGpu,
+        Tensor<T> routingWeightsGpu,
+        int batchSize)
+    {
+        // For dense routing, combine all experts weighted by their routing weights
+        // routingWeightsGpu: [batchSize, numExperts]
+        // expertOutputsGpu[i]: [batchSize, outputDim...]
+
+        int numExperts = expertOutputsGpu.Count;
+        int[] outputShape = expertOutputsGpu[0].Shape.ToArray();
+
+        // Initialize combined output to zeros
+        var combinedGpu = gpuEngine.ZerosGpu<T>(outputShape);
+
+        // For each expert, multiply by weight column and accumulate
+        for (int i = 0; i < numExperts; i++)
+        {
+            // Extract weight column i: [batchSize, 1]
+            var weightColumnGpu = gpuEngine.SliceColumnGpu(routingWeightsGpu, i);
+
+            // Multiply expert output by broadcast weight
+            var weightedOutput = gpuEngine.BroadcastMultiplyColumnGpu(expertOutputsGpu[i], weightColumnGpu);
+
+            // Accumulate
+            combinedGpu = gpuEngine.AddGpu(combinedGpu, weightedOutput);
+        }
+
+        return combinedGpu;
+    }
+
+    /// <summary>
+    /// Divides tensor A by broadcast of tensor B along axis 1.
+    /// A: [batchSize, features], B: [batchSize, 1] -> Result: A[i,j] / B[i,0]
+    /// </summary>
+    private Tensor<T> DivideByBroadcastGpuHelper(DirectGpuTensorEngine gpuEngine, Tensor<T> a, Tensor<T> b)
+    {
+        // For normalization: a / b where b is [batchSize, 1]
+        // We can compute 1/b then multiply
+        // But we need an inverse operation. For now, download, compute, upload
+        // TODO: Add InverseGpu or DivideGpu to DirectGpuTensorEngine
+        var aData = a;
+        var bData = b;
+
+        int batchSize = aData.Shape[0];
+        int features = aData.Shape[1];
+
+        var result = TensorAllocator.Rent<T>(aData._shape);
+        for (int i = 0; i < batchSize; i++)
+        {
+            T divisor = bData[i, 0];
+            T safeDivisor = NumOps.GreaterThan(divisor, NumOps.Zero) ? divisor : NumOps.One;
+            for (int j = 0; j < features; j++)
+            {
+                result[i, j] = NumOps.Divide(aData[i, j], safeDivisor);
+            }
+        }
+
+        return gpuEngine.UploadToGpu(result, GpuTensorRole.Activation);
+    }
+    #endregion
+
+}

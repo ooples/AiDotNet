@@ -1,0 +1,312 @@
+using AiDotNet.Attributes;
+using System.Globalization;
+using System.Text;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Validation;
+
+namespace AiDotNet.MetaLearning.Models;
+
+/// <summary>
+/// A simple linear model mapping Matrix input to Vector output, useful for meta-learning examples and testing.
+/// </summary>
+/// <remarks>
+/// <para>Computes y = X * w + b where w is a weight vector and b is a bias scalar.
+/// Provides gradient computation via MSE loss for use with gradient-based meta-learners.</para>
+/// <para><b>For Beginners:</b> This is a simple linear model used mainly for testing and
+/// demonstrating meta-learning algorithms. It takes a matrix of inputs and produces predictions
+/// using a straightforward linear formula (y = inputs * weights + bias). Its simplicity makes
+/// it ideal for verifying that meta-learning algorithms like MAML work correctly before
+/// scaling up to more complex models.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a simple linear model for meta-learning testing
+/// var model = new LinearVectorModel(inputDim: 5, learningRate: 0.01);
+/// var input = new Matrix&lt;double&gt;(10, 5);  // 10 samples, 5 features
+/// var labels = new Vector&lt;double&gt;(10);
+/// model.Train(input, labels);
+/// Vector&lt;double&gt; predictions = model.Predict(input);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
+[ComponentType(ComponentType.MetaLearner)]
+[PipelineStage(PipelineStage.Training)]
+public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>, ICloneable
+{
+    private Vector<double> _parameters;
+    private readonly int _inputDim;
+    private readonly double _learningRate;
+
+    /// <summary>
+    /// Creates a new linear model with the given input dimension.
+    /// </summary>
+    /// <param name="inputDim">Number of input features.</param>
+    /// <param name="learningRate">Learning rate for gradient descent in <see cref="Train"/>. Default is 0.01.</param>
+    public LinearVectorModel(int inputDim, double learningRate = 0.01)
+    {
+        Guard.Positive(inputDim);
+        if (learningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
+        _inputDim = inputDim;
+        _learningRate = learningRate;
+        _parameters = new Vector<double>(inputDim + 1);
+        for (int i = 0; i < _parameters.Length; i++)
+        {
+            _parameters[i] = 0.01 * (i + 1);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<double> Predict(Matrix<double> input)
+    {
+        Guard.NotNull(input);
+        var output = new Vector<double>(input.Rows);
+        if (input.Columns < _inputDim)
+            throw new ArgumentException(
+                $"Input has {input.Columns} columns but model expects at least {_inputDim}.", nameof(input));
+
+        for (int r = 0; r < input.Rows; r++)
+        {
+            double sum = _parameters[_inputDim];
+            for (int c = 0; c < _inputDim; c++)
+            {
+                sum += input[r, c] * _parameters[c];
+            }
+
+            output[r] = sum;
+        }
+
+        return output;
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Matrix<double> input, Vector<double> expectedOutput)
+    {
+        var gradients = ComputeGradients(input, expectedOutput, DefaultLossFunction);
+        ApplyGradients(gradients, _learningRate);
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<double> GetModelMetadata() => new()
+    {
+        Name = "LinearVectorModel",
+        FeatureCount = _inputDim,
+        Complexity = _parameters.Length
+    };
+
+    /// <inheritdoc/>
+    public override Vector<double> GetParameters() => _parameters.Clone();
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<double> parameters)
+    {
+        Guard.NotNull(parameters);
+        if (parameters.Length != _parameters.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter count mismatch: expected {_parameters.Length}, got {parameters.Length}",
+                nameof(parameters));
+        }
+
+        _parameters = parameters.Clone();
+    }
+
+    /// <inheritdoc/>
+    public override long ParameterCount => _parameters.Length;
+
+    /// <inheritdoc/>
+    public override IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
+    {
+        var model = new LinearVectorModel(_inputDim, _learningRate);
+        model.SetParameters(parameters);
+        return model;
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
+    {
+        var copy = new LinearVectorModel(_inputDim, _learningRate);
+        copy.SetParameters(_parameters);
+        return copy;
+    }
+
+    object ICloneable.Clone() => DeepCopy();
+
+    /// <inheritdoc/>
+    public override ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+    /// <inheritdoc/>
+    public override Vector<double> ComputeGradients(
+        Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
+    {
+        Guard.NotNull(input);
+        Guard.NotNull(target);
+
+        var gradients = new Vector<double>(_parameters.Length);
+        int count = Math.Min(input.Rows, target.Length);
+        if (count == 0)
+        {
+            return gradients;
+        }
+
+        var predictions = Predict(input);
+
+        // Use the provided loss function if available, otherwise fall back to MSE
+        var loss = lossFunction ?? DefaultLossFunction;
+        var lossGradient = loss.CalculateDerivative(predictions, target);
+
+        double scale = 1.0 / count;
+        for (int r = 0; r < count; r++)
+        {
+            double error = lossGradient[r];
+            for (int c = 0; c < _inputDim && c < input.Columns; c++)
+            {
+                gradients[c] += scale * error * input[r, c];
+            }
+
+            gradients[_inputDim] += scale * error;
+        }
+
+        return gradients;
+    }
+
+    /// <inheritdoc/>
+    public override void ApplyGradients(Vector<double> gradients, double learningRate)
+    {
+        Guard.NotNull(gradients);
+        if (gradients.Length != _parameters.Length)
+            throw new ArgumentException(
+                $"Gradient length mismatch: expected {_parameters.Length}, got {gradients.Length}.",
+                nameof(gradients));
+        if (learningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
+
+        for (int i = 0; i < _parameters.Length; i++)
+        {
+            _parameters[i] -= learningRate * gradients[i];
+        }
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize() => Encoding.UTF8.GetBytes(SerializeParameters());
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        Guard.NotNull(data);
+        DeserializeParameters(Encoding.UTF8.GetString(data));
+    }
+
+    /// <inheritdoc/>
+    public override void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path is required.", nameof(filePath));
+        }
+
+        File.WriteAllText(filePath, SerializeParameters());
+    }
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path is required.", nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException("Model file not found.", filePath);
+        }
+
+        DeserializeParameters(File.ReadAllText(filePath));
+    }
+
+    /// <inheritdoc/>
+    public override void SaveState(Stream stream)
+    {
+        Guard.NotNull(stream);
+        using var writer = new StreamWriter(stream, Encoding.UTF8, 1024, leaveOpen: true);
+        writer.Write(SerializeParameters());
+        writer.Flush();
+    }
+
+    /// <inheritdoc/>
+    public override void LoadState(Stream stream)
+    {
+        Guard.NotNull(stream);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true,
+            bufferSize: 1024, leaveOpen: true);
+        DeserializeParameters(reader.ReadToEnd());
+    }
+
+    /// <inheritdoc/>
+    public override IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);
+
+    /// <inheritdoc/>
+    public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+    }
+
+    /// <inheritdoc/>
+    public override bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputDim;
+
+    /// <inheritdoc/>
+    public override Dictionary<string, double> GetFeatureImportance()
+    {
+        var importance = new Dictionary<string, double>();
+        if (_inputDim == 0)
+        {
+            return importance;
+        }
+
+        // Use absolute weight magnitude as feature importance
+        for (int i = 0; i < _inputDim; i++)
+        {
+            importance[$"feature_{i}"] = Math.Abs(_parameters[i]);
+        }
+
+        return importance;
+    }
+
+    private string SerializeParameters()
+    {
+        return string.Join(",", _parameters.Select(p => p.ToString("R", CultureInfo.InvariantCulture)));
+    }
+
+    private void DeserializeParameters(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            _parameters = new Vector<double>(_parameters.Length);
+            return;
+        }
+
+        var parts = content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        int expectedCount = _inputDim + 1;
+        if (parts.Length != expectedCount)
+        {
+            throw new InvalidDataException(
+                $"Parameter count mismatch: expected {expectedCount}, got {parts.Length}");
+        }
+
+        var vector = new Vector<double>(parts.Length);
+        for (int i = 0; i < parts.Length; i++)
+        {
+            vector[i] = double.Parse(parts[i], CultureInfo.InvariantCulture);
+        }
+
+        _parameters = vector;
+    }
+}

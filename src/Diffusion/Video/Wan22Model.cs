@@ -1,0 +1,214 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.Video;
+
+/// <summary>
+/// Wan 2.2 video model with timestep-specialized MoE experts.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet"><item>Paper: "Wan 2.2: Timestep-Specialized Mixture-of-Experts for Video Generation" (Alibaba, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Wan 2.2 improves on Wan 2.1 by assigning different expert sub-networks to different stages of the video creation process. Early stages focus on overall structure while later stages refine fine details. This timestep specialization produces sharper, more temporally consistent videos.</para>
+/// <para>
+/// Wan 2.2 upgrades the MoE architecture with timestep-specialized experts, where different
+/// expert subnetworks activate at different denoising stages. Early timesteps use structure experts
+/// while later timesteps use detail experts. This specialization significantly improves both
+/// fidelity and temporal coherence.
+/// </para>
+/// <para>
+/// Technical specifications:
+/// - Architecture: DiT + Timestep-Specialized MoE + Causal3DVAE
+/// - Latent channels: 16
+/// - Default: 81 frames at 16 FPS
+/// - Supports I2V: Yes | T2V: Yes | V2V: No
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 480, Width = 832, NumInferenceSteps = 50 };
+/// var model = new Wan22Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 81, 60, 104 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelTask(ModelTask.TextToVideo)]
+[ModelTask(ModelTask.ImageToVideo)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Wan: Open and Advanced Large-Scale Video Generative Models", "https://arxiv.org/abs/2503.20314", Year = 2025, Authors = "Alibaba")]
+public class Wan22Model<T> : VideoDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 16;
+    private const int CONTEXT_DIM = 4096;
+    private const int DEFAULT_NUM_FRAMES = 81;
+    private const int DEFAULT_FPS = 16;
+
+    private DiTNoisePredictor<T>? _predictor;
+    private TemporalVAE<T>? _temporalVAE;
+    private readonly IConditioningModule<T>? _conditioner;
+    // Seed for reproducible construction, threaded to the sub-models (which honor it). Previously Wan22
+    // accepted no seed at all and its DiT/VAE were built unseeded, so every construction drew different
+    // weights from the process-global RNG — non-reproducible regardless of caller intent.
+    private readonly int? _seed;
+
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _predictor; } }
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _temporalVAE; } }
+    public override IVAEModel<T>? TemporalVAE { get { EnsureInitialized(); return _temporalVAE; } }
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    public override int LatentChannels => LATENT_CHANNELS;
+    public override bool SupportsImageToVideo => true;
+    public override bool SupportsTextToVideo => true;
+    public override bool SupportsVideoToVideo => false;
+    public override long ParameterCount { get { EnsureInitialized(); return _predictor.ParameterCount + _temporalVAE.GetParameters().Length; } }
+
+    /// <summary>
+    /// Initializes a new instance of Wan22Model with full customization support.
+    /// </summary>
+    public Wan22Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        DiTNoisePredictor<T>? predictor = null,
+        TemporalVAE<T>? temporalVAE = null,
+        IConditioningModule<T>? conditioner = null,
+        int defaultNumFrames = DEFAULT_NUM_FRAMES,
+        int defaultFPS = DEFAULT_FPS,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.0001,
+                BetaEnd = 0.02,
+                BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateDefault()),
+            defaultNumFrames,
+            defaultFPS,
+            architecture)
+    {
+        _conditioner = conditioner;
+        _seed = seed;
+        if (predictor is not null || temporalVAE is not null)
+            InitializeLayers(predictor, temporalVAE, seed);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
+    private void EnsureInitialized()
+    {
+        if (_predictor is null || _temporalVAE is null)
+            InitializeLayers(null, null, _seed);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
+    private void InitializeLayers(
+        DiTNoisePredictor<T>? predictor,
+        TemporalVAE<T>? temporalVAE,
+        int? seed)
+    {
+        _predictor = predictor ?? new DiTNoisePredictor<T>(
+            inputChannels: LATENT_CHANNELS,
+            hiddenSize: 3072,
+            numLayers: 40,
+            numHeads: 24,
+            patchSize: 2,
+            contextDim: CONTEXT_DIM,
+            seed: seed);
+
+        _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
+            inputChannels: 3,
+            latentChannels: LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numTemporalLayers: 3,
+            temporalKernelSize: 3,
+            causalMode: true,
+            latentScaleFactor: 0.13025,
+            seed: seed);
+    }
+
+    protected override Tensor<T> PredictVideoNoise(
+        Tensor<T> latents,
+        int timestep,
+        Tensor<T> imageEmbedding,
+        Tensor<T> motionEmbedding)
+    {
+        EnsureInitialized();
+        return _predictor.PredictNoise(latents, timestep, imageEmbedding);
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        EnsureInitialized();
+        var predParams = _predictor.GetParameters();
+        var vaeParams = _temporalVAE.GetParameters();
+        var combined = new Vector<T>(predParams.Length + vaeParams.Length);
+        for (int i = 0; i < predParams.Length; i++) combined[i] = predParams[i];
+        for (int i = 0; i < vaeParams.Length; i++) combined[predParams.Length + i] = vaeParams[i];
+        return combined;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        EnsureInitialized();
+        int predCount = checked((int)_predictor.ParameterCount);
+        var vaeCount = _temporalVAE.GetParameters().Length;
+        if (parameters.Length != predCount + vaeCount)
+            throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
+        var predParams = new Vector<T>(predCount);
+        var vaeParams = new Vector<T>(vaeCount);
+        for (int i = 0; i < predCount; i++) predParams[i] = parameters[i];
+        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[predCount + i];
+        _predictor.SetParameters(predParams);
+        _temporalVAE.SetParameters(vaeParams);
+    }
+
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    public override IDiffusionModel<T> Clone()
+    {
+        EnsureInitialized();
+                return new Wan22Model<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
+            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
+            conditioner: _conditioner,
+            defaultNumFrames: DefaultNumFrames,
+            defaultFPS: DefaultFPS);
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "Wan22",
+            Version = "2.2",
+            Description = "Wan 2.2 video model with timestep-specialized MoE experts.",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
+            Complexity = ParameterCount
+        };
+        metadata.SetProperty("architecture", "dit-moe-timestep-specialized");
+        metadata.SetProperty("open_source", true);
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("default_frames", DEFAULT_NUM_FRAMES);
+        return metadata;
+    }
+}

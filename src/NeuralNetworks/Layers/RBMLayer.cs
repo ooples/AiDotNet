@@ -1,0 +1,1115 @@
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a Restricted Boltzmann Machine (RBM) layer for neural networks.
+/// </summary>
+/// <remarks>
+/// <para>
+/// An RBM layer is a stochastic neural network layer that learns a probability distribution over its inputs.
+/// It consists of a visible layer and a hidden layer with no connections between nodes within the same layer.
+/// </para>
+/// <para><b>For Beginners:</b> An RBM layer is like a feature detector that can learn patterns in data.
+/// 
+/// Imagine you have a set of movie ratings:
+/// - The visible layer represents the actual ratings
+/// - The hidden layer represents abstract features (e.g., "likes action", "prefers comedy")
+/// - The RBM learns to connect ratings to these abstract features
+/// 
+/// RBM layers are useful for:
+/// - Finding underlying patterns in data
+/// - Reducing the dimensionality of data
+/// - Initializing weights for deep neural networks
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+public partial class RBMLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// Gets the number of units in the visible layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The visible units are the input nodes of the RBM, representing observed data.
+    /// This value determines the dimensionality of the input data that the RBM can process.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of the visible units as the "input sensors" of the RBM.
+    /// 
+    /// For example, if you're working with 28x28 pixel images:
+    /// - You would have 784 visible units (28 × 28 = 784)
+    /// - Each visible unit represents one pixel in the image
+    /// - The visible layer receives the actual data you want to analyze
+    /// 
+    /// This number must match the dimensionality of your input data.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Visible-unit count. Non-readonly so the lazy ctor can leave it
+    /// uninitialised (sentinel <c>-1</c>) and the first <c>Forward</c>
+    /// fills it from <c>input.Shape[^1]</c> via <see cref="OnFirstForward"/>.
+    /// Eager ctors set it immediately so the <c>Forward</c> path's
+    /// <see cref="EnsureInitialized"/> call is a no-op.
+    /// </summary>
+    private int _visibleUnits;
+
+    /// <summary>
+    /// Tracks whether weights / biases have been materialized. Lazy ctor
+    /// defers materialization until first <c>Forward</c> resolves the
+    /// visible-unit count from input shape.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <inheritdoc />
+    public override bool IsInitialized => _isInitialized;
+
+    /// <summary>
+    /// Gets the number of units in the hidden layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The hidden units are the nodes that learn to detect features or patterns in the input data.
+    /// This value determines the capacity of the RBM to represent complex patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of hidden units as "pattern detectors" that learn important features.
+    /// 
+    /// For example, in an image recognition task:
+    /// - You might have 100-500 hidden units
+    /// - Each hidden unit learns to detect a specific pattern (like edges, corners, or shapes)
+    /// - More hidden units can recognize more complex patterns, but require more data to train properly
+    /// 
+    /// The number of hidden units is a hyperparameter you can adjust to balance between:
+    /// - Too few: The RBM can't learn complex patterns
+    /// - Too many: The RBM might overfit to the training data
+    /// </para>
+    /// </remarks>
+    private readonly int _hiddenUnits;
+
+    /// <summary>
+    /// Gets or sets the weight matrix connecting visible and hidden units.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The weights tensor represents the strength of connections between visible and hidden units.
+    /// Shape is [hiddenUnits, visibleUnits]. Each element W[j,i] represents the connection strength
+    /// between visible unit i and hidden unit j.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of the weights as "connection strengths" between units.
+    ///
+    /// The weight tensor:
+    /// - Has dimensions [hiddenUnits × visibleUnits]
+    /// - Each weight shows how strongly a visible unit influences a hidden unit
+    /// - Positive weights mean "these units tend to be active together"
+    /// - Negative weights mean "when one unit is active, the other tends to be inactive"
+    ///
+    /// During training, these weights are adjusted to capture patterns in your data.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _weights;
+
+    // Removed _weightsTCache: caching the transpose across forwards is unsafe
+    // in tape-trained networks because the optimizer's Step path updates the
+    // underlying ParameterBuffer in place without calling
+    // RBMLayer.UpdateParameters, so the explicit invalidation hooks never
+    // fire and the cache drifts one optimizer step behind `_weights`. Forward
+    // now recomputes the transpose every call — see Forward for cost analysis.
+
+    /// <summary>
+    /// Gets or sets the bias values for the visible units.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The visible biases represent the baseline activation level of each visible unit,
+    /// independent of any inputs from hidden units. They allow the RBM to model
+    /// the marginal distribution of the visible units.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of visible biases as the "default preference" of each visible unit.
+    ///
+    /// Visible biases:
+    /// - One bias value per visible unit
+    /// - Control how likely each visible unit is to be active by default
+    /// - Positive bias: the unit prefers to be on (value of 1)
+    /// - Negative bias: the unit prefers to be off (value of 0)
+    ///
+    /// For example, if most images in your dataset have dark backgrounds (pixels mostly off),
+    /// the biases for those background pixels would become negative during training.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _visibleBiases;
+
+    /// <summary>
+    /// Gets or sets the bias values for the hidden units.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The hidden biases represent the baseline activation level of each hidden unit,
+    /// independent of any inputs from visible units. They allow the RBM to model
+    /// the marginal distribution of the hidden units.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of hidden biases as the "default sensitivity" of each feature detector.
+    ///
+    /// Hidden biases:
+    /// - One bias value per hidden unit
+    /// - Control how easily each feature detector activates
+    /// - Positive bias: the detector is more sensitive (activates easily)
+    /// - Negative bias: the detector is less sensitive (requires stronger evidence to activate)
+    ///
+    /// These biases help the RBM learn features that occur with different frequencies in your data.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> _hiddenBiases;
+
+    /// <summary>
+    /// Gradient of the weights computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _weightsGradient;
+
+    /// <summary>
+    /// Gradient of the visible biases computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _visibleBiasesGradient;
+
+    /// <summary>
+    /// Gradient of the hidden biases computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _hiddenBiasesGradient;
+
+    /// <summary>
+    /// Stores the last input from the visible layer during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field caches the original visible input tensor from the most recent forward pass.
+    /// It is used during parameter updates in contrastive divergence training.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as saving the "before" snapshot of input data.
+    ///
+    /// During training:
+    /// - The RBM needs to compare the original input with a reconstructed version
+    /// - This field stores the original input data (the "before" snapshot)
+    /// - It's used in the "positive phase" of contrastive divergence training
+    ///
+    /// This storage helps the RBM adjust its weights to make better reconstructions of the input data.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastVisibleInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Stores the last output from the hidden layer during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field caches the hidden unit activations from the most recent forward pass.
+    /// It is used during parameter updates in contrastive divergence training.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as saving what patterns the RBM detected in the input.
+    ///
+    /// During training:
+    /// - The RBM activates hidden units based on the input
+    /// - This field stores those activations (what features were detected)
+    /// - It's used in the "positive phase" of contrastive divergence training
+    ///
+    /// This storage helps the RBM learn which features are actually present in the data
+    /// versus which ones it incorrectly generates on its own.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastHiddenOutput;
+
+    /// <summary>
+    /// Stores the reconstructed visible layer activations during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field caches the reconstructed visible unit activations during training.
+    /// It is used during parameter updates in contrastive divergence training.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as the RBM's attempt to recreate the original input.
+    ///
+    /// During training:
+    /// - After detecting features, the RBM tries to recreate the original input
+    /// - This field stores that reconstruction (the "after" snapshot)
+    /// - It's used in the "negative phase" of contrastive divergence training
+    ///
+    /// The difference between the original input and this reconstruction guides
+    /// how the RBM updates its weights to improve future reconstructions.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _reconstructedVisible;
+
+    /// <summary>
+    /// Stores the reconstructed hidden layer activations during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field caches the hidden unit activations based on the reconstructed visible units.
+    /// It is used during parameter updates in contrastive divergence training.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this as what patterns the RBM detects in its own reconstruction.
+    ///
+    /// During training:
+    /// - After reconstructing the input, the RBM detects features in that reconstruction
+    /// - This field stores those activations (what the RBM "thinks" should be in the data)
+    /// - It's used in the "negative phase" of contrastive divergence training
+    ///
+    /// The difference between these activations and the ones from the real data helps
+    /// the RBM learn to distinguish real patterns from ones it incorrectly imagines.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _reconstructedHidden;
+
+    /// <summary>
+    /// Initializes a new instance of the RBMLayer class with scalar activation.
+    /// </summary>
+    /// <param name="visibleUnits">The number of visible units.</param>
+    /// <param name="hiddenUnits">The number of hidden units.</param>
+    /// <param name="scalarActivation">The scalar activation function to use.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new RBM layer with the specified number of visible and hidden units,
+    /// using a scalar activation function that is applied element-wise to unit activations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how you create an RBM layer with a standard activation function.
+    /// 
+    /// For example:
+    /// ```csharp
+    /// // Create an RBM with 784 visible units (28x28 image), 200 hidden units,
+    /// // and sigmoid activation function
+    /// var rbmLayer = new RBMLayer<float>(784, 200, new SigmoidActivation<float>());
+    /// ```
+    /// 
+    /// The sigmoid activation is most common for RBMs because it produces probabilities
+    /// between 0 and 1, which is what the RBM needs for its stochastic behavior.
+    /// </para>
+    /// </remarks>
+    public RBMLayer(int visibleUnits, int hiddenUnits, IActivationFunction<T>? scalarActivation = null)
+        : base([visibleUnits], [hiddenUnits], scalarActivation ?? new SigmoidActivation<T>())
+    {
+        _visibleUnits = visibleUnits;
+        _hiddenUnits = hiddenUnits;
+        _weights = new Tensor<T>([_hiddenUnits, _visibleUnits]);
+        _visibleBiases = new Tensor<T>([_visibleUnits]);
+        _hiddenBiases = new Tensor<T>([_hiddenUnits]);
+
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy ctor — visible-unit count is resolved from <c>input.Shape[^1]</c>
+    /// on the first <c>Forward</c> call. Use this for new code that should
+    /// adopt the PyTorch-style lazy shape inference pattern; the eager
+    /// <c>(int visibleUnits, ...)</c> overload remains for callers that
+    /// know the visible dim at construction time.
+    /// </summary>
+    /// <param name="hiddenUnits">Number of hidden units (architectural,
+    /// independent of input shape).</param>
+    /// <param name="scalarActivation">Activation function (defaults to
+    /// <see cref="SigmoidActivation{T}"/>).</param>
+    public RBMLayer(int hiddenUnits, IActivationFunction<T>? scalarActivation = null)
+        : base([-1], [hiddenUnits], scalarActivation ?? new SigmoidActivation<T>())
+    {
+        if (hiddenUnits <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenUnits), "Hidden unit count must be positive.");
+
+        _visibleUnits = -1;
+        _hiddenUnits = hiddenUnits;
+        // All parameter tensors get re-allocated in EnsureInitialized once
+        // the visible dimension is resolved on first forward; allocate
+        // empty placeholders here so the not-null reference contract holds
+        // (GetParameters / ClearGradients walk these fields unconditionally)
+        // without doing duplicate work the lazy path will redo. Pre-fix the
+        // hidden-bias was allocated at full size here AND re-allocated in
+        // EnsureInitialized, leaking the first tensor.
+        _weights = new Tensor<T>([0, 0]);
+        _visibleBiases = new Tensor<T>([0]);
+        _hiddenBiases = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads the visible-unit count from <c>input.Shape[^1]</c> and resolves
+    /// the lazy shape so subsequent forward / parameter / serialization
+    /// paths can index against a real <c>InputShape[0]</c>.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"RBMLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int visibleUnits = input.Shape[rank - 1];
+        if (visibleUnits <= 0)
+            throw new ArgumentException(
+                $"RBMLayer's visible-unit count must be positive; got {visibleUnits} from input shape.",
+                nameof(input));
+
+        _visibleUnits = visibleUnits;
+        ResolveShapes(new[] { visibleUnits }, OutputShape);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate weights / biases against the resolved
+    /// visible-unit count and run Xavier initialization. Eager-ctor
+    /// instances bypass this path because <see cref="_isInitialized"/> is
+    /// set to true at construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_visibleUnits <= 0)
+            throw new InvalidOperationException(
+                "RBMLayer cannot initialize until OnFirstForward has resolved the visible-unit count from input shape.");
+
+        _weights = AllocateLazyWeight([_hiddenUnits, _visibleUnits]);
+        _visibleBiases = AllocateLazyWeight([_visibleUnits]);
+        _hiddenBiases = AllocateLazyWeight([_hiddenUnits]);
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the RBMLayer class with vector activation.
+    /// </summary>
+    /// <param name="visibleUnits">The number of visible units.</param>
+    /// <param name="hiddenUnits">The number of hidden units.</param>
+    /// <param name="vectorActivation">The vector activation function to use.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new RBM layer with the specified number of visible and hidden units,
+    /// using a vector activation function that is applied to vectors of unit activations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a more advanced way to create an RBM that processes multiple units at once.
+    /// 
+    /// For example:
+    /// ```csharp
+    /// // Create an RBM with 784 visible units, 200 hidden units,
+    /// // and a vectorized sigmoid activation function
+    /// var rbmLayer = new RBMLayer<float>(784, 200, new VectorizedSigmoidActivation<float>());
+    /// ```
+    /// 
+    /// This approach is functionally equivalent to using scalar activation, but can be more
+    /// computationally efficient, especially when running on specialized hardware like GPUs.
+    /// </para>
+    /// </remarks>
+    public RBMLayer(int visibleUnits, int hiddenUnits, IVectorActivationFunction<T>? vectorActivation = null)
+        : base([visibleUnits], [hiddenUnits], vectorActivation ?? new SigmoidActivation<T>())
+    {
+        _visibleUnits = visibleUnits;
+        _hiddenUnits = hiddenUnits;
+        _weights = new Tensor<T>([_hiddenUnits, _visibleUnits]);
+        _visibleBiases = new Tensor<T>([_visibleUnits]);
+        _hiddenBiases = new Tensor<T>([_hiddenUnits]);
+
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Initializes the weights and biases of the RBM layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method initializes the RBM parameters with appropriate starting values.
+    /// Weights are set to small random values, while biases are initialized to zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets up the RBM with starting values before training.
+    /// 
+    /// During initialization:
+    /// - Weights are set to small random values (between -0.05 and 0.05)
+    /// - Small random values help the RBM start learning gradually
+    /// - Biases are set to zero (no initial preference)
+    /// 
+    /// Good initialization is important because:
+    /// - Too large values can cause training to diverge
+    /// - Too small values can cause very slow learning
+    /// - The right balance helps the RBM train efficiently
+    /// </para>
+    /// </remarks>
+    private void InitializeParameters()
+    {
+        // Initialize biases to zero (in-place — keeps lazy registration).
+        _visibleBiases.Fill(NumOps.Zero);
+        _hiddenBiases.Fill(NumOps.Zero);
+
+        // Xavier/Glorot uniform initialization (Glorot & Bengio, 2010):
+        // U(-a, a) where a = sqrt(6 / (fan_in + fan_out))
+        // This ensures Var(W) = 2 / (fan_in + fan_out) for uniform
+        // distributions, keeping sigmoid activations in the linear
+        // regime while preserving gradient flow.
+        //
+        // Critical: copy the result into the EXISTING lazy-allocated
+        // _weights tensor in place rather than reassigning it —
+        // reassignment would discard the AllocateLazyWeight registration
+        // from the lazy ctor's EnsureInitialized path. Closes review-
+        // comment #1271.7BpA.
+        // Draw U(-a, a) from a SEEDED RNG (derived from the layer's RandomSeed, wired from
+        // architecture.RandomSeed via the LayerInitializationSeedScope) so the RBM's weights are
+        // REPRODUCIBLE and order/platform-independent. The prior Tensor.CreateRandom sampled the
+        // process-shared RNG, so the DBN's stacked-RBM init varied by test-execution context —
+        // making TrainingError_ShouldNotExceedTestError pass on one machine but fail on another
+        // (the CD fit quality tracks the init). Fills the lazy-allocated _weights in place (see the
+        // note above) — no reassignment, no pool-rented Engine-op result. Secure-RNG fallback only
+        // when no seed was requested (production default).
+        double a = Math.Sqrt(6.0 / (_visibleUnits + _hiddenUnits));
+        var random = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
+        // CreateRandom(Random, …) draws U(0,1) serially from the SEEDED RNG (reproducible +
+        // cross-platform); the vectorized Engine scale/shift below map it to U(-a, a). Same op
+        // chain as before — only the RNG source changed from the process-shared overload.
+        var randomTensor = Tensor<T>.CreateRandom(random, _hiddenUnits, _visibleUnits);
+        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(2.0 * a));
+        var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
+        shiftTensor.Fill(NumOps.FromDouble(a));
+        var finalWeights = Engine.TensorSubtract(scaledTensor, shiftTensor);
+        finalWeights.AsSpan().CopyTo(_weights.AsWritableSpan());
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_visibleBiases, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_hiddenBiases, PersistentTensorRole.Biases);
+    }
+
+    /// <summary>
+    /// Computes the forward pass of the RBM layer.
+    /// </summary>
+    /// <param name="input">The input tensor containing visible unit activations.</param>
+    /// <returns>The output tensor containing hidden unit activations.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the RBM layer. It takes a tensor of visible unit
+    /// activations, computes the probability of each hidden unit being active, and returns these
+    /// probabilities as the output tensor. It also stores the input and output for use in training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates what patterns the RBM detects in the input data.
+    /// 
+    /// During the forward pass:
+    /// - The RBM receives input data (like an image or set of ratings)
+    /// - It calculates how strongly each hidden unit (pattern detector) should activate
+    /// - The result shows which patterns were detected in the input
+    /// - The original input and pattern detections are saved for training
+    /// 
+    /// This is like the RBM saying "based on this input, here are the patterns I can see in it."
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Lazy ctor uses _visibleUnits = -1 sentinel until first forward.
+        // OnFirstForward + EnsureInitialized run from the base's
+        // IsShapeResolved guard for layers that have lazy state.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException("Input must have at least one dimension.", nameof(input));
+
+        int visibleSize = input.Shape[^1];
+        if (visibleSize != _visibleUnits)
+            throw new ArgumentException($"Expected input feature size {_visibleUnits} but got {visibleSize}.", nameof(input));
+
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
+            flatBatch *= input.Shape[d];
+
+        var visible2D = rank == 1
+            ? Engine.Reshape(input, [1, _visibleUnits])
+            : Engine.Reshape(input, [flatBatch, _visibleUnits]);
+
+        _lastVisibleInput = visible2D;
+
+        // Recompute the transpose every forward — caching it across forwards is
+        // unsafe in a tape-trained network because the tape-based optimizer's
+        // Step path updates the underlying ParameterBuffer in place WITHOUT
+        // calling RBMLayer.UpdateParameters, so the explicit `_weightsTCache = null`
+        // invalidation hooks never fire. The cached transpose then drifts
+        // exactly one optimizer step behind `_weights` after every Train iter,
+        // which surfaces as the consumer DBM Clone's ~3% prediction divergence:
+        // the trained network's forward consumes the stale cache, while the
+        // cloned network (constructed with `_weightsTCache = null`) computes
+        // a fresh, correct transpose. Recomputing per-forward keeps Forward
+        // strictly a function of the current parameter values — same input
+        // and same weights → same output, regardless of construction path.
+        // Cost: one O(_visibleUnits × _hiddenUnits) transpose per forward,
+        // negligible relative to the FusedLinear that follows it.
+        Tensor<T> weightsT = Engine.TensorTranspose(_weights);
+        Tensor<T> hiddenProbs = Engine.FusedLinear(visible2D, weightsT, _hiddenBiases, FusedActivationType.Sigmoid);
+        _lastHiddenOutput = hiddenProbs;
+
+        if (rank == 1)
+            return Engine.Reshape(hiddenProbs, [_hiddenUnits]);
+
+        var outputShape = new int[rank];
+        for (int d = 0; d < rank - 1; d++)
+            outputShape[d] = input.Shape[d];
+        outputShape[rank - 1] = _hiddenUnits;
+
+        return Engine.Reshape(hiddenProbs, outputShape);
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU using FusedLinearGpu with Sigmoid activation.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors.</param>
+    /// <returns>The GPU output tensor.</returns>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        // Lazy-ctor guard: same as CPU Forward.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+        _originalInputShape = input._shape;
+
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException("Input must have at least one dimension.", nameof(input));
+
+        int visibleSize = input.Shape[^1];
+        if (visibleSize != _visibleUnits)
+            throw new ArgumentException($"Expected input feature size {_visibleUnits} but got {visibleSize}.", nameof(input));
+
+        // Calculate batch size from all dimensions except the last
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
+            flatBatch *= input.Shape[d];
+
+        // Reshape input to 2D [batch, visibleUnits] for matrix multiply
+        Tensor<T> input2D = input;
+        if (rank == 1)
+        {
+            input2D = input.Reshape([1, _visibleUnits]);
+            flatBatch = 1;
+        }
+        else if (rank > 2)
+        {
+            input2D = input.Reshape([flatBatch, _visibleUnits]);
+        }
+
+        // Transpose weights for FusedLinearGpu (expects [inputFeatures, outputFeatures])
+        // RBM weights are [hiddenUnits, visibleUnits], need [visibleUnits, hiddenUnits]
+        var weightsT = Engine.TensorTranspose(_weights);
+
+        // Use FusedLinearGpu with Sigmoid activation - fully GPU-resident
+        var result = gpuEngine.FusedLinearGpu(input2D, weightsT, _hiddenBiases, FusedActivationType.Sigmoid);
+
+        // Cache state for backward pass only during training
+        if (IsTrainingMode)
+        {
+            _lastVisibleInput = input;
+            if (_lastVisibleInput.Shape.Length != 2)
+                _lastVisibleInput = _lastVisibleInput.Reshape([flatBatch, _visibleUnits]);
+            _lastHiddenOutput = result;
+        }
+
+        // Reshape output to match expected shape
+        if (rank == 1)
+        {
+            return result.Reshape([_hiddenUnits]);
+        }
+        else if (rank > 2)
+        {
+            var outputShape = new int[rank];
+            for (int d = 0; d < rank - 1; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[rank - 1] = _hiddenUnits;
+            return result.Reshape(outputShape);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Trains the RBM using contrastive divergence with the given data.
+    /// </summary>
+    /// <param name="input">The input data vector.</param>
+    /// <param name="learningRate">The learning rate for parameter updates.</param>
+    /// <param name="kSteps">The number of Gibbs sampling steps (typically 1).</param>
+    /// <remarks>
+    /// <para>
+    /// This method implements the contrastive divergence (CD) algorithm for training the RBM.
+    /// It performs 'kSteps' of Gibbs sampling to approximate the model's distribution and
+    /// updates weights and biases to make the model distribution closer to the data distribution.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the RBM to recognize patterns in data.
+    /// 
+    /// Contrastive divergence works by comparing:
+    /// 1. How units activate with real data ("reality")
+    /// 2. How units activate with the RBM's own generated data ("imagination")
+    /// 
+    /// The training process:
+    /// - First computes probabilities and samples from the visible to hidden layer
+    /// - Then reconstructs the visible layer from the hidden layer
+    /// - Repeats this Gibbs sampling chain for kSteps iterations
+    /// - Finally updates the weights and biases based on the difference between 
+    ///   the original data correlations and the generated data correlations
+    /// 
+    /// The standard approach uses CD-1 (k=1), which works surprisingly well in practice
+    /// despite being a rough approximation.
+    /// </para>
+    /// </remarks>
+    public void TrainWithContrastiveDivergence(Vector<T> input, T learningRate, int kSteps = 1)
+    {
+        // Delegate to tensor-based implementation
+        TrainWithContrastiveDivergenceTensor(new Tensor<T>([input.Length], input), learningRate, kSteps);
+    }
+
+    /// <summary>
+    /// Tensor-based contrastive divergence training - no type conversions in hot path.
+    /// </summary>
+    private void TrainWithContrastiveDivergenceTensor(Tensor<T> input, T learningRate, int kSteps = 1)
+    {
+        // Lazy-ctor guard: ContrastiveDivergence training reads _visibleUnits
+        // and the weight matrices, so they need to be resolved+materialized.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException("Input must have at least one dimension.", nameof(input));
+
+        int visibleSize = input.Shape[^1];
+        if (visibleSize != _visibleUnits)
+            throw new ArgumentException($"Expected input feature size {_visibleUnits} but got {visibleSize}.", nameof(input));
+
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
+            flatBatch *= input.Shape[d];
+
+        var v0 = rank == 1
+            ? input.Reshape([1, _visibleUnits])
+            : input.Reshape([flatBatch, _visibleUnits]);
+
+        var h0Probs = SampleHiddenGivenVisibleTensor(v0);
+        var h0Samples = SampleBinaryStatesTensor(h0Probs);
+
+        var vk = v0;
+        var hkSamples = h0Samples;
+        Tensor<T> vkProbs = new Tensor<T>([flatBatch, _visibleUnits]);
+        Tensor<T> hkProbs = new Tensor<T>([flatBatch, _hiddenUnits]);
+
+        for (int step = 0; step < kSteps; step++)
+        {
+            vkProbs = SampleVisibleGivenHiddenTensor(hkSamples);
+            vk = SampleBinaryStatesTensor(vkProbs);
+
+            hkProbs = SampleHiddenGivenVisibleTensor(vk);
+
+            if (step < kSteps - 1)
+            {
+                hkSamples = SampleBinaryStatesTensor(hkProbs);
+            }
+            else
+            {
+                hkSamples = hkProbs;
+            }
+        }
+
+        T batchScale = NumOps.Divide(learningRate, NumOps.FromDouble(flatBatch));
+
+        var hiddenBiasDiff = Engine.TensorSubtract(h0Probs, hkProbs);
+        var hiddenBiasGrad = Engine.ReduceSum(hiddenBiasDiff, new[] { 0 }, keepDims: false);
+        var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasGrad, batchScale);
+        _hiddenBiases = Engine.TensorAdd(_hiddenBiases, hiddenBiasDelta);
+
+        var visibleBiasDiff = Engine.TensorSubtract(v0, vkProbs);
+        var visibleBiasGrad = Engine.ReduceSum(visibleBiasDiff, new[] { 0 }, keepDims: false);
+        var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasGrad, batchScale);
+        _visibleBiases = Engine.TensorAdd(_visibleBiases, visibleBiasDelta);
+
+        var positiveOuter = Engine.TensorMatMul(Engine.TensorTranspose(h0Probs), v0);
+        var negativeOuter = Engine.TensorMatMul(Engine.TensorTranspose(hkProbs), vk);
+        var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
+        var weightDelta = Engine.TensorMultiplyScalar(weightGradient, batchScale);
+        _weights = Engine.TensorAdd(_weights, weightDelta);
+        // _weightsTCache invalidation removed — Forward no longer caches.
+    }
+
+
+    /// <summary>
+    /// Computes the outer product of two vectors as a 2D tensor.
+    /// </summary>
+    private Tensor<T> ComputeOuterProduct(Vector<T> a, Vector<T> b)
+    {
+        // Delegate to tensor version
+        return ComputeOuterProductTensor(new Tensor<T>([a.Length], a), new Tensor<T>([b.Length], b));
+    }
+
+    /// <summary>
+    /// Samples binary states (0 or 1) from probability values.
+    /// </summary>
+    /// <param name="probabilities">Vector of probability values between 0 and 1.</param>
+    /// <returns>Vector of binary samples (0 or 1) based on the probabilities.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts probability values to binary states by comparing each probability
+    /// with a random number. If the probability is greater than the random number, the state
+    /// becomes 1; otherwise, it becomes 0.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adds randomness to make the RBM's behavior probabilistic.
+    ///
+    /// For each probability value (e.g., 0.7):
+    /// - Generate a random number between 0 and 1 (e.g., 0.4)
+    /// - If the probability is higher than the random number (0.7 > 0.4), output 1
+    /// - Otherwise, output 0
+    ///
+    /// This stochastic (random) behavior is essential for RBMs because:
+    /// - It prevents the RBM from getting stuck in fixed patterns
+    /// - It allows exploration of different possible states
+    /// - It models the inherent uncertainty in pattern recognition
+    ///
+    /// For example, a unit with a 70% probability will be active roughly 70% of the time,
+    /// but not always, creating a range of possible network states.
+    /// </para>
+    /// </remarks>
+    private Vector<T> SampleBinaryStates(Vector<T> probabilities)
+    {
+        // Delegate to tensor version and convert back
+        var probTensor = new Tensor<T>([probabilities.Length], probabilities);
+        var samplesTensor = SampleBinaryStatesTensor(probTensor);
+        return new Vector<T>(samplesTensor.ToArray());
+    }
+
+
+
+    /// <summary>
+    /// Computes the probability of each hidden unit being active given the visible units (tensor-based).
+    /// </summary>
+    /// <param name="visible">The visible unit tensor (1D).</param>
+    /// <returns>A tensor of probabilities for each hidden unit.</returns>
+    private Tensor<T> SampleHiddenGivenVisibleTensor(Tensor<T> visible)
+    {
+        Tensor<T> visible2D = visible;
+        bool squeeze = false;
+
+        if (visible.Shape.Length == 1)
+        {
+            visible2D = visible.Reshape([1, _visibleUnits]);
+            squeeze = true;
+        }
+        else if (visible.Shape.Length != 2)
+        {
+            throw new ArgumentException("Visible tensor must be 1D or 2D.", nameof(visible));
+        }
+
+        var weightsT = Engine.TensorTranspose(_weights);
+        var weighted = Engine.TensorMatMul(visible2D, weightsT);
+        var biasExpanded = _hiddenBiases.Reshape([1, _hiddenUnits]);
+        var activations = Engine.TensorBroadcastAdd(weighted, biasExpanded);
+        var probs = Engine.Sigmoid(activations);
+
+        return squeeze ? probs.Reshape([_hiddenUnits]) : probs;
+    }
+
+
+    /// <summary>
+    /// Computes the probability of each visible unit being active given the hidden units (tensor-based).
+    /// </summary>
+    /// <param name="hidden">The hidden unit tensor (1D).</param>
+    /// <returns>A tensor of probabilities for each visible unit.</returns>
+    private Tensor<T> SampleVisibleGivenHiddenTensor(Tensor<T> hidden)
+    {
+        Tensor<T> hidden2D = hidden;
+        bool squeeze = false;
+
+        if (hidden.Shape.Length == 1)
+        {
+            hidden2D = hidden.Reshape([1, _hiddenUnits]);
+            squeeze = true;
+        }
+        else if (hidden.Shape.Length != 2)
+        {
+            throw new ArgumentException("Hidden tensor must be 1D or 2D.", nameof(hidden));
+        }
+
+        var weighted = Engine.TensorMatMul(hidden2D, _weights);
+        var biasExpanded = _visibleBiases.Reshape([1, _visibleUnits]);
+        var activations = Engine.TensorBroadcastAdd(weighted, biasExpanded);
+        var probs = Engine.Sigmoid(activations);
+
+        return squeeze ? probs.Reshape([_visibleUnits]) : probs;
+    }
+
+
+    /// <summary>
+    /// Samples binary states from probability tensor using stochastic sampling.
+    /// </summary>
+    private Tensor<T> SampleBinaryStatesTensor(Tensor<T> probabilities)
+    {
+        var randomTensor = Tensor<T>.CreateRandom(probabilities._shape);
+        return Engine.TensorGreaterThan(probabilities, randomTensor);
+    }
+
+
+    /// <summary>
+    /// Computes the probability of each hidden unit being active given the visible units.
+    /// </summary>
+    /// <param name="visible">The visible unit values.</param>
+    /// <returns>A vector of probabilities for each hidden unit.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the conditional probability P(h|v) for each hidden unit in the RBM.
+    /// It calculates the activation of each hidden unit as the weighted sum of visible unit values
+    /// plus the hidden bias, then applies the activation function to convert to a probability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates how strongly each pattern detector responds to the input.
+    ///
+    /// For each hidden unit (pattern detector):
+    /// - The RBM calculates a weighted sum of all visible units that connect to it
+    /// - It adds the hidden unit's bias (default sensitivity)
+    /// - It applies the activation function to convert to a probability between 0 and 1
+    /// - The result tells how strongly this pattern is present in the input
+    ///
+    /// For example, if a hidden unit detects "horizontal lines" in images, this method
+    /// would calculate how confident the RBM is that horizontal lines are present in the input image.
+    /// </para>
+    /// </remarks>
+    private Vector<T> SampleHiddenGivenVisible(Vector<T> visible)
+    {
+        // Use tensor-based implementation and convert back
+        var visibleTensor = new Tensor<T>([visible.Length], visible);
+        var hiddenProbsTensor = SampleHiddenGivenVisibleTensor(visibleTensor);
+        return new Vector<T>(hiddenProbsTensor.ToArray());
+    }
+
+    /// <summary>
+    /// Computes the probability of each visible unit being active given the hidden units.
+    /// </summary>
+    /// <param name="hidden">The hidden unit values.</param>
+    /// <returns>A vector of probabilities for each visible unit.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the conditional probability P(v|h) for each visible unit in the RBM.
+    /// It calculates the activation of each visible unit as the weighted sum of hidden unit values
+    /// plus the visible bias, then applies the activation function to convert to a probability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method reconstructs the input based on detected patterns.
+    ///
+    /// For each visible unit (input element):
+    /// - The RBM calculates a weighted sum of all hidden units that connect to it
+    /// - It adds the visible unit's bias (default preference)
+    /// - It applies the activation function to convert to a probability between 0 and 1
+    /// - The result is the RBM's "guess" at what this input value should be
+    ///
+    /// For example, in an image recognition task, this would reconstruct the pixel values
+    /// based on the patterns (features) that the RBM detected in the forward pass.
+    /// </para>
+    /// </remarks>
+    private Vector<T> SampleVisibleGivenHidden(Vector<T> hidden)
+    {
+        // Use tensor-based implementation and convert back
+        var hiddenTensor = new Tensor<T>([hidden.Length], hidden);
+        var visibleProbsTensor = SampleVisibleGivenHiddenTensor(hiddenTensor);
+        return new Vector<T>(visibleProbsTensor.ToArray());
+    }
+
+    /// <summary>
+    /// Updates the layer's parameters using either standard backpropagation or contrastive divergence.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for parameter updates.</param>
+    /// <remarks>
+    /// This method handles two training modes:
+    /// 1. Discriminative training (backprop): Uses gradients computed by BackwardViaAutodiff.
+    /// 2. Generative training (CD-k): Uses statistics from the Gibbs sampling chain.
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // 1. Standard Backpropagation (Discriminative Fine-tuning)
+        if (_weightsGradient != null && _visibleBiasesGradient != null && _hiddenBiasesGradient != null)
+        {
+            _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
+            // _weightsTCache invalidation removed — Forward no longer caches.
+            _visibleBiases = Engine.TensorSubtract(_visibleBiases, Engine.TensorMultiplyScalar(_visibleBiasesGradient, learningRate));
+            _hiddenBiases = Engine.TensorSubtract(_hiddenBiases, Engine.TensorMultiplyScalar(_hiddenBiasesGradient, learningRate));
+            return;
+        }
+
+        // 2. Contrastive Divergence (Generative Training)
+        if (_lastVisibleInput != null && _lastHiddenOutput != null &&
+            _reconstructedVisible != null && _reconstructedHidden != null)
+        {
+            int batchSize = _lastVisibleInput.Shape[0];
+            T batchScale = NumOps.Divide(learningRate, NumOps.FromDouble(batchSize));
+
+            var positiveOuter = Engine.TensorMatMul(Engine.TensorTranspose(_lastHiddenOutput), _lastVisibleInput);
+            var negativeOuter = Engine.TensorMatMul(Engine.TensorTranspose(_reconstructedHidden), _reconstructedVisible);
+            var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
+            var weightDelta = Engine.TensorMultiplyScalar(weightGradient, batchScale);
+            _weights = Engine.TensorAdd(_weights, weightDelta);
+
+            var hiddenBiasDiff = Engine.TensorSubtract(_lastHiddenOutput, _reconstructedHidden);
+            var hiddenBiasGrad = Engine.ReduceSum(hiddenBiasDiff, new[] { 0 }, keepDims: false);
+            var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasGrad, batchScale);
+            _hiddenBiases = Engine.TensorAdd(_hiddenBiases, hiddenBiasDelta);
+
+            var visibleBiasDiff = Engine.TensorSubtract(_lastVisibleInput, _reconstructedVisible);
+            var visibleBiasGrad = Engine.ReduceSum(visibleBiasDiff, new[] { 0 }, keepDims: false);
+            var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasGrad, batchScale);
+            _visibleBiases = Engine.TensorAdd(_visibleBiases, visibleBiasDelta);
+        }
+    }
+
+
+    /// <summary>
+    /// Computes the outer product of two tensors as a 2D tensor.
+    /// </summary>
+    private Tensor<T> ComputeOuterProductTensor(Tensor<T> a, Tensor<T> b)
+    {
+        // Use tensor matrix multiplication for outer product: outer(a, b) = a.reshape([n,1]) @ b.reshape([1,m])
+        var aReshaped = a.Reshape([a.Length, 1]);
+        var bReshaped = b.Reshape([1, b.Length]);
+        return Engine.TensorMatMul(aReshaped, bReshaped);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method collects all trainable parameters of the RBM (weights, visible biases, and
+    /// hidden biases) into a single vector. The parameters are arranged in the order: weights
+    /// (row-major), visible biases, hidden biases.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method packs all the RBM's learnable values into one list.
+    /// 
+    /// The returned vector contains:
+    /// - All weight values (connections between visible and hidden units)
+    /// - All visible bias values (default preferences for visible units)
+    /// - All hidden bias values (default sensitivities for hidden units)
+    /// 
+    /// This is useful for:
+    /// - Saving the RBM's state to a file
+    /// - Loading a previously trained RBM
+    /// - Using optimization algorithms that work on all parameters at once
+    /// 
+    /// Think of it as taking a snapshot of everything the RBM has learned.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_visibleBiases.ToArray()),
+            new Vector<T>(_hiddenBiases.ToArray())
+        );
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        // _weights is a 2D Tensor [visibleUnits, hiddenUnits]
+        for (int i = 0; i < _weights.Length; i++)
+            _weights.SetFlat(i, parameters[idx++]);
+        // _visibleBiases is a 1D Tensor [visibleUnits]
+        for (int i = 0; i < _visibleBiases.Length; i++)
+            _visibleBiases.SetFlat(i, parameters[idx++]);
+        // _hiddenBiases is a 1D Tensor [hiddenUnits]
+        for (int i = 0; i < _hiddenBiases.Length; i++)
+            _hiddenBiases.SetFlat(i, parameters[idx++]);
+        // _weightsTCache invalidation removed — Forward no longer caches.
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears the cached data used during training (both CD and backprop).
+    /// While RBMs don't maintain state between passes in the same way as recurrent networks,
+    /// this implementation does cache intermediate values for training purposes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the RBM's "memory" of previous inputs.
+    /// 
+    /// When you call this method:
+    /// - The RBM forgets the last data it saw
+    /// - It clears internal storage used during training
+    /// - This ensures each batch of data is processed independently
+    /// 
+    /// This is useful when you want to start fresh, such as when:
+    /// - Beginning training on a new dataset
+    /// - Switching from training mode to evaluation mode
+    /// - Processing unrelated sequences of data
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightsGradient == null || _visibleBiasesGradient == null || _hiddenBiasesGradient == null)
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weightsGradient.ToArray()),
+            new Vector<T>(_visibleBiasesGradient.ToArray()),
+            new Vector<T>(_hiddenBiasesGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null; _visibleBiasesGradient = null; _hiddenBiasesGradient = null;
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values used during contrastive divergence training
+        _lastVisibleInput = null;
+        _lastHiddenOutput = null;
+        _reconstructedVisible = null;
+        _reconstructedHidden = null;
+
+        // Clear gradients from backpropagation
+        _weightsGradient = null;
+        _visibleBiasesGradient = null;
+        _hiddenBiasesGradient = null;
+    }
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the layer.
+    /// </summary>
+    public override long ParameterCount =>
+        _visibleUnits > 0
+            ? (long)_visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits
+            // Lazy-ctor instance hasn't seen its first Forward yet — visible
+            // dim is unknown, all parameter tensors are zero-sized
+            // placeholders, and EnsureInitialized hasn't run. Reporting a
+            // count that doesn't match the actual GetParameters().Length
+            // would break the optimizer's per-parameter state allocation
+            // (it sizes its bookkeeping arrays from ParameterCount and
+            // walks GetParameters() to fill them).
+            : 0L;
+
+    /// <summary>
+    /// Indicates whether this layer supports training.
+    /// </summary>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+}

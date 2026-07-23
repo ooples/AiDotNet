@@ -1,0 +1,354 @@
+﻿using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.ComputerVision.Detection.Necks;
+
+/// <summary>
+/// Feature Pyramid Network (FPN) for multi-scale feature fusion.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> FPN creates a feature pyramid by combining features from
+/// different backbone levels using a top-down pathway. High-resolution features from
+/// earlier layers are enriched with semantic information from deeper layers.</para>
+///
+/// <para>Key features:
+/// - Top-down pathway with lateral connections
+/// - 1x1 convolutions to match channel dimensions
+/// - Simple element-wise addition for fusion
+/// - Fast and memory efficient
+/// </para>
+///
+/// <para>Reference: Lin et al., "Feature Pyramid Networks for Object Detection", CVPR 2017</para>
+/// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Feature Pyramid Networks for Object Detection",
+    "https://arxiv.org/abs/1612.03144",
+    Year = 2017,
+    Authors = "Tsung-Yi Lin, Piotr Dollar, Ross Girshick, Kaiming He, Bharath Hariharan, Serge Belongie")]
+public class FPN<T> : NeckBase<T>
+{
+    private readonly int _outputChannels;
+    private readonly int[] _inputChannels;
+    private readonly int _numLevels;
+    private readonly List<Tensor<T>> _lateralWeights;
+    private readonly List<Tensor<T>> _lateralBiases;
+    private readonly List<Tensor<T>> _outputWeights;
+    private readonly List<Tensor<T>> _outputBiases;
+
+    /// <inheritdoc/>
+    public override string Name => "FPN";
+
+    /// <inheritdoc/>
+    public override int OutputChannels => _outputChannels;
+
+    /// <inheritdoc/>
+    public override int NumLevels => _numLevels;
+
+    /// <summary>
+    /// Creates a new Feature Pyramid Network.
+    /// </summary>
+    /// <param name="inputChannels">Channel counts from backbone at each level.</param>
+    /// <param name="outputChannels">Output channel count for all levels (default 256).</param>
+    public FPN(int[] inputChannels, int outputChannels = 256)
+    {
+        _inputChannels = inputChannels;
+        _outputChannels = outputChannels;
+        _numLevels = inputChannels.Length;
+
+        _lateralWeights = new List<Tensor<T>>();
+        _lateralBiases = new List<Tensor<T>>();
+        _outputWeights = new List<Tensor<T>>();
+        _outputBiases = new List<Tensor<T>>();
+
+        // Initialize lateral connections (1x1 conv to match channels)
+        for (int i = 0; i < _numLevels; i++)
+        {
+            var lateralWeight = new Tensor<T>(new[] { outputChannels, inputChannels[i] });
+            var lateralBias = new Tensor<T>(new[] { outputChannels });
+            InitializeWeights(lateralWeight);
+            _lateralWeights.Add(lateralWeight);
+            _lateralBiases.Add(lateralBias);
+
+            // Output convolutions (3x3 for refinement, simplified as 1x1 here)
+            var outputWeight = new Tensor<T>(new[] { outputChannels, outputChannels });
+            var outputBias = new Tensor<T>(new[] { outputChannels });
+            InitializeWeights(outputWeight);
+            _outputWeights.Add(outputWeight);
+            _outputBiases.Add(outputBias);
+        }
+    }
+
+    /// <summary>
+    /// Creates FPN from a configuration object.
+    /// </summary>
+    /// <param name="config">Neck configuration.</param>
+    public FPN(NeckConfig config)
+        : this(config.InputChannels, config.OutputChannels)
+    {
+    }
+
+    private void InitializeWeights(Tensor<T> weights)
+    {
+        // He initialization
+        double scale = Math.Sqrt(2.0 / weights.Shape[1]);
+        var random = RandomHelper.CreateSeededRandom(42);
+
+        for (int i = 0; i < weights.Length; i++)
+        {
+            double val = random.NextDouble() * 2 * scale - scale;
+            weights[i] = NumOps.FromDouble(val);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override List<Tensor<T>> Forward(List<Tensor<T>> features)
+    {
+        ValidateFeatures(features, _inputChannels);
+
+        // Build top-down pathway
+        var lateralFeatures = new List<Tensor<T>>(_numLevels);
+        var outputFeatures = new List<Tensor<T>>(_numLevels);
+
+        // Apply lateral connections (1x1 conv)
+        for (int i = 0; i < _numLevels; i++)
+        {
+            var lateral = Conv1x1(features[i], _lateralWeights[i], _lateralBiases[i]);
+            lateralFeatures.Add(lateral);
+        }
+
+        // Top-down pathway with lateral connections
+        // Start from the deepest level (smallest spatial resolution)
+        for (int i = _numLevels - 1; i >= 0; i--)
+        {
+            Tensor<T> current = lateralFeatures[i];
+
+            // Add upsampled feature from deeper level (if not the deepest)
+            if (i < _numLevels - 1)
+            {
+                // Get the output from the next deeper level and upsample
+                var upsampled = Upsample2x(outputFeatures[^1]);
+
+                // Resize if dimensions don't match exactly (due to odd sizes)
+                if (upsampled.Shape[2] != current.Shape[2] || upsampled.Shape[3] != current.Shape[3])
+                {
+                    upsampled = ResizeToMatch(upsampled, current);
+                }
+
+                current = Add(current, upsampled);
+            }
+
+            // Apply output convolution
+            var output = Conv1x1(current, _outputWeights[i], _outputBiases[i]);
+            output = ApplyReLU(output);
+            outputFeatures.Insert(0, output);
+        }
+
+        return outputFeatures;
+    }
+
+    /// <inheritdoc/>
+    public override long GetParameterCount()
+    {
+        long count = 0;
+
+        for (int i = 0; i < _numLevels; i++)
+        {
+            // Lateral weights and biases
+            count += _inputChannels[i] * _outputChannels + _outputChannels;
+            // Output weights and biases
+            count += _outputChannels * _outputChannels + _outputChannels;
+        }
+
+        return count;
+    }
+
+    /// <inheritdoc/>
+    public override void WriteParameters(BinaryWriter writer)
+    {
+        // Write configuration
+        writer.Write(_numLevels);
+        writer.Write(_outputChannels);
+        foreach (int ic in _inputChannels)
+        {
+            writer.Write(ic);
+        }
+
+        // Write weights
+        for (int i = 0; i < _numLevels; i++)
+        {
+            WriteTensor(writer, _lateralWeights[i]);
+            WriteTensor(writer, _lateralBiases[i]);
+            WriteTensor(writer, _outputWeights[i]);
+            WriteTensor(writer, _outputBiases[i]);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void ReadParameters(BinaryReader reader)
+    {
+        // Read and verify configuration
+        int numLevels = reader.ReadInt32();
+        int outputChannels = reader.ReadInt32();
+        var inputChannels = new int[numLevels];
+        for (int i = 0; i < numLevels; i++)
+        {
+            inputChannels[i] = reader.ReadInt32();
+        }
+
+        if (numLevels != _numLevels || outputChannels != _outputChannels)
+        {
+            throw new InvalidOperationException($"FPN configuration mismatch: expected {_numLevels} levels with {_outputChannels} channels, got {numLevels} levels with {outputChannels} channels.");
+        }
+
+        for (int i = 0; i < numLevels; i++)
+        {
+            if (inputChannels[i] != _inputChannels[i])
+            {
+                throw new InvalidOperationException($"FPN input channel mismatch at level {i}: expected {_inputChannels[i]}, got {inputChannels[i]}.");
+            }
+        }
+
+        // Read weights
+        for (int i = 0; i < _numLevels; i++)
+        {
+            ReadTensor(reader, _lateralWeights[i]);
+            ReadTensor(reader, _lateralBiases[i]);
+            ReadTensor(reader, _outputWeights[i]);
+            ReadTensor(reader, _outputBiases[i]);
+        }
+    }
+
+    private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
+    {
+        writer.Write(tensor.Rank);
+        foreach (int dim in tensor._shape)
+        {
+            writer.Write(dim);
+        }
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(tensor[i]));
+        }
+    }
+
+    private void ReadTensor(BinaryReader reader, Tensor<T> tensor)
+    {
+        int rank = reader.ReadInt32();
+        if (rank != tensor.Rank)
+        {
+            throw new InvalidOperationException($"Tensor rank mismatch: expected {tensor.Rank}, got {rank}.");
+        }
+        for (int i = 0; i < rank; i++)
+        {
+            int dim = reader.ReadInt32();
+            if (dim != tensor.Shape[i])
+            {
+                throw new InvalidOperationException($"Tensor shape mismatch at dimension {i}: expected {tensor.Shape[i]}, got {dim}.");
+            }
+        }
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+    }
+
+    private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)
+    {
+        int batch = source.Shape[0];
+        int channels = source.Shape[1];
+        int targetH = target.Shape[2];
+        int targetW = target.Shape[3];
+        int sourceH = source.Shape[2];
+        int sourceW = source.Shape[3];
+
+        var result = new Tensor<T>(new[] { batch, channels, targetH, targetW });
+
+        for (int n = 0; n < batch; n++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < targetH; h++)
+                {
+                    for (int w = 0; w < targetW; w++)
+                    {
+                        // Nearest neighbor interpolation
+                        int srcH = Math.Min(h * sourceH / targetH, sourceH - 1);
+                        int srcW = Math.Min(w * sourceW / targetW, sourceW - 1);
+                        result[n, c, h, w] = source[n, c, srcH, srcW];
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private Tensor<T> ApplyReLU(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x._shape);
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            result[i] = NumOps.FromDouble(Math.Max(0, val));
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Produces a bit-exact deep copy by reconstructing a fresh instance with the same
+    /// input/output channel configuration and copying every weight tensor element-by-element
+    /// in the native <typeparamref name="T"/> domain. Avoids the binary <c>WriteParameters</c>
+    /// path because that round-trips through <c>double</c> via
+    /// <c>NumOps.ToDouble</c>/<c>NumOps.FromDouble</c>, which is lossy for backends like
+    /// <c>decimal</c>, <c>Half</c>, or other non-<c>double</c> numeric types.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var clone = new FPN<T>((int[])_inputChannels.Clone(), _outputChannels);
+        for (int i = 0; i < _numLevels; i++)
+        {
+            CopyTensorInto(_lateralWeights[i], clone._lateralWeights[i]);
+            CopyTensorInto(_lateralBiases[i], clone._lateralBiases[i]);
+            CopyTensorInto(_outputWeights[i], clone._outputWeights[i]);
+            CopyTensorInto(_outputBiases[i], clone._outputBiases[i]);
+        }
+        return clone;
+    }
+
+    /// <summary>
+    /// Copies every element from <paramref name="src"/> into <paramref name="dst"/> in
+    /// native <typeparamref name="T"/> arithmetic. Both tensors must share the same shape.
+    /// </summary>
+    private static void CopyTensorInto(Tensor<T> src, Tensor<T> dst)
+    {
+        if (src.Rank != dst.Rank || src.Length != dst.Length)
+        {
+            throw new InvalidOperationException(
+                $"DeepCopy tensor shape mismatch: src=[{string.Join(",", src._shape)}], " +
+                $"dst=[{string.Join(",", dst._shape)}].");
+        }
+        for (int i = 0; i < src.Rank; i++)
+        {
+            if (src._shape[i] != dst._shape[i])
+            {
+                throw new InvalidOperationException(
+                    $"DeepCopy tensor shape mismatch at axis {i}: src=[{string.Join(",", src._shape)}], " +
+                    $"dst=[{string.Join(",", dst._shape)}].");
+            }
+        }
+        for (int i = 0; i < src.Length; i++)
+        {
+            dst[i] = src[i];
+        }
+    }
+}

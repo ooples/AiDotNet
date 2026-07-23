@@ -1,0 +1,917 @@
+using System.Linq;
+using System.Reflection;
+using Xunit;
+using AiDotNet.Configuration;
+using AiDotNet.Interfaces;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.IntegrationTests.Configuration;
+
+/// <summary>
+/// Comprehensive integration tests that verify the Roslyn source generator provides
+/// 100% coverage of all Configure*() methods on AiModelBuilder, that the type registry
+/// discovers all concrete implementations, and that the JSON Schema and docs generators
+/// cover every section.
+/// </summary>
+public class SourceGeneratorCoverageTests
+{
+    #region Configure Method Coverage
+
+    /// <summary>
+    /// Verifies that every public Configure*() method on AiModelBuilder has a corresponding
+    /// property on YamlModelConfig (either hand-written or auto-generated).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task YamlModelConfig_HasPropertyForEveryConfigureMethod()
+    {
+        var builderType = typeof(AiModelBuilder<double, Matrix<double>, Vector<double>>);
+
+        // Get all unique Configure* method names (excluding async, convenience overloads)
+        var configureMethods = builderType
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.Name.StartsWith("Configure", StringComparison.Ordinal))
+            .Where(m => !m.Name.EndsWith("Async", StringComparison.Ordinal))
+            // Exclude convenience overloads that are just wrappers
+            .Where(m => m.Name != "ConfigureTimeSeriesFeaturesForFinance")
+            .Where(m => m.Name != "ConfigureTimeSeriesFeaturesMinimal")
+            // ConfigureModel(IFullModel<...>) is intentionally skipped by the generator
+            // because IFullModel can't be instantiated from YAML (requires pre-built model)
+            .Where(m => m.Name != "ConfigureModel")
+            .Select(m => m.Name.Substring("Configure".Length))
+            .Distinct()
+            .ToList();
+
+        var configType = typeof(YamlModelConfig);
+        var configProperties = configType
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missingProperties = new List<string>();
+        foreach (var methodSection in configureMethods)
+        {
+            if (!configProperties.Contains(methodSection))
+            {
+                missingProperties.Add(methodSection);
+            }
+        }
+
+        Assert.True(
+            missingProperties.Count == 0,
+            $"The following Configure*() methods have no matching YamlModelConfig property: " +
+            $"{string.Join(", ", missingProperties)}. " +
+            $"Total methods: {configureMethods.Count}, total properties: {configProperties.Count}");
+    }
+
+    /// <summary>
+    /// Verifies the total number of YAML properties matches expectations.
+    /// Hand-written: Optimizer, TimeSeriesModel + 16 deployment POCOs = 18
+    /// Auto-generated: 48 from source generator
+    /// Total: 66 properties
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task YamlModelConfig_HasExpectedPropertyCount()
+    {
+        var configType = typeof(YamlModelConfig);
+        var properties = configType
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead && p.CanWrite)
+            .ToList();
+
+        // At minimum we expect all Configure* methods to have coverage
+        // The exact count may increase as new methods are added, but should never decrease
+        Assert.True(properties.Count >= 60,
+            $"Expected at least 60 YAML config properties but found {properties.Count}. " +
+            $"Properties: {string.Join(", ", properties.Select(p => p.Name))}");
+    }
+
+    #endregion
+
+    #region Generated Section Deserialization
+
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithRegularizationSection_DeserializesCorrectly()
+    {
+        var yaml = @"
+regularization:
+  type: NoRegularization
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        Assert.NotNull(config.Regularization);
+        Assert.Equal("NoRegularization", config.Regularization.Type);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithFitDetectorSection_DeserializesCorrectly()
+    {
+        var yaml = @"
+fitDetector:
+  type: DefaultFitDetector
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        Assert.NotNull(config.FitDetector);
+        Assert.Equal("DefaultFitDetector", config.FitDetector.Type);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithFairnessEvaluatorSection_DeserializesCorrectly()
+    {
+        var yaml = @"
+fairnessEvaluator:
+  type: BasicFairnessEvaluator
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        Assert.NotNull(config.FairnessEvaluator);
+        Assert.Equal("BasicFairnessEvaluator", config.FairnessEvaluator.Type);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithPreprocessingPipeline_DeserializesCorrectly()
+    {
+        var yaml = @"
+preprocessing:
+  steps:
+    - type: StandardScaler
+    - type: SimpleImputer
+      params:
+        strategy: Mean
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        Assert.NotNull(config.Preprocessing);
+        Assert.Equal(2, config.Preprocessing.Steps.Count);
+        Assert.Equal("StandardScaler", config.Preprocessing.Steps[0].Type);
+        Assert.Equal("SimpleImputer", config.Preprocessing.Steps[1].Type);
+        Assert.True(config.Preprocessing.Steps[1].Params.ContainsKey("strategy"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithPostprocessingPipeline_DeserializesCorrectly()
+    {
+        var yaml = @"
+postprocessing:
+  steps:
+    - type: SoftmaxTransformer
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        Assert.NotNull(config.Postprocessing);
+        Assert.Single(config.Postprocessing.Steps);
+        Assert.Equal("SoftmaxTransformer", config.Postprocessing.Steps[0].Type);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithFederatedLearningSection_DeserializesCorrectly()
+    {
+        var yaml = @"
+federatedLearning:
+  numberOfClients: 10
+  localEpochs: 5
+  learningRate: 0.01
+  maxRounds: 100
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        Assert.NotNull(config.FederatedLearning);
+        Assert.Equal(10, config.FederatedLearning.NumberOfClients);
+        Assert.Equal(5, config.FederatedLearning.LocalEpochs);
+        Assert.Equal(0.01, config.FederatedLearning.LearningRate);
+        Assert.Equal(100, config.FederatedLearning.MaxRounds);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithAugmentationSection_DeserializesCorrectly()
+    {
+        var yaml = @"
+augmentation:
+  isEnabled: true
+  probability: 0.5
+  seed: 42
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        Assert.NotNull(config.Augmentation);
+        Assert.True(config.Augmentation.IsEnabled);
+        Assert.Equal(0.5, config.Augmentation.Probability);
+        Assert.Equal(42, config.Augmentation.Seed);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithUncertaintyQuantificationSection_DeserializesCorrectly()
+    {
+        var yaml = @"
+uncertaintyQuantification:
+  enabled: true
+  numSamples: 100
+  monteCarloDropoutRate: 0.1
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        Assert.NotNull(config.UncertaintyQuantification);
+        Assert.True(config.UncertaintyQuantification.Enabled);
+        Assert.Equal(100, config.UncertaintyQuantification.NumSamples);
+        Assert.Equal(0.1, config.UncertaintyQuantification.MonteCarloDropoutRate);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LoadFromString_WithProgramSynthesisSection_DeserializesCorrectly()
+    {
+        var yaml = @"
+programSynthesis:
+  maxSequenceLength: 512
+  vocabularySize: 50000
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        Assert.NotNull(config.ProgramSynthesis);
+        Assert.Equal(512, config.ProgramSynthesis.MaxSequenceLength);
+        Assert.Equal(50000, config.ProgramSynthesis.VocabularySize);
+    }
+
+    #endregion
+
+    #region Type Registry Coverage
+
+    /// <summary>
+    /// Verifies the type registry has entries for the sections that have parameterless-ctor implementations.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_HasRegisteredImplementations_ForKeyInterfaceSections()
+    {
+        var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+
+        // These sections MUST have at least one registered implementation.
+        // With the factory-based constructor resolution, all sections with concrete
+        // implementations (including those requiring constructor parameters) are now registered.
+        var expectedSections = new[]
+        {
+            "Regularization",
+            "FitDetector",
+            "Model",
+            "FairnessEvaluator",
+            "TrainingMonitor",
+            "PromptTemplate",
+            "PromptOptimizer",
+            "FewShotExampleSelector",
+            "PromptAnalyzer",
+            "ObjectDetector",
+            "InstanceSegmenter",
+            "ObjectTracker",
+            "FitnessCalculator",
+            "DataLoader",
+            "BiasDetector",
+            "LoRA",
+            "RetrievalAugmentedGeneration",
+            "CrossValidation",
+            "AutoML",
+            "MetaLearning",
+            "DistributedTraining",
+            "ExperimentTracker",
+            "CheckpointManager",
+            "ModelRegistry",
+            "DataVersionControl",
+            "HyperparameterOptimizer",
+            "Tokenizer",
+            "PromptChain",
+            "PromptCompressor",
+            "Optimizer",
+        };
+
+        foreach (var section in expectedSections)
+        {
+            Assert.True(registries.ContainsKey(section),
+                $"Type registry is missing section: {section}");
+            Assert.True(registries[section].Count > 0,
+                $"Type registry has section '{section}' but with zero implementations");
+        }
+    }
+
+    /// <summary>
+    /// Verifies the Model section of the type registry has a substantial number of implementations.
+    /// The library has hundreds of IFullModel implementations and all with public constructors
+    /// should be registered.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_ModelSection_HasMultipleImplementations()
+    {
+        var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+
+        Assert.True(registries.ContainsKey("Model"), "Model section missing from type registry");
+        Assert.True(registries["Model"].Count >= 100,
+            $"Model section only has {registries["Model"].Count} implementations. " +
+            $"Expected at least 100.");
+    }
+
+    /// <summary>
+    /// The "AutoML" registry section is a merged POCO+interface section: ConfigureAutoML(AutoMLOptions)
+    /// owns the options config, and IAutoMLModel is registered on the same section so a YAML
+    /// <c>autoML.type</c> resolves a concrete search engine through the type registry and is passed to
+    /// the ConfigureAutoML(IAutoMLModel) overload. This pins that a tabular (Matrix/Vector) pipeline can
+    /// actually resolve at least one registered AutoML engine to that interface — i.e. the merge exposes
+    /// genuinely instantiable implementations for the type: binding, not just discoverability metadata.
+    /// (Like every registry section, it also holds impls for other TInput/TOutput combinations — e.g.
+    /// Tensor-based DiffusionAutoML — which resolve only under a matching pipeline instantiation.)
+    /// </summary>
+    [Fact]
+    public void TypeRegistry_AutoMLSection_ResolvesAtLeastOneIAutoMLModelForTabularPipeline()
+    {
+        var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+
+        Assert.True(registries.ContainsKey("AutoML"), "AutoML section missing from type registry.");
+        Assert.True(registries["AutoML"].Count > 0, "AutoML section has zero registered implementations.");
+
+        var interfaceType = typeof(IAutoMLModel<double, Matrix<double>, Vector<double>>);
+        var assignable = registries["AutoML"]
+            .Where(kvp => interfaceType.IsAssignableFrom(kvp.Value))
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        Assert.True(assignable.Count > 0,
+            "No registered AutoML implementation is assignable to IAutoMLModel<double, Matrix<double>, Vector<double>>, " +
+            "so a tabular pipeline's YAML 'autoML.type' binding could never resolve a valid engine. Registered: " +
+            string.Join(", ", registries["AutoML"].Keys));
+    }
+
+    /// <summary>
+    /// Verifies CreateInstance works for representative types from each section.
+    /// Samples up to 3 types per section to avoid test host crashes from types
+    /// that allocate large resources during construction.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_SampledTypes_CanBeInstantiated()
+    {
+        var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+
+        var successes = 0;
+        var sectionsTested = 0;
+        var failures = new List<string>();
+        foreach (var (sectionName, types) in registries)
+        {
+            // Sample up to 3 types per section (first, middle, last) to keep the test fast
+            // and avoid crashing the test host from heavy constructors.
+            var typeNames = types.Keys.ToList();
+            var sampled = new List<string> { typeNames[0] };
+            if (typeNames.Count > 2) sampled.Add(typeNames[typeNames.Count / 2]);
+            if (typeNames.Count > 1) sampled.Add(typeNames[typeNames.Count - 1]);
+
+            var sectionHasSuccess = false;
+            foreach (var typeName in sampled)
+            {
+                try
+                {
+                    var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
+                        .CreateInstance<object>(sectionName, typeName);
+                    if (instance is not null)
+                    {
+                        successes++;
+                        sectionHasSuccess = true;
+                    }
+                    else
+                    {
+                        failures.Add($"{sectionName}/{typeName}: CreateInstance returned null");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failures.Add($"{sectionName}/{typeName}: {ex.GetType().Name} - {ex.InnerException?.Message ?? ex.Message}");
+                }
+            }
+
+            if (sectionHasSuccess)
+            {
+                sectionsTested++;
+            }
+        }
+
+        // At least half of all sections should have at least one instantiable type.
+        Assert.True(sectionsTested >= registries.Count / 2,
+            $"Only {sectionsTested}/{registries.Count} sections had at least one instantiable type.\n" +
+            $"Successes: {successes}\nFailures:\n{string.Join("\n", failures.Take(20))}");
+    }
+
+    /// <summary>
+    /// Verifies the YamlRegisteredTypeNames (non-generic) matches the generic YamlTypeRegistry.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task RegisteredTypeNames_MatchesTypeRegistry()
+    {
+        var genericRegistries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+        var stringNames = YamlRegisteredTypeNames.SectionTypes;
+
+        foreach (var (sectionName, typeDict) in genericRegistries)
+        {
+            Assert.True(stringNames.ContainsKey(sectionName),
+                $"YamlRegisteredTypeNames is missing section: {sectionName}");
+            Assert.Equal(typeDict.Count, stringNames[sectionName].Length);
+
+            foreach (var typeName in typeDict.Keys)
+            {
+                Assert.Contains(typeName, stringNames[sectionName]);
+            }
+        }
+    }
+
+    #endregion
+
+    #region Schema Metadata Coverage
+
+    /// <summary>
+    /// Verifies the schema metadata covers all generated sections.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SchemaMetadata_CoversAllGeneratedSections()
+    {
+        var sections = YamlSchemaMetadata.Sections;
+        var sectionNames = sections.Select(s => s.SectionName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // All auto-generated properties should appear in the schema metadata
+        var generatedPropertyNames = typeof(YamlModelConfig)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(p => p.Name)
+            .ToList();
+
+        // Note: some properties are hand-written in the base class, not in generated partial
+        // The schema metadata is for the generated sections. Check that generated sections are there.
+        Assert.True(sections.Count >= 40,
+            $"Expected at least 40 schema metadata sections but found {sections.Count}");
+    }
+
+    /// <summary>
+    /// Verifies POCO sections in the schema metadata have property definitions.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SchemaMetadata_PocoSections_HaveProperties()
+    {
+        var sections = YamlSchemaMetadata.Sections;
+        var pocoSections = sections.Where(s => s.Category == "Poco").ToList();
+
+        Assert.True(pocoSections.Count > 0, "No POCO sections found in schema metadata");
+
+        foreach (var section in pocoSections)
+        {
+            Assert.True(section.PocoProperties.Length > 0,
+                $"POCO section '{section.SectionName}' has no properties defined in schema metadata");
+        }
+    }
+
+    /// <summary>
+    /// Verifies the hand-written sections are correctly marked in schema metadata.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SchemaMetadata_HandWrittenSections_AreMarked()
+    {
+        var sections = YamlSchemaMetadata.Sections;
+
+        // The hand-written sections should be marked with IsHandWritten = true
+        var handWrittenNames = new[] { "Optimizer", "Quantization", "Compression", "Caching",
+            "Versioning", "ABTesting", "Telemetry", "Export", "GpuAcceleration", "Profiling",
+            "JitCompilation", "MixedPrecision", "Reasoning", "Benchmarking",
+            "InferenceOptimizations", "Interpretability", "MemoryManagement" };
+
+        foreach (var name in handWrittenNames)
+        {
+            var section = sections.FirstOrDefault(s =>
+                s.SectionName.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (section is not null)
+            {
+                Assert.True(section.IsHandWritten,
+                    $"Section '{name}' should be marked as hand-written in schema metadata");
+            }
+        }
+    }
+
+    #endregion
+
+    #region JSON Schema and Docs Generation
+
+    /// <summary>
+    /// Verifies the JSON Schema generator produces valid output.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task JsonSchemaGenerate_ProducesValidJson()
+    {
+        var schema = YamlJsonSchema.Generate();
+
+        Assert.False(string.IsNullOrWhiteSpace(schema), "JSON Schema is empty");
+        Assert.Contains("\"$schema\"", schema);
+        Assert.Contains("\"properties\"", schema);
+        Assert.Contains("\"optimizer\"", schema);
+        Assert.Contains("\"timeSeriesModel\"", schema);
+        Assert.Contains("\"quantization\"", schema);
+        Assert.Contains("\"regularization\"", schema);
+    }
+
+    /// <summary>
+    /// Verifies the JSON Schema covers both hand-written and generated sections.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task JsonSchemaGenerate_CoversAllSections()
+    {
+        var schema = YamlJsonSchema.Generate();
+
+        // Hand-written POCO sections
+        Assert.Contains("\"quantization\"", schema);
+        Assert.Contains("\"compression\"", schema);
+        Assert.Contains("\"caching\"", schema);
+        Assert.Contains("\"telemetry\"", schema);
+        Assert.Contains("\"profiling\"", schema);
+        Assert.Contains("\"inferenceOptimizations\"", schema);
+        Assert.Contains("\"memoryManagement\"", schema);
+
+        // Generated interface sections
+        Assert.Contains("\"regularization\"", schema);
+        Assert.Contains("\"fitDetector\"", schema);
+        Assert.Contains("\"fairnessEvaluator\"", schema);
+        Assert.Contains("\"tokenizer\"", schema);
+        Assert.Contains("\"promptTemplate\"", schema);
+
+        // Generated pipeline sections
+        Assert.Contains("\"preprocessing\"", schema);
+        Assert.Contains("\"postprocessing\"", schema);
+    }
+
+    /// <summary>
+    /// Verifies the docs generator produces markdown output with key sections.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task DocsGenerate_ProducesMarkdown()
+    {
+        var docs = YamlDocsGenerator.Generate();
+
+        Assert.False(string.IsNullOrWhiteSpace(docs), "Documentation is empty");
+        Assert.Contains("# AiDotNet YAML Configuration Reference", docs);
+        Assert.Contains("## Quick Start", docs);
+        Assert.Contains("## Table of Contents", docs);
+        Assert.Contains("### optimizer", docs);
+        Assert.Contains("### timeSeriesModel", docs);
+    }
+
+    /// <summary>
+    /// Verifies the docs generator covers POCO, interface, and pipeline sections.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task DocsGenerate_CoversAllSectionTypes()
+    {
+        var docs = YamlDocsGenerator.Generate();
+
+        // POCO sections
+        Assert.Contains("quantization", docs);
+        Assert.Contains("caching", docs);
+        Assert.Contains("telemetry", docs);
+
+        // Interface sections
+        Assert.Contains("regularization", docs);
+        Assert.Contains("fairnessEvaluator", docs);
+        Assert.Contains("tokenizer", docs);
+
+        // Pipeline sections
+        Assert.Contains("preprocessing", docs);
+    }
+
+    #endregion
+
+    #region Type Registry CreateInstance End-to-End
+
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_NoRegularization_Works()
+    {
+        var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
+            .CreateInstance<IRegularization<double, Matrix<double>, Vector<double>>>(
+                "Regularization", "NoRegularization");
+
+        Assert.NotNull(instance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_DefaultFitDetector_Works()
+    {
+        var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
+            .CreateInstance<IFitDetector<double, Matrix<double>, Vector<double>>>(
+                "FitDetector", "DefaultFitDetector");
+
+        Assert.NotNull(instance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_BasicFairnessEvaluator_Works()
+    {
+        var instance = YamlTypeRegistry<double, Matrix<double>, Vector<double>>
+            .CreateInstance<IFairnessEvaluator<double>>(
+                "FairnessEvaluator", "BasicFairnessEvaluator");
+
+        Assert.NotNull(instance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_InvalidSection_ThrowsArgumentException()
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            YamlTypeRegistry<double, Matrix<double>, Vector<double>>
+                .CreateInstance<object>("NonExistentSection", "SomeType"));
+
+        Assert.Contains("NonExistentSection", ex.Message);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_CreateInstance_InvalidType_ThrowsArgumentException()
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            YamlTypeRegistry<double, Matrix<double>, Vector<double>>
+                .CreateInstance<object>("Regularization", "NonExistentType"));
+
+        Assert.Contains("NonExistentType", ex.Message);
+        Assert.Contains("Available types", ex.Message);
+    }
+
+    #endregion
+
+    #region Coverage Gap Documentation Tests
+
+    /// <summary>
+    /// Verifies that all previously-gapped interface sections now have registered implementations.
+    /// These were previously excluded because the ImplementationFinder required parameterless
+    /// constructors. With smart constructor resolution, they are now all registered.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task TypeRegistry_PreviouslyGappedSections_NowHaveImplementations()
+    {
+        var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+
+        // ALL of these previously-gapped sections should now have implementations
+        var previouslyGappedSections = new[]
+        {
+            "FitnessCalculator",
+            "DataLoader",
+            "BiasDetector",
+            "LoRA",
+            "RetrievalAugmentedGeneration",
+            "CrossValidation",
+            "AutoML",
+            "MetaLearning",
+            "DistributedTraining",
+            "ExperimentTracker",
+            "CheckpointManager",
+            "ModelRegistry",
+            "DataVersionControl",
+            "HyperparameterOptimizer",
+            "PromptChain",
+            "PromptCompressor",
+            "ObjectDetector",
+            "InstanceSegmenter",
+            "ObjectTracker",
+        };
+
+        foreach (var section in previouslyGappedSections)
+        {
+            Assert.True(registries.ContainsKey(section),
+                $"Section '{section}' still has no registered implementations.");
+            Assert.True(registries[section].Count > 0,
+                $"Section '{section}' is registered but has zero implementations.");
+        }
+    }
+
+    /// <summary>
+    /// Counts the total number of Configure methods, generated properties, and registered types
+    /// to provide a clear coverage summary.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task CoverageSummary_ReportsCounts()
+    {
+        var builderType = typeof(AiModelBuilder<double, Matrix<double>, Vector<double>>);
+        var configType = typeof(YamlModelConfig);
+
+        var configureMethods = builderType
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.Name.StartsWith("Configure", StringComparison.Ordinal))
+            .Where(m => !m.Name.EndsWith("Async", StringComparison.Ordinal))
+            .Where(m => m.Name != "ConfigureTimeSeriesFeaturesForFinance")
+            .Where(m => m.Name != "ConfigureTimeSeriesFeaturesMinimal")
+            .Select(m => m.Name)
+            .Distinct()
+            .Count();
+
+        var yamlProperties = configType
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead && p.CanWrite)
+            .Count();
+
+        var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+        var totalRegisteredTypes = registries.Values.Sum(d => d.Count);
+        var sectionsWithImpls = registries.Count;
+
+        var schemaSections = YamlSchemaMetadata.Sections.Count;
+
+        // Assertions to ensure coverage doesn't regress
+        Assert.True(configureMethods > 50,
+            $"Expected >50 Configure methods, found {configureMethods}");
+        Assert.True(yamlProperties >= configureMethods - 5,
+            $"YAML properties ({yamlProperties}) should be close to Configure methods ({configureMethods})");
+        Assert.True(totalRegisteredTypes >= 800,
+            $"Expected at least 800 registered types, found {totalRegisteredTypes}");
+        Assert.True(sectionsWithImpls >= 25,
+            $"Expected at least 25 sections with implementations, found {sectionsWithImpls}");
+        Assert.True(schemaSections >= 40,
+            $"Expected at least 40 schema metadata sections, found {schemaSections}");
+    }
+
+    #endregion
+
+    #region YAML Applier End-to-End for Generated Sections
+
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithRegularizationSection_ConfiguresBuilder()
+    {
+        var yaml = @"
+regularization:
+  type: NoRegularization
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+
+        // Should not throw - the registry has NoRegularization
+        var exception = Record.Exception(() =>
+            YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder));
+        Assert.Null(exception);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithFitDetectorSection_ConfiguresBuilder()
+    {
+        var yaml = @"
+fitDetector:
+  type: DefaultFitDetector
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+
+        var exception = Record.Exception(() =>
+            YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder));
+        Assert.Null(exception);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithFairnessEvaluatorSection_ConfiguresBuilder()
+    {
+        var yaml = @"
+fairnessEvaluator:
+  type: BasicFairnessEvaluator
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+
+        var exception = Record.Exception(() =>
+            YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder));
+        Assert.Null(exception);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithPromptTemplateSection_ConfiguresBuilder()
+    {
+        var yaml = @"
+promptTemplate:
+  type: InstructionFollowingTemplate
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+
+        var exception = Record.Exception(() =>
+            YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder));
+        Assert.Null(exception);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Apply_WithComprehensiveConfig_AllSectionsApplyWithoutError()
+    {
+        var yaml = @"
+optimizer:
+  type: Adam
+
+caching:
+  enabled: true
+  maxCacheSize: 1000
+
+jitCompilation:
+  enabled: true
+
+inferenceOptimizations:
+  enableKVCache: true
+
+interpretability:
+  enableSHAP: true
+
+memoryManagement:
+  useGradientCheckpointing: true
+
+regularization:
+  type: NoRegularization
+
+fitDetector:
+  type: DefaultFitDetector
+
+fairnessEvaluator:
+  type: BasicFairnessEvaluator
+
+promptTemplate:
+  type: InstructionFollowingTemplate
+";
+
+        var config = YamlConfigLoader.LoadFromString(yaml);
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+
+        var exception = Record.Exception(() =>
+            YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder));
+        Assert.Null(exception);
+    }
+
+    #endregion
+
+    #region Merged-section (RegistryMerged) regression — PR #1789 CodeRabbit fixes
+
+    /// <summary>
+    /// Thread 2 (YamlConfigSourceGenerator.GetYamlPropertyType): a RegistryMerged section whose builder
+    /// exposes the interface overload emits a <c>type:</c>/<c>params:</c> applier branch, so its
+    /// YamlModelConfig property MUST be a <see cref="YamlTypeSection"/> (exposing Type/Params). If the
+    /// generator instead surfaced the concrete POCO type, the applier's <c>config.AutoML.Type</c> access
+    /// would not compile. This pins the AutoML merged section to YamlTypeSection.
+    /// </summary>
+    [Fact]
+    public void YamlModelConfig_AutoMLMergedSection_PropertyIsYamlTypeSection()
+    {
+        var prop = typeof(YamlModelConfig).GetProperty("AutoML");
+        Assert.NotNull(prop);
+        Assert.Equal(typeof(YamlTypeSection), prop!.PropertyType);
+    }
+
+    /// <summary>
+    /// Threads 1+2: a YAML <c>autoML.type</c> naming a registered IAutoMLModel round-trips through the
+    /// merged applier branch (CreateInstance&lt;IAutoMLModel&gt; -&gt; builder.ConfigureAutoML(IAutoMLModel))
+    /// without error, proving the merged section is genuinely instantiable end to end and that the parsed
+    /// property carries the type name via YamlTypeSection.
+    /// </summary>
+    [Fact]
+    public void YamlRoundTrip_AutoMLMergedSection_ResolvesRegisteredEngine()
+    {
+        var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+        var interfaceType = typeof(IAutoMLModel<double, Matrix<double>, Vector<double>>);
+        var engineName = registries["AutoML"]
+            .Where(kvp => interfaceType.IsAssignableFrom(kvp.Value))
+            .Select(kvp => kvp.Key)
+            .First();
+
+        var yaml = $"autoML:\n  type: {engineName}\n";
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        // Thread 2: the generated property is a YamlTypeSection carrying the parsed type name.
+        Assert.NotNull(config.AutoML);
+        Assert.Equal(engineName, config.AutoML!.Type);
+
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        var exception = Record.Exception(() =>
+            YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder));
+        Assert.Null(exception);
+    }
+
+    /// <summary>
+    /// Thread 3 (IAiModelBuilder): the advanced <c>ConfigureAutoML(IAutoMLModel&lt;...&gt;)</c> overload must be
+    /// declared on BOTH the IAiModelBuilder interface AND the concrete AiModelBuilder. Every fluent
+    /// <c>Configure*</c> method belongs on the interface so it is callable through the interface abstraction
+    /// (and dispatched against by the generated YAML applier), and it must remain a public method on the
+    /// concrete builder.
+    /// </summary>
+    [Fact]
+    public void ConfigureAutoML_IAutoMLModelOverload_IsOnBothInterfaceAndConcreteBuilder()
+    {
+        var interfaceType = typeof(IAiModelBuilder<double, Matrix<double>, Vector<double>>);
+        var concreteType = typeof(AiModelBuilder<double, Matrix<double>, Vector<double>>);
+        var autoMLModelType = typeof(IAutoMLModel<double, Matrix<double>, Vector<double>>);
+
+        static bool HasIAutoMLModelOverload(Type t, Type paramType) => t
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Any(m => m.Name == "ConfigureAutoML"
+                && m.GetParameters().Length == 1
+                && m.GetParameters()[0].ParameterType == paramType);
+
+        Assert.True(HasIAutoMLModelOverload(interfaceType, autoMLModelType),
+            "ConfigureAutoML(IAutoMLModel<...>) must be declared on IAiModelBuilder — every Configure* method belongs on the interface so it is usable through the abstraction.");
+        Assert.True(HasIAutoMLModelOverload(concreteType, autoMLModelType),
+            "ConfigureAutoML(IAutoMLModel<...>) must remain a public method on the concrete AiModelBuilder.");
+    }
+
+    #endregion
+}

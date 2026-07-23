@@ -1,0 +1,78 @@
+namespace AiDotNet.Serving.Configuration;
+
+/// <summary>
+/// Represents a model to be loaded when the server starts.
+/// </summary>
+public class StartupModel
+{
+    /// <summary>
+    /// Gets or sets the name of the model.
+    /// This will be used as the identifier for API requests.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the file path to the serialized model.
+    /// </summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the numeric type used by the model.
+    /// Default is Double.
+    /// </summary>
+    public NumericType NumericType { get; set; } = NumericType.Double;
+
+    /// <summary>
+    /// Gets or sets the expected SHA-256 hash (hex) of the model file.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When specified, AiDotNet.Serving validates the model file hash before loading.
+    /// </para>
+    /// </remarks>
+    public string? Sha256 { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this model is served as an autoregressive text-generation model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When <c>true</c>, the model is loaded as a tensor-to-tensor (token-to-logits) language model
+    /// via the KV-cached incremental generation path (paged KV cache, per-request session isolation,
+    /// and RadixAttention-style prompt-prefix sharing). The model file must be a tensor model whose
+    /// forward maps token IDs to per-position vocabulary logits. When <c>false</c> (the default), the
+    /// model is loaded as an ordinary prediction model and the <c>generate</c> endpoint reports it as
+    /// non-generative.
+    /// </para>
+    /// </remarks>
+    public bool EnableTextGeneration { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether the incremental text-generation model uses int8 weight-only quantization
+    /// so more sequences stay KV-resident. Only takes effect when <see cref="EnableTextGeneration"/>
+    /// is <c>true</c>. Default is <c>false</c>.
+    /// </summary>
+    public bool QuantizeKvCacheWeights { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether the incremental text-generation path uses a paged (vLLM-style) KV cache
+    /// that allocates KV memory in fixed-size blocks. Only takes effect when
+    /// <see cref="EnableTextGeneration"/> is <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the industry-standard high-throughput serving default, so it is <c>true</c> out of the
+    /// box — paged KV cache is wired transparently with no configuration required. Set to <c>false</c>
+    /// only to force the traditional contiguous KV cache (e.g. for debugging or memory-tiny models).
+    /// </para>
+    /// </remarks>
+    public bool EnablePagedKvCache { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the block size (in tokens) for the paged KV cache when
+    /// <see cref="EnablePagedKvCache"/> is enabled. Common values are 16 (default) or 32: smaller
+    /// blocks reduce internal fragmentation, larger blocks reduce block-table overhead.
+    /// </summary>
+    public int PagedKvCacheBlockSize { get; set; } = 16;
+}
+

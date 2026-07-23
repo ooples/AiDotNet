@@ -1,0 +1,237 @@
+using System;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
+{
+    public class PatchEmbeddingLayerTests
+    {
+        [Fact(Timeout = 120000)]
+        public async Task Constructor_WithValidParameters_InitializesCorrectly()
+        {
+            // Arrange & Act
+            var layer = new PatchEmbeddingLayer<double>(
+                patchSize: 8,
+                embeddingDim: 64);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.True(layer.SupportsTraining);
+            Assert.True(layer.ParameterCount > 0);
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task ResolveFromShape_WithNonDivisibleHeight_CropsToFloorPatchGrid()
+        {
+            await Task.Yield();
+            // Resolution-independent patchification (Flamingo/NFNet + Perceiver): a non-divisible
+            // image is NOT rejected — the partial-patch remainder rows are cropped (integer floor),
+            // matching a PyTorch Conv2d(stride=patch). height=33 with patchSize 8 -> floor(33/8)=4
+            // complete patch rows, width=32 -> 4 cols => 16 patches, and Forward crops the remainder.
+            var layer = new PatchEmbeddingLayer<double>(patchSize: 8, embeddingDim: 64);
+            layer.ResolveFromShape(new[] { 3, 33, 32 }); // must not throw
+
+            var input = new Tensor<double>([1, 3, 33, 32]);
+            for (int i = 0; i < input.Length; i++) input[i] = 0.1;
+            var output = layer.Forward(input);
+
+            Assert.Equal(3, output.Rank);
+            Assert.Equal((33 / 8) * (32 / 8), output.Shape[1]); // 4*4 = 16
+            Assert.Equal(64, output.Shape[2]);
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task ResolveFromShape_WithNonDivisibleWidth_CropsToFloorPatchGrid()
+        {
+            await Task.Yield();
+            var layer = new PatchEmbeddingLayer<double>(patchSize: 8, embeddingDim: 64);
+            layer.ResolveFromShape(new[] { 3, 32, 33 }); // width 33 not divisible by 8; must not throw
+
+            var input = new Tensor<double>([1, 3, 32, 33]);
+            for (int i = 0; i < input.Length; i++) input[i] = 0.1;
+            var output = layer.Forward(input);
+
+            Assert.Equal((32 / 8) * (33 / 8), output.Shape[1]); // 4*4 = 16
+            Assert.Equal(64, output.Shape[2]);
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task ResolveFromShape_WithSubPatchInput_ThrowsArgumentException()
+        {
+            await Task.Yield();
+            // An image smaller than a single patch in either spatial dim has NO complete patch and
+            // IS rejected (floor(H/patch) < 1) — the one case the resolution-independent path still
+            // guards, per the reviewer's "reject tensors smaller than one full patch".
+            var layer = new PatchEmbeddingLayer<double>(patchSize: 8, embeddingDim: 64);
+            // [channels=3, height=4, width=4] — 4 < patchSize 8 => zero patches.
+            Assert.Throws<ArgumentException>(() =>
+                layer.ResolveFromShape(new[] { 3, 4, 4 }));
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task Forward_WithValidInput_ReturnsCorrectShape()
+        {
+            // Arrange
+            var layer = new PatchEmbeddingLayer<double>(
+                patchSize: 8,
+                embeddingDim: 64);
+
+            int batchSize = 2;
+            var input = new Tensor<double>([batchSize, 3, 32, 32]);
+            for (int i = 0; i < input.Length; i++)
+            {
+                input[i] = 0.1;
+            }
+
+            // Act
+            var output = layer.Forward(input);
+
+            // Assert
+            int expectedPatches = (32 / 8) * (32 / 8);
+            Assert.Equal(3, output.Rank);
+            Assert.Equal(batchSize, output.Shape[0]);
+            Assert.Equal(expectedPatches, output.Shape[1]);
+            Assert.Equal(64, output.Shape[2]);
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task Forward_CalculatesCorrectNumberOfPatches()
+        {
+            // Arrange
+            var layer = new PatchEmbeddingLayer<double>(
+                patchSize: 16,
+                embeddingDim: 128);
+
+            var input = new Tensor<double>([1, 3, 64, 64]);
+
+            // Act
+            var output = layer.Forward(input);
+
+            // Assert - 64/16 = 4 patches per dimension, 4x4 = 16 total patches
+            Assert.Equal(16, output.Shape[1]);
+        }
+
+
+
+        [Fact(Timeout = 120000)]
+        public async Task GetParameters_ReturnsAllParameters()
+        {
+            // Arrange — lazy ctor; resolve with channels=3 + a divisible
+            // image so weights materialize before reading parameters.
+            var layer = new PatchEmbeddingLayer<double>(
+                patchSize: 4,
+                embeddingDim: 32);
+            layer.ResolveFromShape(new[] { 3, 8, 8 });
+
+            // Act
+            var parameters = layer.GetParameters();
+
+            // Assert
+            int patchDim = 3 * 4 * 4;
+            int expectedParams = patchDim * 32 + 32;
+            Assert.Equal(expectedParams, parameters.Length);
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task SetParameters_WithValidVector_UpdatesParameters()
+        {
+            // Arrange
+            var layer = new PatchEmbeddingLayer<double>(
+                patchSize: 4,
+                embeddingDim: 32);
+
+            var params1 = layer.GetParameters();
+            var newParams = new Vector<double>(params1.Length);
+            for (int i = 0; i < newParams.Length; i++)
+            {
+                newParams[i] = 0.5;
+            }
+
+            // Act
+            layer.SetParameters(newParams);
+
+            // Assert
+            var params2 = layer.GetParameters();
+            for (int i = 0; i < params2.Length; i++)
+            {
+                Assert.Equal(0.5, params2[i], 6);
+            }
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task SetParameters_WithInvalidLength_ThrowsArgumentException()
+        {
+            // Arrange
+            var layer = new PatchEmbeddingLayer<double>(
+                patchSize: 4,
+                embeddingDim: 32);
+
+            var wrongParams = new Vector<double>(10);
+
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() => layer.SetParameters(wrongParams));
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task ResetState_ClearsCachedValues()
+        {
+            // Arrange
+            var layer = new PatchEmbeddingLayer<double>(
+                patchSize: 4,
+                embeddingDim: 32);
+
+            var input = new Tensor<double>([1, 3, 16, 16]);
+            layer.Forward(input);
+
+            // Act
+            layer.ResetState();
+
+            // Assert - should not throw when called without prior forward
+            layer.ResetState();
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task Forward_WithMultipleBatches_ProcessesIndependently()
+        {
+            // Arrange
+            var layer = new PatchEmbeddingLayer<double>(
+                patchSize: 4,
+                embeddingDim: 32);
+
+            int batchSize = 4;
+            var input = new Tensor<double>([batchSize, 3, 16, 16]);
+            var random = RandomHelper.CreateSeededRandom(42);
+            for (int i = 0; i < input.Length; i++)
+            {
+                input[i] = random.NextDouble();
+            }
+
+            // Act
+            var output = layer.Forward(input);
+
+            // Assert
+            Assert.Equal(batchSize, output.Shape[0]);
+            Assert.Equal(16, output.Shape[1]);
+            Assert.Equal(32, output.Shape[2]);
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task ParameterCount_MatchesGetParametersLength()
+        {
+            // Arrange
+            var layer = new PatchEmbeddingLayer<double>(
+                patchSize: 8,
+                embeddingDim: 64);
+
+            // Act
+            int count1 = (int)layer.ParameterCount;
+            int count2 = layer.GetParameters().Length;
+
+            // Assert
+            Assert.Equal(count1, count2);
+        }
+    }
+}

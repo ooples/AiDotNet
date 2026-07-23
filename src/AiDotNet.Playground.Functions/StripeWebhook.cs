@@ -1,0 +1,353 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Logging;
+using Stripe;
+
+namespace AiDotNet.Playground.Functions;
+
+public class StripeWebhook
+{
+    private readonly ILogger<StripeWebhook> _logger;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    // Shared HttpClient to avoid socket exhaustion from per-request instantiation
+    private static readonly HttpClient SharedHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(30)
+    };
+
+    public StripeWebhook(ILogger<StripeWebhook> logger)
+    {
+        _logger = logger;
+    }
+
+    [Function("stripe-webhook")]
+    public async Task<IActionResult> Run(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req)
+    {
+        // Stripe calls webhooks server-to-server; CORS is not needed.
+        // If browser-origin calls are needed later, configure CORS in host.json instead.
+
+        var webhookSecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET");
+        if (string.IsNullOrEmpty(webhookSecret))
+        {
+            _logger.LogError("STRIPE_WEBHOOK_SECRET environment variable is not set");
+            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+        }
+
+        // Read the raw body for signature verification
+        string requestBody;
+        using (var reader = new StreamReader(req.Body, Encoding.UTF8))
+        {
+            requestBody = await reader.ReadToEndAsync();
+        }
+
+        Event stripeEvent;
+        try
+        {
+            stripeEvent = EventUtility.ConstructEvent(
+                requestBody,
+                req.Headers["Stripe-Signature"],
+                webhookSecret
+            );
+        }
+        catch (StripeException ex)
+        {
+            _logger.LogWarning(ex, "Stripe webhook signature verification failed");
+            return new BadRequestObjectResult("Invalid signature");
+        }
+
+        _logger.LogInformation("Received Stripe event: {EventType} ({EventId})", stripeEvent.Type, stripeEvent.Id);
+
+        try
+        {
+            switch (stripeEvent.Type)
+            {
+                case EventTypes.CheckoutSessionCompleted:
+                    await HandleCheckoutSessionCompleted(stripeEvent);
+                    break;
+
+                case EventTypes.CustomerSubscriptionUpdated:
+                    await HandleSubscriptionUpdated(stripeEvent);
+                    break;
+
+                case EventTypes.CustomerSubscriptionDeleted:
+                    await HandleSubscriptionDeleted(stripeEvent);
+                    break;
+
+                default:
+                    _logger.LogInformation("Unhandled event type: {EventType}", stripeEvent.Type);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing Stripe event {EventType} ({EventId})", stripeEvent.Type, stripeEvent.Id);
+            // Return 500 so Stripe retries - transient errors (DB down, network) should be retried.
+            // Stripe retries with exponential backoff up to 72 hours.
+            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+        }
+
+        return new OkResult();
+    }
+
+    private async Task HandleCheckoutSessionCompleted(Event stripeEvent)
+    {
+        var session = stripeEvent.Data.Object as Stripe.Checkout.Session;
+        if (session is null)
+        {
+            _logger.LogWarning("CheckoutSessionCompleted: could not deserialize session object");
+            return;
+        }
+
+        var customerEmail = session.CustomerDetails?.Email ?? session.CustomerEmail;
+        var customerId = session.CustomerId;
+
+        if (string.IsNullOrEmpty(customerEmail))
+        {
+            _logger.LogWarning("CheckoutSessionCompleted: no customer email found for session {SessionId}", session.Id);
+            return;
+        }
+
+        _logger.LogInformation(
+            "Checkout completed for customer {CustomerId}, email {EmailDomain}, subscription {SubscriptionId}",
+            customerId, MaskEmail(customerEmail), session.SubscriptionId);
+
+        // Determine tier from the subscription
+        var tier = "pro"; // Default to pro since that's our only paid tier currently
+
+        await UpdateSupabaseProfile(customerEmail, tier, "active", customerId);
+    }
+
+    private async Task HandleSubscriptionUpdated(Event stripeEvent)
+    {
+        var subscription = stripeEvent.Data.Object as Subscription;
+        if (subscription is null)
+        {
+            _logger.LogWarning("SubscriptionUpdated: could not deserialize subscription object");
+            return;
+        }
+
+        // Get customer email from Stripe
+        var customerEmail = await GetCustomerEmail(subscription.CustomerId);
+        if (string.IsNullOrEmpty(customerEmail))
+        {
+            _logger.LogWarning("SubscriptionUpdated: could not find email for customer {CustomerId}", subscription.CustomerId);
+            return;
+        }
+
+        var status = subscription.Status switch
+        {
+            "active" => "active",
+            "past_due" => "past_due",
+            "canceled" => "canceled",
+            "unpaid" => "unpaid",
+            "trialing" => "active",
+            _ => subscription.Status
+        };
+
+        var tier = status == "canceled" ? "free" : "pro";
+
+        _logger.LogInformation(
+            "Subscription updated for {EmailDomain}: status={Status}, tier={Tier}",
+            MaskEmail(customerEmail), status, tier);
+
+        await UpdateSupabaseProfile(customerEmail, tier, status, subscription.CustomerId);
+    }
+
+    private async Task HandleSubscriptionDeleted(Event stripeEvent)
+    {
+        var subscription = stripeEvent.Data.Object as Subscription;
+        if (subscription is null)
+        {
+            _logger.LogWarning("SubscriptionDeleted: could not deserialize subscription object");
+            return;
+        }
+
+        var customerEmail = await GetCustomerEmail(subscription.CustomerId);
+        if (string.IsNullOrEmpty(customerEmail))
+        {
+            _logger.LogWarning("SubscriptionDeleted: could not find email for customer {CustomerId}", subscription.CustomerId);
+            return;
+        }
+
+        _logger.LogInformation("Subscription deleted for {EmailDomain}, reverting to free tier", MaskEmail(customerEmail));
+
+        await UpdateSupabaseProfile(customerEmail, "free", "canceled", subscription.CustomerId);
+    }
+
+    private async Task<string?> GetCustomerEmail(string? customerId)
+    {
+        if (string.IsNullOrEmpty(customerId))
+        {
+            return null;
+        }
+
+        var stripeSecretKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
+        if (string.IsNullOrEmpty(stripeSecretKey))
+        {
+            _logger.LogError("STRIPE_SECRET_KEY environment variable is not set");
+            return null;
+        }
+
+        StripeConfiguration.ApiKey = stripeSecretKey;
+        var customerService = new CustomerService();
+
+        try
+        {
+            var customer = await customerService.GetAsync(customerId);
+            return customer.Email;
+        }
+        catch (StripeException ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve customer {CustomerId} from Stripe", customerId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Masks an email address for safe logging (e.g., "j***@example.com").
+    /// </summary>
+    private static string MaskEmail(string? email)
+    {
+        if (string.IsNullOrEmpty(email))
+        {
+            return "[no-email]";
+        }
+
+        var atIndex = email.IndexOf('@');
+        if (atIndex <= 0)
+        {
+            return "***";
+        }
+
+        return $"{email[0]}***@{email[(atIndex + 1)..]}";
+    }
+
+    /// <summary>
+    /// Updates the user's subscription profile in Supabase.
+    /// Throws on configuration or HTTP failures so the webhook can return 500
+    /// and Stripe will retry the event.
+    /// </summary>
+    private async Task UpdateSupabaseProfile(string email, string tier, string status, string? stripeCustomerId)
+    {
+        var supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL");
+        var supabaseKey = Environment.GetEnvironmentVariable("SUPABASE_SECRET_KEY");
+
+        if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(supabaseKey))
+        {
+            _logger.LogError("SUPABASE_URL or SUPABASE_SECRET_KEY environment variables are not set");
+            throw new InvalidOperationException("Supabase configuration is missing. Cannot update profile.");
+        }
+
+        // First, find the user by email in Supabase Auth
+        // Use per-request message headers instead of DefaultRequestHeaders to avoid thread-safety issues
+        var httpClient = SharedHttpClient;
+
+        // Look up user by email via auth admin API (paginated to avoid truncation)
+        string? userId = null;
+        int page = 1;
+        const int perPage = 100;
+
+        while (userId is null)
+        {
+            var usersRequest = new HttpRequestMessage(HttpMethod.Get,
+                $"{supabaseUrl}/auth/v1/admin/users?page={page}&per_page={perPage}");
+            usersRequest.Headers.Add("apikey", supabaseKey);
+            usersRequest.Headers.Add("Authorization", $"Bearer {supabaseKey}");
+            var usersResponse = await httpClient.SendAsync(usersRequest);
+            if (!usersResponse.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to list Supabase users: {StatusCode}", usersResponse.StatusCode);
+                throw new InvalidOperationException($"Supabase user lookup failed with HTTP {(int)usersResponse.StatusCode}.");
+            }
+
+            var usersJson = await usersResponse.Content.ReadAsStringAsync();
+            using var usersData = JsonDocument.Parse(usersJson);
+
+            int count = 0;
+            if (usersData.RootElement.TryGetProperty("users", out var usersArray))
+            {
+                foreach (var user in usersArray.EnumerateArray())
+                {
+                    count++;
+                    if (user.TryGetProperty("email", out var emailProp) &&
+                        string.Equals(emailProp.GetString(), email, StringComparison.OrdinalIgnoreCase))
+                    {
+                        userId = user.GetProperty("id").GetString();
+                        break;
+                    }
+                }
+            }
+
+            // No more pages if fewer results than page size
+            if (count < perPage)
+            {
+                break;
+            }
+
+            page++;
+        }
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            _logger.LogWarning("No Supabase user found with email {EmailDomain}", MaskEmail(email));
+            return;
+        }
+
+        // Update the profiles table via REST API
+        var updatePayload = new Dictionary<string, object?>
+        {
+            ["subscription_tier"] = tier,
+            ["subscription_status"] = status,
+            ["updated_at"] = DateTime.UtcNow.ToString("o")
+        };
+
+        if (!string.IsNullOrEmpty(stripeCustomerId))
+        {
+            updatePayload["stripe_customer_id"] = stripeCustomerId;
+        }
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(updatePayload),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        // PATCH the profile row matching this user's ID
+        var patchRequest = new HttpRequestMessage(HttpMethod.Patch,
+            $"{supabaseUrl}/rest/v1/profiles?id=eq.{userId}")
+        {
+            Content = jsonContent
+        };
+        patchRequest.Headers.Add("apikey", supabaseKey);
+        patchRequest.Headers.Add("Authorization", $"Bearer {supabaseKey}");
+        patchRequest.Headers.Add("Prefer", "return=minimal");
+
+        var patchResponse = await httpClient.SendAsync(patchRequest);
+
+        if (patchResponse.IsSuccessStatusCode)
+        {
+            _logger.LogInformation(
+                "Updated profile for user {UserId} ({EmailDomain}): tier={Tier}, status={Status}, stripe_customer={CustomerId}",
+                userId, MaskEmail(email), tier, status, stripeCustomerId);
+        }
+        else
+        {
+            var errorBody = await patchResponse.Content.ReadAsStringAsync();
+            _logger.LogError(
+                "Failed to update profile for user {UserId}: {StatusCode} - {Error}",
+                userId, patchResponse.StatusCode, errorBody);
+            throw new InvalidOperationException(
+                $"Supabase profile update failed with HTTP {(int)patchResponse.StatusCode}.");
+        }
+    }
+}

@@ -1,0 +1,277 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+
+namespace AiDotNet.Video.FrameInterpolation;
+
+/// <summary>
+/// VFIMamba state-space model for video frame interpolation with linear-complexity attention.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "VFIMamba: Video Frame Interpolation with State Space Models" (Zhang et al., NeurIPS 2024)</item>
+/// </list></para>
+/// <para>
+/// VFIMamba is the first to apply Mamba (selective state space models) to frame interpolation:
+/// - Selective state space: uses Mamba's selective scan mechanism instead of attention, achieving
+///   linear complexity O(N) for processing frame features while maintaining global context,
+///   enabling efficient processing of high-resolution frames
+/// - Bidirectional scanning: scans frame features in both forward (left-to-right, top-to-bottom)
+///   and backward directions, ensuring each pixel has full global context from all directions
+/// - Cross-frame state propagation: the SSM state from one frame is propagated to condition
+///   the processing of the other frame, enabling implicit motion correspondence without
+///   explicit flow estimation
+/// - Multi-scale Mamba blocks: hierarchical Mamba blocks at different spatial scales, capturing
+///   both fine-grained texture details and coarse motion patterns
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> VFIMamba uses a new type of AI architecture called "Mamba" that can
+/// process long sequences efficiently (unlike transformers which get slow with long inputs).
+/// This means it can handle high-resolution frames without running out of memory, while still
+/// understanding how every pixel relates to every other pixel.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a VFIMamba model for state-space based frame interpolation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new VFIMambaOptions();
+/// var vfiMamba = new VFIMamba&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var vfiMambaOnnx = new VFIMamba&lt;double&gt;(architecture, "vfimamba_model.onnx");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FrameInterpolation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("VFIMamba: Video Frame Interpolation with State Space Models",
+    "https://arxiv.org/abs/2407.02315",
+    Year = 2024,
+    Authors = "Guozhen Zhang, Chunxu Liu, Yuhan Zhu, Limin Wang")]
+public class VFIMamba<T> : FrameInterpolationBase<T>
+{
+    private readonly VFIMambaOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    /// <summary>
+    /// Creates a VFIMamba model for ONNX inference.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="modelPath">Path to the ONNX model file.</param>
+    /// <param name="options">Optional configuration options.</param>
+    public VFIMamba(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        VFIMambaOptions? options = null)
+        : base(architecture)
+    {
+        _options = options ?? new VFIMambaOptions();
+        _useNativeMode = false;
+        SupportsArbitraryTimestep = true;
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates a VFIMamba model for native training and inference.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="options">Optional configuration options.</param>
+    /// <param name="optimizer">Optional optimizer for training.</param>
+    public VFIMamba(
+        NeuralNetworkArchitecture<T> architecture,
+        VFIMambaOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
+    {
+        _options = options ?? new VFIMambaOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SupportsArbitraryTimestep = true;
+        InitializeLayers();
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
+    {
+        ThrowIfDisposed();
+        if (t < 0.0 || t > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(t), t, "Timestep must be in [0, 1].");
+        var f0 = PreprocessFrames(frame0);
+        var f1 = PreprocessFrames(frame1);
+        var concat = ConcatenateFeatures(f0, f1);
+        var output = IsOnnxMode ? RunOnnxInference(concat) : Forward(concat);
+        return PostprocessOutput(output);
+    }
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
+            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultFrameInterpolationLayers(
+                inputChannels: ch, inputHeight: h, inputWidth: w,
+                numFeatures: _options.NumFeatures));
+        }
+    }
+
+    /// <inheritdoc/>
+    // Identity pre/post-processing: the network trains on the raw layer stack (the tape path
+    // does not call NormalizeFrames), and its sigmoid synthesis head already emits [0,1] frames.
+    // Applying /255 + *255 only on the inference path was a train/eval scale mismatch that left
+    // the evaluation loss huge and non-monotonic (MoreData_ShouldNotDegrade). Keep both identity.
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+        TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int required = 0;
+        foreach (var layer in Layers) required += layer.GetParameters().Length;
+        if (parameters.Length < required)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var p = layer.GetParameters();
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            layer.SetParameters(sub);
+            offset += p.Length;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ModelName", "VFIMamba" },
+                { "Variant", _options.Variant.ToString() },
+                { "NumFeatures", _options.NumFeatures },
+                { "NumMambaBlocks", _options.NumMambaBlocks },
+                { "StateDim", _options.StateDim },
+                { "ExpansionFactor", _options.ExpansionFactor },
+                { "NumStages", _options.NumStages },
+                { "Complexity", _options.NumMambaBlocks * _options.NumStages }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write((int)_options.Variant);
+        writer.Write(_options.NumFeatures);
+        writer.Write(_options.NumMambaBlocks);
+        writer.Write(_options.StateDim);
+        writer.Write(_options.ExpansionFactor);
+        writer.Write(_options.NumStages);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.DropoutRate);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        _options.Variant = (VideoModelVariant)reader.ReadInt32();
+        _options.NumFeatures = reader.ReadInt32();
+        _options.NumMambaBlocks = reader.ReadInt32();
+        _options.StateDim = reader.ReadInt32();
+        _options.ExpansionFactor = reader.ReadInt32();
+        _options.NumStages = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.DropoutRate = reader.ReadDouble();
+        // Native-mode layers (with their trained weights) are already reconstructed by
+        // the base DeserializeInternalUnchecked before this override runs, so do NOT
+        // clear + re-initialize them here — that would discard the deserialized weights
+        // and leave the model randomly initialized (breaking clone/load parity). Only an
+        // ONNX session needs rebuilding from its path.
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxModel?.Dispose();
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new VFIMamba<T>(Architecture, p, _options);
+        return new VFIMamba<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(VFIMamba<T>));
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}

@@ -1,0 +1,436 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+
+namespace AiDotNet.Genetics;
+
+/// <summary>
+/// Represents an individual that is also a full model, allowing direct evolution of models
+/// without conversion between individuals and models.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
+/// <typeparam name="TInput">The type of input data for the model.</typeparam>
+/// <typeparam name="TOutput">The type of output data produced by the model.</typeparam>
+/// <typeparam name="TGene">The type representing a gene in the genetic model.</typeparam>
+/// <remarks>
+/// <para>
+/// This class implements both IEvolvable and IFullModel interfaces, allowing it to be used
+/// directly in genetic algorithms while also providing model prediction capabilities.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// This class combines the functionality of an individual in a genetic algorithm with a machine
+/// learning model. This means:
+/// 
+/// - You can evolve the model directly without converting between different representations
+/// - The individual can make predictions like any other model
+/// - It simplifies the implementation of genetic algorithms for model optimization
+/// 
+/// Use this when you want to directly evolve machine learning models using genetic algorithms.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a genetic individual wrapping a model, evolved via gene-to-model factory
+/// var genes = new List&lt;RealGene&lt;double&gt;&gt; { new(0.5), new(1.2), new(-0.3) };
+/// Func&lt;ICollection&lt;RealGene&lt;double&gt;&gt;, IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;&gt; factory =
+///     g =&gt; new VectorModel&lt;double&gt;(new Vector&lt;double&gt;(g.Select(x =&gt; x.Value).ToArray()));
+/// var individual = new ModelIndividual&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;, RealGene&lt;double&gt;&gt;(genes, factory);
+/// Vector&lt;double&gt; prediction = individual.Predict(inputMatrix);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ResearchPaper("Adaptation in Natural and Artificial Systems", "https://doi.org/10.7551/mitpress/1090.001.0001")]
+    [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+public class ModelIndividual<T, TInput, TOutput, TGene> :
+    IEvolvable<TGene, T>,
+    IFullModel<T, TInput, TOutput>,
+    IParameterizable<T, TInput, TOutput>
+    where TGene : class
+{
+    private List<TGene> _genes = new List<TGene>();
+    private T _fitness;
+    private IFullModel<T, TInput, TOutput> _innerModel;
+    private readonly Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> _modelFactory;
+    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Creates a new model individual with the specified genes and model factory.
+    /// </summary>
+    /// <param name="genes">The genes to initialize with.</param>
+    /// <param name="modelFactory">A function that creates a model from genes.</param>
+    public ModelIndividual(
+        ICollection<TGene> genes,
+        Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> modelFactory)
+    {
+        _genes = [.. genes];
+        _modelFactory = modelFactory;
+        _innerModel = _modelFactory(_genes);
+        _fitness = _numOps.Zero;
+    }
+
+    /// <summary>
+    /// Creates a new model individual by wrapping an existing model.
+    /// </summary>
+    /// <param name="model">The model to wrap.</param>
+    /// <param name="genes">The genes representing the model.</param>
+    /// <param name="modelFactory">A function that creates a model from genes.</param>
+    public ModelIndividual(
+        IFullModel<T, TInput, TOutput> model,
+        ICollection<TGene> genes,
+        Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> modelFactory)
+    {
+        _innerModel = model;
+        // Initialize with a copy of provided genes to avoid shared references
+        _genes = [.. genes];
+        _modelFactory = modelFactory;
+        _fitness = _numOps.Zero;
+    }
+
+    #region IEvolvable Implementation
+
+    /// <summary>
+    /// Gets the genes of this individual.
+    /// </summary>
+    /// <returns>The collection of genes.</returns>
+    public ICollection<TGene> GetGenes()
+    {
+        return _genes;
+    }
+
+    /// <summary>
+    /// Sets the genes of this individual and updates the inner model.
+    /// </summary>
+    /// <param name="genes">The new genes.</param>
+    public void SetGenes(ICollection<TGene> genes)
+    {
+        _genes = [.. genes];
+        // Recreate the model with the new genes
+        _innerModel = _modelFactory(_genes);
+    }
+
+    /// <summary>
+    /// Gets the fitness of this individual.
+    /// </summary>
+    /// <returns>The fitness value.</returns>
+    public T GetFitness()
+    {
+        return _fitness;
+    }
+
+    /// <summary>
+    /// Sets the fitness of this individual.
+    /// </summary>
+    /// <param name="fitness">The new fitness value.</param>
+    public void SetFitness(T fitness)
+    {
+        _fitness = fitness;
+    }
+
+    /// <summary>
+    /// Creates a deep clone of this individual.
+    /// </summary>
+    /// <returns>A new individual with the same genes and fitness.</returns>
+    public IEvolvable<TGene, T> Clone()
+    {
+        var clonedGenes = new List<TGene>();
+
+        // Deep clone each gene if it implements ICloneable
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                // Fallback to shallow copy if not cloneable
+                clonedGenes.Add(gene);
+            }
+        }
+
+        var clone = new ModelIndividual<T, TInput, TOutput, TGene>(clonedGenes, _modelFactory);
+        clone.SetFitness(_fitness);
+
+        return clone;
+    }
+
+    #endregion
+
+    #region IFullModel Implementation
+
+    /// <summary>
+    /// Makes a prediction using the inner model.
+    /// </summary>
+    /// <param name="input">The input data.</param>
+    /// <returns>The predicted output.</returns>
+    public TOutput Predict(TInput input)
+    {
+        return _innerModel.Predict(input);
+    }
+
+    /// <summary>
+    /// Gets the metadata for the model.
+    /// </summary>
+    /// <returns>The model metadata.</returns>
+    public ModelMetadata<T> GetMetaData()
+    {
+        return _innerModel.GetModelMetadata();
+    }
+
+    /// <summary>
+    /// Gets the parameters of the model.
+    /// </summary>
+    /// <returns>The model parameters as a vector.</returns>
+    public Vector<T> GetParameters()
+    {
+        return InterfaceGuard.Parameterizable(_innerModel).GetParameters();
+    }
+
+    /// <summary>
+    /// Updates the parameters of the model.
+    /// </summary>
+    /// <param name="parameters">The new parameters.</param>
+    public void UpdateParameters(Vector<T> parameters)
+    {
+        _innerModel = InterfaceGuard.Parameterizable(_innerModel).WithParameters(parameters);
+    }
+
+    /// <summary>
+    /// Creates a new model with the specified parameters.
+    /// </summary>
+    /// <param name="parameters">The parameters for the new model.</param>
+    /// <returns>A new model with the specified parameters.</returns>
+    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        var newModel = InterfaceGuard.Parameterizable(_innerModel).WithParameters(parameters);
+
+        return new ModelIndividual<T, TInput, TOutput, TGene>(
+            newModel,
+            _genes,
+            _modelFactory);
+    }
+
+    /// <summary>
+    /// Serializes the model to a byte array.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model.</returns>
+    public byte[] Serialize()
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return _innerModel.Serialize();
+        }
+    }
+
+    /// <summary>
+    /// Deserializes the model from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized model.</param>
+    public void Deserialize(byte[] data)
+    {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            _innerModel.Deserialize(data);
+        }
+    }
+
+    public void Train(TInput input, TOutput expectedOutput)
+    {
+        _innerModel.Train(input, expectedOutput);
+    }
+
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        return _innerModel.GetModelMetadata();
+    }
+
+    public IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return InterfaceGuard.FeatureAware(_innerModel).GetActiveFeatureIndices();
+    }
+
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        return _innerModel.GetFeatureImportance();
+    }
+
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        InterfaceGuard.FeatureAware(_innerModel).SetActiveFeatureIndices(featureIndices);
+    }
+
+    public bool IsFeatureUsed(int featureIndex)
+    {
+        return InterfaceGuard.FeatureAware(_innerModel).IsFeatureUsed(featureIndex);
+    }
+
+    public IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        var copiedInner = _innerModel.DeepCopy();
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
+        }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(copiedInner, clonedGenes, _modelFactory);
+    }
+
+    IFullModel<T, TInput, TOutput> ICloneable<IFullModel<T, TInput, TOutput>>.Clone()
+    {
+        var cloned = _innerModel.Clone();
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
+        }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(cloned, clonedGenes, _modelFactory);
+    }
+
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        _innerModel = InterfaceGuard.Parameterizable(_innerModel).WithParameters(parameters);
+        _parameterCountCache = null; // invalidate cache
+    }
+
+    private int? _parameterCountCache;
+    public virtual long ParameterCount
+        => _parameterCountCache ??= InterfaceGuard.Parameterizable(_innerModel).GetParameters()?.Length ?? 0;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    public virtual void SaveModel(string filePath)
+    {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = Serialize();
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                Directory.CreateDirectory(directory);
+            File.WriteAllBytes(filePath, data);
+        }
+        catch (IOException ex) { throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when saving model to '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (FileNotFoundException ex) { throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath, ex); }
+        catch (IOException ex) { throw new InvalidOperationException($"File I/O error while loading model from '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
+    }
+
+    /// <summary>
+    /// Gets the default loss function for gradient computation by delegating to the inner model.
+    /// </summary>
+    public ILossFunction<T> DefaultLossFunction => _innerModel.DefaultLossFunction;
+
+    /// <summary>
+    /// Computes gradients by delegating to the inner model.
+    /// </summary>
+    public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        return InterfaceGuard.GradientComputable(_innerModel).ComputeGradients(input, target, lossFunction);
+    }
+
+    /// <summary>
+    /// Applies gradients by delegating to the inner model.
+    /// </summary>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        InterfaceGuard.GradientComputable(_innerModel).ApplyGradients(gradients, learningRate);
+    }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    public void SaveState(Stream stream)
+    {
+        _innerModel.SaveState(stream);
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    public void LoadState(Stream stream)
+    {
+        _innerModel.LoadState(stream);
+    }
+
+
+    #endregion
+
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Forwards Dispose to the inner model when it implements
+    /// IDisposable. The individual itself owns no additional
+    /// disposable state beyond the wrapped model reference.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Disposes the inner model. Override + call base for additional cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing)
+        {
+            (_innerModel as System.IDisposable)?.Dispose();
+        }
+        _disposed = true;
+    }
+}

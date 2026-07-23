@@ -1,0 +1,205 @@
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.Helpers;
+
+/// <summary>
+/// Provides helper methods for creating and manipulating vectors used in AI and machine learning operations.
+/// </summary>
+/// <remarks>
+/// <b>For Beginners:</b> In AI and machine learning, a vector is simply a list of numbers arranged in a specific order.
+/// Think of it as a one-dimensional array or a single column/row of data. Vectors are used to represent:
+/// - Features of a single data point (like height, weight, age of a person)
+/// - Target values we want to predict
+/// - Weights in a trained model
+/// - Intermediate calculations during model training
+///
+/// This helper class provides convenient methods to work with vectors in your AI applications.
+/// </remarks>
+public static class VectorHelper
+{
+    /// <summary>
+    /// Creates a new vector with the specified size.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements (e.g., double, float).</typeparam>
+    /// <param name="size">The number of elements in the vector.</param>
+    /// <returns>A new vector initialized with default values.</returns>
+    public static Vector<T> CreateVector<T>(int size)
+    {
+        return new Vector<T>(size);
+    }
+
+    /// <summary>
+    /// Computes the L2 (Euclidean) norm of a vector using hardware-accelerated operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>The L2 norm (square root of sum of squares).</returns>
+    public static T L2Norm<T>(Vector<T> vector)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return numOps.FromDouble(Math.Sqrt(
+            Math.Max(0, numOps.ToDouble(AiDotNetEngine.Current.DotProduct(vector, vector)))));
+    }
+
+    /// <summary>
+    /// Returns a new unit-length vector in the same direction as the input.
+    /// If the input vector has near-zero norm, a clone of the original is returned.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="vector">The input vector to normalize.</param>
+    /// <param name="epsilon">Minimum norm threshold below which the vector is not normalized. Default: 1e-10.</param>
+    /// <returns>A new normalized vector, or a clone if the norm is below epsilon.</returns>
+    public static Vector<T> Normalize<T>(Vector<T> vector, double epsilon = 1e-10)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double norm = Math.Sqrt(Math.Max(0,
+            numOps.ToDouble(AiDotNetEngine.Current.DotProduct(vector, vector))));
+
+        if (norm < epsilon)
+        {
+            var clone = new Vector<T>(vector.Length);
+            for (int i = 0; i < vector.Length; i++)
+            {
+                clone[i] = vector[i];
+            }
+            return clone;
+        }
+
+        return AiDotNetEngine.Current.Multiply(vector, numOps.FromDouble(1.0 / norm));
+    }
+
+    /// <summary>
+    /// Normalizes a vector in place, modifying the original vector to have unit length.
+    /// If the norm is below epsilon, the vector is left unchanged.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="vector">The vector to normalize in place.</param>
+    /// <param name="epsilon">Minimum norm threshold. Default: 1e-10.</param>
+    public static void NormalizeInPlace<T>(Vector<T> vector, double epsilon = 1e-10)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double norm = Math.Sqrt(Math.Max(0,
+            numOps.ToDouble(AiDotNetEngine.Current.DotProduct(vector, vector))));
+
+        if (norm < epsilon) return;
+
+        var normalized = AiDotNetEngine.Current.Multiply(vector, numOps.FromDouble(1.0 / norm));
+        for (int i = 0; i < vector.Length; i++)
+        {
+            vector[i] = normalized[i];
+        }
+    }
+
+    /// <summary>
+    /// Stable CPU engine used for similarity reductions so the result does not
+    /// depend on whichever engine is globally active. See
+    /// <see cref="CosineSimilarity{T}"/> for why this matters.
+    /// </summary>
+    private static readonly AiDotNet.Tensors.Engines.CpuEngine _cosineEngine =
+        new AiDotNet.Tensors.Engines.CpuEngine();
+
+    /// <summary>
+    /// Computes the cosine similarity between two vectors, returning a value in [-1, 1].
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="a">First vector.</param>
+    /// <param name="b">Second vector.</param>
+    /// <param name="epsilon">Minimum denominator threshold. Default: 1e-10.</param>
+    /// <returns>Cosine similarity in [-1, 1]. Returns 0 if either vector has near-zero norm.</returns>
+    /// <remarks>
+    /// The dot products run on a fixed CPU engine, NOT <c>AiDotNetEngine.Current</c>.
+    /// Routing through the mutable global engine made the result depend on whichever
+    /// engine happened to be active: <c>AiModelBuilder.BuildAsync</c> auto-enables the
+    /// Direct GPU engine, and the GPU's differently-rounded floating-point reduction
+    /// changed cosine similarities process-wide. That non-determinism flipped
+    /// borderline threshold comparisons in safety detectors — e.g.
+    /// <c>SemanticJailbreakDetector</c> (and the ensemble it feeds) stopped flagging
+    /// jailbreak strings after ANY build, process-wide, including freshly created
+    /// pipelines. A similarity primitive must be deterministic regardless of global
+    /// engine state. Pinning to the CPU engine (rather than a naive scalar loop)
+    /// preserves the exact accelerated-reduction values callers were validated
+    /// against, so only the source of non-determinism is removed.
+    /// </remarks>
+    public static double CosineSimilarity<T>(Vector<T> a, Vector<T> b, double epsilon = 1e-10)
+    {
+        if (a is null) throw new ArgumentNullException(nameof(a));
+        if (b is null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length)
+            throw new ArgumentException(
+                $"Vectors must have equal length for cosine similarity; got {a.Length} and {b.Length}.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        double dot = numOps.ToDouble(_cosineEngine.DotProduct(a, b));
+        double normA = numOps.ToDouble(_cosineEngine.DotProduct(a, a));
+        double normB = numOps.ToDouble(_cosineEngine.DotProduct(b, b));
+
+        double denom = Math.Sqrt(normA * normB);
+        return denom > epsilon ? Math.Max(-1.0, Math.Min(1.0, dot / denom)) : 0;
+    }
+
+    /// <summary>
+    /// Computes the dot product of two vectors using hardware-accelerated operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="a">First vector.</param>
+    /// <param name="b">Second vector.</param>
+    /// <returns>The dot product as type T.</returns>
+    public static T DotProduct<T>(Vector<T> a, Vector<T> b)
+    {
+        return AiDotNetEngine.Current.DotProduct(a, b);
+    }
+
+    /// <summary>
+    /// Computes the Euclidean distance between two vectors using hardware-accelerated operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="a">First vector.</param>
+    /// <param name="b">Second vector.</param>
+    /// <returns>The Euclidean distance as type T.</returns>
+    public static T EuclideanDistance<T>(Vector<T> a, Vector<T> b)
+    {
+        // Direct sum-of-squares loop — every site this helper is called from
+        // (clustering distance computations, K-means EM, kNN feature
+        // selection, RAG vector similarity) iterates over many small
+        // vectors per call. Routing those through engine.Subtract +
+        // engine.DotProduct dispatches to GPU when the global engine has
+        // been switched to a GPU backend (via AiDotNetEngine
+        // .AutoDetectAndConfigureGpu, which AiModelBuilder calls during
+        // BuildAsync) — for small d the per-call dispatch overhead and
+        // tiny-buffer round-trip cost dominate the math, and GPU-path
+        // numerics surfaced as the all-same-cluster regression in
+        // issue #1224 Cluster B (KMeans through AiModelBuilder produced
+        // ARI=0). Computing the dot product inline keeps the math on
+        // CPU FP64 regardless of engine state, which is what every
+        // distance-metric call in this codebase actually wants.
+        if (a is null) throw new ArgumentNullException(nameof(a));
+        if (b is null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length)
+            throw new ArgumentException($"Vectors must have the same length. Got {a.Length} and {b.Length}.", nameof(b));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sumSq = numOps.Zero;
+        int n = a.Length;
+        for (int i = 0; i < n; i++)
+        {
+            T diffI = numOps.Subtract(a[i], b[i]);
+            sumSq = numOps.Add(sumSq, numOps.Multiply(diffI, diffI));
+        }
+        return numOps.Sqrt(sumSq);
+    }
+
+    /// <summary>
+    /// Computes the Manhattan (L1) distance between two vectors using hardware-accelerated operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="a">First vector.</param>
+    /// <param name="b">Second vector.</param>
+    /// <returns>The Manhattan distance as type T.</returns>
+    public static T ManhattanDistance<T>(Vector<T> a, Vector<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(a, b);
+        var absDiff = engine.Abs(diff);
+        return engine.Sum(absDiff);
+    }
+}

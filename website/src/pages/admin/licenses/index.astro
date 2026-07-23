@@ -1,0 +1,1143 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+
+// Single source of truth for the product list. Shared between:
+//   - the filter dropdown on the table
+//   - the Issue License modal's product selector
+//   - the client-side productBadge() helper (via the serialized version below)
+// Keep this aligned with the `license_product` Postgres enum in
+// website/supabase/migrations/20260419000000_add_product_to_license_keys.sql.
+// Adding a new product means editing this array + the enum migration, nothing else.
+interface ProductConfig {
+  value: string;
+  label: string;
+  prefix: string;
+  badgeClass: string;
+}
+const PRODUCTS: ProductConfig[] = [
+  {
+    value: 'aidotnet',
+    label: 'AiDotNet',
+    prefix: 'aidn',
+    badgeClass: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+  },
+  {
+    value: 'harmonic_engine',
+    label: 'Harmonic Engine',
+    prefix: 'harm',
+    badgeClass: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
+  },
+];
+// Serialized JSON blob the client <script> picks up — lets the browser
+// render product badges and validate issue-form input against the same
+// list the Astro frontmatter used to render the dropdowns above.
+const productsJson = JSON.stringify(PRODUCTS);
+---
+
+<AdminLayout title="License Management - AiDotNet Admin" description="Manage BSL license keys, view activations, and administer license tiers." activeTab="licenses">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">License Keys</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage BSL license keys, view activations, and administer tiers</p>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+          <span><span id="active-count" class="font-semibold text-green-500">--</span> active</span>
+          <span><span id="suspended-count" class="font-semibold text-yellow-500">--</span> suspended</span>
+          <span><span id="revoked-count" class="font-semibold text-red-500">--</span> revoked</span>
+        </div>
+        <button
+          id="issue-license-btn"
+          class="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-brand-blue to-brand-purple text-white text-sm font-medium rounded-xl hover:shadow-lg transition-all"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Issue License
+        </button>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-col sm:flex-row gap-3">
+      <div class="flex-1">
+        <input
+          id="search-input"
+          type="text"
+          placeholder="Search by license key, owner, or organization..."
+          class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+        />
+      </div>
+      <select
+        id="filter-product"
+        class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+      >
+        <option value="">All Products</option>
+        {PRODUCTS.map((p) => <option value={p.value}>{p.label}</option>)}
+      </select>
+      <select
+        id="filter-tier"
+        class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+      >
+        <option value="">All Tiers</option>
+        <option value="community">Community</option>
+        <option value="professional">Professional</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <select
+        id="filter-status"
+        class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+      >
+        <option value="">All Status</option>
+        <option value="active">Active</option>
+        <option value="suspended">Suspended</option>
+        <option value="revoked">Revoked</option>
+        <option value="expired">Expired</option>
+      </select>
+    </div>
+
+    <!-- Licenses table -->
+    <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div id="licenses-loading" class="p-12 text-center">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Loading licenses...</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table id="licenses-table" class="hidden w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">License Key</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Product</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Owner</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tier</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Activations</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Issued</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Expires</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="licenses-body" class="divide-y divide-slate-100 dark:divide-slate-800">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Issue License Modal -->
+    <div id="issue-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 w-full max-w-md shadow-xl">
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4">Issue New License</h2>
+        <form id="issue-form" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Product</label>
+            <select
+              id="issue-product"
+              required
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            >
+              {/*
+                Empty disabled placeholder — the issuance flow is
+                multi-product so HTML `required` must actually force an
+                explicit choice. Without this option the browser would
+                auto-select PRODUCTS[0] (AiDotNet), and an admin who
+                misses this field would accidentally issue an AiDotNet
+                license instead of being told to pick one.
+              */}
+              <option value="" selected disabled>Select a product</option>
+              {PRODUCTS.map((p) => <option value={p.value}>{p.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Customer Email</label>
+            <input
+              id="issue-email"
+              type="email"
+              required
+              placeholder="user@example.com"
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            />
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              OK if the customer hasn't signed up yet — the license will appear in the admin UI now and can be reassigned to their real account once the signup-reconciliation step ships.
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Customer Full Name (optional)</label>
+            <input
+              id="issue-customer-name"
+              type="text"
+              placeholder="Jane Doe"
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            />
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Leave blank to fall back to the signed-up user's profile name.
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tier</label>
+            <select
+              id="issue-tier"
+              required
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            >
+              <option value="community">Community (Free)</option>
+              <option value="professional">Professional ($29/mo)</option>
+              <option value="enterprise">Enterprise ($99/mo)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Max Activations</label>
+            <input
+              id="issue-max-activations"
+              type="number"
+              min="1"
+              max="100"
+              value="3"
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Organization (optional)</label>
+            <input
+              id="issue-org"
+              type="text"
+              placeholder="Company name"
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Notes (optional)</label>
+            <textarea
+              id="issue-notes"
+              rows="2"
+              placeholder="Internal notes about this license..."
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            ></textarea>
+          </div>
+          <div id="issue-error" class="hidden text-sm text-red-500"></div>
+          <div class="flex gap-3 pt-2">
+            <button
+              type="button"
+              id="cancel-issue-btn"
+              class="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+            >Cancel</button>
+            <button
+              type="submit"
+              class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-brand-blue to-brand-purple rounded-xl hover:shadow-lg transition-all"
+            >Issue License</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Activations Modal -->
+    <div id="activations-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 w-full max-w-lg shadow-xl">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-slate-900 dark:text-white">Machine Activations</h2>
+          <button id="close-activations-btn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="activations-content" class="space-y-3 max-h-96 overflow-y-auto">
+          <p class="text-sm text-slate-500">Loading...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!--
+    Serialized product list hand-off from the Astro frontmatter to the
+    browser-side script below. Using a data-attribute keeps the two-way
+    contract explicit (frontmatter defines, script consumes) and avoids
+    the `const PRODUCT_META = { ... }` duplication that previously had to
+    be maintained in lockstep with the HTML dropdown options.
+  -->
+  <div id="admin-licenses-config" data-products={productsJson} class="hidden"></div>
+
+  <script>
+    import { supabase } from '../../../lib/supabase';
+
+    interface LicenseKey {
+      id: string;
+      user_id: string;
+      license_key: string;
+      product: string;
+      tier: string;
+      status: string;
+      max_activations: number;
+      organization_name: string | null;
+      notes: string | null;
+      stripe_subscription_id: string | null;
+      issued_at: string;
+      expires_at: string | null;
+      created_at: string;
+      // Admin-populated attribution fields. Used when a license was
+      // issued directly by an admin (e.g., training cohort bulk-issue)
+      // before the real customer has signed up, so the UI can show the
+      // real person instead of the synthetic bootstrap user_id.
+      customer_email: string | null;
+      customer_full_name: string | null;
+      ownerName?: string;
+      ownerEmail?: string;
+      activationCount?: number;
+    }
+
+    // Product metadata: display label + license-key prefix. The prefix must
+    // match what the client library expects so that validation is O(1) based
+    // on the key string alone and doesn't need a DB round-trip just to
+    // classify product.
+    //
+    // Source of truth lives in the Astro frontmatter (the `PRODUCTS` array)
+    // so the HTML dropdowns and the client-side helpers never drift apart.
+    // We read the serialized JSON from the #admin-licenses-config element
+    // the Astro template rendered for us.
+    interface ClientProduct { value: string; label: string; prefix: string; badgeClass: string; }
+    const __configEl = document.getElementById('admin-licenses-config');
+    const __productList: ClientProduct[] = __configEl
+      ? JSON.parse(__configEl.getAttribute('data-products') || '[]')
+      : [];
+    const PRODUCT_META: Record<string, { label: string; prefix: string; badge: string }> = {};
+    for (const p of __productList) {
+      PRODUCT_META[p.value] = { label: p.label, prefix: p.prefix, badge: p.badgeClass };
+    }
+    // Fallback key used by productBadge() when a DB row surfaces an unknown
+    // product string (e.g., a new product added to the enum but not yet
+    // reflected in the admin UI config). The first entry in the list is the
+    // canonical "home" product — currently AiDotNet.
+    const FALLBACK_PRODUCT_KEY: string | undefined = __productList[0]?.value;
+
+    interface Activation {
+      id: string;
+      machine_id_hash: string;
+      hostname: string | null;
+      os_description: string | null;
+      first_seen_at: string;
+      last_seen_at: string;
+      is_active: boolean;
+    }
+
+    let allLicenses: LicenseKey[] = [];
+    let filteredLicenses: LicenseKey[] = [];
+
+    async function fetchAllPaginated<T>(table: string, select: string, orderCol: string): Promise<T[]> {
+      const pageSize = 1000;
+      let allData: T[] = [];
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error } = await supabase
+          .from(table)
+          .select(select)
+          .order(orderCol, { ascending: false })
+          .range(from, to);
+        if (error || !data) break;
+        allData = allData.concat(data as T[]);
+        hasMore = data.length === pageSize;
+        page++;
+      }
+      return allData;
+    }
+
+    async function loadLicenses() {
+      // Load profiles for name lookup. Fall back through full_name -> email
+      // -> undefined so profiles with neither signal don't store a literal
+      // 'Unknown' string — that would be truthy and outrank a perfectly
+      // good customer_email on the license row in the precedence chain
+      // below.
+      const profiles = await fetchAllPaginated<{ id: string; full_name: string | null; email: string | null }>('profiles', 'id, full_name, email', 'id');
+
+      const nameMap = new Map<string, string | undefined>();
+      for (const p of profiles) {
+        const label = (p.full_name && p.full_name.trim()) || (p.email && p.email.trim()) || undefined;
+        nameMap.set(p.id, label);
+      }
+
+      // Load all license keys
+      let licenses: LicenseKey[];
+      try {
+        licenses = await fetchAllPaginated<LicenseKey>('license_keys', 'id, user_id, license_key, product, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at, customer_email, customer_full_name', 'created_at');
+      } catch (err) {
+        const loading = document.getElementById('licenses-loading');
+        if (loading) loading.innerHTML = '<p class="text-sm text-red-500">Failed to load licenses.</p>';
+        console.error('License load error:', err);
+        return;
+      }
+
+      // Load activation counts per license
+      const { data: activations } = await supabase
+        .from('license_activations')
+        .select('license_key_id')
+        .eq('is_active', true)
+        .range(0, 9999);
+
+      const activationCounts = new Map<string, number>();
+      if (activations) {
+        for (const a of activations) {
+          activationCounts.set(a.license_key_id, (activationCounts.get(a.license_key_id) || 0) + 1);
+        }
+      }
+
+      // Owner-attribution precedence:
+      //   1. customer_full_name (admin-set, e.g. bulk training issuance)
+      //   2. profile.full_name
+      //   3. profile.email
+      //   4. customer_email (when no profile exists yet)
+      //   5. 'Unknown'
+      //
+      // customer_full_name wins over profile.full_name deliberately: when
+      // an admin issued a license to someone whose profile is a synthetic
+      // bootstrap account (ci@aidotnet.dev, etc.), the admin-entered name
+      // is the authoritative label — it represents the real human this
+      // license was granted to, not the bot that inserted the row.
+      allLicenses = licenses.map(l => {
+        const profileLabel = nameMap.get(l.user_id);
+        const ownerName =
+          (l.customer_full_name && l.customer_full_name.trim()) ||
+          profileLabel ||
+          (l.customer_email && l.customer_email.trim()) ||
+          'Unknown';
+        return {
+          ...l,
+          ownerName,
+          ownerEmail: l.customer_email || undefined,
+          activationCount: activationCounts.get(l.id) || 0,
+        };
+      });
+
+      // Stats
+      const activeCount = allLicenses.filter(l => l.status === 'active').length;
+      const suspendedCount = allLicenses.filter(l => l.status === 'suspended').length;
+      const revokedCount = allLicenses.filter(l => l.status === 'revoked').length;
+
+      const activeEl = document.getElementById('active-count');
+      const suspendedEl = document.getElementById('suspended-count');
+      const revokedEl = document.getElementById('revoked-count');
+      if (activeEl) activeEl.textContent = String(activeCount);
+      if (suspendedEl) suspendedEl.textContent = String(suspendedCount);
+      if (revokedEl) revokedEl.textContent = String(revokedCount);
+
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const search = (document.getElementById('search-input') as HTMLInputElement).value.toLowerCase().trim();
+      const productFilter = (document.getElementById('filter-product') as HTMLSelectElement).value;
+      const tierFilter = (document.getElementById('filter-tier') as HTMLSelectElement).value;
+      const statusFilter = (document.getElementById('filter-status') as HTMLSelectElement).value;
+
+      filteredLicenses = allLicenses.filter(l => {
+        if (search) {
+          // Include customer_email + customer_full_name in the search
+          // haystack so admins can find a bulk-issued training license
+          // by typing the student's name or email even when the row's
+          // user_id still points at the synthetic bootstrap account.
+          const haystack = `${l.license_key} ${l.ownerName || ''} ${l.ownerEmail || ''} ${l.customer_full_name || ''} ${l.organization_name || ''}`.toLowerCase();
+          if (!haystack.includes(search)) return false;
+        }
+        if (productFilter && l.product !== productFilter) return false;
+        if (tierFilter && l.tier !== tierFilter) return false;
+        if (statusFilter && l.status !== statusFilter) return false;
+        return true;
+      });
+
+      renderTable();
+    }
+
+    // Tracks which unknown product values we've already warned about this
+    // page-load so a table with thousands of malformed rows doesn't spam the
+    // console with one warning per row.
+    const __warnedUnknownProducts = new Set<string>();
+
+    function productBadge(product: string): string {
+      const meta = PRODUCT_META[product];
+      if (meta) {
+        return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${meta.badge}">${escapeHtml(meta.label)}</span>`;
+      }
+      // Unknown or malformed product value. Surface a warning once per
+      // distinct value so admins notice data drift (new enum value in the
+      // DB that the admin panel hasn't been updated for, stray NULL, typo in
+      // a manual insert) instead of silently papering over it with the
+      // default badge. Render the raw value so the row stays scannable.
+      if (!__warnedUnknownProducts.has(product)) {
+        __warnedUnknownProducts.add(product);
+        console.warn(
+          `[admin/licenses] Unknown product value "${product}" — ` +
+          'check that the PRODUCTS list in index.astro matches the license_product enum.'
+        );
+      }
+      const fallbackMeta = FALLBACK_PRODUCT_KEY ? PRODUCT_META[FALLBACK_PRODUCT_KEY] : undefined;
+      const badgeClass = fallbackMeta?.badge ?? 'bg-slate-100 dark:bg-slate-700 text-slate-500';
+      const displayLabel = product ? `Unknown: ${product}` : 'Unknown';
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}" title="Unrecognized product value — see console">${escapeHtml(displayLabel)}</span>`;
+    }
+
+    function tierBadge(tier: string): string {
+      const colors: Record<string, string> = {
+        community: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300',
+        professional: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+        enterprise: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+      };
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${colors[tier] || colors.community}">${tier}</span>`;
+    }
+
+    function statusBadge(status: string): string {
+      const colors: Record<string, string> = {
+        active: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+        suspended: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+        revoked: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+        expired: 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
+      };
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${colors[status] || colors.expired}">${status}</span>`;
+    }
+
+    function renderTable() {
+      const loading = document.getElementById('licenses-loading');
+      const table = document.getElementById('licenses-table');
+      const tbody = document.getElementById('licenses-body');
+
+      if (loading) loading.classList.add('hidden');
+      if (table) table.classList.remove('hidden');
+      if (!tbody) return;
+
+      if (filteredLicenses.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="py-8 text-center text-sm text-slate-500 dark:text-slate-400">No licenses found</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filteredLicenses.map(l => {
+        const keyPreview = l.license_key.length > 16
+          ? l.license_key.substring(0, 8) + '...' + l.license_key.substring(l.license_key.length - 4)
+          : l.license_key;
+        const issued = new Date(l.issued_at).toLocaleDateString();
+        const expires = l.expires_at ? new Date(l.expires_at).toLocaleDateString() : 'Never';
+        const activations = `${l.activationCount || 0} / ${l.max_activations}`;
+
+        let actions = '';
+        if (l.status === 'active') {
+          actions = `
+            <button class="suspend-btn text-sm font-medium text-yellow-500 hover:underline mr-2" data-id="${l.id}">Suspend</button>
+            <button class="revoke-btn text-sm font-medium text-red-500 hover:underline" data-id="${l.id}">Revoke</button>
+          `;
+        } else if (l.status === 'suspended') {
+          actions = `
+            <button class="reactivate-btn text-sm font-medium text-green-500 hover:underline mr-2" data-id="${l.id}">Reactivate</button>
+            <button class="revoke-btn text-sm font-medium text-red-500 hover:underline" data-id="${l.id}">Revoke</button>
+          `;
+        } else {
+          actions = '<span class="text-xs text-slate-400">--</span>';
+        }
+
+        // The admin-resend-license-email edge function refuses to re-send
+        // anything except active licenses (it returns 409 for suspended,
+        // expired, revoked, etc. — see functions/admin-resend-license-email/
+        // index.ts:113). Hide the button on every non-active row so the
+        // operator doesn't get a UI affordance for an action the backend
+        // will refuse. Reactivation flows reactivate the license first
+        // (status -> active), then resend; they don't bypass this check.
+        const showResend = l.status === 'active';
+        const resendButton = showResend
+          ? `<button class="resend-email-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="Re-send the license-key email to the customer">resend</button>`
+          : '';
+        return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
+          <td class="py-3 px-4">
+            <div class="flex items-center gap-2">
+              <button class="copy-key-btn font-mono text-xs text-slate-700 dark:text-slate-200 hover:text-brand-blue transition-colors" data-id="${l.id}" title="Click to copy the full license key to the clipboard">${escapeHtml(keyPreview)}</button>
+              ${resendButton}
+              <button class="activations-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="View activations">activations</button>
+            </div>
+          </td>
+          <td class="py-3 px-4">${productBadge(l.product)}</td>
+          <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(l.ownerName || 'Unknown')}${l.ownerEmail && l.ownerEmail !== l.ownerName ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.ownerEmail)}</span>` : ''}${l.organization_name ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.organization_name)}</span>` : ''}</td>
+          <td class="py-3 px-4">${tierBadge(l.tier)}</td>
+          <td class="py-3 px-4">${statusBadge(l.status)}</td>
+          <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${activations}</td>
+          <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-sm">${issued}</td>
+          <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-sm">${expires}</td>
+          <td class="py-3 px-4">${actions}</td>
+        </tr>`;
+      }).join('');
+
+      // Attach event handlers
+      attachHandlers();
+    }
+
+    /**
+     * Renders the resend button's failure state — both the error-result
+     * branch (server returned a non-2xx) and the exception branch (network
+     * threw before a response arrived) flow through here so the markup,
+     * dismiss wiring, and accessibility attributes stay in lockstep.
+     *
+     * Accessibility notes:
+     *   - The actionable server message is rendered as visible inline
+     *     text wrapped in <span role="alert" aria-live="polite"> so screen
+     *     readers announce it on append. The previous tooltip-only
+     *     placement was inaccessible to keyboard, touch, and assistive
+     *     technology users (review-comment #1268.h3tx / .h3t6).
+     *   - Dismiss is a real <button> with type="button" and aria-label so
+     *     it's focusable, keyboard-activatable (Enter/Space), and screen-
+     *     reader-discoverable. The <span> + click-handler version was
+     *     mouse-only (review-comment #1268.h3uC).
+     *   - Refactored out of the call-site so future changes to the failure
+     *     markup (label text, dismiss UX) don't drift between the
+     *     error-result and exception branches (review-comment
+     *     #1268.h3uQ / .h3ua).
+     */
+    function renderResendFailure(btn: Element, orig: string, serverMsg: string | undefined): void {
+      // role="alert" already creates an assertive live region — pairing
+      // it with aria-live="polite" sent conflicting instructions to AT
+      // (some screen readers honored one, some the other), making the
+      // failure-message announcement timing undefined. Use role="alert"
+      // alone (review-comment #1268.iCwz).
+      const messageBlock = serverMsg
+        ? `<span role="alert" class="ml-2 text-xs text-red-600 dark:text-red-400">${escapeHtml(serverMsg)}</span>`
+        : '';
+      // Render the failure label + message INSIDE the resend button, but
+      // place the dismiss control as a SIBLING (not nested) so we don't
+      // emit invalid button-within-button HTML — that pattern produced
+      // inconsistent keyboard / screen-reader behavior across browsers
+      // (review-comment #1268.iCwG).
+      btn.innerHTML = `<span class="text-red-500">failed</span>${messageBlock}`;
+
+      // Idempotent dismiss control: if a previous failure on this button
+      // left one in place, remove it before creating a fresh one. Using
+      // a data-for attribute pointing at the parent .resend-email-btn
+      // would let multiple resend buttons coexist on the page without
+      // their dismiss controls colliding, but here each table row has a
+      // unique resend button, so a parent-scoped selector is enough.
+      const parent = btn.parentElement;
+      if (!parent) return;
+      const existing = parent.querySelector(':scope > .resend-dismiss');
+      if (existing) existing.remove();
+
+      const dismiss = document.createElement('button');
+      dismiss.type = 'button';
+      dismiss.className = 'resend-dismiss text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer ml-1';
+      dismiss.setAttribute('aria-label', 'Dismiss failure message');
+      dismiss.textContent = '✕';
+      dismiss.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        btn.innerHTML = orig;
+        // Focus management: the dismiss button is about to remove
+        // itself from the DOM, which leaves the keyboard user with no
+        // focused element (browser falls back to <body>, which is
+        // disorienting and breaks tab-order). Move focus back to the
+        // resend button — the natural next action after dismissing a
+        // failure is to retry, and `btn` is the resend button itself,
+        // so focusing it is both stable and semantically correct.
+        // Closes review-comment #1268.pmPI.
+        if (btn instanceof HTMLElement) {
+          btn.focus();
+        }
+        dismiss.remove();
+      });
+      // Tab order: insertAdjacentElement('afterend', dismiss) places
+      // the dismiss button immediately after the resend button in the
+      // DOM, so the natural tab-order is resend -> dismiss -> next
+      // row's resend. Verified by the e2e keyboard-accessibility test
+      // in licenses-copy-and-resend.spec.ts (resendRow.locator path).
+      btn.insertAdjacentElement('afterend', dismiss);
+    }
+
+    function attachHandlers() {
+      const tbody = document.getElementById('licenses-body');
+      if (!tbody) return;
+
+      tbody.querySelectorAll('.suspend-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id || !confirm('Suspend this license? The user will lose access until reactivated.')) return;
+          await updateLicenseStatus(id, 'suspended');
+        });
+      });
+
+      tbody.querySelectorAll('.revoke-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id || !confirm('Revoke this license permanently? This cannot be undone.')) return;
+          await updateLicenseStatus(id, 'revoked');
+        });
+      });
+
+      tbody.querySelectorAll('.reactivate-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id) return;
+          await updateLicenseStatus(id, 'active');
+        });
+      });
+
+      tbody.querySelectorAll('.activations-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id) return;
+          await showActivations(id);
+        });
+      });
+
+      // Copy-key button: writes the FULL license key (not the truncated
+      // preview) to the clipboard. The full key is looked up from the
+      // in-memory `allLicenses` array via data-id rather than embedded in
+      // the DOM via data-key — keeps sensitive strings out of HTML and
+      // shrinks the rendered table on large license sets.
+      tbody.querySelectorAll('.copy-key-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id) return;
+          const license = allLicenses.find(l => l.id === id);
+          if (!license) {
+            console.error('Copy: license row not found in memory for id', id);
+            alert('Could not find the license to copy. Refresh the page and try again.');
+            return;
+          }
+          try {
+            await navigator.clipboard.writeText(license.license_key);
+            // Click-safe revert: capture the ORIGINAL label once per
+            // burst (only on the first click in a series of rapid
+            // clicks — subsequent clicks would otherwise overwrite the
+            // cache with the temporary 'copied' span). Cancel any
+            // in-flight revert from a previous click so its delayed
+            // callback doesn't fire after a newer click already
+            // refreshed the label. Net effect: N clicks in any 1.5s
+            // window all revert exactly once, to the real preview.
+            const el = btn as HTMLElement;
+            if (el.dataset.originalLabel === undefined) {
+              el.dataset.originalLabel = btn.innerHTML;
+            }
+            const existingId = el.dataset.revertTimeoutId;
+            if (existingId !== undefined) {
+              clearTimeout(Number.parseInt(existingId, 10));
+            }
+            btn.innerHTML = '<span class="text-green-500">copied</span>';
+            const newId = window.setTimeout(() => {
+              btn.innerHTML = el.dataset.originalLabel ?? '';
+              delete el.dataset.originalLabel;
+              delete el.dataset.revertTimeoutId;
+            }, 1500);
+            el.dataset.revertTimeoutId = String(newId);
+          } catch (err) {
+            console.error('Clipboard copy failed:', err);
+            alert(
+              'Copy failed — your browser blocked clipboard access. '
+              + 'Check site permissions for clipboard, try a different browser, '
+              + 'or run this page over HTTPS (clipboard API requires secure context).',
+            );
+          }
+        });
+      });
+
+      // Re-send email button: calls the admin-resend-license-email edge
+      // function which re-issues a key-delivery email to the customer's
+      // address on file. Used when the original Stripe-checkout email was
+      // dropped (no Resend key configured at the time, recipient bounced,
+      // or transport hiccupped). The license itself is unchanged — only
+      // the email is re-sent.
+      tbody.querySelectorAll('.resend-email-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id) return;
+          // Rapid re-click guard: bail if a previous click on this same
+          // button is still in flight. Without the dataset flag, an
+          // impatient operator clicking 3× would fire 3 send requests
+          // before any of them returned, deliver 3 emails to the
+          // customer, AND race-overwrite the button's innerHTML state.
+          const buttonEl = btn as HTMLButtonElement;
+          if (buttonEl.dataset.inFlight === 'true') return;
+          buttonEl.dataset.inFlight = 'true';
+          buttonEl.disabled = true;
+          if (!confirm('Re-send the license-key email to the customer?')) {
+            delete buttonEl.dataset.inFlight;
+            buttonEl.disabled = false;
+            return;
+          }
+          // Cancel any pending success-revert timer from a previous
+          // resend attempt on THIS button. Without this, if the operator
+          // clicked resend, got "sent", then clicked resend again within
+          // 2.5s, the stale revert callback would fire AFTER the new
+          // attempt set "sending..." and silently restore the OLD label
+          // (or worse, overwrite a "failed" state from the new attempt).
+          // Closes review-comment #1268.iCwg / .iCws.
+          const stalePendingRevertId = buttonEl.dataset.successRevertId;
+          if (stalePendingRevertId !== undefined) {
+            clearTimeout(Number.parseInt(stalePendingRevertId, 10));
+            delete buttonEl.dataset.successRevertId;
+          }
+          // Remove any leftover dismiss sibling from a previous failure
+          // on this button — without this, a retry after a failure would
+          // leave the old ✕ in place after the new attempt succeeds.
+          const parentEl = buttonEl.parentElement;
+          if (parentEl) {
+            const staleDismiss = parentEl.querySelector(':scope > .resend-dismiss');
+            if (staleDismiss) staleDismiss.remove();
+          }
+          // Cache the IDLE label once per button on the dataset, then
+          // always revert to that. Snapshotting btn.innerHTML on every
+          // click is a regression hazard: on a retry-after-failure path
+          // the innerHTML at this moment is the failure markup
+          // (<span>failed</span><span role="alert">...</span>), so a
+          // subsequent success would auto-revert to that stale failure
+          // label instead of the original idle "Resend" text. Closes
+          // review-comments #1268.peGx / .pmOa. Mirrors the
+          // `originalLabel` cache pattern already used by the copy-key
+          // button at line 670-680.
+          if (buttonEl.dataset.idleLabel === undefined) {
+            buttonEl.dataset.idleLabel = btn.innerHTML;
+          }
+          const orig = buttonEl.dataset.idleLabel;
+          btn.innerHTML = '<span class="text-slate-400">sending...</span>';
+          // Track outcome so the auto-revert can run on success but skip
+          // on failure — without this, the resend button reverts back to
+          // its idle label 2.5s after a failure and takes the actionable
+          // error tooltip with it. Operators who looked away during the
+          // call would never know what went wrong. Closes review-comment
+          // #1256.hteN.
+          let succeeded = false;
+          try {
+            const { data, error } = await supabase.functions.invoke('admin-resend-license-email', {
+              body: { license_id: id },
+            });
+            // Distinguish server-side vs transport-side failures so admins
+            // can see WHICH category fired (config, malformed recipient,
+            // upstream send) instead of an opaque "failed". The edge
+            // function returns a `message` field on every non-2xx; surface
+            // it so the operator gets actionable detail without opening
+            // the network tab.
+            if (error) {
+              // Supabase JS sets `data` to null on non-2xx and stashes
+              // the actual Response on `error.context`. The edge function
+              // returns `message` in the body — read it from there, not
+              // from `data` (which never has it in the error path).
+              // Wrap in try/catch because error.context may be missing
+              // (network error before the response was received) or the
+              // body may not be JSON.
+              let serverMsg: string | undefined;
+              try {
+                const ctx = (error as { context?: Response }).context;
+                if (ctx && typeof ctx.json === 'function') {
+                  const body = await ctx.json();
+                  if (body && typeof body.message === 'string') {
+                    serverMsg = body.message;
+                  }
+                }
+              } catch {
+                // Body wasn't JSON / context missing — fall through to
+                // generic "failed" label.
+              }
+              console.error('Resend failed:', { error, serverMsg });
+              renderResendFailure(btn, orig, serverMsg);
+            } else {
+              btn.innerHTML = '<span class="text-green-500">sent</span>';
+              succeeded = true;
+            }
+          } catch (err) {
+            console.error('Resend invoke threw:', err);
+            renderResendFailure(btn, orig, undefined);
+          } finally {
+            // Always release the in-flight guard so the operator can
+            // retry on transient failures without reloading the page.
+            delete buttonEl.dataset.inFlight;
+            buttonEl.disabled = false;
+          }
+          // Auto-revert ONLY on success. Failure label persists until the
+          // operator clicks the ✕ dismiss control, ensuring the
+          // server's actionable error message is never silently hidden
+          // (the previous unconditional 2.5s revert removed both the
+          // "failed" label AND the tooltip carrying the cause, leaving
+          // an operator who looked away unable to see what went wrong).
+          //
+          // Per-button revert tracking: store the timeout ID on the
+          // dataset and clear the pointer when it fires. The next click
+          // on this button cancels any in-flight timer so a stale
+          // callback can never overwrite a fresh state (cancel happens
+          // at the top of this handler; this side just makes sure the
+          // timer ID is reachable from there).
+          if (succeeded) {
+            const revertId = window.setTimeout(() => {
+              btn.innerHTML = orig;
+              delete buttonEl.dataset.successRevertId;
+            }, 2500);
+            buttonEl.dataset.successRevertId = String(revertId);
+          }
+        });
+      });
+    }
+
+    async function updateLicenseStatus(id: string, status: string) {
+      const updateData: Record<string, string | null> = { status };
+      if (status === 'revoked') {
+        updateData.revoked_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from('license_keys')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) {
+        console.error('Update error:', error);
+        alert('Failed to update license. Please try again.');
+        return;
+      }
+
+      // Update local data
+      const license = allLicenses.find(l => l.id === id);
+      if (license) license.status = status;
+
+      // Refresh stats
+      const activeCount = allLicenses.filter(l => l.status === 'active').length;
+      const suspendedCount = allLicenses.filter(l => l.status === 'suspended').length;
+      const revokedCount = allLicenses.filter(l => l.status === 'revoked').length;
+      const activeEl = document.getElementById('active-count');
+      const suspendedEl = document.getElementById('suspended-count');
+      const revokedEl = document.getElementById('revoked-count');
+      if (activeEl) activeEl.textContent = String(activeCount);
+      if (suspendedEl) suspendedEl.textContent = String(suspendedCount);
+      if (revokedEl) revokedEl.textContent = String(revokedCount);
+
+      applyFilters();
+    }
+
+    async function showActivations(licenseKeyId: string) {
+      const modal = document.getElementById('activations-modal');
+      const content = document.getElementById('activations-content');
+      if (!modal || !content) return;
+
+      modal.classList.remove('hidden');
+      content.innerHTML = '<p class="text-sm text-slate-500">Loading activations...</p>';
+
+      const { data: activations, error } = await supabase
+        .from('license_activations')
+        .select('id, machine_id_hash, hostname, os_description, first_seen_at, last_seen_at, is_active')
+        .eq('license_key_id', licenseKeyId)
+        .order('last_seen_at', { ascending: false });
+
+      if (error || !activations) {
+        content.innerHTML = '<p class="text-sm text-red-500">Failed to load activations.</p>';
+        return;
+      }
+
+      if (activations.length === 0) {
+        content.innerHTML = '<p class="text-sm text-slate-500">No activations found for this license.</p>';
+        return;
+      }
+
+      content.innerHTML = activations.map((a: Activation) => {
+        const statusBadge = a.is_active
+          ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Active</span>'
+          : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-700 text-slate-500">Inactive</span>';
+        const firstSeen = new Date(a.first_seen_at).toLocaleDateString();
+        const lastSeen = new Date(a.last_seen_at).toLocaleDateString();
+        const machinePreview = a.machine_id_hash.substring(0, 12) + '...';
+
+        const deactivateBtn = a.is_active
+          ? `<button class="deactivate-activation-btn text-xs text-red-500 hover:underline" data-id="${a.id}" data-license="${licenseKeyId}">Deactivate</button>`
+          : '';
+
+        return `<div class="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-mono text-xs text-slate-500">${escapeHtml(machinePreview)}</span>
+            <div class="flex items-center gap-2">
+              ${statusBadge}
+              ${deactivateBtn}
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <div><span class="font-medium">Hostname:</span> ${escapeHtml(a.hostname || 'Unknown')}</div>
+            <div><span class="font-medium">OS:</span> ${escapeHtml(a.os_description || 'Unknown')}</div>
+            <div><span class="font-medium">First seen:</span> ${firstSeen}</div>
+            <div><span class="font-medium">Last seen:</span> ${lastSeen}</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      // Attach deactivation handlers
+      content.querySelectorAll('.deactivate-activation-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const activationId = (btn as HTMLElement).dataset.id;
+          const licenseId = (btn as HTMLElement).dataset.license;
+          if (!activationId || !confirm('Deactivate this machine?')) return;
+
+          const { error } = await supabase
+            .from('license_activations')
+            .update({ is_active: false, deactivated_at: new Date().toISOString() })
+            .eq('id', activationId);
+
+          if (error) {
+            alert('Failed to deactivate. Please try again.');
+            return;
+          }
+
+          // Refresh the activations modal
+          if (licenseId) await showActivations(licenseId);
+
+          // Update activation count in local data
+          const license = allLicenses.find(l => l.id === licenseId);
+          if (license && license.activationCount) {
+            license.activationCount--;
+            applyFilters();
+          }
+        });
+      });
+    }
+
+    // Issue License form
+    async function issueLicense(e: Event) {
+      e.preventDefault();
+      const errorEl = document.getElementById('issue-error');
+
+      const email = (document.getElementById('issue-email') as HTMLInputElement).value.trim();
+      const customerName = (document.getElementById('issue-customer-name') as HTMLInputElement).value.trim();
+      const product = (document.getElementById('issue-product') as HTMLSelectElement).value;
+      const tier = (document.getElementById('issue-tier') as HTMLSelectElement).value;
+      const maxActivations = parseInt((document.getElementById('issue-max-activations') as HTMLInputElement).value);
+      const org = (document.getElementById('issue-org') as HTMLInputElement).value.trim();
+      const notes = (document.getElementById('issue-notes') as HTMLTextAreaElement).value.trim();
+
+      const productMeta = PRODUCT_META[product];
+      if (!productMeta) {
+        if (errorEl) {
+          errorEl.textContent = `Unknown product: ${product}`;
+          errorEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      // Look up the customer's profile by email. Two outcomes:
+      //   - profile exists  → use their user_id so their /account/licenses/
+      //                        page shows this license on first load.
+      //   - no profile yet  → fall back to the synthetic bootstrap user
+      //                        (ci@aidotnet.dev) and rely on the
+      //                        customer_email column to attribute the row.
+      //                        A later reconciliation pass flips user_id
+      //                        over when the real customer signs up.
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('email', email)
+        .limit(1);
+
+      if (profileError) {
+        if (errorEl) {
+          errorEl.textContent = `Profile lookup failed: ${profileError.message}`;
+          errorEl.classList.remove('hidden');
+        }
+        console.error('Profile lookup error:', profileError);
+        return;
+      }
+
+      let userId: string | null = null;
+      let profileFullName: string | null = null;
+      if (profiles && profiles.length > 0) {
+        userId = profiles[0].id;
+        profileFullName = profiles[0].full_name ?? null;
+      } else {
+        // Resolve the bootstrap placeholder on demand. Looking it up by
+        // email instead of hardcoding the UUID keeps the migration/fresh-
+        // install path sane — anyone seeding a new environment can rename
+        // the placeholder as long as the email stays stable.
+        const { data: bootstrap, error: bootstrapError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', 'ci@aidotnet.dev')
+          .limit(1);
+        if (bootstrapError || !bootstrap || bootstrap.length === 0) {
+          if (errorEl) {
+            errorEl.textContent =
+              'No profile for this email, and the ci@aidotnet.dev bootstrap account is missing. ' +
+              'Create the bootstrap profile before issuing pre-signup licenses.';
+            errorEl.classList.remove('hidden');
+          }
+          console.error('Bootstrap profile missing:', bootstrapError);
+          return;
+        }
+        userId = bootstrap[0].id;
+      }
+
+      // Generate a license key: {productPrefix}.{random12}.{random16}.
+      // Product prefix (aidn / harm / ...) comes from PRODUCT_META so the
+      // client library can classify a key by prefix without a DB call.
+      const keyPart1 = crypto.randomUUID().replace(/-/g, '').substring(0, 12);
+      const keyPart2 = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      const licenseKey = `${productMeta.prefix}.${keyPart1}.${keyPart2}`;
+
+      // customer_full_name precedence: admin-typed name > profile name
+      // (when one exists) > null. We deliberately store the form-supplied
+      // name even when a profile exists so the admin can correct stale
+      // profile data (e.g., a customer signed up with just an email and
+      // the profile has no display name yet).
+      const customerFullName = customerName || profileFullName || null;
+
+      const { error: insertError } = await supabase
+        .from('license_keys')
+        .insert({
+          user_id: userId,
+          license_key: licenseKey,
+          product: product,
+          tier: tier,
+          status: 'active',
+          max_activations: maxActivations,
+          organization_name: org || null,
+          notes: notes || null,
+          // Always persist customer_email so the admin table + search
+          // work even when user_id points at the bootstrap placeholder.
+          customer_email: email,
+          customer_full_name: customerFullName,
+        });
+
+      if (insertError) {
+        if (errorEl) {
+          errorEl.textContent = `Failed to issue license: ${insertError.message}`;
+          errorEl.classList.remove('hidden');
+        }
+        console.error('Insert error:', insertError);
+        return;
+      }
+
+      // Close modal and refresh
+      const modal = document.getElementById('issue-modal');
+      if (modal) modal.classList.add('hidden');
+      (document.getElementById('issue-form') as HTMLFormElement).reset();
+      if (errorEl) errorEl.classList.add('hidden');
+
+      await loadLicenses();
+    }
+
+    function escapeHtml(str: string): string {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    // Modal handlers
+    document.getElementById('issue-license-btn')?.addEventListener('click', () => {
+      document.getElementById('issue-modal')?.classList.remove('hidden');
+    });
+    document.getElementById('cancel-issue-btn')?.addEventListener('click', () => {
+      document.getElementById('issue-modal')?.classList.add('hidden');
+    });
+    document.getElementById('close-activations-btn')?.addEventListener('click', () => {
+      document.getElementById('activations-modal')?.classList.add('hidden');
+    });
+    document.getElementById('issue-form')?.addEventListener('submit', issueLicense);
+
+    // Close modals on escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.getElementById('issue-modal')?.classList.add('hidden');
+        document.getElementById('activations-modal')?.classList.add('hidden');
+      }
+    });
+
+    // Filter handlers
+    document.getElementById('search-input')?.addEventListener('input', applyFilters);
+    document.getElementById('filter-product')?.addEventListener('change', applyFilters);
+    document.getElementById('filter-tier')?.addEventListener('change', applyFilters);
+    document.getElementById('filter-status')?.addEventListener('change', applyFilters);
+
+    await (window as any).__adminReady;
+    loadLicenses();
+  </script>
+</AdminLayout>

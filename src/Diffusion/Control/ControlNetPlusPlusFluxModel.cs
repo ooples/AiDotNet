@@ -1,0 +1,183 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+
+namespace AiDotNet.Diffusion.Control;
+
+/// <summary>
+/// ControlNet++ adapted for FLUX architecture with reward-guided training.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Combines ControlNet++ reward-guided training with FLUX's flow-matching architecture.
+/// Uses 16-channel latent space with double-stream transformer blocks for improved
+/// control signal adherence on FLUX-based models.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This is the most advanced version of ControlNet that works
+/// with FLUX models. It combines the improved training (ControlNet++) with FLUX's
+/// powerful architecture for the best possible control over generated images.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create ControlNet++ for FLUX with reward-guided conditioning
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 16,
+///     Height = 1024,
+///     Width = 1024,
+///     NumInferenceSteps = 28
+/// };
+/// var model = new ControlNetPlusPlusFluxModel&lt;float&gt;(options, ControlType.Depth);
+///
+/// // Generate with enhanced depth-guided control on FLUX
+/// var depthMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 1024, 1024 });
+/// var result = model.Predict(depthMap);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("ControlNet++: All-in-One ControlNet for Image Generations and Editing", "https://arxiv.org/abs/2404.07987")]
+public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int FLUX_LATENT_CHANNELS = 16;
+    private const int FLUX_CONTEXT_DIM = 4096;
+    private const double DEFAULT_GUIDANCE = 3.5;
+
+    private FluxDoubleStreamPredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private ControlNetEncoder<T> _controlEncoder;
+    private readonly IConditioningModule<T>? _conditioner;
+    private readonly ControlType _controlType;
+    private readonly double _rewardWeight;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => FLUX_LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _controlEncoder.ParameterCount;
+
+    public ControlNetPlusPlusFluxModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        FluxDoubleStreamPredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        ControlType controlType = ControlType.Canny,
+        double rewardWeight = 0.5,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.0001, BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
+            architecture)
+    {
+        _controlType = controlType;
+        _conditioner = conditioner;
+        _rewardWeight = rewardWeight;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae), nameof(_controlEncoder))]
+    private void InitializeLayers(FluxDoubleStreamPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new FluxDoubleStreamPredictor<T>(seed: seed);
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: FLUX_LATENT_CHANNELS, baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
+        _controlEncoder = new ControlNetEncoder<T>(
+            inputChannels: 3, baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var all = new List<T>();
+        var p1 = _predictor.GetParameters(); for (int i = 0; i < p1.Length; i++) all.Add(p1[i]);
+        var p2 = _controlEncoder.GetParameters(); for (int i = 0; i < p2.Length; i++) all.Add(p2[i]);
+        return new Vector<T>(all.ToArray());
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int o = 0;
+        int c1 = checked((int)_predictor.ParameterCount); var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _predictor.SetParameters(new Vector<T>(a1)); o += c1;
+        int c2 = (int)_controlEncoder.ParameterCount; var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2));
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Clone the ACTUAL predictor and VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/rewardWeight/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-
+        // unresolved Flux predictor/VAE, so after the source resolved its lazy layers the copy-on-write
+        // share no longer lined up 1:1 and the clone diverged. Cloning the resolved predictor/VAE makes
+        // the clone structurally identical (the control encoder is then transferred by the share below).
+        var clone = new ControlNetPlusPlusFluxModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: null);
+        // #1624: O(1)-until-write copy-on-write parameter share (avoids the full-model flatten copy that
+        // OOMs the 16 GB runner). Foundation-scale (12B FLUX) fallback when the share doesn't line up 1:1:
+        // restore the base predictor/VAE through the STREAMING chunked API (never materializes a flat 12B
+        // Vector<T> — that flatten is the #1624 clone OOM). The inherited GetParameterChunks() covers only
+        // predictor/VAE/conditioner, so restore the small conv control encoder via its own flat API after.
+        // (On net471 the chunked base restore no-ops — but net471 does not run a 12B FLUX predictor.)
+        if (!clone.TryShareParametersFrom(this))
+        {
+            clone.SetParameterChunks(GetParameterChunks());
+            clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
+        }
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "ControlNet++-FLUX", Version = "1.0",
+            Description = "ControlNet++ with reward-guided training for FLUX flow-matching architecture",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        metadata.SetProperty("architecture", "flux-controlnet-plus-plus");
+        metadata.SetProperty("base_model", "FLUX.1");
+        metadata.SetProperty("text_encoder", "CLIP-L + T5-XXL");
+        metadata.SetProperty("context_dim", FLUX_CONTEXT_DIM);
+        metadata.SetProperty("control_type", _controlType.ToString());
+        metadata.SetProperty("reward_weight", _rewardWeight);
+        metadata.SetProperty("latent_channels", FLUX_LATENT_CHANNELS);
+        metadata.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        return metadata;
+    }
+}

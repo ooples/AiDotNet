@@ -1,0 +1,391 @@
+using AiDotNet.Attributes;
+using AiDotNet.Extensions;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
+
+namespace AiDotNet.VisionLanguage.InstructionTuned;
+
+/// <summary>
+/// Gemma 3: Google's 3B-72B VLM with Native Dynamic Resolution ViT and 128k context.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Gemma 3 (Google, 2025) is a family of vision-language models ranging from 3B to 72B parameters.
+/// It features Native Dynamic Resolution ViT for flexible image processing, 128k token context
+/// window, and support for 29 languages. Uses SigLIP-based vision encoder with MLP projection.
+/// </para>
+/// <para><b>References:</b>
+/// <list type="bullet"><item>Paper: "Gemma 3 Technical Report" (Google, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Gemma 3 from Google is a family of open vision-language models
+/// ranging from 3 billion to 72 billion parameters. It can process images at their native
+/// resolution using Dynamic Resolution ViT, meaning it adapts to each image's actual size
+/// rather than forcing all images to a fixed size. With a 128K token context window, it can
+/// handle very long conversations and documents. It supports 29 languages and uses a
+/// SigLIP-based vision encoder with an MLP projection to connect visual features to the
+/// language model. Default values follow the original paper settings.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Gemma 3 model for multilingual visual understanding
+/// // with dynamic resolution ViT and 128K context window
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Gemma3&lt;double&gt;(architecture, "gemma3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Gemma3&lt;double&gt;(architecture, new Gemma3Options());
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper(
+    "Gemma 3 Technical Report",
+    "https://arxiv.org/abs/2503.19786",
+    Year = 2025,
+    Authors = "Gemma Team"
+)]
+public class Gemma3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+{
+    private readonly Gemma3Options _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    private int _encoderLayerEnd;
+
+    public Gemma3(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        Gemma3Options? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new Gemma3Options();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public Gemma3(
+        NeuralNetworkArchitecture<T> architecture,
+        Gemma3Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new Gemma3Options();
+        _options.ValidateVisualSizing();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
+    /// <summary>
+    /// Generates text using Gemma 3's Native Dynamic Resolution architecture.
+    /// Gemma 3 (Google, 2025) uses:
+    /// (1) SigLIP-based vision encoder with Native Dynamic Resolution (NDR) that
+    ///     processes images at their natural aspect ratio without distortion,
+    /// (2) Pan-and-scan: splits images into non-overlapping crops at native aspect
+    ///     ratio plus a global thumbnail for context,
+    /// (3) Soft-capped attention with logit capping at 50.0 for training stability,
+    /// (4) Gemma-3 decoder backbone with 128k context and 29-language support.
+    /// </summary>
+    public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
+
+        // Step 1: SigLIP vision encoder with NDR
+        var visualFeatures = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visualFeatures = Layers[i].Forward(visualFeatures);
+
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
+        if (prompt is not null)
+        {
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
+        }
+        else
+        {
+            fusedInput = visualFeatures;
+        }
+
+        var output = fusedInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+
+        return output;
+    }
+
+    public Tensor<T> Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage
+    )
+    {
+        ThrowIfDisposed();
+        var sb = new System.Text.StringBuilder();
+        sb.Append(_options.SystemPrompt);
+        foreach (var (role, content) in conversationHistory)
+            sb.Append($"\n{role}: {content}");
+        sb.Append($"\nUser: {userMessage}\nAssistant:");
+        return GenerateFromImage(image, sb.ToString());
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            // Validate visual-patch options only when building the default VLM stack —
+            // ComputePatchSize() is the only consumer of _options.ImageSize /
+            // _options.MaxVisualTokens; when Architecture.Layers is supplied those
+            // options are irrelevant and validation would spuriously reject custom-
+            // layer setups.
+            ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultVisionAdapterLayers(
+                    _options.VisionDim,
+                    _options.VisionDim * 2,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    patchSize: ComputePatchSize()
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+        ValidateEncoderDecoderBoundary(_encoderLayerEnd);
+
+        // NOTE: Gemma3 is paper-scale by default (VisionDim=1152, 27 vision
+        // layers, DecoderDim=3584, 36 decoder layers — Google's 4B/12B/27B
+        // SigLIP-SO family). The auto-detect streaming gate in
+        // NeuralNetworkBase reads ParameterCount, which returns 0 PRE-first-
+        // forward for lazy DenseLayers; the first warm-up Predict
+        // materializes the full lazy weight matrix on the GC heap and OOMs
+        // the runner before auto-detect gets a chance to engage.
+        //
+        // Calling ConfigureWeightLifetime(new GpuOffloadOptions()) here to
+        // pre-engage streaming was the natural fix but surfaces a downstream
+        // engine bug: when PredictEagerStreaming later calls
+        // RegisterLayerTrainableTensorsWithWeightRegistry on a lazy layer's
+        // freshly-materialized weights, DropStorageForStreaming throws
+        // "storage refcount is 2" — some view/rebind operation in
+        // PatchEmbeddingLayer's OnFirstForward leaves the weight tensor's
+        // storage shared. Deferring streaming pre-engagement until the
+        // engine-side refcount issue is fixed.
+    }
+
+    // Gemma-3 (Google 2025): 896 / sqrt(4096) = 14 — SigLIP 14x14 patches.
+    private int ComputePatchSize() =>
+        ComputeVisualPatchSize(_options.ImageSize, _options.MaxVisualTokens, roundUp: true);
+
+    // +2 leading layers from the helper: PatchEmbedding + LayerNorm.
+    private void ComputeEncoderDecoderBoundary()
+    {
+        _encoderLayerEnd = ComputeVisionLanguageBoundary(
+            leadingLayerCount: 2,
+            visionLayerCount: _options.NumVisionLayers,
+            visionBlockLayerCount: TransformerBlockLayerCount(_options.DropoutRate),
+            trailingLayerCount: 6
+        );
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "Gemma-3-Native" : "Gemma-3-ONNX",
+            Description =
+                "Gemma 3: Google's Multilingual VLM with Native Dynamic Resolution (2025)",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "Gemma-3";
+        m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
+        m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
+        m.AdditionalInfo["NativeDynamicRes"] = _options.EnableNativeDynamicResolution.ToString();
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.DecoderDim);
+        writer.Write(_options.ProjectionDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.EnableNativeDynamicResolution);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.DecoderDim = reader.ReadInt32();
+        _options.ProjectionDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        _options.EnableNativeDynamicResolution = reader.ReadBoolean();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new Gemma3<T>(Architecture, mp, new Gemma3Options(_options));
+        return new Gemma3<T>(Architecture, new Gemma3Options(_options));
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(Gemma3<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
+}

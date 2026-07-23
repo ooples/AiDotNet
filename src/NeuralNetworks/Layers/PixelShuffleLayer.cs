@@ -1,0 +1,454 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Pixel shuffle (sub-pixel convolution) layer for efficient spatial upsampling.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <remarks>
+/// <para>
+/// Pixel shuffle rearranges elements from the channel dimension into spatial dimensions,
+/// effectively upscaling the spatial resolution. This is more efficient than transposed
+/// convolution (deconvolution) for upsampling operations.
+/// </para>
+/// <para>
+/// For a 2x upscaling, the layer takes 4 channel values and arranges them as a 2x2 spatial block.
+/// The operation follows the formula: [batch, channels * r^2, height, width] -> [batch, channels, height * r, width * r]
+/// </para>
+/// <para><b>For Beginners:</b> Imagine you have a small image and want to make it bigger.
+///
+/// Pixel shuffle works by:
+/// 1. Starting with extra channel information (4x more channels for 2x upscaling)
+/// 2. Rearranging those channel values into spatial positions
+/// 3. Creating a larger image with the same amount of total information
+///
+/// For example, with 2x upscaling:
+/// - Input: 64 channels × 32×32 pixels
+/// - Output: 16 channels × 64×64 pixels (same total data, different arrangement)
+///
+/// This is commonly used in super-resolution models like Real-ESRGAN and ESPCN.
+/// </para>
+/// </remarks>
+[LayerCategory(LayerCategory.Upsampling)]
+[LayerTask(LayerTask.UpSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 4, 4", TestConstructorArgs = "2")]
+public class PixelShuffleLayer<T> : LayerBase<T>
+{
+    #region Fields
+
+    /// <summary>
+    /// The upscaling factor for spatial dimensions.
+    /// </summary>
+    private readonly int _upscaleFactor;
+
+    /// <summary>
+    /// Cached input from the last forward pass for backpropagation.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Cached original input shape for backward pass with higher-rank tensors.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Cached GPU input shape for backward pass.
+    /// </summary>
+    private int[]? _gpuCachedInputShape;
+
+    /// <summary>
+    /// Whether a batch dimension was added for 3D input in GPU forward.
+    /// </summary>
+    private bool _gpuAdded3DBatch;
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Gets the upscaling factor used by this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The upscaling factor determines how much the spatial dimensions are increased.
+    /// A factor of 2 doubles both width and height, a factor of 4 quadruples them.
+    /// </para>
+    /// </remarks>
+    public int UpscaleFactor => _upscaleFactor;
+
+    /// <inheritdoc />
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Indicates whether this layer supports GPU execution.
+    /// PixelShuffle uses GPU Reshape and Permute operations for efficient rearrangement.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PixelShuffleLayer{T}"/> class.
+    /// </summary>
+    /// <param name="inputShape">The shape of the input tensor. Supports any rank >= 3.</param>
+    /// <param name="upscaleFactor">The spatial upscaling factor (e.g., 2 for 2x upscaling).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Create a pixel shuffle layer to upscale your feature maps.
+    ///
+    /// The input channels must be divisible by upscaleFactor². For example:
+    /// - 2x upscaling requires input channels divisible by 4
+    /// - 4x upscaling requires input channels divisible by 16
+    ///
+    /// Example usage:
+    /// <code>
+    /// // Create a 2x upscaling layer for 64-channel 32×32 feature maps
+    /// var pixelShuffle = new PixelShuffleLayer&lt;float&gt;(
+    ///     inputShape: new[] { 64, 32, 32 },  // [channels, height, width]
+    ///     upscaleFactor: 2
+    /// );
+    /// // Output will be [16, 64, 64] - 4x fewer channels, 4x more pixels
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public PixelShuffleLayer(int upscaleFactor)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
+    {
+        if (upscaleFactor < 1)
+            throw new ArgumentOutOfRangeException(nameof(upscaleFactor),
+                $"upscaleFactor must be at least 1. Got: {upscaleFactor}");
+        _upscaleFactor = upscaleFactor;
+    }
+
+    /// <summary>
+    /// Resolves channel/spatial dims and registers the resolved output shape on first forward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 3)
+            throw new ArgumentException(
+                $"PixelShuffleLayer requires rank>=3 [...,C,H,W] input; got rank {rank}.",
+                nameof(input));
+
+        int r2 = _upscaleFactor * _upscaleFactor;
+        int c = input.Shape[rank - 3];
+        int h = input.Shape[rank - 2];
+        int w = input.Shape[rank - 1];
+
+        if (c % r2 != 0)
+        {
+            throw new ArgumentException(
+                $"Channel count ({c}) must be divisible by upscaleFactor² ({r2}) for pixel shuffle.");
+        }
+
+        ResolveShapes(new[] { c, h, w }, new[] { c / r2, h * _upscaleFactor, w * _upscaleFactor });
+    }
+
+    #endregion
+
+    #region Shape Calculation
+
+    /// <summary>
+    /// Calculates the output shape based on input shape and upscale factor.
+    /// </summary>
+    /// <param name="inputShape">The input tensor shape.</param>
+    /// <param name="upscaleFactor">The upscaling factor.</param>
+    /// <returns>The calculated output shape.</returns>
+    private static int[] CalculateOutputShape(int[] inputShape, int upscaleFactor)
+    {
+        int r2 = upscaleFactor * upscaleFactor;
+
+        return inputShape.Length switch
+        {
+            // 3D: [channels, height, width] -> [channels/r², height*r, width*r]
+            3 => [inputShape[0] / r2, inputShape[1] * upscaleFactor, inputShape[2] * upscaleFactor],
+
+            // 4D: [batch, channels, height, width] -> [batch, channels/r², height*r, width*r]
+            4 => [inputShape[0], inputShape[1] / r2, inputShape[2] * upscaleFactor, inputShape[3] * upscaleFactor],
+
+            // 5D: [batch, frames, channels, height, width] -> [batch, frames, channels/r², height*r, width*r]
+            5 => [inputShape[0], inputShape[1], inputShape[2] / r2, inputShape[3] * upscaleFactor, inputShape[4] * upscaleFactor],
+
+            // General case for higher dimensions: reduce channel dim, expand last two spatial dims
+            _ when inputShape.Length > 5 => CalculateHighDimensionalOutputShape(inputShape, upscaleFactor),
+
+            // Less than 3D is not supported
+            _ => throw new ArgumentException($"Pixel shuffle requires at least 3 dimensions, got {inputShape.Length}.")
+        };
+    }
+
+    /// <summary>
+    /// Calculates output shape for tensors with more than 5 dimensions.
+    /// </summary>
+    private static int[] CalculateHighDimensionalOutputShape(int[] inputShape, int upscaleFactor)
+    {
+        int r2 = upscaleFactor * upscaleFactor;
+        var result = new int[inputShape.Length];
+
+        // Copy batch and other leading dimensions
+        for (int i = 0; i < inputShape.Length - 3; i++)
+        {
+            result[i] = inputShape[i];
+        }
+
+        // Channel dimension (third from last) gets reduced
+        int channelIdx = inputShape.Length - 3;
+        result[channelIdx] = inputShape[channelIdx] / r2;
+
+        // Height and width (last two) get expanded
+        result[^2] = inputShape[^2] * upscaleFactor;
+        result[^1] = inputShape[^1] * upscaleFactor;
+
+        return result;
+    }
+
+    /// <summary>
+    /// Validates that the input shape is compatible with the upscale factor.
+    /// </summary>
+    private static void ValidateInputShape(int[] inputShape, int upscaleFactor)
+    {
+        // Validate upscaleFactor to prevent division by zero and invalid shapes
+        if (upscaleFactor < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(upscaleFactor),
+                $"upscaleFactor must be at least 1. Got: {upscaleFactor}");
+        }
+
+        if (inputShape.Length < 3)
+        {
+            throw new ArgumentException(
+                $"Pixel shuffle requires at least 3 dimensions (channels, height, width), got {inputShape.Length}.");
+        }
+
+        int r2 = upscaleFactor * upscaleFactor;
+
+        // Determine channel dimension based on rank
+        int channelIdx = inputShape.Length switch
+        {
+            3 => 0,  // [channels, height, width]
+            4 => 1,  // [batch, channels, height, width]
+            _ => inputShape.Length - 3  // General: third from last
+        };
+
+        int channels = inputShape[channelIdx];
+        if (channels % r2 != 0)
+        {
+            throw new ArgumentException(
+                $"Number of input channels ({channels}) must be divisible by upscaleFactor² ({r2}) for upscale factor {upscaleFactor}.");
+        }
+    }
+
+    #endregion
+
+    #region Forward Pass
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// This method uses the GPU-accelerated IEngine.PixelShuffle operation for optimal performance.
+    /// For tensors with more than 4 dimensions, it reshapes to 4D, applies the operation, and
+    /// restores the original shape structure.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        EnsureInitializedFromInput(input);
+        _originalInputShape = input._shape;
+        var shape = input._shape;
+
+        // For 4D tensors (batch, channels, height, width), use Engine directly
+        if (shape.Length == 4)
+        {
+            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+            return Engine.PixelShuffle(input, _upscaleFactor);
+        }
+
+        // For 3D tensors (channels, height, width), add batch dimension
+        if (shape.Length == 3)
+        {
+            var input4D = Engine.Reshape(input, [1, shape[0], shape[1], shape[2]]);
+            _lastInput = input4D;
+            var output4D = Engine.PixelShuffle(input4D, _upscaleFactor);
+            // Remove batch dimension from output
+            return Engine.Reshape(output4D, [output4D.Shape[1], output4D.Shape[2], output4D.Shape[3]]);
+        }
+
+        // For higher-rank tensors, collapse batch dimensions and use Engine
+        if (shape.Length > 4)
+        {
+            // Collapse all leading dimensions into single batch
+            int batchSize = 1;
+            for (int i = 0; i < shape.Length - 3; i++)
+            {
+                batchSize *= shape[i];
+            }
+
+            int channels = shape[^3];
+            int height = shape[^2];
+            int width = shape[^1];
+
+            var input4D = Engine.Reshape(input, [batchSize, channels, height, width]);
+            _lastInput = input4D;
+            var output4D = Engine.PixelShuffle(input4D, _upscaleFactor);
+
+            // Restore original batch dimensions with new spatial dimensions
+            var outputShape = new int[shape.Length];
+            for (int i = 0; i < shape.Length - 3; i++)
+            {
+                outputShape[i] = shape[i];
+            }
+            outputShape[^3] = output4D.Shape[1]; // new channels
+            outputShape[^2] = output4D.Shape[2]; // new height
+            outputShape[^1] = output4D.Shape[3]; // new width
+
+            return Engine.Reshape(output4D, outputShape);
+        }
+
+        throw new ArgumentException($"Pixel shuffle requires at least 3 dimensions, got {shape.Length}.");
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="inputs">The GPU-resident input tensors.</param>
+    /// <returns>A GPU-resident output tensor after pixel shuffle.</returns>
+    /// <remarks>
+    /// <para>
+    /// Pixel shuffle is implemented as: Reshape -> Permute -> Reshape
+    /// [N, C*r², H, W] -> [N, C, r, r, H, W] -> [N, C, H, r, W, r] -> [N, C, H*r, W*r]
+    /// All operations stay GPU-resident.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+        var shape = input._shape;
+        int r = _upscaleFactor;
+        int r2 = r * r;
+
+        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        if (shape.Length < 3)
+            throw new ArgumentException($"PixelShuffle requires at least 3D tensor [C, H, W]. Got rank {shape.Length}.");
+
+        int batch, channels, height, width;
+        bool added3DBatch = false;
+        var originalShape = shape;
+
+        if (shape.Length == 4)
+        {
+            batch = shape[0];
+            channels = shape[1];
+            height = shape[2];
+            width = shape[3];
+        }
+        else if (shape.Length == 3)
+        {
+            batch = 1;
+            channels = shape[0];
+            height = shape[1];
+            width = shape[2];
+            added3DBatch = true;
+            input = gpuEngine.ReshapeGpu(input, new[] { 1, channels, height, width });
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            batch = 1;
+            for (int d = 0; d < shape.Length - 3; d++)
+                batch *= shape[d];
+            channels = shape[shape.Length - 3];
+            height = shape[shape.Length - 2];
+            width = shape[shape.Length - 1];
+            input = gpuEngine.ReshapeGpu(input, new[] { batch, channels, height, width });
+        }
+
+        // Cache for backward pass
+        if (IsTrainingMode)
+        {
+            _gpuCachedInputShape = (int[])originalShape.Clone();
+            _gpuAdded3DBatch = added3DBatch;
+        }
+
+        int outChannels = channels / r2;
+
+        // Step 1: Reshape [N, C*r², H, W] -> [N, C, r, r, H, W]
+        var reshaped1 = gpuEngine.ReshapeGpu(input, new[] { batch, outChannels, r, r, height, width });
+
+        // Step 2: Permute [N, C, r, r, H, W] -> [N, C, H, r, W, r]
+        var permuted = gpuEngine.PermuteGpu(reshaped1, new[] { 0, 1, 4, 2, 5, 3 });
+
+        // Step 3: Reshape [N, C, H, r, W, r] -> [N, C, H*r, W*r]
+        int outHeight = height * r;
+        int outWidth = width * r;
+        var result = gpuEngine.ReshapeGpu(permuted, new[] { batch, outChannels, outHeight, outWidth });
+
+        // Restore original tensor rank
+        if (originalShape.Length > 4)
+        {
+            var restoreShape = new int[originalShape.Length];
+            for (int d = 0; d < originalShape.Length - 3; d++)
+                restoreShape[d] = originalShape[d];
+            restoreShape[originalShape.Length - 3] = outChannels;
+            restoreShape[originalShape.Length - 2] = outHeight;
+            restoreShape[originalShape.Length - 1] = outWidth;
+            result = gpuEngine.ReshapeGpu(result, restoreShape);
+        }
+        else if (added3DBatch)
+        {
+            result = gpuEngine.ReshapeGpu(result, new[] { outChannels, outHeight, outWidth });
+        }
+
+        return result;
+    }
+
+    #endregion
+
+    #region Backward Pass
+
+    #endregion
+
+    #region Parameter Management
+
+    /// <inheritdoc />
+    public override void UpdateParameters(T learningRate)
+    {
+        // No parameters to update - this is a purely structural layer
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        return Vector<T>.Empty();
+    }
+
+    /// <inheritdoc />
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _originalInputShape = null;
+        _gpuCachedInputShape = null;
+        _gpuAdded3DBatch = false;
+    }
+
+    #endregion
+
+    #region JIT Compilation
+
+    #endregion
+}

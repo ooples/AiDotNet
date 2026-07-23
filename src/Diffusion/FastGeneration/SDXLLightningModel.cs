@@ -1,0 +1,186 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.FastGeneration;
+
+/// <summary>
+/// SDXL Lightning model for 2-8 step high-quality generation via progressive distillation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// SDXL Lightning combines progressive distillation with adversarial training for high-quality
+/// few-step generation. Available as both full UNet checkpoints and LoRA adapters. Achieves
+/// superior quality to SDXL Turbo at 2-4 steps while maintaining SDXL-level aesthetics.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> SDXL Lightning is ByteDance's answer to SDXL Turbo. It generates
+/// beautiful 1024x1024 images in 2-8 steps (vs SDXL's 25-50). Unlike Turbo which works
+/// best at 1 step, Lightning excels at 2-4 steps with slightly higher quality. It also
+/// comes as a LoRA, so you can apply it to existing SDXL fine-tunes.
+/// </para>
+/// <para>
+/// Reference: Lin et al., "SDXL-Lightning: Progressive Adversarial Diffusion Distillation", 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
+/// var model = new SDXLLightningModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("SDXL-Lightning: Progressive Adversarial Diffusion Distillation", "https://arxiv.org/abs/2402.13929", Year = 2024, Authors = "Lin et al.")]
+public class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 4;
+    private const int SDXL_CONTEXT_DIM = 2048;
+    private const double DEFAULT_GUIDANCE = 0.0;
+    private const int DEFAULT_STEPS = 4;
+
+    private UNetNoisePredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+
+    /// <summary>
+    /// Initializes a new SDXL Lightning model.
+    /// </summary>
+    public SDXLLightningModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.00085,
+                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear,
+                DefaultInferenceSteps = DEFAULT_STEPS
+            },
+            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(UNetNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new UNetNoisePredictor<T>(
+            inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
+            baseChannels: 320, channelMultipliers: [1, 2, 4],
+            numResBlocks: 2, attentionResolutions: [4, 2],
+            contextDim: 2048, architecture: Architecture, seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2, latentScaleFactor: 0.13025, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        var combined = new Vector<T>(pp.Length + vp.Length);
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Clone the ACTUAL predictor and VAE (mirrors InstaFlowModel/MultiDiffusionModel):
+        // passing only conditioner/seed rebuilt InitializeLayers' DEFAULT-sized (and lazily
+        // unresolved) UNet/VAE, so once the source resolved its lazy layers via a forward pass
+        // its GetParameters() returned a larger count than the clone could accept — SetParameters
+        // threw / Clone produced divergent output. Cloning the resolved predictor/VAE (+ same
+        // architecture/options/scheduler) makes the clone structurally identical to the source.
+        var clone = new SDXLLightningModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "SDXL Lightning", Version = "1.0",
+            Description = "Progressive adversarial distillation for 2-8 step SDXL-quality generation",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "sdxl-progressive-distilled");
+        m.SetProperty("base_model", "Stable Diffusion XL");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14 + OpenCLIP ViT-bigG/14");
+        m.SetProperty("context_dim", SDXL_CONTEXT_DIM);
+        m.SetProperty("distillation_method", "progressive-adversarial");
+        m.SetProperty("optimal_steps", DEFAULT_STEPS);
+        m.SetProperty("max_recommended_steps", 8);
+        m.SetProperty("default_resolution", 1024);
+        m.SetProperty("lora_available", true);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        return m;
+    }
+}

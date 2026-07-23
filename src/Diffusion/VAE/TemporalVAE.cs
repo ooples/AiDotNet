@@ -1,0 +1,1084 @@
+using System.Linq;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Layers;
+
+namespace AiDotNet.Diffusion.VAE;
+
+/// <summary>
+/// Temporal-aware Variational Autoencoder for video diffusion models.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// The TemporalVAE extends the standard VAE to handle video data by incorporating
+/// temporal awareness into the encoding and decoding process. This helps maintain
+/// temporal consistency across frames when used in video diffusion models.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> While a standard VAE processes each frame independently,
+/// TemporalVAE considers relationships between consecutive frames:
+///
+/// Standard VAE approach (per-frame):
+/// - Frame 1 -> Latent 1 (no knowledge of other frames)
+/// - Frame 2 -> Latent 2 (no knowledge of other frames)
+/// - Result: Possible flickering/inconsistency between frames
+///
+/// TemporalVAE approach:
+/// - Frames 1,2,3,... -> Encode with temporal awareness
+/// - Latent knows about neighboring frames
+/// - Result: Smoother, more consistent video
+///
+/// Key features:
+/// - 3D convolutions that span across time dimension
+/// - Temporal attention for long-range frame relationships
+/// - Optional causal mode for streaming/autoregressive generation
+///
+/// Used in: Stable Video Diffusion, Video LDM, and similar models.
+/// </para>
+/// <para>
+/// Architecture details:
+/// - Input: [batch, channels, frames, height, width] video tensor
+/// - Encoder: 2D spatial blocks + 1D temporal blocks
+/// - Latent: [batch, latentChannels, frames, height/8, width/8]
+/// - Decoder: 2D spatial blocks + 1D temporal blocks
+/// - Output: [batch, channels, frames, height, width] reconstructed video
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var vae = new TemporalVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4, numFrames: 14);
+/// var video = Tensor&lt;float&gt;.Random(new[] { 1, 3, 14, 320, 512 });
+/// var latent = vae.Encode(video);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
+public class TemporalVAE<T> : VAEModelBase<T>
+{
+    /// <summary>
+    /// Standard Stable Video Diffusion latent scale factor.
+    /// </summary>
+    private const double SVD_LATENT_SCALE = 0.18215;
+
+    /// <summary>
+    /// Number of temporal layers in encoder/decoder.
+    /// </summary>
+    private readonly int _numTemporalLayers;
+
+    /// <summary>
+    /// Base channel count.
+    /// </summary>
+    private readonly int _baseChannels;
+
+    /// <summary>
+    /// Channel multipliers for each level.
+    /// </summary>
+    private readonly int[] _channelMultipliers;
+
+    /// <summary>
+    /// Whether to use causal convolutions (for streaming).
+    /// </summary>
+    private readonly bool _causalMode;
+
+    /// <summary>
+    /// Number of frames to process together.
+    /// </summary>
+    private readonly int _temporalKernelSize;
+
+    /// <summary>
+    /// Encoder spatial layers.
+    /// </summary>
+    private readonly List<ILayer<T>> _encoderSpatialLayers;
+
+    /// <summary>
+    /// Encoder temporal layers.
+    /// </summary>
+    private readonly List<ILayer<T>> _encoderTemporalLayers;
+
+    /// <summary>
+    /// Decoder spatial layers.
+    /// </summary>
+    private readonly List<ILayer<T>> _decoderSpatialLayers;
+
+    /// <summary>
+    /// Decoder temporal layers.
+    /// </summary>
+    private readonly List<ILayer<T>> _decoderTemporalLayers;
+
+    /// <summary>
+    /// Mean projection layer.
+    /// </summary>
+    private ConvolutionalLayer<T>? _meanConv;
+
+    /// <summary>
+    /// Log variance projection layer.
+    /// </summary>
+    private ConvolutionalLayer<T>? _logVarConv;
+
+    /// <summary>
+    /// Input convolution.
+    /// </summary>
+    private ConvolutionalLayer<T>? _inputConv;
+
+    /// <summary>
+    /// Post-quant convolution.
+    /// </summary>
+    private ConvolutionalLayer<T>? _postQuantConv;
+
+    /// <summary>
+    /// Output convolution.
+    /// </summary>
+    private ConvolutionalLayer<T>? _outputConv;
+
+    /// <summary>
+    /// Cached mean from encoding.
+    /// </summary>
+    private Tensor<T>? _cachedMean;
+
+    /// <summary>
+    /// Cached log variance from encoding.
+    /// </summary>
+    private Tensor<T>? _cachedLogVar;
+
+    /// <summary>
+    /// True once this VAE has runtime state that a clone must preserve.
+    /// Constructor-time lazy/eager placeholders do not force default scaffold
+    /// clones to materialize the full paper-scale VAE.
+    /// </summary>
+    private bool _preserveMaterializedParameters;
+    private bool _lazyShapesResolved;
+
+    /// <summary>
+    /// Input channels (3 for RGB video).
+    /// </summary>
+    private readonly int _inputChannels;
+
+    /// <summary>
+    /// Latent channels.
+    /// </summary>
+    private readonly int _latentChannels;
+
+    /// <summary>
+    /// Downsampling factor.
+    /// </summary>
+    private readonly int _downsampleFactor;
+
+    /// <summary>
+    /// Latent scale factor.
+    /// </summary>
+    private readonly double _latentScaleFactor;
+
+    /// <inheritdoc />
+    public override int InputChannels => _inputChannels;
+
+    /// <inheritdoc />
+    public override int LatentChannels => _latentChannels;
+
+    /// <inheritdoc />
+    public override int DownsampleFactor => _downsampleFactor;
+
+    /// <inheritdoc />
+    public override double LatentScaleFactor => _latentScaleFactor;
+
+    /// <inheritdoc />
+    public override long ParameterCount => CalculateParameterCount();
+
+    /// <inheritdoc />
+    public override bool SupportsTiling => true;
+
+    /// <inheritdoc />
+    public override bool SupportsSlicing => true;
+
+    /// <summary>
+    /// Gets whether this VAE uses causal convolutions.
+    /// </summary>
+    public bool IsCausal => _causalMode;
+
+    /// <summary>
+    /// Gets the temporal kernel size.
+    /// </summary>
+    public int TemporalKernelSize => _temporalKernelSize;
+
+    /// <summary>
+    /// Initializes a new instance of the TemporalVAE class.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels (default: 3 for RGB).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 128).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numTemporalLayers">Number of temporal layers per spatial block (default: 1).</param>
+    /// <param name="temporalKernelSize">Kernel size for temporal convolutions (default: 3).</param>
+    /// <param name="causalMode">Whether to use causal convolutions (default: false).</param>
+    /// <param name="latentScaleFactor">Scale factor for latents (default: 0.18215).</param>
+    /// <param name="lossFunction">Optional loss function (default: MSE).</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    public TemporalVAE(
+        int inputChannels = 3,
+        int latentChannels = 4,
+        int baseChannels = 128,
+        int[]? channelMultipliers = null,
+        int numTemporalLayers = 1,
+        int temporalKernelSize = 3,
+        bool causalMode = false,
+        double? latentScaleFactor = null,
+        ILossFunction<T>? lossFunction = null,
+        int? seed = null)
+        : base(lossFunction, seed)
+    {
+        _inputChannels = inputChannels;
+        _latentChannels = latentChannels;
+        _baseChannels = baseChannels;
+        _channelMultipliers = channelMultipliers ?? new[] { 1, 2, 4, 4 };
+        _numTemporalLayers = numTemporalLayers;
+        _temporalKernelSize = temporalKernelSize;
+        _causalMode = causalMode;
+        _latentScaleFactor = latentScaleFactor ?? SVD_LATENT_SCALE;
+
+        _downsampleFactor = (int)Math.Pow(2, _channelMultipliers.Length - 1);
+
+        _encoderSpatialLayers = new List<ILayer<T>>();
+        _encoderTemporalLayers = new List<ILayer<T>>();
+        _decoderSpatialLayers = new List<ILayer<T>>();
+        _decoderTemporalLayers = new List<ILayer<T>>();
+
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Initializes all encoder and decoder layers.
+    /// </summary>
+    private void InitializeLayers()
+    {
+        // Spatial encoder layers from LayerHelper (includes inputConv, resblocks, downsamples, meanConv, logVarConv, postQuantConv)
+        var allEncoderLayers = LayerHelper<T>.CreateTemporalVAEEncoderLayers(
+            _inputChannels, _latentChannels, _baseChannels,
+            _channelMultipliers).ToList();
+
+        // First layer is the input convolution
+        _inputConv = (ConvolutionalLayer<T>)allEncoderLayers[0];
+        // Last 3 are latent projections: MeanConv, LogVarConv, PostQuantConv
+        _postQuantConv = (ConvolutionalLayer<T>)allEncoderLayers[^1];
+        _logVarConv = (ConvolutionalLayer<T>)allEncoderLayers[^2];
+        _meanConv = (ConvolutionalLayer<T>)allEncoderLayers[^3];
+        // Middle layers are the encoder spatial blocks and downsamples
+        for (int i = 1; i < allEncoderLayers.Count - 3; i++)
+        {
+            _encoderSpatialLayers.Add(allEncoderLayers[i]);
+        }
+
+        // Temporal encoder layers (parallel processing path, not in LayerHelper)
+        for (int level = 0; level < _channelMultipliers.Length; level++)
+        {
+            var outChannels = _baseChannels * _channelMultipliers[level];
+            for (int t = 0; t < _numTemporalLayers; t++)
+            {
+                _encoderTemporalLayers.Add(CreateTemporalBlock(outChannels));
+            }
+        }
+
+        // Spatial decoder layers from LayerHelper
+        var allDecoderLayers = LayerHelper<T>.CreateTemporalVAEDecoderLayers(
+            _inputChannels, _latentChannels, _baseChannels,
+            _channelMultipliers).ToList();
+
+        // PostQuantConv already assigned above; skip first layer (duplicate postQuantConv)
+        // Last layer is output conv
+        _outputConv = (ConvolutionalLayer<T>)allDecoderLayers[^1];
+        // Middle layers are decoder spatial blocks and upsamples
+        for (int i = 1; i < allDecoderLayers.Count - 1; i++)
+        {
+            _decoderSpatialLayers.Add(allDecoderLayers[i]);
+        }
+
+        // Temporal decoder layers (parallel processing path).
+        // These run as one monolithic block (see ApplyTemporalLayers) on the post-quant output
+        // BEFORE the spatial decoder, so the LAST temporal block must emit `lastChannels`
+        // (_baseChannels * _channelMultipliers[^1]) to feed the spatial decoder's first residual
+        // block. Building low→high (ascending level) makes the block chain end at lastChannels —
+        // mirroring the encoder's temporal path. Building it high→low (descending) made the chain
+        // end at _baseChannels, so the spatial decoder's GroupNorm rejected the input with a
+        // "channels != expected" mismatch for any numTemporalLayers >= 1 (a hard decode crash).
+        for (int level = 0; level < _channelMultipliers.Length; level++)
+        {
+            var outChannels = _baseChannels * _channelMultipliers[level];
+            for (int t = 0; t < _numTemporalLayers; t++)
+            {
+                _decoderTemporalLayers.Add(CreateTemporalBlock(outChannels));
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Encode(Tensor<T> video, bool sampleMode = true)
+    {
+        _preserveMaterializedParameters = true;
+        var (mean, logVar) = EncodeWithDistribution(video);
+        return sampleMode ? Sample(mean, logVar) : mean;
+    }
+
+    /// <inheritdoc />
+    public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> video)
+    {
+        if (_inputConv == null || _meanConv == null || _logVarConv == null)
+        {
+            throw new InvalidOperationException("Encoder layers not initialized.");
+        }
+
+        // Handle video input: [batch, channels, frames, height, width]
+        // or image input: [batch, channels, height, width]
+        bool isVideo = video.Shape.Length == 5;
+
+        return isVideo ? EncodeVideo(video) : EncodeFrame(video);
+    }
+
+    /// <summary>
+    /// Encodes a single frame.
+    /// </summary>
+    private (Tensor<T> Mean, Tensor<T> LogVariance) EncodeFrame(Tensor<T> frame)
+    {
+        if (_inputConv == null || _meanConv == null || _logVarConv == null)
+        {
+            throw new InvalidOperationException("Encoder layers not initialized.");
+        }
+
+        var x = _inputConv.Forward(frame);
+
+        // Apply spatial encoder blocks
+        foreach (var layer in _encoderSpatialLayers)
+        {
+            x = layer.Forward(x);
+        }
+
+        var mean = _meanConv.Forward(x);
+        var logVar = _logVarConv.Forward(x);
+
+        _cachedMean = mean;
+        _cachedLogVar = logVar;
+
+        return (mean, logVar);
+    }
+
+    /// <summary>
+    /// Encodes a video with temporal awareness.
+    /// </summary>
+    private (Tensor<T> Mean, Tensor<T> LogVariance) EncodeVideo(Tensor<T> video)
+    {
+        if (_inputConv == null || _meanConv == null || _logVarConv == null)
+        {
+            throw new InvalidOperationException("Encoder layers not initialized.");
+        }
+
+        int frames = video.Shape[2];
+
+        // Process each frame through spatial encoder
+        var frameLatents = new List<Tensor<T>>();
+        for (int f = 0; f < frames; f++)
+        {
+            // Extract frame: [batch, channels, height, width]
+            var frame = ExtractFrame(video, f);
+
+            var x = _inputConv.Forward(frame);
+
+            // Apply spatial blocks
+            foreach (var layer in _encoderSpatialLayers)
+            {
+                x = layer.Forward(x);
+            }
+
+            frameLatents.Add(x);
+        }
+
+        // Apply temporal processing across frames
+        var processedLatents = ApplyTemporalLayers(_encoderTemporalLayers, frameLatents);
+
+        // Project to mean and logVar for each frame
+        var means = new List<Tensor<T>>();
+        var logVars = new List<Tensor<T>>();
+
+        foreach (var latent in processedLatents)
+        {
+            means.Add(_meanConv.Forward(latent));
+            logVars.Add(_logVarConv.Forward(latent));
+        }
+
+        // Stack frames back into video format
+        var mean = StackFrames(means);
+        var logVar = StackFrames(logVars);
+
+        _cachedMean = mean;
+        _cachedLogVar = logVar;
+
+        return (mean, logVar);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Decode(Tensor<T> latent)
+    {
+        _preserveMaterializedParameters = true;
+        if (_postQuantConv == null || _outputConv == null)
+        {
+            throw new InvalidOperationException("Decoder layers not initialized.");
+        }
+
+        // Handle video latent: [batch, latentChannels, frames, height, width]
+        // or image latent: [batch, latentChannels, height, width]
+        bool isVideo = latent.Shape.Length == 5;
+
+        return isVideo ? DecodeVideo(latent) : DecodeFrame(latent);
+    }
+
+    /// <summary>
+    /// Decodes a single frame latent.
+    /// </summary>
+    private Tensor<T> DecodeFrame(Tensor<T> latent)
+    {
+        if (_postQuantConv == null || _outputConv == null)
+        {
+            throw new InvalidOperationException("Decoder layers not initialized.");
+        }
+
+        var x = _postQuantConv.Forward(latent);
+
+        foreach (var layer in _decoderSpatialLayers)
+        {
+            x = layer.Forward(x);
+        }
+
+        return _outputConv.Forward(x);
+    }
+
+    /// <summary>
+    /// Decodes a video latent with temporal awareness.
+    /// </summary>
+    private Tensor<T> DecodeVideo(Tensor<T> latent)
+    {
+        if (_postQuantConv == null || _outputConv == null)
+        {
+            throw new InvalidOperationException("Decoder layers not initialized.");
+        }
+
+        int frames = latent.Shape[2];
+
+        // Extract frame latents
+        var frameLatents = new List<Tensor<T>>();
+        for (int f = 0; f < frames; f++)
+        {
+            var frameLatent = ExtractFrame(latent, f);
+            var x = _postQuantConv.Forward(frameLatent);
+            frameLatents.Add(x);
+        }
+
+        // Apply temporal processing
+        var processedLatents = ApplyTemporalLayers(_decoderTemporalLayers, frameLatents);
+
+        // Decode each frame using LINQ Select for explicit transformation
+        var decodedFrames = processedLatents.Select(x =>
+        {
+            var decoded = _decoderSpatialLayers.Aggregate(x, (current, layer) => layer.Forward(current));
+            return _outputConv.Forward(decoded);
+        }).ToList();
+
+        return StackFrames(decodedFrames);
+    }
+
+    /// <summary>
+    /// Encodes a video and applies latent scaling for use in diffusion.
+    /// </summary>
+    /// <param name="video">The input video tensor.</param>
+    /// <param name="sampleMode">Whether to sample from the distribution.</param>
+    /// <returns>Scaled video latent representation.</returns>
+    public Tensor<T> EncodeVideoForDiffusion(Tensor<T> video, bool sampleMode = true)
+    {
+        var latent = Encode(video, sampleMode);
+        return ScaleLatent(latent);
+    }
+
+    /// <summary>
+    /// Decodes a diffusion video latent back to video space.
+    /// </summary>
+    /// <param name="latent">The latent from diffusion (already scaled).</param>
+    /// <returns>The decoded video.</returns>
+    public Tensor<T> DecodeVideoFromDiffusion(Tensor<T> latent)
+    {
+        var unscaled = UnscaleLatent(latent);
+        return Decode(unscaled);
+    }
+
+    #region Temporal Processing
+
+    /// <summary>
+    /// Applies temporal layers across frames.
+    /// </summary>
+    private List<Tensor<T>> ApplyTemporalLayers(List<ILayer<T>> temporalLayers, List<Tensor<T>> frameFeatures)
+    {
+        if (temporalLayers.Count == 0 || frameFeatures.Count == 0)
+        {
+            return frameFeatures;
+        }
+
+        // Stack frames into a 5D tensor: [batch, channels, frames, height, width]
+        var stacked = StackFramesToVideo(frameFeatures);
+
+        // Apply each temporal layer
+        var processed = stacked;
+        foreach (var layer in temporalLayers)
+        {
+            if (layer is LayerBase<T> layerBase)
+            {
+                processed = layerBase.Forward(processed);
+            }
+            else
+            {
+                processed = layer.Forward(processed);
+            }
+        }
+
+        // Unstack back to individual frames
+        return UnstackVideoToFrames(processed, frameFeatures.Count);
+    }
+
+    /// <summary>
+    /// Stacks frame features into a video tensor.
+    /// </summary>
+    private Tensor<T> StackFramesToVideo(List<Tensor<T>> frames)
+    {
+        if (frames.Count == 0)
+        {
+            throw new ArgumentException("No frames to stack.");
+        }
+
+        int batch = frames[0].Shape[0];
+        int channels = frames[0].Shape[1];
+        int numFrames = frames.Count;
+        int height = frames[0].Shape[2];
+        int width = frames[0].Shape[3];
+
+        var video = new Tensor<T>(new[] { batch, channels, numFrames, height, width });
+        var videoSpan = video.AsWritableSpan();
+        int spatialSize = height * width;
+
+        for (int f = 0; f < numFrames; f++)
+        {
+            var frameSpan = frames[f].AsSpan();
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    int srcOffset = b * channels * spatialSize + c * spatialSize;
+                    int dstOffset = b * channels * numFrames * spatialSize +
+                                    c * numFrames * spatialSize +
+                                    f * spatialSize;
+
+                    for (int i = 0; i < spatialSize; i++)
+                    {
+                        videoSpan[dstOffset + i] = frameSpan[srcOffset + i];
+                    }
+                }
+            }
+        }
+
+        return video;
+    }
+
+    /// <summary>
+    /// Unstacks a video tensor back to individual frames.
+    /// </summary>
+    private List<Tensor<T>> UnstackVideoToFrames(Tensor<T> video, int numFrames)
+    {
+        int batch = video.Shape[0];
+        int channels = video.Shape[1];
+        int height = video.Shape[3];
+        int width = video.Shape[4];
+
+        var frames = new List<Tensor<T>>();
+        var videoSpan = video.AsSpan();
+        int spatialSize = height * width;
+
+        for (int f = 0; f < numFrames; f++)
+        {
+            var frame = new Tensor<T>(new[] { batch, channels, height, width });
+            var frameSpan = frame.AsWritableSpan();
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    int srcOffset = b * channels * numFrames * spatialSize +
+                                    c * numFrames * spatialSize +
+                                    f * spatialSize;
+                    int dstOffset = b * channels * spatialSize + c * spatialSize;
+
+                    for (int i = 0; i < spatialSize; i++)
+                    {
+                        frameSpan[dstOffset + i] = videoSpan[srcOffset + i];
+                    }
+                }
+            }
+
+            frames.Add(frame);
+        }
+
+        return frames;
+    }
+
+    /// <summary>
+    /// Extracts a single frame from a video tensor.
+    /// </summary>
+    private Tensor<T> ExtractFrame(Tensor<T> video, int frameIndex)
+    {
+        int batch = video.Shape[0];
+        int channels = video.Shape[1];
+        int height = video.Shape[3];
+        int width = video.Shape[4];
+
+        var frame = new Tensor<T>([batch, channels, height, width]);
+        var frameSpan = frame.AsWritableSpan();
+        var videoSpan = video.AsSpan();
+
+        int spatialSize = height * width;
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        int videoIdx = b * channels * video.Shape[2] * spatialSize +
+                                       c * video.Shape[2] * spatialSize +
+                                       frameIndex * spatialSize +
+                                       h * width + w;
+                        int frameIdx = b * channels * spatialSize +
+                                       c * spatialSize +
+                                       h * width + w;
+                        frameSpan[frameIdx] = videoSpan[videoIdx];
+                    }
+                }
+            }
+        }
+
+        return frame;
+    }
+
+    /// <summary>
+    /// Stacks frames into a video tensor.
+    /// </summary>
+    private Tensor<T> StackFrames(List<Tensor<T>> frames)
+    {
+        if (frames.Count == 0)
+        {
+            throw new ArgumentException("No frames to stack.");
+        }
+
+        int batch = frames[0].Shape[0];
+        int channels = frames[0].Shape[1];
+        int numFrames = frames.Count;
+        int height = frames[0].Shape[2];
+        int width = frames[0].Shape[3];
+
+        var video = new Tensor<T>([batch, channels, numFrames, height, width]);
+        var videoSpan = video.AsWritableSpan();
+        int spatialSize = height * width;
+
+        for (int f = 0; f < numFrames; f++)
+        {
+            var frameSpan = frames[f].AsSpan();
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            int frameIdx = b * channels * spatialSize +
+                                           c * spatialSize +
+                                           h * width + w;
+                            int videoIdx = b * channels * numFrames * spatialSize +
+                                           c * numFrames * spatialSize +
+                                           f * spatialSize +
+                                           h * width + w;
+                            videoSpan[videoIdx] = frameSpan[frameIdx];
+                        }
+                    }
+                }
+            }
+        }
+
+        return video;
+    }
+
+    #endregion
+
+    #region Layer Factory Methods
+    // Spatial layer creation moved to LayerHelper<T>.CreateTemporalVAEEncoderLayers()
+    // and LayerHelper<T>.CreateTemporalVAEDecoderLayers().
+
+    private ILayer<T> CreateTemporalBlock(int channels)
+    {
+        // Temporal block using 3D convolution across time dimension
+        // Kept here because temporal blocks are a parallel processing path
+        int downsampleFactor = (int)Math.Pow(2, _channelMultipliers.Length - 1);
+        int spatialSize = 64 / downsampleFactor; // Compute from input size
+        return new Conv3DLayer<T>(
+            outputChannels: channels,
+            kernelSize: _temporalKernelSize,
+            stride: 1,
+            padding: 1,
+            activationFunction: new SiLUActivation<T>());
+    }
+
+    #endregion
+
+    #region Parameter Management
+
+    private int CalculateParameterCount()
+    {
+        long count = 0;
+
+        // Input conv
+        count += _inputChannels * _baseChannels * 9 + _baseChannels;
+
+        // Encoder blocks
+        for (int level = 0; level < _channelMultipliers.Length; level++)
+        {
+            var channels = _baseChannels * _channelMultipliers[level];
+            count += channels * channels * 2; // Spatial
+            count += _numTemporalLayers * channels * channels; // Temporal
+            if (level < _channelMultipliers.Length - 1)
+            {
+                count += channels * channels * 9; // Downsample
+            }
+        }
+
+        // Latent projections
+        var lastChannels = _baseChannels * _channelMultipliers[^1];
+        count += lastChannels * _latentChannels * 9 * 2; // mean + logvar
+        count += _latentChannels * lastChannels * 9; // post-quant
+
+        // Decoder blocks (similar to encoder)
+        for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
+        {
+            var channels = _baseChannels * _channelMultipliers[level];
+            count += channels * channels * 2;
+            count += _numTemporalLayers * channels * channels;
+            if (level > 0)
+            {
+                count += channels * channels * 9;
+            }
+        }
+
+        // Output conv
+        count += _baseChannels * _inputChannels * 9 + _inputChannels;
+
+        return (int)Math.Min(count, int.MaxValue);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var parameters = new List<T>();
+
+        AddLayerParameters(parameters, _inputConv);
+
+        foreach (var layer in _encoderSpatialLayers)
+        {
+            AddLayerParameters(parameters, layer);
+        }
+
+        foreach (var layer in _encoderTemporalLayers)
+        {
+            AddLayerParameters(parameters, layer);
+        }
+
+        AddLayerParameters(parameters, _meanConv);
+        AddLayerParameters(parameters, _logVarConv);
+        AddLayerParameters(parameters, _postQuantConv);
+
+        foreach (var layer in _decoderSpatialLayers)
+        {
+            AddLayerParameters(parameters, layer);
+        }
+
+        foreach (var layer in _decoderTemporalLayers)
+        {
+            AddLayerParameters(parameters, layer);
+        }
+
+        AddLayerParameters(parameters, _outputConv);
+
+        return new Vector<T>(parameters.ToArray());
+    }
+
+    private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var layerParams = layer.GetParameters();
+        for (int i = 0; i < layerParams.Length; i++)
+        {
+            parameters.Add(layerParams[i]);
+        }
+    }
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private IEnumerable<ILayer<T>?> EnumerateAllLayers()
+    {
+        yield return _inputConv;
+
+        foreach (var layer in _encoderSpatialLayers)
+            yield return layer;
+
+        foreach (var layer in _encoderTemporalLayers)
+            yield return layer;
+
+        yield return _meanConv;
+        yield return _logVarConv;
+        yield return _postQuantConv;
+
+        foreach (var layer in _decoderSpatialLayers)
+            yield return layer;
+
+        foreach (var layer in _decoderTemporalLayers)
+            yield return layer;
+
+        yield return _outputConv;
+    }
+
+    private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) yield break;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                yield return parameter;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(subLayer))
+                yield return parameter;
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _preserveMaterializedParameters = true;
+        var index = 0;
+
+        SetLayerParameters(_inputConv, parameters, ref index);
+
+        foreach (var layer in _encoderSpatialLayers)
+        {
+            SetLayerParameters(layer, parameters, ref index);
+        }
+
+        foreach (var layer in _encoderTemporalLayers)
+        {
+            SetLayerParameters(layer, parameters, ref index);
+        }
+
+        SetLayerParameters(_meanConv, parameters, ref index);
+        SetLayerParameters(_logVarConv, parameters, ref index);
+        SetLayerParameters(_postQuantConv, parameters, ref index);
+
+        foreach (var layer in _decoderSpatialLayers)
+        {
+            SetLayerParameters(layer, parameters, ref index);
+        }
+
+        foreach (var layer in _decoderTemporalLayers)
+        {
+            SetLayerParameters(layer, parameters, ref index);
+        }
+
+        SetLayerParameters(_outputConv, parameters, ref index);
+    }
+
+    private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)
+    {
+        if (layer == null) return;
+        var layerParams = layer.GetParameters();
+        var newParams = new Vector<T>(layerParams.Length);
+        for (int i = 0; i < layerParams.Length && index < parameters.Length; i++)
+        {
+            newParams[i] = parameters[index++];
+        }
+        layer.SetParameters(newParams);
+    }
+
+    #endregion
+
+    #region ICloneable Implementation
+
+    /// <inheritdoc />
+    public override IVAEModel<T> Clone()
+    {
+        var clone = new TemporalVAE<T>(
+            _inputChannels,
+            _latentChannels,
+            _baseChannels,
+            _channelMultipliers,
+            _numTemporalLayers,
+            _temporalKernelSize,
+            _causalMode,
+            _latentScaleFactor,
+            LossFunction);
+
+        if (_preserveMaterializedParameters)
+        {
+            // The encoder/decoder conv stacks are lazy — they only ALLOCATE their weight tensors on
+            // the first Encode/Decode, not at construction. A fresh clone has the layer STRUCTURE but
+            // unallocated weights, so SetParameters(GetParameters()) onto it copies into nothing and the
+            // clone re-initializes with a fresh RNG on its first real forward → divergent Predict and a
+            // parameter-count mismatch. Resolve both sides' lazy shapes (one tiny encode+decode) before
+            // the parameter round-trip so the vectors line up and the trained values land. Mirrors
+            // StandardVAE.Clone.
+            TriggerLazyShapeResolution();
+            clone.TriggerLazyShapeResolution();
+            if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        }
+        else
+        {
+            CopyMaterializedParametersTo(clone);
+        }
+        return clone;
+    }
+
+    /// <summary>
+    /// Materializes every lazy encoder/decoder weight tensor by running one tiny encode+decode probe,
+    /// so <see cref="GetParameters"/>/<see cref="SetParameters"/>/parameter-count agree before any real
+    /// forward. Idempotent (weight shapes are channel-driven and fixed once allocated). A 5-D video probe
+    /// is used so the temporal conv stack is resolved too — an image probe would leave the temporal layers
+    /// lazy and let them re-RNG-initialize on the first real video forward.
+    /// </summary>
+    internal void TriggerLazyShapeResolution()
+    {
+        if (_lazyShapesResolved) return;
+        int spatial = Math.Max(_downsampleFactor, 2);
+        int frames = Math.Max(_temporalKernelSize, 2);
+        var dummyVideo = new Tensor<T>(new[] { 1, _inputChannels, frames, spatial, spatial });
+        var dummyLatent = Encode(dummyVideo, sampleMode: false);
+        _ = Decode(dummyLatent);
+        // Mark resolved only AFTER a successful probe — if Encode/Decode throws, a retry must
+        // re-run the probe rather than skip it on the stale flag.
+        _lazyShapesResolved = true;
+    }
+
+    private void CopyMaterializedParametersTo(TemporalVAE<T> clone)
+    {
+        using var source = EnumerateMaterializedModelParameters().GetEnumerator();
+        using var target = clone.EnumerateMaterializedModelParameters().GetEnumerator();
+
+        while (source.MoveNext())
+        {
+            if (!target.MoveNext())
+            {
+                throw new InvalidOperationException(
+                    "Clone has fewer materialized tensors than the source temporal VAE. " +
+                    "Architectures may differ or a lazy tensor was materialized without " +
+                    "marking runtime state.");
+            }
+
+            CopyTensorData(source.Current, target.Current);
+        }
+
+        if (target.MoveNext())
+        {
+            throw new InvalidOperationException(
+                "Clone has more materialized tensors than the source temporal VAE. " +
+                "Architectures may differ.");
+        }
+    }
+
+    private IEnumerable<Tensor<T>> EnumerateMaterializedModelParameters()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private static void CopyTensorData(Tensor<T> source, Tensor<T> target)
+    {
+        if (source.Length != target.Length)
+        {
+            throw new InvalidOperationException(
+                $"Cannot copy tensor with {source.Length} elements into tensor " +
+                $"with {target.Length} elements.");
+        }
+
+        source.Data.Span.CopyTo(target.Data.Span);
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        return Clone();
+    }
+
+    #endregion
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+        AddLayerGradients(gradients, _inputConv);
+        foreach (var layer in _encoderSpatialLayers) AddLayerGradients(gradients, layer);
+        foreach (var layer in _encoderTemporalLayers) AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _meanConv);
+        AddLayerGradients(gradients, _logVarConv);
+        AddLayerGradients(gradients, _postQuantConv);
+        foreach (var layer in _decoderSpatialLayers) AddLayerGradients(gradients, layer);
+        foreach (var layer in _decoderTemporalLayers) AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _outputConv);
+        return new Vector<T>(gradients.ToArray());
+    }
+
+    private void AddLayerGradients(List<T> gradients, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+    }
+    /// <inheritdoc />
+    /// <remarks>
+    /// This concrete VAE does not implement layer-level backprop yet, so the
+    /// exact-gradient path is unsupported. The base class catches this and falls
+    /// through to SPSA in ComputeGradients.
+    /// </remarks>
+    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
+            "implemented. ComputeGradients will fall through to SPSA.");
+    }
+
+}

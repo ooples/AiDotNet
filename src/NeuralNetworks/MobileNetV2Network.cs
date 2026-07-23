@@ -1,0 +1,509 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
+using AiDotNet.Validation;
+
+namespace AiDotNet.NeuralNetworks;
+
+/// <summary>
+/// Implements the MobileNetV2 architecture for efficient mobile inference.
+/// </summary>
+/// <remarks>
+/// <para>
+/// MobileNetV2 (Sandler et al., 2018) introduced the inverted residual structure with
+/// linear bottlenecks, making it highly efficient for mobile and embedded vision applications.
+/// </para>
+/// <para>
+/// Architecture overview:
+/// <code>
+/// Input (3x224x224)
+///   ↓
+/// Conv 3x3, 32, stride 2 → BN → ReLU6
+///   ↓
+/// InvertedResidual (t=1, c=16, n=1, s=1)
+///   ↓
+/// InvertedResidual (t=6, c=24, n=2, s=2)
+///   ↓
+/// InvertedResidual (t=6, c=32, n=3, s=2)
+///   ↓
+/// InvertedResidual (t=6, c=64, n=4, s=2)
+///   ↓
+/// InvertedResidual (t=6, c=96, n=3, s=1)
+///   ↓
+/// InvertedResidual (t=6, c=160, n=3, s=2)
+///   ↓
+/// InvertedResidual (t=6, c=320, n=1, s=1)
+///   ↓
+/// Conv 1x1, 1280 → BN → ReLU6
+///   ↓
+/// Global Average Pool (1x1)
+///   ↓
+/// FC (num_classes)
+/// </code>
+/// Where t=expansion, c=output channels, n=repeat count, s=stride.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> MobileNetV2 is designed to be efficient on mobile devices.
+///
+/// Key innovations:
+/// - Inverted Residuals: Expand → Depthwise Conv → Project (opposite of traditional bottlenecks)
+/// - Linear Bottlenecks: No activation after the projection layer (preserves information)
+/// - ReLU6: Activation capped at 6 for better quantization on mobile devices
+/// - Depthwise Separable Convolutions: Much fewer parameters than standard convolutions
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("MobileNetV2: Inverted Residuals and Linear Bottlenecks", "https://arxiv.org/abs/1801.04381", Year = 2018, Authors = "Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen")]
+public class MobileNetV2Network<T> : NeuralNetworkBase<T>
+{
+    private readonly MobileNetV2Options _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly MobileNetV2Configuration _configuration;
+
+    /// <summary>
+    /// Gets the width multiplier used by this network.
+    /// </summary>
+    public MobileNetV2WidthMultiplier WidthMultiplier => _configuration.WidthMultiplier;
+
+    /// <summary>
+    /// Gets the number of output classes.
+    /// </summary>
+    public int NumClasses => _configuration.NumClasses;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MobileNetV2Network{T}"/> class.
+    /// </summary>
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="configuration">The MobileNetV2-specific configuration.</param>
+    /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
+    /// <param name="lossFunction">Optional loss function (default: cross-entropy with logits).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public MobileNetV2Network()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 1000),
+            configuration: MobileNetV2Configuration.CreateStandard(1000))
+    {
+    }
+
+    public MobileNetV2Network(
+        NeuralNetworkArchitecture<T> architecture,
+        MobileNetV2Configuration configuration,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0,
+        MobileNetV2Options? options = null)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), maxGradNorm)
+    {
+        _options = options ?? new MobileNetV2Options();
+        Options = _options;
+        _fusedTrainingDisabled = _options.DisableFusedOptimizerStep;
+        Guard.NotNull(configuration);
+        _configuration = configuration;
+
+        ArchitectureValidator.ValidateInputType(
+            architecture,
+            InputType.ThreeDimensional,
+            nameof(MobileNetV2Network<T>));
+
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _lossFunction = LossFunction;
+
+        EnsureDeterministicBlas();
+
+        InitializeLayers();
+    }
+
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                Epsilon = 1e-6,
+                UseAMSGrad = true
+            });
+    }
+
+    private static bool _determinismSet;
+    private static void EnsureDeterministicBlas()
+    {
+        if (_determinismSet) return;
+        _determinismSet = true;
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
+    }
+
+    /// <summary>
+    /// Initializes a new MobileNetV2 with width multiplier 1.0.
+    /// </summary>
+    /// <param name="numClasses">The number of output classes.</param>
+    /// <param name="inputChannels">The number of input channels (default: 3 for RGB).</param>
+    /// <returns>A configured MobileNetV2 network.</returns>
+    public static MobileNetV2Network<T> MobileNetV2_100(int numClasses = 1000, int inputChannels = 3)
+    {
+        var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new MobileNetV2Network<T>(architecture, config);
+    }
+
+    /// <summary>
+    /// Initializes a new MobileNetV2 with width multiplier 0.35 (smallest).
+    /// </summary>
+    public static MobileNetV2Network<T> MobileNetV2_035(int numClasses = 1000, int inputChannels = 3)
+    {
+        var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha035, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new MobileNetV2Network<T>(architecture, config);
+    }
+
+    /// <summary>
+    /// Initializes a new MobileNetV2 with width multiplier 0.5.
+    /// </summary>
+    public static MobileNetV2Network<T> MobileNetV2_050(int numClasses = 1000, int inputChannels = 3)
+    {
+        var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha050, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new MobileNetV2Network<T>(architecture, config);
+    }
+
+    /// <summary>
+    /// Initializes a new MobileNetV2 with width multiplier 0.75.
+    /// </summary>
+    public static MobileNetV2Network<T> MobileNetV2_075(int numClasses = 1000, int inputChannels = 3)
+    {
+        var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha075, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new MobileNetV2Network<T>(architecture, config);
+    }
+
+    /// <summary>
+    /// Initializes a new MobileNetV2 with width multiplier 1.3.
+    /// </summary>
+    public static MobileNetV2Network<T> MobileNetV2_130(int numClasses = 1000, int inputChannels = 3)
+    {
+        var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha130, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new MobileNetV2Network<T>(architecture, config);
+    }
+
+    /// <summary>
+    /// Initializes a new MobileNetV2 with width multiplier 1.4 (largest).
+    /// </summary>
+    public static MobileNetV2Network<T> MobileNetV2_140(int numClasses = 1000, int inputChannels = 3)
+    {
+        var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha140, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new MobileNetV2Network<T>(architecture, config);
+    }
+
+    private static NeuralNetworkArchitecture<T> CreateArchitectureFromConfig(MobileNetV2Configuration config)
+    {
+        return new NeuralNetworkArchitecture<T>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: config.InputChannels * config.InputHeight * config.InputWidth,
+            inputHeight: config.InputHeight,
+            inputWidth: config.InputWidth,
+            inputDepth: config.InputChannels,
+            outputSize: config.NumClasses,
+            layers: null
+        );
+    }
+
+    /// <inheritdoc />
+    protected sealed override void InitializeLayers()
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            // Use the layers provided by the user
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else
+        {
+            // Use MobileNetV2-specific layer configuration
+            Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV2Layers(Architecture, _configuration));
+        }
+
+        SetAllLayersEvalMode();
+    }
+
+    private void SetAllLayersEvalMode()
+    {
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Performs a forward pass through the network.
+    /// </summary>
+    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
+    /// <returns>The output class logits.</returns>
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        // Accept 3D [C, H, W] (single unbatched sample) or 4D [B, C, H, W].
+        // Internal layers — especially BatchNormalizationLayer —
+        // broadcast their channel-scale/shift tensors as [1, C, 1, 1] and
+        // require the input to be 4D for that broadcast to apply along the
+        // channel dimension. A 3D input would otherwise line up the 16-channel
+        // scale tensor against the spatial H=32 dimension and throw
+        //   "Tensors with shapes [16, 32, 32] and [1, 16, 1] cannot be
+        //    broadcast: dimension 1 has sizes 32 and 16 (must be equal or
+        //    one must be 1)."
+        // inside BatchNormalizationLayer.ApplyInferenceAnyRank. The fix
+        // mirrors ResNet/VGG's input-shape contract.
+        bool addedBatch = false;
+        Tensor<T> output = input;
+        if (input.Rank == 3)
+        {
+            output = PromoteToBatchedTensor(input);
+            addedBatch = true;
+        }
+
+        foreach (var layer in Layers)
+        {
+            output = layer.Forward(output);
+        }
+
+        // If the caller passed a 3D input we expanded to 4D; squeeze the
+        // leading batch dim off so the output shape matches the input's
+        // un-batched contract.
+        if (addedBatch && output.Rank >= 1 && output.Shape[0] == 1)
+        {
+            int[] squeezed = new int[output.Rank - 1];
+            for (int i = 0; i < squeezed.Length; i++) squeezed[i] = output.Shape[i + 1];
+            output = Engine.Reshape(output, squeezed);
+        }
+        return output;
+    }
+
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        // Mirror Forward's 3D → 4D expansion so the channel-broadcasted
+        // BatchNormalizationLayer inside every InvertedResidualBlock sees
+        // the 4D tensor it requires. Without this, callers that probe
+        // activations layer-by-layer with a 3D test input hit the same
+        // "[16,32,32] vs [1,16,1] cannot be broadcast" failure that the
+        // Forward override already handles.
+        Tensor<T> probeInput = input.Rank == 3 ? PromoteToBatchedTensor(input) : input;
+        return base.GetNamedLayerActivations(probeInput);
+    }
+
+    /// <inheritdoc />
+    /// <summary>
+    /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> for
+    /// compiled-plan replay; <see cref="Forward"/> remains the eager fallback.
+    /// </summary>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Bypasses the base-class <see cref="NeuralNetworkBase{T}.PredictCompiled"/>
+    /// auto-compiler and routes directly through <see cref="Forward"/>. Sandler
+    /// et al. 2018's MobileNetV2 has a non-sequential topology (per-block
+    /// expansion → depthwise → squeeze-excitation? → projection → residual add
+    /// inside every <see cref="InvertedResidualBlock{T}"/>, plus the
+    /// transpose-NCHW-to-NHWC hops around the SE module and the rank-3 →
+    /// rank-4 input promotion around the whole stack). The generic tracer
+    /// in <see cref="CompiledModelHost{T}"/> captures the top-level
+    /// <c>foreach (layer in Layers)</c> sequential replay from
+    /// <see cref="Forward"/>, but the tracer's inspection of the inverted-
+    /// residual block's internal tensors corrupts the parameter references
+    /// (verified locally: Predict zeros the output AND subsequent direct
+    /// Forward calls on the same instance also return zero, so the compiled
+    /// plan is writing back into the shared weight buffers on replay).
+    /// Eager replay keeps weights read-only per forward pass, matches
+    /// ResNet/VGG's contract, and avoids the compile-host's coupling to the
+    /// block's internal layer layout. Training (<see cref="Train"/>) still
+    /// runs through the tape for gradient flow; only inference bypasses the
+    /// plan cache.
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        SetAllLayersEvalMode();
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () => Forward(input));
+    }
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Mirror Forward's shape contract — expand 3D inputs (and their
+        // targets) to 4D so ForwardForTraining's raw layer iteration
+        // receives the 4D tensor BatchNormalizationLayer needs. See
+        // ResNet/VGG Train() for the same pattern.
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+        {
+            if (layer is BatchNormalizationLayer<T>)
+                layer.SetTrainingMode(false);
+        }
+
+        var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
+        TrainWithTape(processedInput, processedTarget, _optimizer);
+        SetTrainingMode(false);
+    }
+
+    /// <inheritdoc />
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int index = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            var layerParameters = parameters.Slice(index, layerParameterCount);
+            layer.UpdateParameters(layerParameters);
+            index += layerParameterCount;
+        }
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NetworkType", "MobileNetV2Network" },
+                { "WidthMultiplier", _configuration.Alpha },
+                { "NumClasses", _configuration.NumClasses },
+                { "InputShape", $"{_configuration.InputChannels}x{_configuration.InputHeight}x{_configuration.InputWidth}" },
+                { "LayerCount", Layers.Count },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc />
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write((int)_configuration.WidthMultiplier);
+        writer.Write(_configuration.InputChannels);
+        writer.Write(_configuration.InputHeight);
+        writer.Write(_configuration.InputWidth);
+        writer.Write(_configuration.NumClasses);
+    }
+
+    /// <summary>
+    /// Deserializes and validates network-specific configuration data.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <exception cref="InvalidDataException">
+    /// Thrown when the serialized configuration does not match the current instance's configuration.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs validation-only deserialization. The serialized configuration values
+    /// are read and compared against the current instance's configuration to ensure compatibility.
+    /// </para>
+    /// <para>
+    /// <b>Design rationale:</b> The network's layer structure is created during construction based
+    /// on the configuration. Changing the configuration during deserialization would not recreate
+    /// the layers, leading to an inconsistent state. Therefore, deserialization requires that the
+    /// target instance was created with a matching configuration.
+    /// </para>
+    /// <para>
+    /// To load a model with a different configuration, create a new network instance with the
+    /// desired configuration, then call <see cref="NeuralNetworkBase{T}.Load"/> on that instance.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Read serialized configuration values
+        var widthMultiplier = (MobileNetV2WidthMultiplier)reader.ReadInt32();
+        var inputChannels = reader.ReadInt32();
+        var inputHeight = reader.ReadInt32();
+        var inputWidth = reader.ReadInt32();
+        var numClasses = reader.ReadInt32();
+
+        // Validate configuration matches - layer structure depends on these values
+        // and cannot be changed after construction
+        if (widthMultiplier != _configuration.WidthMultiplier ||
+            inputChannels != _configuration.InputChannels ||
+            inputHeight != _configuration.InputHeight ||
+            inputWidth != _configuration.InputWidth ||
+            numClasses != _configuration.NumClasses)
+        {
+            throw new InvalidDataException(
+                $"Serialized MobileNetV2 configuration (WidthMultiplier={widthMultiplier}, InputChannels={inputChannels}, " +
+                $"InputHeight={inputHeight}, InputWidth={inputWidth}, NumClasses={numClasses}) does not match current configuration " +
+                $"(WidthMultiplier={_configuration.WidthMultiplier}, InputChannels={_configuration.InputChannels}, " +
+                $"InputHeight={_configuration.InputHeight}, InputWidth={_configuration.InputWidth}, " +
+                $"NumClasses={_configuration.NumClasses}). Create a new network with matching configuration to load this model.");
+        }
+    }
+
+    /// <inheritdoc />
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var config = new MobileNetV2Configuration(
+            _configuration.WidthMultiplier,
+            _configuration.NumClasses,
+            _configuration.InputHeight,
+            _configuration.InputWidth,
+            _configuration.InputChannels);
+
+        return new MobileNetV2Network<T>(
+            Architecture,
+            config,
+            lossFunction: _lossFunction,
+            options: new MobileNetV2Options(_options));
+    }
+
+    /// <inheritdoc />
+    public override void Deserialize(byte[] data)
+    {
+        base.Deserialize(data);
+        SetAllLayersEvalMode();
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+    {
+        return DeepCopy();
+    }
+
+    /// <summary>
+    /// Gets the layer at the specified index.
+    /// </summary>
+    public ILayer<T> GetLayer(int index)
+    {
+        if (index < 0 || index >= Layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), $"Index must be between 0 and {Layers.Count - 1}.");
+        }
+        return Layers[index];
+    }
+}

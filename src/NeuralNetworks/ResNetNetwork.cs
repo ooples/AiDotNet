@@ -1,0 +1,673 @@
+using AiDotNet.Attributes;
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Validation;
+
+namespace AiDotNet.NeuralNetworks;
+
+/// <summary>
+/// Represents a ResNet (Residual Network) neural network architecture for image classification.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+/// <remarks>
+/// <para>
+/// ResNet networks are deep convolutional neural networks that introduced skip connections (residual
+/// connections) to enable training of very deep networks. They learn residual functions with reference
+/// to the layer inputs, rather than learning unreferenced functions directly.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> ResNet networks revolutionized deep learning by solving the "vanishing gradient"
+/// problem that made very deep networks hard to train. Key benefits include:
+/// <list type="bullet">
+/// <item>Can train networks with 100+ layers (compared to ~20 layers for earlier architectures)</item>
+/// <item>Skip connections allow gradients to flow more easily during training</item>
+/// <item>Each block learns the "residual" (difference) rather than the complete transformation</item>
+/// <item>Winner of ImageNet 2015 competition with top-5 error of 3.57%</item>
+/// </list>
+/// </para>
+/// <para>
+/// <b>Architecture Variants:</b>
+/// <list type="bullet">
+/// <item><b>ResNet18/34:</b> Use BasicBlock (2 conv layers per block)</item>
+/// <item><b>ResNet50/101/152:</b> Use BottleneckBlock (1x1-3x3-1x1 conv pattern) for efficiency</item>
+/// </list>
+/// </para>
+/// <para>
+/// <b>Typical Usage:</b>
+/// <code>
+/// // Create ResNet50 for 1000-class classification
+/// var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 1000);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 224,
+///     inputWidth: 224,
+///     inputDepth: 3,
+///     outputSize: 1000,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification);
+/// var network = new ResNetNetwork&lt;float&gt;(architecture, config);
+/// </code>
+/// </para>
+/// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Deep Residual Learning for Image Recognition", "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
+public class ResNetNetwork<T> : NeuralNetworkBase<T>
+{
+    private readonly ResNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    /// <summary>
+    /// The loss function used to calculate the error between predicted and expected outputs.
+    /// </summary>
+    private readonly ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// The optimization algorithm used to update the network's parameters during training.
+    /// </summary>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
+    /// The ResNet configuration specifying the variant and parameters.
+    /// </summary>
+    private readonly ResNetConfiguration _configuration;
+
+    /// <summary>
+    /// Gets the ResNet variant being used.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The variant determines how deep the network is (ResNet18, 34, 50, 101, or 152)
+    /// and which block type is used (BasicBlock for 18/34, BottleneckBlock for 50/101/152).
+    /// </para>
+    /// </remarks>
+    public ResNetVariant Variant => _configuration.Variant;
+
+    /// <summary>
+    /// Gets whether this variant uses bottleneck blocks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ResNet50 and deeper use bottleneck blocks (1x1-3x3-1x1 convolutions)
+    /// which are more parameter efficient than the basic blocks used in ResNet18/34.
+    /// </para>
+    /// </remarks>
+    public bool UsesBottleneck => _configuration.UsesBottleneck;
+
+    /// <summary>
+    /// Gets the number of output classes for classification.
+    /// </summary>
+    public int NumClasses => _configuration.NumClasses;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ResNetNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 1000),
+            configuration: ResNetConfiguration.CreateResNet50(1000))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the ResNetNetwork class.
+    /// </summary>
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="configuration">The ResNet-specific configuration.</param>
+    /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
+    /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
+    /// <exception cref="InvalidInputTypeException">Thrown when the input type is not three-dimensional.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when configuration is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// ResNet networks require three-dimensional input data (channels, height, width).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> When creating a ResNet network, you need to provide:
+    /// <list type="bullet">
+    /// <item>An architecture object that describes the input/output dimensions</item>
+    /// <item>A configuration that specifies which ResNet variant to use</item>
+    /// <item>Optionally, custom optimizer and loss function (good defaults are provided)</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public ResNetNetwork(
+        NeuralNetworkArchitecture<T> architecture,
+        ResNetConfiguration configuration,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0,
+        ResNetOptions? options = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+    {
+        _options = options ?? new ResNetOptions();
+        Options = _options;
+        Guard.NotNull(configuration);
+        _configuration = configuration;
+
+        ArchitectureValidator.ValidateInputType(
+            architecture,
+            InputType.ThreeDimensional,
+            nameof(ResNetNetwork<T>));
+
+        // Validate that architecture matches configuration
+        ValidateArchitectureMatchesConfiguration(architecture, configuration);
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Validates that the architecture parameters match the configuration.
+    /// </summary>
+    private static void ValidateArchitectureMatchesConfiguration(
+        NeuralNetworkArchitecture<T> architecture,
+        ResNetConfiguration configuration)
+    {
+        if (architecture.OutputSize != configuration.NumClasses)
+        {
+            throw new ArgumentException(
+                $"Architecture output size ({architecture.OutputSize}) does not match " +
+                $"configuration NumClasses ({configuration.NumClasses}).",
+                nameof(architecture));
+        }
+
+        var inputShape = architecture.GetInputShape();
+        if (inputShape[0] != configuration.InputChannels ||
+            inputShape[1] != configuration.InputHeight ||
+            inputShape[2] != configuration.InputWidth)
+        {
+            throw new ArgumentException(
+                $"Architecture input shape [{inputShape[0]}, {inputShape[1]}, {inputShape[2]}] " +
+                $"does not match configuration input shape " +
+                $"[{configuration.InputChannels}, {configuration.InputHeight}, {configuration.InputWidth}].",
+                nameof(architecture));
+        }
+    }
+
+    /// <summary>
+    /// Creates a minimal ResNet network optimized for fast test execution.
+    /// </summary>
+    /// <remarks>
+    /// Uses ResNet18 (smallest variant) with 32x32 input resolution,
+    /// resulting in significantly fewer layers than standard variants.
+    /// Construction time is typically under 50ms.
+    /// </remarks>
+    /// <param name="numClasses">The number of output classes.</param>
+    /// <param name="inputChannels">The number of input channels (default: 3 for RGB).</param>
+    /// <returns>A minimal ResNet network for testing.</returns>
+    public static ResNetNetwork<T> ForTesting(int numClasses = 10, int inputChannels = 3)
+    {
+        var config = ResNetConfiguration.CreateForTesting(numClasses);
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: inputChannels * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: inputChannels,
+            outputSize: numClasses,
+            layers: null
+        );
+        return new ResNetNetwork<T>(architecture, config);
+    }
+
+    /// <summary>
+    /// Initializes the layers of the ResNet network based on the configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method either uses custom layers provided in the architecture or creates
+    /// the standard ResNet layers based on the configuration.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method builds the ResNet network layer by layer:
+    /// <list type="number">
+    /// <item>Initial 7x7 convolution with stride 2</item>
+    /// <item>Max pooling 3x3 with stride 2</item>
+    /// <item>Four stages of residual blocks (conv2_x through conv5_x)</item>
+    /// <item>Global average pooling</item>
+    /// <item>Fully connected classification layer</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    protected sealed override void InitializeLayers()
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            // Use the layers provided by the user
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else
+        {
+            // Use ResNet-specific layer configuration
+            Layers.AddRange(CreateResNetLayers());
+        }
+    }
+
+    /// <summary>
+    /// Creates the ResNet layers based on the configuration.
+    /// </summary>
+    private IEnumerable<ILayer<T>> CreateResNetLayers()
+    {
+        var layers = new List<ILayer<T>>();
+        var config = _configuration;
+
+        // currentHeight/Width/Channels tracking removed — lazy layers
+        // (#1209) infer all spatial + channel dims from input.Shape on
+        // first Forward, so the running tally was never read after the
+        // 5-line drop in #1209's earlier pass. Re-add it only if a
+        // future stage genuinely needs to size something at construction
+        // time (which lazy ctors deliberately removed the need for).
+
+        // Stage 0: Initial convolution (conv1)
+        // 7x7 conv, 64, stride 2
+        layers.Add(new ConvolutionalLayer<T>(
+            outputDepth: 64,
+            kernelSize: 7,
+            stride: 2,
+            padding: 3,
+            activationFunction: new ActivationFunctions.IdentityActivation<T>()));
+
+        // Batch normalization after conv1
+        layers.Add(new BatchNormalizationLayer<T>());
+
+        // ReLU activation
+        layers.Add(new ActivationLayer<T>(
+            activationFunction: new ActivationFunctions.ReLUActivation<T>()));
+
+        // Max pooling: 3x3 pool, stride 2
+        layers.Add(new MaxPoolingLayer<T>(
+            poolSize: 3,
+            stride: 2));
+
+        // Get block configuration for this variant
+        int[] blockCounts = config.BlockCounts;
+        int[] baseChannels = config.BaseChannels;
+        int expansion = config.Expansion;
+
+        // Stage 1-4: Residual blocks. BasicBlock / BottleneckBlock are lazy
+        // on input channels (#1209) — they read in-channel count from the
+        // forward tensor. The local `inChannels` running tally is no longer
+        // needed since the lazy ctors don't accept an inChannels arg.
+        for (int stageIdx = 0; stageIdx < 4; stageIdx++)
+        {
+            int stageBaseChannels = baseChannels[stageIdx];
+            int numBlocks = blockCounts[stageIdx];
+            int stride = stageIdx == 0 ? 1 : 2; // First stage has stride 1, others have stride 2
+
+            // First block of stage may downsample
+            if (config.UsesBottleneck)
+            {
+                layers.Add(new BottleneckBlock<T>(
+                    baseChannels: stageBaseChannels,
+                    stride: stride,
+                    zeroInitResidual: config.ZeroInitResidual));
+            }
+            else
+            {
+                layers.Add(new BasicBlock<T>(
+                    outChannels: stageBaseChannels * expansion,
+                    stride: stride,
+                    zeroInitResidual: config.ZeroInitResidual));
+            }
+
+            // Remaining blocks in stage (stride 1, no channel change)
+            for (int blockIdx = 1; blockIdx < numBlocks; blockIdx++)
+            {
+                if (config.UsesBottleneck)
+                {
+                    layers.Add(new BottleneckBlock<T>(
+                    baseChannels: stageBaseChannels,
+                    stride: 1,
+                    zeroInitResidual: config.ZeroInitResidual));
+                }
+                else
+                {
+                    layers.Add(new BasicBlock<T>(
+                    outChannels: stageBaseChannels * expansion,
+                    stride: 1,
+                    zeroInitResidual: config.ZeroInitResidual));
+                }
+            }
+        }
+
+        // Global average pooling
+        int finalChannels = baseChannels[3] * expansion; // 512 for BasicBlock, 2048 for Bottleneck
+        layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool());
+
+        // Flatten for FC layer
+        layers.Add(new FlattenLayer<T>());
+
+        // Fully connected classifier
+        if (config.IncludeClassifier)
+        {
+            var outputActivation = Architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+                ? (IActivationFunction<T>)new ActivationFunctions.SigmoidActivation<T>()
+                : new ActivationFunctions.SoftmaxActivation<T>();
+
+            layers.Add(new DenseLayer<T>(
+                outputSize: config.NumClasses,
+                activationFunction: outputActivation));
+        }
+
+        return layers;
+    }
+
+    /// <summary>
+    /// Performs a forward pass through the ResNet network with the given input tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to process (shape: [channels, height, width] for a single example, or [batch, channels, height, width] for a batch).</param>
+    /// <returns>The output tensor after processing through all layers.</returns>
+    /// <exception cref="TensorShapeMismatchException">Thrown when the input shape doesn't match expected shape.</exception>
+    /// <remarks>
+    /// <para>
+    /// The forward pass sequentially processes the input through each layer of the network:
+    /// initial conv, residual blocks, global pooling, and classification layer.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is how the network makes predictions. You give it an image
+    /// (as a tensor), and it processes it through all the ResNet layers to produce a prediction.
+    /// The output contains probabilities for each class.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+
+        var expectedShape = Architecture.GetInputShape();
+
+        // Validate input shape - accept both 3D [C,H,W] and 4D [B,C,H,W]
+        bool addedBatch = false;
+        Tensor<T> processedInput;
+
+        if (input.Rank == 3)
+        {
+            // 3D input: validate against expected shape directly
+            TensorValidator.ValidateShape(
+                input,
+                expectedShape,
+                nameof(ResNetNetwork<T>),
+                "forward pass");
+            addedBatch = true;
+            processedInput = PromoteToBatchedTensor(input);
+        }
+        else if (input.Rank == 4)
+        {
+            // 4D input: validate the non-batch dimensions [C,H,W] match expected shape
+            var actualNonBatch = new int[] { input.Shape[1], input.Shape[2], input.Shape[3] };
+            if (!actualNonBatch.SequenceEqual(expectedShape))
+            {
+                throw new TensorShapeMismatchException(
+                    $"Shape mismatch in ResNetNetwork during forward pass: Expected non-batch dimensions [{string.Join(", ", expectedShape)}], but got [{string.Join(", ", actualNonBatch)}].");
+            }
+            processedInput = input;
+        }
+        else
+        {
+            throw new TensorShapeMismatchException(
+                $"Shape mismatch in ResNetNetwork during forward pass: Expected 3D [C,H,W] or 4D [B,C,H,W] input, but got rank {input.Rank}.");
+        }
+
+        Tensor<T> output = processedInput;
+        foreach (var layer in Layers)
+        {
+            output = layer.Forward(output);
+        }
+
+        // Remove batch dimension if we added it
+        if (addedBatch && output.Rank == 2 && output.Shape[0] == 1)
+        {
+            output = output.Reshape([output.Shape[1]]);
+        }
+
+        return output;
+    }
+
+
+    /// <summary>
+    /// Updates the parameters of all layers in the network.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters for the network.</param>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int index = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            var layerParameters = parameters.Slice(index, layerParameterCount);
+            layer.UpdateParameters(layerParameters);
+            index += layerParameterCount;
+        }
+    }
+
+    /// <summary>
+    /// Makes a prediction using the ResNet network for the given input.
+    /// </summary>
+    /// <param name="input">The input tensor to make a prediction for.</param>
+    /// <returns>The predicted output tensor containing class probabilities.</returns>
+    /// <summary>
+    /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> so the
+    /// forward pass gets traced and replayed by <c>CompiledModelHost</c> after warmup —
+    /// matching PyTorch's <c>torch.compile</c> default. The eager forward is
+    /// <see cref="Forward"/>, which retains the GPU-resident optimization path.
+    /// </summary>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
+
+    // Hotfix: bypass the compiled-replay path in NeuralNetworkBase.Predict.
+    // Forward has shape-conditional control flow (rank-3 → rank-4 batch
+    // promotion and the trailing Reshape that strips the synthetic batch
+    // dim) that the tracer does not capture correctly — routing through
+    // PredictCompiled returned an intermediate feature-map shape instead of
+    // the final logits, and also cached the first input so Predict(x2)
+    // returned Predict(x1)'s output. Tracked upstream at
+    // ooples/AiDotNet.Tensors#228; remove this override once that lands.
+    //
+    // Also force eval mode here (matches PyTorch model.eval()). The base
+    // class defaults IsTrainingMode=true at construction, which would let
+    // BatchNorm use batch stats instead of the (zero-init) running stats
+    // and produce non-deterministic Predict output across calls.
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        SetTrainingMode(false);
+        // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () => Forward(input));
+    }
+
+    /// <summary>
+    /// Trains the ResNet network using the provided input and expected output.
+    /// </summary>
+    /// <param name="input">The input tensor for training.</param>
+    /// <param name="expectedOutput">The expected output tensor (one-hot encoded class labels).</param>
+    /// <remarks>
+    /// Accepts both 3D <c>[C, H, W]</c> (single unbatched example) and 4D
+    /// <c>[B, C, H, W]</c> inputs — matches <see cref="Forward"/>'s contract.
+    /// When a 3D input arrives, a leading batch dimension is added so every
+    /// downstream layer sees the conv-standard 4D tensor. The corresponding
+    /// target is also expanded to <c>[1, numClasses]</c> so the loss sees
+    /// matching batch dims on both operands. Previously
+    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> fed the raw 3D
+    /// tensor straight to the layer stack, which caused the FlattenLayer to
+    /// treat the 512-channel dimension as a batch and produce a
+    /// <c>[512, 10]</c> prediction — failing the loss shape check in
+    /// <c>EnsureTargetMatchesPredicted</c>.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
+            TrainWithTape(processedInput, processedTarget, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Applies parameter updates using the optimizer.
+    /// </summary>
+    private void ApplyParameterUpdates()
+    {
+        _optimizer.UpdateParameters(Layers);
+    }
+
+    /// <summary>
+    /// Calculates the gradient of the loss with respect to the network's output.
+    /// </summary>
+    private Vector<T> CalculateOutputGradient(Tensor<T> prediction, Tensor<T> expectedOutput)
+    {
+        return _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+    }
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the network.
+    /// </summary>
+    /// <returns>The total parameter count.</returns>
+    /// <remarks>
+    /// <para>
+    /// ResNet networks have fewer parameters than VGG despite being deeper:
+    /// <list type="bullet">
+    /// <item>ResNet18: ~11.7 million parameters</item>
+    /// <item>ResNet34: ~21.8 million parameters</item>
+    /// <item>ResNet50: ~25.6 million parameters</item>
+    /// <item>ResNet101: ~44.5 million parameters</item>
+    /// <item>ResNet152: ~60.2 million parameters</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public new long GetParameterCount()
+    {
+        return base.GetParameterCount();
+    }
+
+    /// <summary>
+    /// Retrieves metadata about the ResNet network model.
+    /// </summary>
+    /// <returns>A ModelMetaData object containing information about the network.</returns>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NetworkType", "ResNet" },
+                { "Variant", _configuration.Variant.ToString() },
+                { "NumClasses", _configuration.NumClasses },
+                { "UsesBottleneck", _configuration.UsesBottleneck },
+                { "BlockCounts", _configuration.BlockCounts },
+                { "Expansion", _configuration.Expansion },
+                { "InputShape", Architecture.GetInputShape() },
+                { "OutputShape", Layers.Count > 0 ? Layers[Layers.Count - 1].GetOutputShape() : Array.Empty<int>() },
+                { "LayerCount", Layers.Count },
+                { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
+                { "NumConvLayers", _configuration.NumConvLayers },
+                { "NumWeightLayers", _configuration.NumWeightLayers },
+                { "ZeroInitResidual", _configuration.ZeroInitResidual }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <summary>
+    /// Serializes ResNet network-specific data to a binary writer.
+    /// </summary>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write((int)_configuration.Variant);
+        writer.Write(_configuration.NumClasses);
+        writer.Write(_configuration.InputHeight);
+        writer.Write(_configuration.InputWidth);
+        writer.Write(_configuration.InputChannels);
+        writer.Write(_configuration.IncludeClassifier);
+        writer.Write(_configuration.ZeroInitResidual);
+        writer.Write(_configuration.UseAutodiff);
+    }
+
+    /// <summary>
+    /// Deserializes ResNet network-specific data from a binary reader.
+    /// </summary>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        var variant = (ResNetVariant)reader.ReadInt32();
+        var numClasses = reader.ReadInt32();
+        var inputHeight = reader.ReadInt32();
+        var inputWidth = reader.ReadInt32();
+        var inputChannels = reader.ReadInt32();
+        var includeClassifier = reader.ReadBoolean();
+        var zeroInitResidual = reader.ReadBoolean();
+        _ = reader.ReadBoolean(); // useAutodiff
+
+        // Validate loaded configuration matches current
+        if (variant != _configuration.Variant)
+        {
+            throw new InvalidOperationException(
+                $"Serialized ResNet variant ({variant}) does not match current configuration ({_configuration.Variant}).");
+        }
+
+        if (numClasses != _configuration.NumClasses)
+        {
+            throw new InvalidOperationException(
+                $"Serialized number of classes ({numClasses}) does not match current configuration ({_configuration.NumClasses}).");
+        }
+
+        if (inputHeight != _configuration.InputHeight || inputWidth != _configuration.InputWidth)
+        {
+            throw new InvalidOperationException(
+                $"Serialized input dimensions ({inputHeight}x{inputWidth}) do not match current configuration ({_configuration.InputHeight}x{_configuration.InputWidth}).");
+        }
+
+        if (inputChannels != _configuration.InputChannels)
+        {
+            throw new InvalidOperationException(
+                $"Serialized input channels ({inputChannels}) does not match current configuration ({_configuration.InputChannels}).");
+        }
+
+        if (includeClassifier != _configuration.IncludeClassifier)
+        {
+            throw new InvalidOperationException(
+                $"Serialized includeClassifier ({includeClassifier}) does not match current configuration ({_configuration.IncludeClassifier}).");
+        }
+
+        if (zeroInitResidual != _configuration.ZeroInitResidual)
+        {
+            throw new InvalidOperationException(
+                $"Serialized zeroInitResidual ({zeroInitResidual}) does not match current configuration ({_configuration.ZeroInitResidual}).");
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the ResNet network model.
+    /// </summary>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new ResNetNetwork<T>(
+            Architecture,
+            _configuration,
+            null,
+            _lossFunction,
+            MaxGradNormValue);
+    }
+}

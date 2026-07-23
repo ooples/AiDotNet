@@ -1,0 +1,109 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Classical Machine Learning"
+  seoTitle="155+ Classical ML Algorithms for .NET - AiDotNet"
+  seoDescription="Complete classical ML toolkit: 50 classifiers, 57 regressors, 48 clustering algorithms, and more. Pure C# with no Python dependency."
+  count="155+"
+  tagline="The most comprehensive classical ML toolkit available for .NET"
+  description="Everything from random forests to XGBoost, from K-Means to HDBSCAN, from isolation forests to deep anomaly detectors. AiDotNet provides more classical ML algorithms than scikit-learn, all in pure C# with full GPU acceleration and SIMD optimization support."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>'
+  useCases={['Tabular Data Analysis', 'Customer Churn Prediction', 'Fraud Detection', 'Medical Diagnosis', 'Predictive Maintenance', 'Market Segmentation', 'Credit Scoring', 'Quality Control']}
+  subcategories={[
+    {
+      name: 'Classification (52 algorithms)',
+      description: 'Predict categorical outcomes with ensemble methods, SVMs, Bayesian classifiers, and more.',
+      items: [
+        { name: 'RandomForest', detail: 'Bagged ensemble of decision trees with feature importance and OOB estimation.' },
+        { name: 'GradientBoosting', detail: 'Sequential boosting with gradient descent optimization.' },
+        { name: 'XGBoost', detail: 'Extreme gradient boosting with regularization and histogram-based splitting.' },
+        { name: 'LightGBM', detail: 'Gradient boosting with leaf-wise growth and categorical feature support.' },
+        { name: 'CatBoost', detail: 'Gradient boosting with native categorical feature handling.' },
+        { name: 'SVM', detail: 'Support vector machine with linear, RBF, polynomial, and sigmoid kernels.' },
+        { name: 'KNN', detail: 'K-nearest neighbors with distance weighting and ball/KD tree acceleration.' },
+        { name: 'LogisticRegression', detail: 'Linear classification with L1/L2 regularization and multinomial support.' },
+        { name: 'NaiveBayes', detail: 'Gaussian, Multinomial, and Bernoulli Naive Bayes classifiers.' },
+        { name: 'ExtraTrees', detail: 'Extremely randomized trees for faster training with comparable accuracy.' },
+        { name: 'AdaBoost', detail: 'Adaptive boosting with automatic re-weighting of misclassified samples.' },
+        { name: 'StackingClassifier', detail: 'Meta-learning ensemble combining multiple base classifiers.' },
+      ]
+    },
+    {
+      name: 'Regression (59 algorithms)',
+      description: 'Predict continuous values with linear models, tree ensembles, kernel methods, and robust estimators.',
+      items: [
+        { name: 'LinearRegression', detail: 'Ordinary least squares with closed-form solution and statistical diagnostics.' },
+        { name: 'Ridge', detail: 'L2-regularized regression for handling multicollinearity.' },
+        { name: 'Lasso', detail: 'L1-regularized regression with automatic feature selection.' },
+        { name: 'ElasticNet', detail: 'Combined L1+L2 regularization with adjustable mixing ratio.' },
+        { name: 'RandomForestRegressor', detail: 'Ensemble of regression trees with variance reduction.' },
+        { name: 'GradientBoostingRegressor', detail: 'Sequential boosting for regression with multiple loss functions.' },
+        { name: 'SVR', detail: 'Support Vector Regression with epsilon-insensitive loss.' },
+        { name: 'BayesianRidge', detail: 'Bayesian linear regression with automatic relevance determination.' },
+        { name: 'HuberRegressor', detail: 'Robust regression resistant to outliers using Huber loss.' },
+        { name: 'QuantileRegression', detail: 'Predict conditional quantiles for uncertainty estimation.' },
+        { name: 'IsotonicRegression', detail: 'Non-parametric monotonic regression for calibration.' },
+      ]
+    },
+    {
+      name: 'Clustering (90+ algorithms)',
+      description: 'Discover natural groupings with density-based, centroid-based, hierarchical, and spectral methods.',
+      items: [
+        { name: 'KMeans', detail: 'Centroid-based clustering with k-means++ initialization.' },
+        { name: 'DBSCAN', detail: 'Density-based clustering that discovers arbitrary-shaped clusters.' },
+        { name: 'HDBSCAN', detail: 'Hierarchical DBSCAN with automatic cluster selection and stability scores.' },
+        { name: 'Agglomerative', detail: 'Bottom-up hierarchical clustering with single, complete, average, Ward linkage.' },
+        { name: 'Spectral', detail: 'Graph-based clustering using eigenvalues of similarity matrix.' },
+        { name: 'GaussianMixture', detail: 'Probabilistic clustering with EM algorithm and model selection (BIC/AIC).' },
+        { name: 'OPTICS', detail: 'Ordering Points to Identify Clustering Structure for varying density.' },
+        { name: 'MeanShift', detail: 'Non-parametric clustering that finds modes in density distribution.' },
+        { name: 'Birch', detail: 'Balanced Iterative Reducing and Clustering using Hierarchies for large datasets.' },
+        { name: 'AffinityPropagation', detail: 'Message-passing algorithm that simultaneously identifies exemplars and clusters.' },
+        { name: 'MiniBatchKMeans', detail: 'Scalable K-Means variant using mini-batches for large datasets.' },
+      ]
+    },
+    {
+      name: 'Anomaly Detection (66 algorithms)',
+      description: 'Identify outliers and anomalies with isolation-based, density-based, and deep learning approaches.',
+      items: [
+        { name: 'IsolationForest', detail: 'Anomaly detection via random partitioning of feature space.' },
+        { name: 'LocalOutlierFactor', detail: 'Density-based anomaly detection comparing local reachability densities.' },
+        { name: 'OneClassSVM', detail: 'Support vector method for novelty detection in high-dimensional spaces.' },
+        { name: 'EllipticEnvelope', detail: 'Gaussian assumption-based outlier detection using Mahalanobis distance.' },
+        { name: 'AutoEncoder', detail: 'Neural network-based anomaly detection via reconstruction error.' },
+        { name: 'COPOD', detail: 'Copula-based outlier detection - fast, parameter-free.' },
+        { name: 'ECOD', detail: 'Empirical cumulative distribution-based outlier detection.' },
+        { name: 'DeepSVDD', detail: 'Deep Support Vector Data Description for complex data.' },
+        { name: 'DAGMM', detail: 'Deep Autoencoding Gaussian Mixture Model for unsupervised anomaly detection.' },
+        { name: 'TranAD', detail: 'Transformer-based adversarial anomaly detection for time series.' },
+      ]
+    },
+    {
+      name: 'Dimensionality Reduction',
+      description: 'Reduce feature space while preserving structure for visualization and preprocessing.',
+      items: [
+        { name: 'PCA', detail: 'Principal Component Analysis for linear dimensionality reduction.' },
+        { name: 'KernelPCA', detail: 'Non-linear PCA using kernel trick for complex manifolds.' },
+        { name: 't-SNE', detail: 'T-distributed Stochastic Neighbor Embedding for 2D/3D visualization.' },
+        { name: 'UMAP', detail: 'Uniform Manifold Approximation for fast, high-quality embeddings.' },
+        { name: 'LDA', detail: 'Linear Discriminant Analysis for supervised dimensionality reduction.' },
+        { name: 'NMF', detail: 'Non-negative Matrix Factorization for parts-based decomposition.' },
+        { name: 'ICA', detail: 'Independent Component Analysis for blind source separation.' },
+        { name: 'Isomap', detail: 'Isometric mapping preserving geodesic distances on manifolds.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Classification with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new GradientBoostingClassifier<float>(
+        numTrees: 200, maxDepth: 6, learningRate: 0.1f))
+    .ConfigurePreprocessing()
+    .BuildAsync(X_train, y_train);
+
+var predictions = result.Predict(X_test);`}
+  codeTitle="Classification with AiModelBuilder"
+/>

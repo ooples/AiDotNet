@@ -1,0 +1,73 @@
+name: Marketing Website (Manual Rebuild)
+
+# Manual-only rebuild of the marketing website to GitHub Pages.
+# Use this when you need to force a rebuild without pushing to master.
+# The primary automatic deployment runs via deploy-website.yml on pushes to master.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true  # Allow rebuild cancellation
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Marketing Website
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: website
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build website
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ./website/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Marketing Website Deployment (Manual)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.deployment.outcome }}" == "success" ]; then
+            echo "Website deployed successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Deployment completed with warnings" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Home](https://ooples.github.io/AiDotNet/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Features](https://ooples.github.io/AiDotNet/features/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Pricing](https://ooples.github.io/AiDotNet/pricing/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Playground](https://ooples.github.io/AiDotNet/playground/)" >> $GITHUB_STEP_SUMMARY

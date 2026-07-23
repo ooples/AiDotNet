@@ -1,0 +1,73 @@
+using OptimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType;
+using LrSchedule = AiDotNet.Tensors.Engines.Compilation.LrSchedule;
+
+namespace AiDotNet.Optimizers.Fused;
+
+/// <summary>
+/// Describes how an optimizer maps onto the compiled fused-optimizer kernel:
+/// which <see cref="OptimizerType"/> to run plus the baked hyperparameters and
+/// optional fused LR schedule.
+/// </summary>
+/// <param name="Type">The fused kernel variant to dispatch (Adam, AdamW, AMSGrad, SGD).</param>
+/// <param name="LearningRate">Current learning rate, baked into the plan.</param>
+/// <param name="Beta1">Adam/AdamW first-moment decay (0 for SGD).</param>
+/// <param name="Beta2">Adam/AdamW second-moment decay (0 for SGD).</param>
+/// <param name="Epsilon">Denominator epsilon (0 for SGD).</param>
+/// <param name="WeightDecay">Decoupled weight decay (AdamW); 0 otherwise.</param>
+/// <param name="Schedule">Optional fused-side LR schedule, or null for constant LR.</param>
+internal readonly record struct FusedOptimizerConfig(
+    OptimizerType Type,
+    float LearningRate,
+    float Beta1,
+    float Beta2,
+    float Epsilon,
+    float WeightDecay,
+    LrSchedule? Schedule)
+{
+    /// <summary>
+    /// When true, request bfloat16 storage for the fused Adam/AdamW moment buffers
+    /// (#1745) — half the optimizer-state footprint, same fp32 update math. Honored
+    /// only by the CPU float Adam/AdamW fused kernel; a safe no-op otherwise.
+    /// <para>
+    /// Init-only property rather than a primary-constructor component so adding it did NOT change the
+    /// record's <c>Deconstruct(...)</c> arity or force existing positional construction sites to add an
+    /// argument (only the one call that sets it uses object-initializer syntax). It still participates in
+    /// the record's value equality/hash, which is correct — two configs differing only in moment storage
+    /// are genuinely distinct.
+    /// </para>
+    /// </summary>
+    public bool UseBf16Moments { get; init; }
+}
+
+/// <summary>
+/// Implemented by optimizers that have a compiled fused-kernel equivalent, so the
+/// fused-training dispatcher can ask the optimizer to describe itself instead of
+/// switching on its concrete type.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Open/closed-compliant by construction: having a fused SIMD kernel
+/// (<c>FusedOptimizer.{SGD,Adam,AdamW,AMSGrad}UpdateSimd</c>) is intrinsic to an
+/// optimizer, so the optimizer declares it. Only the optimizers that actually have
+/// a kernel implement this interface — there is no central catalog and no
+/// <c>OptimizerType is (… or … or …)</c> whitelist to keep in sync. An optimizer
+/// without a fused kernel simply doesn't implement it and uses the eager tape;
+/// adding a kernel later means implementing this interface, with no change to the
+/// dispatcher. This is also why only a handful of the ~20 optimizers are
+/// fuse-able: the rest have no SIMD kernel.
+/// </para>
+/// <para>
+/// <see cref="TryGetFusedOptimizerConfig"/> returns <c>false</c> when THIS
+/// instance is configured in a way the fused kernel can't reproduce (adaptive
+/// learning rate, an unsupported LR-scheduler type, etc.), so a fuse-able
+/// optimizer family can still fall back per-instance.
+/// </para>
+/// </remarks>
+internal interface IFusedOptimizerSpec
+{
+    /// <summary>
+    /// Describes this optimizer for the fused kernel, or returns <c>false</c> to
+    /// fall back to the eager tape.
+    /// </summary>
+    bool TryGetFusedOptimizerConfig(out FusedOptimizerConfig config);
+}

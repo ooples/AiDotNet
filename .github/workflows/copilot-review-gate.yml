@@ -1,0 +1,67 @@
+name: Copilot Review Gate
+
+on:
+  pull_request:
+    branches: [ '**' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  gate:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check unresolved Copilot review threads
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          
+          # Use GraphQL to check for unresolved review threads from bots
+          QUERY='query($owner: String!, $repo: String!, $pr: Int!) {
+            repository(owner: $owner, name: $repo) {
+              pullRequest(number: $pr) {
+                reviewThreads(first: 100) {
+                  nodes {
+                    isResolved
+                    viewerCanResolve
+                    comments(first: 1) {
+                      nodes {
+                        author {
+                          login
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }'
+          
+          # Extract owner and repo name
+          OWNER=$(echo "$REPO" | cut -d'/' -f1)
+          REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
+          
+          # Query unresolved threads from Copilot review bot(s).
+          # Note: GitHub Advanced Security / code-scanning threads are tracked separately (CodeQL/Sonar/etc.)
+          # and cannot always be manually resolved like normal review threads.
+          UNRESOLVED=$(gh api graphql \
+            -f query="$QUERY" \
+            -f owner="$OWNER" \
+            -f repo="$REPO_NAME" \
+            -F pr="$PR_NUMBER" \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and .viewerCanResolve == true and (.comments.nodes[0].author.login | test("copilot"; "i")))] | length')
+          
+          echo "Unresolved Copilot review threads: $UNRESOLVED"
+          if [ "$UNRESOLVED" -gt 0 ]; then
+            echo "Found $UNRESOLVED unresolved Copilot review threads"
+            exit 1
+          fi

@@ -1,0 +1,232 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+
+namespace AiDotNet.Video.Denoising;
+
+/// <summary>
+/// UDVD unidirectional deep video denoising for blind self-supervised denoising.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "Unsupervised Deep Video Denoising" (Sheth et al., CVPR 2021)</item>
+/// </list></para>
+/// <para><b>For Beginners:</b> UDVD (Unidirectional Video Denoising) processes video in a single temporal direction for causal denoising. This makes it suitable for streaming applications where future frames are not available.</para>
+/// <para>
+/// UDVD performs blind video denoising without paired training data. In the original paper,
+/// training uses a self-supervised loss that exploits temporal redundancy. The native Train
+/// method uses a supervised approach with paired clean/noisy data for simplicity; the full
+/// self-supervised training pipeline is available through the ONNX model. It processes frames
+/// unidirectionally using only past frames, enabling real-time streaming operation.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a UDVD model for blind self-supervised video denoising
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new UDVDOptions();
+/// var udvd = new UDVD&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for streaming inference
+/// var udvdOnnx = new UDVD&lt;double&gt;(architecture, "udvd_model.onnx");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Unsupervised Deep Video Denoising",
+    "https://arxiv.org/abs/2011.15045",
+    Year = 2021,
+    Authors = "Dev Yashpal Sheth, Sreyas Mohan, Joshua L. Vincent, Ramon Manzorro, Peter A. Crozier, Mitesh M. Khapra, Eero P. Simoncelli, Carlos Fernandez-Granda")]
+public class UDVD<T> : VideoDenoisingBase<T>
+{
+    private readonly UDVDOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    /// <summary>
+    /// Creates a UDVD model for ONNX inference.
+    /// </summary>
+    public UDVD(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        UDVDOptions? options = null)
+        : base(architecture)
+    {
+        if (string.IsNullOrEmpty(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        _options = options ?? new UDVDOptions();
+        _useNativeMode = false;
+        IsBlindDenoising = true;
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates a UDVD model for native training and inference.
+    /// </summary>
+    public UDVD(
+        NeuralNetworkArchitecture<T> architecture,
+        UDVDOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
+    {
+        _options = options ?? new UDVDOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        IsBlindDenoising = true;
+        InitializeLayers();
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> Denoise(Tensor<T> noisyFrames)
+    {
+        ThrowIfDisposed();
+        var preprocessed = PreprocessFrames(noisyFrames);
+        var output = IsOnnxMode ? RunOnnxInference(preprocessed) : Forward(preprocessed);
+        return PostprocessOutput(output);
+    }
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
+            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoDenoisingLayers(
+                inputChannels: ch, inputHeight: h, inputWidth: w,
+                numFeatures: _options.NumFeatures,
+                temporalFrames: _options.TemporalBufferSize));
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+        TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int required = 0;
+        foreach (var layer in Layers) required += layer.GetParameters().Length;
+        if (parameters.Length < required)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var p = layer.GetParameters();
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            layer.SetParameters(sub);
+            offset += p.Length;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ModelName", "UDVD" },
+                { "Variant", _options.Variant.ToString() },
+                { "NumFeatures", _options.NumFeatures },
+                { "NumLevels", _options.NumLevels },
+                { "NumResBlocks", _options.NumResBlocks },
+                { "TemporalBufferSize", _options.TemporalBufferSize }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write((int)_options.Variant);
+        writer.Write(_options.NumFeatures);
+        writer.Write(_options.NumLevels);
+        writer.Write(_options.NumResBlocks);
+        writer.Write(_options.TemporalBufferSize);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.DropoutRate);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _options.Variant = (VideoModelVariant)reader.ReadInt32();
+        _options.NumFeatures = reader.ReadInt32();
+        _options.NumLevels = reader.ReadInt32();
+        _options.NumResBlocks = reader.ReadInt32();
+        _options.TemporalBufferSize = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.DropoutRate = reader.ReadDouble();
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new UDVD<T>(Architecture, p, _options);
+        return new UDVD<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(UDVD<T>));
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
+        base.Dispose(disposing);
+    }
+}

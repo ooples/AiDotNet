@@ -1,0 +1,1415 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.SyntheticData;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.NeuralNetworks.SyntheticData;
+
+/// <summary>
+/// TabSyn generator combining VAE pretraining with latent diffusion for state-of-the-art
+/// synthetic tabular data generation.
+/// </summary>
+/// <remarks>
+/// <para>
+/// TabSyn trains in two phases:
+/// 1. <b>VAE Phase</b>: Encoder-decoder learns latent representation of tabular data
+/// 2. <b>Diffusion Phase</b>: Gaussian diffusion model learns the distribution of latent codes
+///
+/// Generation: z ~ DiffusionModel -> decoded = VAEDecoder(z) -> inverse transform
+///
+/// This implementation follows the standard neural network architecture pattern with:
+/// - Proper inheritance from NeuralNetworkBase
+/// - Layer-based architecture using ILayer components
+/// - Engine-based tensor operations for CPU/GPU acceleration
+/// - Full autodiff and JIT compilation support
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> TabSyn is a two-step generator:
+///
+/// <b>Step 1 - VAE Training (learning to compress):</b>
+/// <code>
+/// Data row -> [Encoder] -> latent code z -> [Decoder] -> reconstructed row
+/// </code>
+///
+/// <b>Step 2 - Diffusion Training (learning the latent distribution):</b>
+/// <code>
+/// Real latent code z -> add noise -> [Denoiser MLP] -> predict noise -> learn to denoise
+/// </code>
+///
+/// <b>Generation:</b>
+/// <code>
+/// Pure noise -> [Denoise 1000 times] -> clean latent z -> [VAE Decoder] -> synthetic row
+/// </code>
+///
+/// If you provide custom layers in the architecture, those will be used directly
+/// for the VAE encoder. If not, the network creates industry-standard
+/// TabSyn encoder layers based on the original research paper specifications.
+///
+/// Example usage:
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputFeatures: 10,
+///     outputSize: 10
+/// );
+/// var options = new TabSynOptions&lt;double&gt;
+/// {
+///     EncoderDimensions = new[] { 256, 256 },
+///     DecoderDimensions = new[] { 256, 256 },
+///     LatentDimension = 64,
+///     DiffusionSteps = 1000,
+///     VAEEpochs = 100,
+///     DiffusionEpochs = 100
+/// };
+/// var generator = new TabSynGenerator&lt;double&gt;(architecture, options);
+/// generator.Fit(data, columns, epochs: 100);
+/// var synthetic = generator.Generate(1000);
+/// </code>
+/// </para>
+/// <para>
+/// Reference: "TabSyn: Bridging the Gap" (Zhang et al., NeurIPS 2023)
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.SyntheticDataGenerator)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Mixed-Type Tabular Data Synthesis with Score-based Diffusion in Latent Space",
+    "https://arxiv.org/abs/2310.09656",
+    Year = 2023,
+    Authors = "Hengrui Zhang, Jiani Zhang, Balasubramaniam Srinivasan, Zhengyuan Shen, Xiao Qin, Christos Faloutsos, Huzefa Rangwala, George Karypis")]
+public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+{
+    private readonly TabSynOptions<T> _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private ILossFunction<T> _lossFunction;
+
+    // Synthetic tabular data infrastructure
+    private TabularDataTransformer<T>? _transformer;
+    private List<ColumnMetadata> _columns = new();
+    private int _dataWidth;
+    private Random _random;
+
+    // VAE mean/logvar projection heads (auxiliary, not user-overridable)
+    private FullyConnectedLayer<T>? _meanLayer;
+    private FullyConnectedLayer<T>? _logVarLayer;
+
+    // VAE decoder layers (auxiliary, not user-overridable)
+    private readonly List<ILayer<T>> _decoderLayers = new();
+
+    // Latent diffusion components (auxiliary, not user-overridable)
+    private GaussianDiffusion<T>? _latentDiffusion;
+    private readonly List<ILayer<T>> _diffMLPLayers = new();
+    private FullyConnectedLayer<T>? _timestepProjection;
+
+    private Tensor<T>? _lastEncoderOutput;
+
+    // Whether custom layers are being used (disables default encoder logic)
+    private bool _usingCustomLayers;
+
+    /// <summary>
+    /// Gets the TabSyn-specific options.
+    /// </summary>
+    public new TabSynOptions<T> Options => _options;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ColumnMetadata> Columns => _columns.AsReadOnly();
+
+    /// <inheritdoc />
+    public bool IsFitted { get; private set; }
+
+    /// <summary>
+    /// Initializes a new TabSyn generator with the specified architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture defining input/output dimensions and optional custom layers.</param>
+    /// <param name="options">TabSyn-specific options for VAE and diffusion configuration.</param>
+    /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
+    /// <param name="lossFunction">Loss function (defaults based on task type).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor creates a TabSyn network based on the architecture you provide.
+    ///
+    /// If you provide custom layers in the architecture, those will be used directly
+    /// for the VAE encoder network. If not, the network will create industry-standard
+    /// TabSyn encoder layers based on the original research paper specifications.
+    ///
+    /// Example usage:
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     inputFeatures: 10,
+    ///     outputSize: 10
+    /// );
+    /// var options = new TabSynOptions&lt;double&gt; { LatentDimension = 64 };
+    /// var generator = new TabSynGenerator&lt;double&gt;(architecture, options);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public TabSynGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
+    public TabSynGenerator(
+        NeuralNetworkArchitecture<T> architecture,
+        TabSynOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 5.0)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+    {
+        _options = options ?? new TabSynOptions<T>();
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
+
+        InitializeLayers();
+    }
+
+    #region Layer Initialization (GANDALF Pattern)
+
+    /// <summary>
+    /// Initializes the layers of the TabSyn network based on the provided architecture.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method either uses custom layers provided in the architecture or creates
+    /// default TabSyn encoder layers following the original paper specifications.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method sets up the VAE encoder network structure:
+    /// - If you provided custom layers, those are used for the encoder
+    /// - Otherwise, it creates the standard TabSyn encoder architecture
+    ///
+    /// The decoder and diffusion MLP are always created internally and are not user-overridable.
+    /// </para>
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            // Use the layers provided by the user for the encoder
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+            _usingCustomLayers = true;
+        }
+        else
+        {
+            // Create default encoder layers
+            int inputDim = Architecture.CalculatedInputSize;
+            int latentDim = _options.LatentDimension;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultTabSynEncoderLayers(
+                inputDim, latentDim, _options.EncoderDimensions));
+            _usingCustomLayers = false;
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds encoder, decoder, and diffusion layers with actual data dimensions
+    /// discovered during Fit(). Only rebuilds encoder when not using custom layers.
+    /// </summary>
+    /// <param name="dataWidth">Actual transformed data width (encoder input and decoder output).</param>
+    private void RebuildLayersWithActualDimensions(int dataWidth)
+    {
+        int latentDim = _options.LatentDimension;
+
+        if (!_usingCustomLayers)
+        {
+            // Rebuild encoder with actual data dimensions
+            Layers.Clear();
+            Layers.AddRange(LayerHelper<T>.CreateDefaultTabSynEncoderLayers(
+                dataWidth, latentDim, _options.EncoderDimensions));
+        }
+
+        BuildAuxiliaryNetworks(dataWidth);
+    }
+
+    /// <summary>
+    /// Builds the auxiliary sub-networks (mean/logvar heads, decoder, diffusion MLP, timestep
+    /// projection) that live outside the base <c>Layers</c> collection. Kept separate from the
+    /// encoder rebuild so deserialization can recreate these structures without clobbering the
+    /// encoder layers already restored by the base class.
+    /// </summary>
+    private void BuildAuxiliaryNetworks(int dataWidth)
+    {
+        int latentDim = _options.LatentDimension;
+
+        // Build mean and logvar projection heads from the last encoder hidden dim
+        int lastEncHidden = _options.EncoderDimensions.Length > 0
+            ? _options.EncoderDimensions[^1]
+            : dataWidth;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        // If using custom layers, the last layer output is 2*latentDim (from LayerHelper),
+        // but for custom layers we create separate mean/logvar heads from the last hidden dim.
+        if (_usingCustomLayers)
+        {
+            // For custom layers, mean/logvar heads take from last custom layer output
+            // We assume the user has set up their layers to output the desired hidden size
+            int customLastOutputDim = latentDim;
+            _meanLayer = new FullyConnectedLayer<T>(latentDim, identity);
+            _logVarLayer = new FullyConnectedLayer<T>(latentDim, identity);
+        }
+        else
+        {
+            // Default encoder outputs 2*latentDim, so we split in the forward pass.
+            // Mean/logvar are simply the first/second half of the encoder output.
+            // No separate projection layers needed - they're built into the default encoder.
+            _meanLayer = null;
+            _logVarLayer = null;
+        }
+
+        // Always rebuild decoder with actual dimensions
+        _decoderLayers.Clear();
+        _decoderLayers.AddRange(LayerHelper<T>.CreateDefaultTabSynDecoderLayers(
+            latentDim, dataWidth, _options.DecoderDimensions));
+
+        // Always rebuild diffusion MLP with actual dimensions
+        _diffMLPLayers.Clear();
+        int teDim = _options.TimestepEmbeddingDimension;
+        int diffInputDim = latentDim + teDim;
+        _diffMLPLayers.AddRange(LayerHelper<T>.CreateDefaultTabSynDiffusionLayers(
+            diffInputDim, latentDim, _options.DiffusionMLPDimensions));
+
+        // Timestep projection
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
+        _timestepProjection = new FullyConnectedLayer<T>(teDim, silu);
+    }
+
+    #endregion
+
+    #region Neural Network Methods (GANDALF Pattern)
+
+    /// <summary>
+    /// Runs the VAE encoder forward pass on input data.
+    /// </summary>
+    /// <param name="input">The input tensor (transformed data row).</param>
+    /// <returns>The encoder output (containing mean and log-variance information).</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This encodes a data row into a latent representation.
+    /// The encoder compresses the input into a small summary vector.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        // If using custom layers, do simple sequential forward
+        if (_usingCustomLayers)
+        {
+            Tensor<T> current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            return current;
+        }
+
+        // Default encoder forward (all layers are sequential from LayerHelper)
+        return EncoderForwardDefault(input);
+    }
+
+    /// <summary>
+    /// Trains the TabSyn network using the provided input and expected output.
+    /// </summary>
+    /// <param name="input">The input data tensor.</param>
+    /// <param name="expectedOutput">The expected reconstruction tensor.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This runs a single training step for the VAE.
+    /// The full two-phase training (VAE then diffusion) happens in Fit().
+    /// This method is provided for compatibility with the NeuralNetworkBase pattern.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // Single-step encoder training for NeuralNetworkBase compatibility (the
+        // full two-phase VAE + latent-diffusion training runs in Fit). The encoder
+        // is the Layers chain, so TrainWithTape backpropagates through it; the
+        // previous body called _optimizer.UpdateParameters(Layers) without a
+        // backward and threw "Backward pass must be called before updating
+        // parameters".
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Runs one optimizer step over the parameters of the given <paramref name="layers"/>
+    /// using gradients from <paramref name="tape"/> for the precomputed scalar
+    /// <paramref name="loss"/>. Lets the two training phases (VAE, latent diffusion)
+    /// each update only their own sub-network from a tape-tracked loss.
+    /// </summary>
+    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IEnumerable<ILayer<T>> layers)
+    {
+        var layerList = layers.Where(l => l is not null).ToList();
+        var trainable = Training.TapeTrainingStep<T>.CollectParameters(layerList);
+        if (trainable.Count == 0) return;
+        var grads = tape.ComputeGradients(loss, trainable);
+        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
+        LastLoss = lossValue;
+        var ctx = new TapeStepContext<T>(trainable, grads, lossValue);
+        _optimizer.Step(ctx);
+    }
+
+    /// <inheritdoc />
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int startIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                startIndex += layerParameterCount;
+            }
+        }
+    }
+
+    #endregion
+
+    #region ISyntheticTabularGenerator<T> Implementation
+
+    /// <summary>
+    /// Fits the TabSyn generator to the provided real tabular data.
+    /// </summary>
+    /// <param name="data">The real data matrix where each row is a sample and each column is a feature.</param>
+    /// <param name="columns">Metadata describing each column (type, categories, etc.).</param>
+    /// <param name="epochs">Number of training epochs (used for VAE epochs; diffusion uses DiffusionEpochs from options).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the "learning" step. The generator studies your real data:
+    /// 1. Fits the VGM transformer for data normalization
+    /// 2. Trains the VAE to learn a compressed latent representation
+    /// 3. Encodes all data to latent space
+    /// 4. Trains the latent diffusion model on the encoded data
+    /// After fitting, call Generate() to create new synthetic rows.
+    /// </para>
+    /// </remarks>
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    {
+        ValidateFitInputs(data, columns, epochs);
+
+        _columns = PrepareColumns(data, columns);
+
+        // Step 1: Fit transformer
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, _columns);
+        _dataWidth = _transformer.TransformedWidth;
+
+        var transformedData = _transformer.Transform(data);
+
+        // Step 2: Rebuild layers with actual data dimensions
+        RebuildLayersWithActualDimensions(_dataWidth);
+
+        // Step 3: Train VAE
+        int vaeBatchSize = Math.Min(_options.BatchSize, data.Rows);
+        int vaeNumBatches = Math.Max(1, data.Rows / vaeBatchSize);
+        T vaeLr = NumOps.FromDouble(_options.VAELearningRate / vaeBatchSize);
+
+        int vaeEpochs = _options.VAEEpochs > 0 ? _options.VAEEpochs : epochs;
+        SetTrainingMode(true);
+        try
+        {
+            for (int epoch = 0; epoch < vaeEpochs; epoch++)
+            {
+                for (int batch = 0; batch < vaeNumBatches; batch++)
+                {
+                    int startRow = batch * vaeBatchSize;
+                    int endRow = Math.Min(startRow + vaeBatchSize, data.Rows);
+                    TrainVAEBatch(transformedData, startRow, endRow, vaeLr);
+                }
+            }
+        }
+        finally { SetTrainingMode(false); }
+
+        // Step 4: Encode all data to latent space
+        var latentCodes = EncodeAllData(transformedData);
+
+        // Step 5: Build and train latent diffusion model
+        _latentDiffusion = new GaussianDiffusion<T>(
+            _options.DiffusionSteps, _options.BetaStart, _options.BetaEnd, "linear", _random);
+
+        int diffBatchSize = Math.Min(_options.BatchSize, data.Rows);
+        int diffNumBatches = Math.Max(1, data.Rows / diffBatchSize);
+        T diffLr = NumOps.FromDouble(_options.DiffusionLearningRate / diffBatchSize);
+
+        SetTrainingMode(true);
+        try
+        {
+            for (int epoch = 0; epoch < _options.DiffusionEpochs; epoch++)
+            {
+                for (int batch = 0; batch < diffNumBatches; batch++)
+                {
+                    int startRow = batch * diffBatchSize;
+                    int endRow = Math.Min(startRow + diffBatchSize, data.Rows);
+                    TrainDiffusionBatch(latentCodes, startRow, endRow, diffLr);
+                }
+            }
+        }
+        finally { SetTrainingMode(false); }
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    {
+        ValidateFitInputs(data, columns, epochs);
+
+        _columns = PrepareColumns(data, columns);
+
+        await Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+
+            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+            _transformer.Fit(data, _columns);
+            _dataWidth = _transformer.TransformedWidth;
+
+            var transformedData = _transformer.Transform(data);
+
+            RebuildLayersWithActualDimensions(_dataWidth);
+
+            int vaeBatchSize = Math.Min(_options.BatchSize, data.Rows);
+            int vaeNumBatches = Math.Max(1, data.Rows / vaeBatchSize);
+            T vaeLr = NumOps.FromDouble(_options.VAELearningRate / vaeBatchSize);
+
+            int vaeEpochs = _options.VAEEpochs > 0 ? _options.VAEEpochs : epochs;
+            SetTrainingMode(true);
+            try
+            {
+                for (int epoch = 0; epoch < vaeEpochs; epoch++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    for (int batch = 0; batch < vaeNumBatches; batch++)
+                    {
+                        int startRow = batch * vaeBatchSize;
+                        int endRow = Math.Min(startRow + vaeBatchSize, data.Rows);
+                        TrainVAEBatch(transformedData, startRow, endRow, vaeLr);
+                    }
+                }
+            }
+            finally { SetTrainingMode(false); }
+
+            var latentCodes = EncodeAllData(transformedData);
+
+            _latentDiffusion = new GaussianDiffusion<T>(
+                _options.DiffusionSteps, _options.BetaStart, _options.BetaEnd, "linear", _random);
+
+            int diffBatchSize = Math.Min(_options.BatchSize, data.Rows);
+            int diffNumBatches = Math.Max(1, data.Rows / diffBatchSize);
+            T diffLr = NumOps.FromDouble(_options.DiffusionLearningRate / diffBatchSize);
+
+            SetTrainingMode(true);
+            try
+            {
+                for (int epoch = 0; epoch < _options.DiffusionEpochs; epoch++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    for (int batch = 0; batch < diffNumBatches; batch++)
+                    {
+                        int startRow = batch * diffBatchSize;
+                        int endRow = Math.Min(startRow + diffBatchSize, data.Rows);
+                        TrainDiffusionBatch(latentCodes, startRow, endRow, diffLr);
+                    }
+                }
+            }
+            finally { SetTrainingMode(false); }
+        }, ct).ConfigureAwait(false);
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Generates new synthetic tabular data rows.
+    /// </summary>
+    /// <param name="numSamples">The number of synthetic rows to generate.</param>
+    /// <param name="conditionColumn">Optional conditioning column indices.</param>
+    /// <param name="conditionValue">Optional conditioning values.</param>
+    /// <returns>A matrix of synthetic data with the same column structure as the training data.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> After fitting, this creates new fake-but-realistic rows by:
+    /// 1. Sampling noise in latent space
+    /// 2. Running reverse diffusion to produce clean latent codes
+    /// 3. Decoding latent codes to transformed data space via VAE decoder
+    /// 4. Applying inverse VGM transform to restore original distributions
+    /// </para>
+    /// </remarks>
+    public Matrix<T> Generate(int numSamples, Vector<T>? conditionColumn = null, Vector<T>? conditionValue = null)
+    {
+        if (!IsFitted || _transformer is null || _latentDiffusion is null)
+        {
+            throw new InvalidOperationException(
+                "The generator must be fitted before generating data. Call Fit() first.");
+        }
+
+        if (numSamples <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
+        }
+
+        int latentDim = _options.LatentDimension;
+        var transformedRows = new Matrix<T>(numSamples, _dataWidth);
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            // Start with noise in latent space
+            var z = CreateStandardNormalVector(latentDim);
+
+            // Reverse diffusion in latent space
+            for (int t = _options.DiffusionSteps - 1; t >= 0; t--)
+            {
+                var timeEmbed = CreateTimestepEmbedding(t);
+                var predictedNoise = DiffusionMLPForward(z, timeEmbed);
+                z = _latentDiffusion.DenoisingStep(z, predictedNoise, t);
+            }
+
+            // Decode latent code to data space
+            var decoded = DecoderForward(VectorToTensor(z));
+            var activated = ApplyOutputActivations(decoded);
+
+            for (int j = 0; j < _dataWidth && j < activated.Length; j++)
+            {
+                transformedRows[i, j] = activated[j];
+            }
+        }
+
+        return _transformer.InverseTransform(transformedRows);
+    }
+
+    #endregion
+
+    #region VAE Forward Passes
+
+    /// <summary>
+    /// Runs the default encoder forward pass (sequential through all LayerHelper-created layers).
+    /// The last layer outputs 2*latentDim which is split into mean and log-variance.
+    /// </summary>
+    private Tensor<T> EncoderForwardDefault(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+        _lastEncoderOutput = current;
+        return current;
+    }
+
+    /// <summary>
+    /// Extracts mean and log-variance from the encoder output.
+    /// </summary>
+    /// <param name="encoderOutput">The encoder output tensor.</param>
+    /// <returns>A tuple of (mean, logVar) tensors, each of size latentDim.</returns>
+    private (Tensor<T> Mean, Tensor<T> LogVar) SplitEncoderOutput(Tensor<T> encoderOutput)
+    {
+        int latentDim = _options.LatentDimension;
+
+        if (_usingCustomLayers && _meanLayer is not null && _logVarLayer is not null)
+        {
+            // Custom layers: pass encoder output through separate mean/logvar heads
+            var mean = _meanLayer.Forward(encoderOutput);
+            var logVar = _logVarLayer.Forward(encoderOutput);
+            return (mean, logVar);
+        }
+
+        // Default encoder: last layer outputs [mean | logVar] concatenated. Use
+        // tape-connected Engine slices so the VAE backward flows into the encoder.
+        var flat = encoderOutput.Rank == 1
+            ? encoderOutput
+            : Engine.Reshape(encoderOutput, new[] { encoderOutput.Length });
+        var meanTensor = Engine.TensorSlice(flat, new[] { 0 }, new[] { latentDim });
+        var logVarTensor = Engine.TensorSlice(flat, new[] { latentDim }, new[] { latentDim });
+        return (meanTensor, logVarTensor);
+    }
+
+    /// <summary>
+    /// VAE reparameterization trick: z = mean + std * epsilon, where epsilon ~ N(0,1).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The reparameterization trick lets us backpropagate through
+    /// the random sampling step. Instead of sampling z directly from the distribution,
+    /// we sample noise epsilon and compute z = mean + std * epsilon. This way the
+    /// randomness is in epsilon (which has no learned parameters) and gradients can
+    /// flow through mean and std.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
+    {
+        // z = mean + exp(0.5*logVar) ⊙ eps, computed with tape-connected Engine ops
+        // (eps is a sampled constant leaf) so gradients flow into mean and logVar.
+        var eps = new Tensor<T>(mean._shape);
+        for (int i = 0; i < eps.Length; i++) eps[i] = SampleStandardNormal();
+        var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(std, eps));
+    }
+
+    /// <summary>
+    /// Runs the VAE decoder forward pass to reconstruct data from latent code.
+    /// </summary>
+    private Tensor<T> DecoderForward(Tensor<T> z)
+    {
+        var current = z;
+        foreach (var layer in _decoderLayers)
+        {
+            current = layer.Forward(current);
+        }
+        return current;
+    }
+
+    #endregion
+
+    #region Diffusion Forward
+
+    /// <summary>
+    /// Creates a sinusoidal timestep embedding for the diffusion model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The diffusion model needs to know "how much noise was added"
+    /// at each step. This creates a vector that encodes the timestep as a combination
+    /// of sine and cosine waves at different frequencies, similar to positional encoding
+    /// in transformers.
+    /// </para>
+    /// </remarks>
+    private Vector<T> CreateTimestepEmbedding(int timestep)
+    {
+        int dim = _options.TimestepEmbeddingDimension;
+        var embedding = new Vector<T>(dim);
+        int halfDim = dim / 2;
+        for (int i = 0; i < halfDim; i++)
+        {
+            double freq = Math.Exp(-Math.Log(10000.0) * i / halfDim);
+            double angle = timestep * freq;
+            embedding[i] = NumOps.FromDouble(Math.Sin(angle));
+            if (i + halfDim < dim) embedding[i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
+        }
+
+        if (_timestepProjection is not null)
+        {
+            var embedTensor = VectorToTensor(embedding);
+            var projected = _timestepProjection.Forward(embedTensor);
+            return TensorToVector(projected, dim);
+        }
+        return embedding;
+    }
+
+    /// <summary>
+    /// Runs the diffusion denoiser MLP forward pass.
+    /// Takes concatenated [noised_latent, timestep_embedding] and predicts noise.
+    /// </summary>
+    private Vector<T> DiffusionMLPForward(Vector<T> latent, Vector<T> timeEmbed)
+    {
+        int totalLen = latent.Length + timeEmbed.Length;
+        var input = new Vector<T>(totalLen);
+        for (int i = 0; i < latent.Length; i++) input[i] = latent[i];
+        for (int i = 0; i < timeEmbed.Length; i++) input[latent.Length + i] = timeEmbed[i];
+
+        var current = VectorToTensor(input);
+        foreach (var layer in _diffMLPLayers)
+        {
+            current = layer.Forward(current);
+        }
+
+        return TensorToVector(current, _options.LatentDimension);
+    }
+
+    #endregion
+
+    #region VAE Training
+
+    /// <summary>
+    /// Trains the VAE on a batch of rows: forward encode, reparameterize, decode, backward.
+    /// </summary>
+    private void TrainVAEBatch(Matrix<T> transformedData, int startRow, int endRow, T scaledLr)
+    {
+        // Build the VAE sub-network's layer list once — same set used per row.
+        var vaeLayers = new List<ILayer<T>>(Layers);
+        if (_meanLayer is not null) vaeLayers.Add(_meanLayer);
+        if (_logVarLayer is not null) vaeLayers.Add(_logVarLayer);
+        vaeLayers.AddRange(_decoderLayers);
+
+        // GPU-RESIDENT fast path — the ELBO closure is identical per row, so
+        // the fused plan compiles on the first row and replays across the batch
+        // with refreshed input per iteration.
+        var trainableVaeLayers = vaeLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableVaeLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        {
+            // Closure-captured (mean, logVar) from Fwd's single encoder pass —
+            // reused by Loss so the encoder doesn't run twice per row. Since input
+            // and target are the same tensor for VAE ELBO training, the encoder
+            // output is genuinely the same value in both closures. Fwd/Loss ordering
+            // is guaranteed by the fused-step contract.
+            Tensor<T>? capturedMean = null;
+            Tensor<T>? capturedLogVar = null;
+            Tensor<T> Fwd(Tensor<T> inp)
+            {
+                var enc = EncoderForwardOnTape(inp);
+                var (m, lv) = SplitEncoderOutput(enc);
+                capturedMean = m;
+                capturedLogVar = lv;
+                var zz = Reparameterize(m, lv);
+                return DecoderForward(zz);
+            }
+            Tensor<T> Loss(Tensor<T> rawOutput, Tensor<T> target)
+            {
+                var m = capturedMean;
+                var lv = capturedLogVar;
+                if (m is null || lv is null)
+                    throw new InvalidOperationException(
+                        "TabSyn VAE fused step: encoder outputs were not captured by Fwd. " +
+                        "This indicates the fused-step framework called the loss closure before " +
+                        "the forward closure, violating its documented Fwd-then-Loss ordering.");
+                return ComputeElboLossTape(rawOutput, target, m, lv);
+            }
+            // On a mid-batch fused failure after fusedEngaged, drop out of the
+            // fused loop and let the eager path below reprocess the remaining
+            // rows — no row is silently skipped.
+            bool fusedEngaged = false;
+            int nextEagerRow = startRow;
+            for (int row = startRow; row < endRow; row++)
+            {
+                var inputTensor = VectorToTensor(GetRow(transformedData, row));
+                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableVaeLayers, inputTensor, inputTensor,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _optimizer,
+                    out T _);
+                if (!ran)
+                {
+                    if (!fusedEngaged) break;
+                    // Fused engaged then failed mid-batch. Resume this row and the
+                    // remainder on the eager path so no gradient is lost.
+                    nextEagerRow = row;
+                    break;
+                }
+                fusedEngaged = true;
+                nextEagerRow = row + 1;
+            }
+            if (fusedEngaged && nextEagerRow >= endRow) return;
+            // Adjust the eager loop's start so it picks up where fused stopped.
+            startRow = nextEagerRow;
+        }
+
+        for (int row = startRow; row < endRow; row++)
+        {
+            var inputTensor = VectorToTensor(GetRow(transformedData, row));
+
+            using var tape = new GradientTape<T>();
+            var encoderOutput = EncoderForwardOnTape(inputTensor);
+            var (mean, logVar) = SplitEncoderOutput(encoderOutput);
+            var z = Reparameterize(mean, logVar);
+            var rawOutput = DecoderForward(z);
+            var loss = ComputeElboLossTape(rawOutput, inputTensor, mean, logVar);
+
+            TapeStepOver(tape, loss, vaeLayers);
+        }
+    }
+
+    /// <summary>Tape-connected encoder forward (Layers chain) for the VAE training step.</summary>
+    private Tensor<T> EncoderForwardOnTape(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in Layers) current = layer.Forward(current);
+        return current;
+    }
+
+    /// <summary>
+    /// Tape-connected negative ELBO: per-column reconstruction (tanh+MSE for the
+    /// continuous value, softmax+cross-entropy for mode indicators and categorical
+    /// one-hots — the CTGAN/TVAE transform loss) plus the Gaussian KL to N(0,I).
+    /// </summary>
+    private Tensor<T> ComputeElboLossTape(Tensor<T> rawOutput, Tensor<T> target, Tensor<T> mean, Tensor<T> logVar)
+    {
+        var raw = rawOutput.Rank == 1 ? rawOutput : Engine.Reshape(rawOutput, new[] { rawOutput.Length });
+        var tgt = target.Rank == 1 ? target : Engine.Reshape(target, new[] { target.Length });
+
+        Tensor<T>? recon = null;
+        int idx = 0;
+        if (_transformer is not null)
+        {
+            for (int col = 0; col < _columns.Count && idx < raw.Length; col++)
+            {
+                var transform = _transformer.GetTransformInfo(col);
+                if (transform.IsContinuous)
+                {
+                    var rawScalar = Engine.TensorSlice(raw, new[] { idx }, new[] { 1 });
+                    var tgtScalar = Engine.TensorSlice(tgt, new[] { idx }, new[] { 1 });
+                    var diff = Engine.TensorSubtract(Engine.TensorTanh(rawScalar), tgtScalar);
+                    recon = AddLoss(recon, ReduceToScalar(Engine.TensorSquare(diff)));
+                    idx++;
+                    int numModes = transform.Width - 1;
+                    if (numModes > 0) { recon = AddLoss(recon, SoftmaxCrossEntropy(raw, tgt, idx, numModes)); idx += numModes; }
+                }
+                else
+                {
+                    recon = AddLoss(recon, SoftmaxCrossEntropy(raw, tgt, idx, transform.Width));
+                    idx += transform.Width;
+                }
+            }
+        }
+        recon ??= ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(raw, tgt)));
+
+        // KL(N(mean, exp(logVar)) || N(0, I)) = -0.5 * Σ(1 + logVar - mean² - exp(logVar)).
+        var klTerm = Engine.TensorSubtract(
+            Engine.TensorSubtract(Engine.TensorAddScalar(logVar, NumOps.One), Engine.TensorSquare(mean)),
+            Engine.TensorExp(logVar));
+        var kl = Engine.TensorMultiplyScalar(ReduceToScalar(klTerm), NumOps.FromDouble(-0.5));
+        return Engine.TensorAdd(recon, kl);
+    }
+
+    private Tensor<T> SoftmaxCrossEntropy(Tensor<T> raw, Tensor<T> tgt, int start, int count)
+    {
+        if (count <= 0) return ReduceToScalar(Engine.TensorSlice(raw, new[] { start }, new[] { 0 }));
+        var rawSlice = Engine.TensorSlice(raw, new[] { start }, new[] { count });
+        var tgtSlice = Engine.TensorSlice(tgt, new[] { start }, new[] { count });
+        var logProbs = Engine.TensorLogSoftmax(rawSlice, axis: 0);
+        return Engine.TensorNegate(ReduceToScalar(Engine.TensorMultiply(tgtSlice, logProbs)));
+    }
+
+    private Tensor<T> ReduceToScalar(Tensor<T> t)
+        => Engine.ReduceSum(t, Enumerable.Range(0, t.Shape.Length).ToArray(), keepDims: false);
+
+    private Tensor<T> AddLoss(Tensor<T>? acc, Tensor<T> term)
+        => acc is null ? term : Engine.TensorAdd(acc, term);
+
+    /// <summary>
+    /// Encodes all training data rows to their mean latent representations.
+    /// </summary>
+    private Matrix<T> EncodeAllData(Matrix<T> transformedData)
+    {
+        int latentDim = _options.LatentDimension;
+        var latentCodes = new Matrix<T>(transformedData.Rows, latentDim);
+
+        for (int i = 0; i < transformedData.Rows; i++)
+        {
+            var inputVec = GetRow(transformedData, i);
+            var inputTensor = VectorToTensor(inputVec);
+
+            var encoderOutput = Predict(inputTensor);
+            var (mean, _) = SplitEncoderOutput(encoderOutput);
+
+            for (int j = 0; j < latentDim && j < mean.Length; j++)
+            {
+                latentCodes[i, j] = mean[j];
+            }
+        }
+
+        return latentCodes;
+    }
+
+    #endregion
+
+    #region Diffusion Training
+
+    /// <summary>
+    /// Trains the latent diffusion model on a batch of latent codes.
+    /// </summary>
+    private void TrainDiffusionBatch(Matrix<T> latentCodes, int startRow, int endRow, T scaledLr)
+    {
+        if (_latentDiffusion is null) return;
+
+        // MultiSlotFusedStep cache: reused across rows so the compiled plan is
+        // built once (on the first row) and replayed per subsequent row by
+        // refreshing slot data. See ooples/AiDotNet#1846.
+        AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
+        try
+        {
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(_diffMLPLayers).ToArray();
+            AiDotNet.Tensors.Engines.Compilation.OptimizerType mfsOptType = default;
+            float mfsLr = 0f, mfsB1 = 0f, mfsB2 = 0f, mfsEps = 0f, mfsWd = 0f;
+            bool fusedEligible = false;
+            if (trainableParams.Length > 0)
+            {
+                fusedEligible = NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                    _optimizer,
+                    out mfsOptType, out mfsLr, out mfsB1, out mfsB2,
+                    out mfsEps, out mfsWd, out _, out _);
+            }
+
+            for (int row = startRow; row < endRow; row++)
+            {
+                int t = _latentDiffusion.SampleTimestep();
+                var clean = GetRow(latentCodes, row);
+                var (noisy, actualNoise) = _latentDiffusion.AddNoise(clean, t);
+                var timeEmbed = CreateTimestepEmbedding(t);
+
+                if (fusedEligible)
+                {
+                    // Slots: [noisyLatent, actualNoise, projectedTimeEmbed].
+                    // _timestepProjection is NOT in _diffMLPLayers (parity with the
+                    // eager path — it's detached there too), so we precompute the
+                    // projected embedding host-side and pass it as slot data.
+                    var slots = new[]
+                    {
+                        VectorToTensor(noisy),
+                        VectorToTensor(actualNoise),
+                        VectorToTensor(timeEmbed),
+                    };
+                    multiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                    Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
+                    {
+                        // s[0] noisyLatent, s[1] actualNoise (unused here — read
+                        // in Loss), s[2] projectedTimeEmbed. Concat + MLP forward.
+                        int totalLen = s[0].Length + s[2].Length;
+                        var input = Engine.TensorConcatenate(new[] { s[0], s[2] }, axis: 0);
+                        var current = input;
+                        foreach (var layer in _diffMLPLayers) current = layer.Forward(current);
+                        return current.Rank == 1 ? current : Engine.Reshape(current, new[] { current.Length });
+                    }
+                    Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
+                    {
+                        var diff = Engine.TensorSubtract(pred, s[1]);
+                        return ReduceToScalar(Engine.TensorSquare(diff));
+                    }
+                    if (multiSlotStep.TryStep(
+                            parameters: trainableParams,
+                            zeroGradAction: null,
+                            freshSlotData: slots,
+                            forward: ForwardFromSlots,
+                            computeLoss: ComputeLossFromSlots,
+                            optimizerType: mfsOptType,
+                            learningRate: mfsLr,
+                            beta1: mfsB1,
+                            beta2: mfsB2,
+                            epsilon: mfsEps,
+                            weightDecay: mfsWd,
+                            out T _))
+                    {
+                        continue;
+                    }
+                }
+
+                using var tape = new GradientTape<T>();
+                var predictedNoise = DiffusionMLPForwardOnTape(noisy, timeEmbed);
+                // ε-prediction MSE (Ho et al. 2020) on the VAE latent codes (Zhang et al. 2024 TabSyn).
+                var diff2 = Engine.TensorSubtract(predictedNoise, VectorToTensor(actualNoise));
+                var loss = ReduceToScalar(Engine.TensorSquare(diff2));
+                TapeStepOver(tape, loss, _diffMLPLayers);
+            }
+        }
+        finally
+        {
+            multiSlotStep?.Dispose();
+        }
+    }
+
+    /// <summary>Tape-connected latent-diffusion denoiser forward returning the predicted noise tensor.</summary>
+    private Tensor<T> DiffusionMLPForwardOnTape(Vector<T> latent, Vector<T> timeEmbed)
+    {
+        int totalLen = latent.Length + timeEmbed.Length;
+        var input = new Vector<T>(totalLen);
+        for (int i = 0; i < latent.Length; i++) input[i] = latent[i];
+        for (int i = 0; i < timeEmbed.Length; i++) input[latent.Length + i] = timeEmbed[i];
+
+        var current = VectorToTensor(input);
+        foreach (var layer in _diffMLPLayers) current = layer.Forward(current);
+        return current.Rank == 1 ? current : Engine.Reshape(current, new[] { current.Length });
+    }
+
+    #endregion
+
+    #region Output Activations
+
+    /// <summary>
+    /// Applies per-column output activations: tanh for continuous values, softmax for modes/categories.
+    /// </summary>
+    private Tensor<T> ApplyOutputActivations(Tensor<T> output)
+    {
+        if (_transformer is null) return output;
+
+        var result = new Tensor<T>(output._shape);
+        int idx = 0;
+
+        for (int col = 0; col < Columns.Count && idx < output.Length; col++)
+        {
+            var transform = _transformer.GetTransformInfo(col);
+            if (transform.IsContinuous)
+            {
+                if (idx < output.Length)
+                {
+                    result[idx] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(output[idx])));
+                    idx++;
+                }
+                int numModes = transform.Width - 1;
+                if (numModes > 0) ApplySoftmax(output, result, ref idx, numModes);
+            }
+            else
+            {
+                ApplySoftmax(output, result, ref idx, transform.Width);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Applies stable softmax activation to a contiguous block of tensor elements.
+    /// </summary>
+    private void ApplySoftmax(Tensor<T> input, Tensor<T> output, ref int idx, int count)
+    {
+        if (count <= 0) return;
+        int actualCount = Math.Min(count, input.Length - idx);
+        if (actualCount <= 0) return;
+        var slice = new Tensor<T>([actualCount]);
+        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
+        var result = Engine.Softmax(slice, -1);
+        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
+        idx += actualCount;
+    }
+
+    #endregion
+
+    #region Serialization and Model Metadata (GANDALF Pattern)
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "LatentDimension", _options.LatentDimension },
+                { "EncoderDimensions", _options.EncoderDimensions },
+                { "DecoderDimensions", _options.DecoderDimensions },
+                { "DiffusionMLPDimensions", _options.DiffusionMLPDimensions },
+                { "DiffusionSteps", _options.DiffusionSteps },
+                { "VAEEpochs", _options.VAEEpochs },
+                { "DiffusionEpochs", _options.DiffusionEpochs },
+                { "EncoderLayerCount", Layers.Count },
+                { "EncoderLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_options.LatentDimension);
+        writer.Write(_options.EncoderDimensions.Length);
+        foreach (var dim in _options.EncoderDimensions)
+        {
+            writer.Write(dim);
+        }
+        writer.Write(_options.DecoderDimensions.Length);
+        foreach (var dim in _options.DecoderDimensions)
+        {
+            writer.Write(dim);
+        }
+        writer.Write(_options.DiffusionMLPDimensions.Length);
+        foreach (var dim in _options.DiffusionMLPDimensions)
+        {
+            writer.Write(dim);
+        }
+        writer.Write(_options.DiffusionSteps);
+        writer.Write(_options.BetaStart);
+        writer.Write(_options.BetaEnd);
+        writer.Write(_options.BatchSize);
+        writer.Write(_options.VAELearningRate);
+        writer.Write(_options.DiffusionLearningRate);
+        writer.Write(_options.VGMModes);
+        writer.Write(_options.TimestepEmbeddingDimension);
+
+        // Persist the auxiliary sub-networks that live outside the base Layers collection. Without
+        // this, a saved/cloned model would fall back to freshly-initialized decoder / diffusion-MLP
+        // / projection weights and generate garbage.
+        writer.Write(IsFitted);
+        writer.Write(_dataWidth);
+        writer.Write(_usingCustomLayers);
+        AuxLayerSerialization.Write(writer, _meanLayer);
+        AuxLayerSerialization.Write(writer, _logVarLayer);
+        AuxLayerSerialization.Write(writer, _timestepProjection);
+        AuxLayerSerialization.WriteParameters(writer, _decoderLayers);
+        AuxLayerSerialization.WriteParameters(writer, _diffMLPLayers);
+
+        // The fitted VGM transformer (column layout + GMM parameters) is required to decode and
+        // inverse-transform generated latents. The latent diffusion process is fully determined by
+        // the options, so it is reconstructed on load rather than serialized.
+        if (_transformer is not null)
+        {
+            writer.Write(true);
+            _transformer.Serialize(writer);
+        }
+        else
+        {
+            writer.Write(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Advance past the option fields (the options themselves are reconstructed in
+        // CreateNewInstance); they must still be read to reach the auxiliary-network data.
+        _ = reader.ReadInt32();                                  // LatentDimension
+        int encDimCount = reader.ReadInt32();
+        for (int i = 0; i < encDimCount; i++) _ = reader.ReadInt32();
+        int decDimCount = reader.ReadInt32();
+        for (int i = 0; i < decDimCount; i++) _ = reader.ReadInt32();
+        int diffDimCount = reader.ReadInt32();
+        for (int i = 0; i < diffDimCount; i++) _ = reader.ReadInt32();
+        _ = reader.ReadInt32();                                  // DiffusionSteps
+        _ = reader.ReadDouble();                                 // BetaStart
+        _ = reader.ReadDouble();                                 // BetaEnd
+        _ = reader.ReadInt32();                                  // BatchSize
+        _ = reader.ReadDouble();                                 // VAELearningRate
+        _ = reader.ReadDouble();                                 // DiffusionLearningRate
+        _ = reader.ReadInt32();                                  // VGMModes
+        _ = reader.ReadInt32();                                  // TimestepEmbeddingDimension
+
+        IsFitted = reader.ReadBoolean();
+        _dataWidth = reader.ReadInt32();
+        _usingCustomLayers = reader.ReadBoolean();
+
+        // Rebuild the auxiliary structures deterministically (the encoder in Layers was already
+        // restored by the base class) so the persisted parameters can be loaded back into them.
+        if (IsFitted)
+        {
+            BuildAuxiliaryNetworks(_dataWidth);
+        }
+
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
+        _meanLayer = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], identity))
+            as FullyConnectedLayer<T>;
+        _logVarLayer = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], identity))
+            as FullyConnectedLayer<T>;
+        _timestepProjection = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], silu))
+            as FullyConnectedLayer<T>;
+        AuxLayerSerialization.ReadParametersInto(reader, _decoderLayers);
+        AuxLayerSerialization.ReadParametersInto(reader, _diffMLPLayers);
+
+        bool hasTransformer = reader.ReadBoolean();
+        if (hasTransformer)
+        {
+            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+            _transformer.Deserialize(reader);
+            _columns = new List<ColumnMetadata>(_transformer.Columns);
+
+            // The latent diffusion process holds no learned parameters — it is fully determined by
+            // the configured schedule, so reconstruct it for the generation path.
+            _latentDiffusion = new GaussianDiffusion<T>(
+                _options.DiffusionSteps, _options.BetaStart, _options.BetaEnd, "linear", _random);
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new TabSynGenerator<T>(
+            Architecture,
+            _options,
+            _optimizer,
+            _lossFunction);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetFeatureImportance()
+    {
+        var importance = new Dictionary<string, T>();
+        int numFeatures = Architecture.CalculatedInputSize;
+        var uniformValue = NumOps.FromDouble(1.0 / Math.Max(numFeatures, 1));
+        for (int f = 0; f < numFeatures; f++)
+        {
+            importance[$"feature_{f}"] = uniformValue;
+        }
+        return importance;
+    }
+
+    #endregion
+
+    #region Input Validation and Column Management
+
+    /// <summary>
+    /// Validates inputs to the Fit method.
+    /// </summary>
+    private static void ValidateFitInputs(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    {
+        if (data.Rows == 0 || data.Columns == 0)
+        {
+            throw new ArgumentException("Data matrix must not be empty.", nameof(data));
+        }
+
+        if (columns.Count == 0)
+        {
+            throw new ArgumentException("Column metadata list must not be empty.", nameof(columns));
+        }
+
+        if (columns.Count != data.Columns)
+        {
+            throw new ArgumentException(
+                $"Column metadata count ({columns.Count}) must match data column count ({data.Columns}).",
+                nameof(columns));
+        }
+
+        if (epochs <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs must be positive.");
+        }
+    }
+
+    private List<ColumnMetadata> PrepareColumns(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        var prepared = new List<ColumnMetadata>(columns.Count);
+
+        for (int col = 0; col < columns.Count; col++)
+        {
+            var meta = columns[col].Clone();
+            meta.ColumnIndex = col;
+
+            if (meta.IsNumerical)
+            {
+                ComputeColumnStatistics(data, col, meta);
+            }
+            else if (meta.IsCategorical && meta.NumCategories == 0)
+            {
+                var categories = new HashSet<string>();
+                for (int row = 0; row < data.Rows; row++)
+                {
+                    var val = NumOps.ToDouble(data[row, col]);
+                    categories.Add(val.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+                meta.Categories = categories.OrderBy(c => c, StringComparer.Ordinal).ToList().AsReadOnly();
+            }
+
+            prepared.Add(meta);
+        }
+
+        return prepared;
+    }
+
+    private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
+    {
+        int n = data.Rows;
+        double sum = 0;
+        double min = double.MaxValue;
+        double max = double.MinValue;
+
+        for (int row = 0; row < n; row++)
+        {
+            double val = NumOps.ToDouble(data[row, colIndex]);
+            sum += val;
+            if (val < min) min = val;
+            if (val > max) max = val;
+        }
+
+        double mean = sum / n;
+        double sumSqDiff = 0;
+        for (int row = 0; row < n; row++)
+        {
+            double val = NumOps.ToDouble(data[row, colIndex]);
+            double diff = val - mean;
+            sumSqDiff += diff * diff;
+        }
+
+        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
+        if (std < 1e-10) std = 1e-10;
+
+        meta.Min = min;
+        meta.Max = max;
+        meta.Mean = mean;
+        meta.Std = std;
+    }
+
+    #endregion
+
+    #region Random Sampling Utilities
+
+    private T SampleStandardNormal()
+    {
+        double u1 = 1.0 - _random.NextDouble();
+        double u2 = _random.NextDouble();
+        double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return NumOps.FromDouble(z);
+    }
+
+    private Vector<T> CreateStandardNormalVector(int length)
+    {
+        var v = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            v[i] = SampleStandardNormal();
+        }
+        return v;
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static Vector<T> GetRow(Matrix<T> matrix, int row)
+    {
+        var v = new Vector<T>(matrix.Columns);
+        for (int j = 0; j < matrix.Columns; j++) v[j] = matrix[row, j];
+        return v;
+    }
+
+    private static Tensor<T> VectorToTensor(Vector<T> v)
+    {
+        var t = new Tensor<T>([v.Length]);
+        for (int i = 0; i < v.Length; i++) t[i] = v[i];
+        return t;
+    }
+
+    private static Vector<T> TensorToVector(Tensor<T> t, int length)
+    {
+        var v = new Vector<T>(length);
+        int copyLen = Math.Min(length, t.Length);
+        for (int i = 0; i < copyLen; i++) v[i] = t[i];
+        return v;
+    }
+
+    #endregion
+
+
+    #region Tensor Shape Helpers
+
+    /// <summary>
+    /// Derives a tensor shape that preserves the rank of the reference but replaces the last dimension.
+    /// </summary>
+    private static int[] DeriveShapeWithLastDim(int[] referenceShape, int lastDim)
+    {
+        if (referenceShape.Length == 0)
+            return [lastDim];
+        var shape = (int[])referenceShape.Clone();
+        shape[^1] = lastDim;
+        return shape;
+    }
+
+    #endregion
+}

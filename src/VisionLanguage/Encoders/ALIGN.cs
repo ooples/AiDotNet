@@ -1,0 +1,404 @@
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
+
+namespace AiDotNet.VisionLanguage.Encoders;
+
+/// <summary>
+/// ALIGN (A Large-scale ImaGe and Noisy-text embedding) model for zero-shot classification
+/// and cross-modal retrieval using EfficientNet as the vision encoder.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// ALIGN (Jia et al., ICML 2021) demonstrates that simple dual-encoder contrastive learning
+/// achieves strong image-text alignment when trained at massive scale. Unlike CLIP which uses
+/// a Vision Transformer, ALIGN uses an EfficientNet-B7 as its vision encoder, showing that
+/// the contrastive learning recipe is architecture-agnostic.
+/// </para>
+/// <para>
+/// <b>Key Innovation:</b> ALIGN trains on 1.8 billion noisy alt-text image-text pairs without
+/// expensive filtering, showing that scale compensates for data noise. The EfficientNet backbone
+/// provides a CNN-based alternative to ViT for vision encoding.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> ALIGN is similar to CLIP but uses a different type of image model
+/// (EfficientNet, which is a convolutional neural network) instead of a Vision Transformer.
+/// It was trained on a very large but noisy dataset, proving that more data beats cleaner data.
+/// </para>
+/// <para>
+/// <b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision" (Jia et al., ICML 2021)</item>
+/// </list>
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an ALIGN model for contrastive image-text alignment
+/// // using EfficientNet vision encoder trained on 1.8B noisy pairs
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ALIGN&lt;double&gt;(architecture, "align.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ALIGN&lt;double&gt;(architecture, new ALIGNOptions());
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper(
+    "Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision",
+    "https://arxiv.org/abs/2102.05918",
+    Year = 2021,
+    Authors = "Jia et al."
+)]
+public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+{
+    private readonly ALIGNOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    /// <summary>
+    /// Creates an ALIGN model in ONNX inference mode.
+    /// </summary>
+    public ALIGN(
+        NeuralNetworkArchitecture<T> architecture,
+        string imageEncoderModelPath,
+        ALIGNOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new ALIGNOptions();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.VisionEmbeddingDim;
+
+        if (string.IsNullOrWhiteSpace(imageEncoderModelPath))
+            throw new ArgumentException(
+                "Image encoder model path cannot be null or empty.",
+                nameof(imageEncoderModelPath)
+            );
+        if (!File.Exists(imageEncoderModelPath))
+            throw new FileNotFoundException(
+                $"ONNX model not found: {imageEncoderModelPath}",
+                imageEncoderModelPath
+            );
+
+        _options.ImageEncoderModelPath = imageEncoderModelPath;
+        OnnxImageEncoder = new OnnxModel<T>(imageEncoderModelPath, _options.OnnxOptions);
+
+        if (_options.TextEncoderModelPath is { } tp && !string.IsNullOrEmpty(tp))
+        {
+            if (!File.Exists(tp))
+                throw new FileNotFoundException($"Text encoder ONNX model not found: {tp}", tp);
+            OnnxTextEncoder = new OnnxModel<T>(tp, _options.OnnxOptions);
+        }
+
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates an ALIGN model in native training mode.
+    /// </summary>
+    public ALIGN(
+        NeuralNetworkArchitecture<T> architecture,
+        ALIGNOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new ALIGNOptions();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.VisionEmbeddingDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.VisionEmbeddingDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxSequenceLength => _options.MaxSequenceLength;
+    public int TextEmbeddingDimension => _options.TextEmbeddingDim;
+    public int ProjectionDimension => _options.ProjectionDim;
+    public T Temperature => NumOps.FromDouble(_options.Temperature);
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var preprocessed = PreprocessImage(image);
+        if (IsOnnxMode && OnnxImageEncoder is not null)
+            return L2Normalize(OnnxImageEncoder.Run(preprocessed));
+        return L2Normalize(ForwardVisionEncoder(preprocessed));
+    }
+
+    public Tensor<T> EncodeText(string text)
+    {
+        ThrowIfDisposed();
+        var tokenized = TokenizeText(text);
+        if (IsOnnxMode && OnnxTextEncoder is not null)
+            return L2Normalize(OnnxTextEncoder.Run(tokenized));
+        return L2Normalize(ForwardTextEncoder(tokenized));
+    }
+
+    public Tensor<T>[] EncodeTexts(string[] texts)
+    {
+        var embeddings = new Tensor<T>[texts.Length];
+        for (int i = 0; i < texts.Length; i++)
+            embeddings[i] = EncodeText(texts[i]);
+        return embeddings;
+    }
+
+    public T ComputeSimilarity(Tensor<T> image, string text)
+    {
+        var imageEmb = EncodeImage(image);
+        var textEmb = EncodeText(text);
+        return CosineSimilarity(imageEmb, textEmb);
+    }
+
+    public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, string[] labels)
+    {
+        var imageEmb = EncodeImage(image);
+        var textEmbs = EncodeTexts(labels);
+        var logits = new Tensor<T>([labels.Length]);
+        double temp = _options.Temperature;
+        for (int i = 0; i < labels.Length; i++)
+        {
+            double sim = NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i]));
+            logits[i] = NumOps.FromDouble(sim / temp);
+        }
+        var probs = Softmax(logits);
+        var result = new Dictionary<string, T>();
+        for (int i = 0; i < labels.Length; i++)
+            result[labels[i]] = probs[i];
+        return result;
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            // Caller-supplied layer graph: keep historic single-list behaviour.
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+
+        // ALIGN vision uses EfficientNet-B7 MBConv blocks (no patch embedding —
+        // EfficientNet processes [B, C, H, W] natively). Block size: 4 layers
+        // (or 5 with dropout): Dense + LN + Dense + LN + [Dropout]. Vision
+        // encoder lives in Layers, text encoder in TextEncoderLayers.
+        int visionBlockSize = _options.DropoutRate > 0 ? 5 : 4;
+        int visionLayerCount = 2 + _options.NumVisionLayers * visionBlockSize;
+        SplitDualStreamLayers(
+            LayerHelper<T>.CreateDefaultALIGNLayers(
+                visionEmbeddingDim: _options.VisionEmbeddingDim,
+                textEmbeddingDim: _options.TextEmbeddingDim,
+                projectionDim: _options.ProjectionDim,
+                numVisionLayers: _options.NumVisionLayers,
+                numTextLayers: _options.NumTextLayers,
+                numTextHeads: _options.NumTextHeads,
+                dropoutRate: _options.DropoutRate
+            ),
+            visionLayerCount
+        );
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxImageEncoder is not null)
+            return OnnxImageEncoder.Run(input);
+        SetTrainingMode(false);
+        var current = PreprocessImage(input);
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateTextEncoderTrainableLayers();
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var layer in Layers)
+        {
+            int count = checked((int)layer.ParameterCount);
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var meta = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "ALIGN-Native" : "ALIGN-ONNX",
+            Description =
+                "ALIGN: A Large-scale ImaGe and Noisy-text embedding (Jia et al., ICML 2021)",
+            FeatureCount = _options.ProjectionDim,
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers,
+        };
+        meta.AdditionalInfo["Architecture"] = "ALIGN";
+        meta.AdditionalInfo["VisionEncoder"] = "EfficientNet-B7";
+        meta.AdditionalInfo["ProjectionDim"] = _options.ProjectionDim.ToString();
+        return meta;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ImageEncoderModelPath ?? string.Empty);
+        writer.Write(_options.TextEncoderModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionEmbeddingDim);
+        writer.Write(_options.TextEmbeddingDim);
+        writer.Write(_options.ProjectionDim);
+        writer.Write(_options.Temperature);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string imgPath = reader.ReadString();
+        if (!string.IsNullOrEmpty(imgPath))
+            _options.ImageEncoderModelPath = imgPath;
+        string txtPath = reader.ReadString();
+        if (!string.IsNullOrEmpty(txtPath))
+            _options.TextEncoderModelPath = txtPath;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionEmbeddingDim = reader.ReadInt32();
+        _options.TextEmbeddingDim = reader.ReadInt32();
+        _options.ProjectionDim = reader.ReadInt32();
+        _options.Temperature = reader.ReadDouble();
+
+        if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (_options.TextEncoderModelPath is { } tp2 && !string.IsNullOrEmpty(tp2))
+            OnnxTextEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (
+            !_useNativeMode
+            && _options.ImageEncoderModelPath is { } mp
+            && !string.IsNullOrEmpty(mp)
+        )
+            return new ALIGN<T>(Architecture, mp, _options);
+        return new ALIGN<T>(Architecture, _options);
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    /// <summary>
+    /// Aligns <c>_options.ImageSize</c> with <c>Architecture.InputHeight</c> when
+    /// the architecture declares an explicit square spatial extent.
+    /// </summary>
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
+    }
+
+    private Tensor<T> ForwardVisionEncoder(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
+    }
+
+    private Tensor<T> ForwardTextEncoder(Tensor<T> tokens)
+    {
+        var current = tokens;
+        foreach (var layer in TextEncoderLayers)
+            current = layer.Forward(current);
+        return current;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(ALIGN<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        if (disposing)
+        {
+            OnnxImageEncoder?.Dispose();
+            OnnxTextEncoder?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}

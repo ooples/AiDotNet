@@ -1,0 +1,73 @@
+name: CI Website
+
+on:
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'src/**'
+      - 'tools/WikiGenerator/**'
+      - '.github/workflows/deploy-website.yml'
+      - '.github/workflows/ci-website.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-website-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    name: Build & Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      # The API reference wiki is generated (not committed) from the library's XML docs.
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Generate API reference wiki
+        working-directory: ${{ github.workspace }}
+        run: |
+          dotnet build src/AiDotNet.csproj -c Debug -f net8.0
+          dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build website
+        run: npm run build   # astro build + pagefind index (postbuild)
+        env:
+          VERCEL: '1'
+          # The API reference wiki adds ~10.7K content pages; raise the V8 heap so the
+          # static build doesn't OOM on the runner.
+          NODE_OPTIONS: '--max-old-space-size=6144'
+
+      - name: Verify build output
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "::error::Build output missing dist/index.html"
+            exit 1
+          fi
+          PAGE_COUNT=$(find dist -name '*.html' | wc -l)
+          echo "Built $PAGE_COUNT pages"
+          if [ "$PAGE_COUNT" -lt 10 ]; then
+            echo "::error::Suspiciously low page count ($PAGE_COUNT). Expected at least 10."
+            exit 1
+          fi
+          echo "## Website Build" >> $GITHUB_STEP_SUMMARY
+          echo "- Pages built: $PAGE_COUNT" >> $GITHUB_STEP_SUMMARY

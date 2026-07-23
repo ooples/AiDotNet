@@ -1,0 +1,73 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Loss Functions"
+  seoTitle="37 Loss Functions for .NET - AiDotNet"
+  seoDescription="Classification, regression, segmentation, and generative loss functions. CrossEntropy, Focal, Dice, Perceptual, InfoNCE, and 37 losses in C#."
+  count="37"
+  tagline="Comprehensive loss function library for every training objective"
+  description="37 loss functions covering classification (CrossEntropy, Focal, ArcFace), regression (MSE, Huber, Quantile), segmentation (Dice, Tversky, Lovasz), and generative training (Perceptual, LPIPS, SSIM, InfoNCE). All with automatic differentiation and GPU support."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>'
+  useCases={['Classification', 'Object Detection', 'Semantic Segmentation', 'Image Generation', 'Contrastive Learning', 'Face Recognition', 'Regression', 'Ranking']}
+  subcategories={[
+    {
+      name: 'Classification Losses',
+      description: 'Losses for categorical prediction tasks with class imbalance handling.',
+      items: [
+        { name: 'CrossEntropy', detail: 'Standard cross-entropy with optional label smoothing and class weights.' },
+        { name: 'BinaryCrossEntropy', detail: 'Binary classification with pos_weight for imbalanced datasets.' },
+        { name: 'FocalLoss', detail: 'Down-weight easy examples to focus on hard cases (RetinaNet).' },
+        { name: 'ArcFace / CosFace', detail: 'Angular margin losses for discriminative face/embedding learning.' },
+        { name: 'PolyLoss', detail: 'Polynomial expansion of cross-entropy for improved tail-class accuracy.' },
+      ]
+    },
+    {
+      name: 'Regression Losses',
+      description: 'Losses for continuous value prediction with outlier robustness.',
+      items: [
+        { name: 'MSE', detail: 'Mean Squared Error for standard regression objectives.' },
+        { name: 'MAE / L1', detail: 'Mean Absolute Error robust to outliers.' },
+        { name: 'Huber', detail: 'Smooth transition between MSE (small errors) and MAE (large errors).' },
+        { name: 'LogCosh', detail: 'Log of hyperbolic cosine, twice differentiable and outlier-robust.' },
+        { name: 'Quantile', detail: 'Asymmetric loss for predicting specific quantiles.' },
+      ]
+    },
+    {
+      name: 'Segmentation Losses',
+      description: 'Specialized losses for pixel-level prediction tasks.',
+      items: [
+        { name: 'Dice', detail: 'Overlap-based loss for imbalanced segmentation masks.' },
+        { name: 'Tversky', detail: 'Generalized Dice with adjustable false positive/negative weighting.' },
+        { name: 'Lovasz', detail: 'Lovasz extension of IoU for direct mIoU optimization.' },
+        { name: 'Boundary', detail: 'Focus on boundary pixels for precise edge segmentation.' },
+      ]
+    },
+    {
+      name: 'Generative & Contrastive Losses',
+      description: 'Losses for image generation, representation learning, and similarity.',
+      items: [
+        { name: 'Perceptual (VGG)', detail: 'Feature-space loss using VGG activations for perceptual quality.' },
+        { name: 'LPIPS', detail: 'Learned Perceptual Image Patch Similarity for generation quality.' },
+        { name: 'SSIM', detail: 'Structural Similarity Index for image quality assessment.' },
+        { name: 'InfoNCE', detail: 'Noise Contrastive Estimation for self-supervised representation learning.' },
+        { name: 'NT-Xent', detail: 'Normalized Temperature-scaled Cross Entropy for contrastive learning (SimCLR).' },
+        { name: 'Triplet', detail: 'Learn embeddings where positives are closer than negatives by a margin.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train with a custom loss function using AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 784, hiddenSize: 128, outputSize: 10))
+    .ConfigureLossFunction(new FocalLoss<float>(
+        gamma: 2.0f, alpha: 0.25f))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(newSample);`}
+  codeTitle="Loss functions with AiModelBuilder"
+/>

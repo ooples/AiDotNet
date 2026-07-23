@@ -1,0 +1,169 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+
+namespace AiDotNet.Diffusion.FastGeneration;
+
+/// <summary>
+/// One-Step Diffusion via Shortcut (OSDS) model for single-step high-quality generation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// OSDS learns a shortcut function that directly maps noise to clean data in a single
+/// forward pass. Unlike distillation approaches, it trains a dedicated shortcut path
+/// that bypasses the iterative denoising process entirely. The shortcut is learned
+/// alongside the standard diffusion trajectory, enabling both one-step and multi-step
+/// generation from the same model.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Most diffusion models need many steps to turn noise into an image.
+/// OSDS learns a "shortcut" — a direct path from noise to image in just one step. Think of
+/// it like learning both the scenic route (multi-step) and a highway (one-step) to the same
+/// destination. You can choose speed or quality depending on your needs.
+/// </para>
+/// <para>
+/// Reference: Frans et al., "One Step Diffusion via Shortcut Models", 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 1 };
+/// var model = new OSDSModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("One Step Diffusion via Shortcut Models", "https://arxiv.org/abs/2410.12557", Year = 2024, Authors = "Frans et al.")]
+public class OSDSModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 4;
+    private const double DEFAULT_GUIDANCE = 0.0;
+
+    private UNetNoisePredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+
+    /// <summary>
+    /// Initializes a new OSDS model with optional configuration.
+    /// </summary>
+    /// <param name="architecture">Neural network architecture configuration.</param>
+    /// <param name="options">Diffusion model options.</param>
+    /// <param name="scheduler">Noise scheduler.</param>
+    /// <param name="predictor">UNet noise predictor with shortcut path.</param>
+    /// <param name="vae">VAE for latent encoding/decoding.</param>
+    /// <param name="conditioner">Text conditioning module.</param>
+    /// <param name="seed">Random seed for reproducibility.</param>
+    public OSDSModel(
+        NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null, UNetNoisePredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
+        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(UNetNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new UNetNoisePredictor<T>(
+            architecture: Architecture, inputChannels: 4, outputChannels: LATENT_CHANNELS,
+            baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocks: 2, attentionResolutions: new[] { 4, 2, 1 }, contextDim: 768, seed: seed);
+        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        var combined = new Vector<T>(pp.Length + vp.Length);
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Clone the ACTUAL predictor and VAE (mirrors InstaFlowModel/MultiDiffusionModel): passing only
+        // conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved UNet/VAE, so once
+        // the source resolved its lazy layers via a forward pass GetParameters() returned a larger count
+        // than the clone could accept — SetParameters threw / Clone diverged. Cloning the resolved
+        // predictor/VAE (+ same architecture/options/scheduler) makes the clone structurally identical.
+        var clone = new OSDSModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T> { Name = "OSDS", Version = "1.0",
+            Description = "One-step diffusion via shortcut models for instant generation",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount };
+        m.SetProperty("architecture", "shortcut-unet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("supports_one_step", true);
+        m.SetProperty("supports_multi_step", true);
+        return m;
+    }
+}

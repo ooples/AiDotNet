@@ -1,0 +1,1468 @@
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Memory;
+
+namespace AiDotNet.NeuralNetworks.Layers.SSM;
+
+/// <summary>
+/// Implements a single RWKV-7 "Goose" block with the WKV-7 kernel featuring dynamic state evolution.
+/// </summary>
+/// <remarks>
+/// <para>
+/// RWKV-7 is the seventh generation of the RWKV architecture, introducing expressive dynamic state
+/// evolution that replaces the fixed exponential decay of previous versions with learnable, data-dependent
+/// transition matrices. This allows the model to dynamically control how information is stored, retained,
+/// and forgotten in the recurrent state.
+/// </para>
+/// <para>
+/// Each block contains two sub-layers with residual connections:
+/// <code>
+///   Time Mixing (WKV-7 kernel):
+///     1. Token shift: lerp between current and previous token
+///     2. Compute r, k, v, a, b from shifted inputs via linear projections
+///     3. WKV-7 state update: state_t = diag(a_t) * state_{t-1} + b_t^T * (k_t * v_t^T)
+///     4. Output: sigmoid(r_t) * GroupNorm(state_t * k_t)
+///     5. Linear output projection
+///
+///   Channel Mixing (SiLU gating):
+///     1. Token shift: lerp between current and previous token
+///     2. r_t = W_r * shifted_r, k_t = W_k * shifted_k
+///     3. output = sigmoid(r_t) * (W_v * SiLU(k_t))
+/// </code>
+/// </para>
+/// <para>
+/// Key innovations over RWKV-6 "Finch":
+/// <list type="bullet">
+///   <item>Learnable transition vectors a_t (diagonal state decay) and b_t (additive state injection)</item>
+///   <item>State evolution: S_t = diag(a_t) * S_{t-1} + b_t * (k_t * v_t), replacing fixed exp decay</item>
+///   <item>Group normalization on WKV output for stability</item>
+///   <item>SiLU activation in channel mixing instead of squared ReLU</item>
+/// </list>
+/// </para>
+/// <para><b>For Beginners:</b> This is one layer in the RWKV-7 model. Think of it as a smart
+/// information processor that:
+/// 1. Reads the current word and blends it with the previous word
+/// 2. Decides what to remember and what to forget (using learnable transition rules)
+/// 3. Produces an output that captures both local and long-range context
+///
+/// Unlike Transformers that re-read the entire text each time, RWKV-7 keeps a compact running
+/// summary (the "state") that gets updated with each new word, making it very efficient.
+/// </para>
+/// <para>
+/// <b>Reference:</b> Peng et al., "RWKV-7 Goose with Expressive Dynamic State Evolution", 2025.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 2")]
+public partial class RWKV7Block<T> : LayerBase<T>
+{
+    // Configuration
+    private readonly int _modelDimension;
+    private readonly int _numHeads;
+    private readonly int _headDimension;
+    private readonly int _ffnDimension;
+
+    // ============ Time Mixing Parameters ============
+
+    // Token shift mixing coefficients: [modelDim]
+    private Tensor<T> _timeMixR;
+    private Tensor<T> _timeMixK;
+    private Tensor<T> _timeMixV;
+    private Tensor<T> _timeMixA;  // v7: shift coefficient for 'a' (state decay)
+    private Tensor<T> _timeMixB;  // v7: shift coefficient for 'b' (state injection)
+
+    // Linear projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _receptanceWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _valueWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _outputWeights;
+
+    // v7: Dynamic state evolution projections
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _aWeights;  // [modelDim, modelDim] projects to per-head diagonal decay
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _aBias;     // [modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _bWeights;  // [modelDim, modelDim] projects to per-head additive injection
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _bBias;     // [modelDim]
+
+    // v7: Group norm on WKV output (per head)
+    private Tensor<T> _groupNormGamma;  // [modelDim]
+    private Tensor<T> _groupNormBeta;   // [modelDim]
+
+    // ============ Channel Mixing Parameters ============
+
+    private Tensor<T> _channelMixR;  // [modelDim]
+    private Tensor<T> _channelMixK;  // [modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _channelKeyWeights;        // [modelDim, ffnDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _channelValueWeights;      // [ffnDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _channelReceptanceWeights; // [modelDim, modelDim]
+
+    // ============ Layer Norms ============
+
+    private Tensor<T> _normGamma1;
+    private Tensor<T> _normBeta1;
+    private Tensor<T> _normGamma2;
+    private Tensor<T> _normBeta2;
+
+    // ============ Cached values for backward ============
+
+    private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastTimeMixOutput;
+    private Tensor<T>? _lastChannelMixOutput;
+    private Tensor<T>? _lastNormed1;
+    private Tensor<T>? _lastNormed2;
+    private Tensor<T>? _lastAfterTimeMix;
+    private int[]? _originalInputShape;
+
+    // Time mixing forward caches
+    private Tensor<T>? _cachedWkvOut;
+    private Tensor<T>? _cachedR;       // [batch, seqLen, modelDim] receptance projection
+    private Tensor<T>? _cachedK;       // [batch, seqLen, modelDim] key projection
+    private Tensor<T>? _cachedV;       // [batch, seqLen, modelDim] value projection
+    private Tensor<T>? _cachedTimeMixNormed1; // [batch, seqLen, modelDim] normed input to time mixing
+    // WKV pre-gate values are reconstructed from _cachedWkvGated / sigmoid(r) during backward
+    private Tensor<T>? _cachedWkvGated;    // [batch, seqLen, modelDim] after gate, before groupNorm
+    // Previous tokens per timestep reconstructed from _cachedTimeMixNormed1 during backward
+
+    // Channel mixing forward caches
+    private Tensor<T>? _cachedChannelRGate;   // [batch, seqLen, modelDim] sigmoid(W_r * rInput)
+    private Tensor<T>? _cachedChannelSiLU;    // [batch, seqLen, ffnDim] SiLU(W_k * kInput)
+    private Tensor<T>? _cachedChannelVProj;   // [batch, seqLen, modelDim] W_v * SiLU(k)
+
+    // ============ Gradients ============
+
+    private Tensor<T>? _timeMixRGrad;
+    private Tensor<T>? _timeMixKGrad;
+    private Tensor<T>? _timeMixVGrad;
+    private Tensor<T>? _timeMixAGrad;
+    private Tensor<T>? _timeMixBGrad;
+    private Tensor<T>? _receptanceWeightsGrad;
+    private Tensor<T>? _keyWeightsGrad;
+    private Tensor<T>? _valueWeightsGrad;
+    private Tensor<T>? _outputWeightsGrad;
+    private Tensor<T>? _aWeightsGrad;
+    private Tensor<T>? _aBiasGrad;
+    private Tensor<T>? _bWeightsGrad;
+    private Tensor<T>? _bBiasGrad;
+    private Tensor<T>? _groupNormGammaGrad;
+    private Tensor<T>? _groupNormBetaGrad;
+    private Tensor<T>? _channelMixRGrad;
+    private Tensor<T>? _channelMixKGrad;
+    private Tensor<T>? _channelKeyWeightsGrad;
+    private Tensor<T>? _channelValueWeightsGrad;
+    private Tensor<T>? _channelReceptanceWeightsGrad;
+    private Tensor<T>? _normGamma1Grad;
+    private Tensor<T>? _normBeta1Grad;
+    private Tensor<T>? _normGamma2Grad;
+    private Tensor<T>? _normBeta2Grad;
+
+    // Recurrent state for autoregressive inference
+    private Tensor<T>? _recurrentState;       // [batch, numHeads, headDim, headDim]
+    private Tensor<T>? _prevToken;            // [batch, modelDim] for time mixing token shift
+    private Tensor<T>? _prevChannelToken;     // [batch, modelDim] for channel mixing token shift
+
+    /// <summary>
+    /// Training support is approximate: gradients flow through residual connections and weight
+    /// gradients are accumulated, but full backpropagation through the WKV-7 recurrent kernel
+    /// is not yet implemented. Suitable for fine-tuning with small learning rates.
+    /// </summary>
+    public override bool SupportsTraining => true;
+
+    /// <summary>Gets the model dimension.</summary>
+    public int ModelDimension => _modelDimension;
+
+    /// <summary>Gets the number of attention heads.</summary>
+    public int NumHeads => _numHeads;
+
+    /// <summary>Gets the dimension per head.</summary>
+    public int HeadDimension => _headDimension;
+
+    /// <summary>Gets the feed-forward network dimension.</summary>
+    public int FFNDimension => _ffnDimension;
+
+    /// <inheritdoc />
+    public override long ParameterCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var tensor in GetAllParameterTensors())
+                count += tensor.Length;
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new RWKV-7 block.
+    /// </summary>
+    /// <param name="sequenceLength">Maximum sequence length.</param>
+    /// <param name="modelDimension">Model dimension (d_model). Default: 256.</param>
+    /// <param name="numHeads">Number of heads for multi-headed states. Default: 4. Must divide modelDimension.</param>
+    /// <param name="ffnMultiplier">FFN expansion multiplier. Default: 3.5 (RWKV-7 standard).</param>
+    /// <param name="activationFunction">Optional activation on final output.</param>
+    public RWKV7Block(
+        int sequenceLength,
+        int modelDimension = 256,
+        int numHeads = 4,
+        double ffnMultiplier = 3.5,
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base(
+            [sequenceLength, modelDimension],
+            [sequenceLength, modelDimension],
+            activationFunction ?? new IdentityActivation<T>())
+    {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
+        if (sequenceLength <= 0)
+            throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
+        if (modelDimension <= 0)
+            throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
+        if (numHeads <= 0)
+            throw new ArgumentException($"Number of heads ({numHeads}) must be positive.", nameof(numHeads));
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException($"Model dimension ({modelDimension}) must be divisible by numHeads ({numHeads}).", nameof(numHeads));
+        if (ffnMultiplier <= 0)
+            throw new ArgumentException($"FFN multiplier ({ffnMultiplier}) must be positive.", nameof(ffnMultiplier));
+
+        _modelDimension = modelDimension;
+        _numHeads = numHeads;
+        _headDimension = modelDimension / numHeads;
+        _ffnDimension = (int)(modelDimension * ffnMultiplier);
+
+        // Time mixing
+        _timeMixR = new Tensor<T>([modelDimension]);
+        _timeMixK = new Tensor<T>([modelDimension]);
+        _timeMixV = new Tensor<T>([modelDimension]);
+        _timeMixA = new Tensor<T>([modelDimension]);
+        _timeMixB = new Tensor<T>([modelDimension]);
+
+        _receptanceWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _keyWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _valueWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _outputWeights = new Tensor<T>([modelDimension, modelDimension]);
+
+        _aWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _aBias = new Tensor<T>([modelDimension]);
+        _bWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _bBias = new Tensor<T>([modelDimension]);
+
+        _groupNormGamma = new Tensor<T>([modelDimension]);
+        _groupNormBeta = new Tensor<T>([modelDimension]);
+
+        // Channel mixing
+        _channelMixR = new Tensor<T>([modelDimension]);
+        _channelMixK = new Tensor<T>([modelDimension]);
+        _channelKeyWeights = new Tensor<T>([modelDimension, _ffnDimension]);
+        _channelValueWeights = new Tensor<T>([_ffnDimension, modelDimension]);
+        _channelReceptanceWeights = new Tensor<T>([modelDimension, modelDimension]);
+
+        // Layer norms
+        _normGamma1 = new Tensor<T>([modelDimension]);
+        _normBeta1 = new Tensor<T>([modelDimension]);
+        _normGamma2 = new Tensor<T>([modelDimension]);
+        _normBeta2 = new Tensor<T>([modelDimension]);
+
+        InitializeParameters();
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_receptanceWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_aWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_aBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_bWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_channelKeyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_channelValueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_channelReceptanceWeights, PersistentTensorRole.Weights);
+
+        // Token-shift interpolation (mu) vectors, group-norm and layer-norm affine
+        // parameters are all learnable in RWKV-7. With the forward now fully
+        // tape-connected they receive correct gradients, so register them too.
+        RegisterTrainableParameter(_timeMixR, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_timeMixK, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_timeMixV, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_timeMixA, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_timeMixB, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_channelMixR, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_channelMixK, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_groupNormGamma, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_groupNormBeta, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_normGamma1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_normBeta1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_normGamma2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_normBeta2, PersistentTensorRole.Biases);
+
+    }
+
+    private void InitializeParameters()
+    {
+        T half = NumOps.FromDouble(0.5);
+
+        // Token shift mixing coefficients initialized to 0.5
+        for (int i = 0; i < _modelDimension; i++)
+        {
+            _timeMixR[i] = half;
+            _timeMixK[i] = half;
+            _timeMixV[i] = half;
+            _timeMixA[i] = half;
+            _timeMixB[i] = half;
+            _channelMixR[i] = half;
+            _channelMixK[i] = half;
+        }
+
+        InitializeProjection(_receptanceWeights);
+        InitializeProjection(_keyWeights);
+        InitializeProjection(_valueWeights);
+        // RWKV's reference initialization keeps the time-mix output projection
+        // at zero so each newly initialized block begins as an exact residual
+        // identity. A generic Xavier matrix here lets some otherwise-valid seeds
+        // amplify the recurrent state on the very first optimizer step, producing
+        // non-finite gradients before global clipping can act.
+        _outputWeights.Fill(NumOps.Zero);
+
+        // v7: State evolution projections - initialized for stable decay
+        InitializeProjection(_aWeights);
+        _aBias.Fill(NumOps.FromDouble(-1.0));  // Initial log-decay: sigmoid(-1) ~ 0.27 retention per step
+
+        InitializeProjection(_bWeights);
+        _bBias.Fill(NumOps.FromDouble(0.0));
+
+        _groupNormGamma.Fill(NumOps.One);
+        _groupNormBeta.Fill(NumOps.Zero);
+
+        InitializeProjection(_channelKeyWeights);
+        // The channel-mix value projection is likewise zero-initialized in the
+        // reference RWKV recipe. The key path still receives gradients through
+        // this projection after the first update while the residual stream starts
+        // numerically stable.
+        _channelValueWeights.Fill(NumOps.Zero);
+        InitializeProjection(_channelReceptanceWeights);
+
+        _normGamma1.Fill(NumOps.One);
+        _normBeta1.Fill(NumOps.Zero);
+        _normGamma2.Fill(NumOps.One);
+        _normBeta2.Fill(NumOps.Zero);
+
+        // Arena workspace: pre-allocate forward pass buffers for zero-allocation hot path
+        Workspace = new LayerWorkspace<T>(timestepCount: 10, sequenceCount: 12);
+        // TimeMixing timestep buffers
+        Workspace.DeclareTimestep(TsRInput, _modelDimension);
+        Workspace.DeclareTimestep(TsKInput, _modelDimension);
+        Workspace.DeclareTimestep(TsVInput, _modelDimension);
+        Workspace.DeclareTimestep(TsAInput, _modelDimension);
+        Workspace.DeclareTimestep(TsBInput, _modelDimension);
+        Workspace.DeclareTimestep(TsWkvOut, _modelDimension);
+        // ChannelMixing timestep buffers
+        Workspace.DeclareTimestep(TsCmRInput, _modelDimension);
+        Workspace.DeclareTimestep(TsCmKInput, _modelDimension);
+        Workspace.DeclareTimestep(TsCmKSiLU, _ffnDimension);
+        // TimeMixing sequence buffers
+        Workspace.DeclareSequence(SqAllR, _modelDimension);
+        Workspace.DeclareSequence(SqAllK, _modelDimension);
+        Workspace.DeclareSequence(SqAllV, _modelDimension);
+        Workspace.DeclareSequence(SqAllA, _modelDimension);
+        Workspace.DeclareSequence(SqAllB, _modelDimension);
+        Workspace.DeclareSequence(SqAllWkv, _modelDimension);
+        Workspace.DeclareSequence(SqAllWkvPre, _modelDimension);
+        Workspace.DeclareSequence(SqAllWkvGated, _modelDimension);
+        // ChannelMixing sequence buffers
+        Workspace.DeclareSequence(SqCmAllRGate, _modelDimension);
+        Workspace.DeclareSequence(SqCmAllVProj, _modelDimension);
+        Workspace.DeclareSequence(SqCmAllSiLU, _ffnDimension);
+        Workspace.DeclareSequence(SqCmAllKProj, _ffnDimension);
+    }
+
+    /// <summary>Gets the workspace, throwing if not initialized.</summary>
+    private LayerWorkspace<T> Ws => Workspace
+        ?? throw new InvalidOperationException("RWKV7Block workspace not initialized.");
+
+    // Workspace buffer indices — TimeMixing timestep buffers
+    private const int TsRInput = 0, TsKInput = 1, TsVInput = 2;
+    private const int TsAInput = 3, TsBInput = 4, TsWkvOut = 5;
+    // Workspace buffer indices — ChannelMixing timestep buffers
+    private const int TsCmRInput = 7, TsCmKInput = 8, TsCmKSiLU = 9;
+    // Workspace buffer indices — TimeMixing sequence buffers
+    private const int SqAllR = 0, SqAllK = 1, SqAllV = 2, SqAllA = 3;
+    private const int SqAllB = 4, SqAllWkv = 5, SqAllWkvPre = 6, SqAllWkvGated = 7;
+    // Workspace buffer indices — ChannelMixing sequence buffers
+    private const int SqCmAllRGate = 8, SqCmAllVProj = 9;
+    // FFN-dimension sequence buffers (separate indices since different shape suffix)
+    private const int SqCmAllSiLU = 10, SqCmAllKProj = 11;
+
+    private void InitializeProjection(Tensor<T> tensor)
+    {
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        _originalInputShape = input._shape;
+
+        int rank = input.Shape.Length;
+        int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
+        int modelDim = input.Shape[rank - 1];
+
+        int batchSize = 1;
+        for (int d = 0; d < rank - 2; d++)
+            batchSize *= input.Shape[d];
+        if (rank < 3) batchSize = 1;
+
+        var input3D = rank == 2
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
+
+        _lastInput = input3D;
+
+        // Pre-size workspace for this forward pass
+        Ws.BeginForward(batchSize, seqLen);
+
+        // Time mixing sub-layer with residual
+        var normed1 = ApplyLayerNorm(input3D, _normGamma1, _normBeta1, batchSize, seqLen);
+        _lastNormed1 = normed1;
+        var timeMixOut = TimeMixingForward(normed1, batchSize, seqLen);
+        _lastTimeMixOutput = timeMixOut;
+        var afterTimeMix = Engine.TensorAdd(input3D, timeMixOut);
+        _lastAfterTimeMix = afterTimeMix;
+
+        // Channel mixing sub-layer with residual
+        var normed2 = ApplyLayerNorm(afterTimeMix, _normGamma2, _normBeta2, batchSize, seqLen);
+        _lastNormed2 = normed2;
+        var channelMixOut = ChannelMixingForward(normed2, batchSize, seqLen);
+        _lastChannelMixOutput = channelMixOut;
+        var output3D = Engine.TensorAdd(afterTimeMix, channelMixOut);
+
+        var result = ApplyActivation(output3D);
+        _lastOutput = result;
+
+        if (rank == 2)
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
+
+        var outputShape = new int[rank];
+        for (int i = 0; i < rank - 2; i++)
+            outputShape[i] = input.Shape[i];
+        outputShape[rank - 2] = seqLen;
+        outputShape[rank - 1] = _modelDimension;
+        return Engine.Reshape(result, outputShape);
+    }
+
+    /// <summary>
+    /// Time mixing forward with WKV-7 dynamic state evolution kernel.
+    /// </summary>
+    private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
+    {
+        // Per-step outputs are concatenated on the autodiff tape (end of loop) rather
+        // than written into a rented buffer via SafeSetSlice, which detached the output.
+        var outputSlices = new System.Collections.Generic.List<Tensor<T>>(seqLen);
+
+        // State: [batch, numHeads, headDim, headDim] - matrix-valued per head.
+        // Statefulness is for autoregressive streaming inference only; in training each
+        // sequence is independent, so start from a fresh zero state every Forward (otherwise
+        // repeated forwards over the same input are not idempotent — carried state poisons
+        // finite-difference gradient checks). Streaming callers run in inference mode.
+        var state = (!IsTrainingMode && _recurrentState != null)
+            ? _recurrentState
+            : new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var xPrev = (!IsTrainingMode && _prevToken != null)
+            ? _prevToken
+            : new Tensor<T>(new[] { batchSize, _modelDimension });
+
+        // Cache intermediate values for backward — zero allocation via workspace
+        var allR = Ws.Sequence(SqAllR);
+        var allK = Ws.Sequence(SqAllK);
+        var allV = Ws.Sequence(SqAllV);
+        var allA = Ws.Sequence(SqAllA);
+        var allB = Ws.Sequence(SqAllB);
+        var allWkv = Ws.Sequence(SqAllWkv);
+        var allWkvPreGate = Ws.Sequence(SqAllWkvPre);
+        var allWkvGated = Ws.Sequence(SqAllWkvGated);
+
+        // Token-shift mix coefficients as [1, modelDim] rows for broadcasting over
+        // batch. Computed once (tape-connected to the mix vectors) and reused each
+        // timestep. Expressing the lerp mix*x_t + (1-mix)*x_prev in Engine ops means
+        // (a) every matmul input is a FRESH tensor — the prior code wrote each
+        // timestep's r/k/v/a/b input into a single reused workspace buffer, so the
+        // tape (which saves references, not snapshots) read only the LAST timestep's
+        // values during backward and produced wrong projection-weight gradients — and
+        // (b) the mix coefficients stay on the autodiff graph.
+        // ---- #1464 throughput: token-shift + the r/k/v/a/b projections do NOT depend on the
+        // recurrent WKV state, so they are computed for the WHOLE sequence in ONE batched GEMM each
+        // (over [batch*seqLen, modelDim]) instead of seqLen separate per-timestep GEMMs. Only the
+        // WKV state recurrence below stays sequential. Every op is still on the autodiff tape, so
+        // the projection-weight gradients are identical to the per-step formulation — clone-parity
+        // and training results are unchanged; this is purely a per-step-overhead reduction.
+        var ones1D = Tensor<T>.CreateDefault(new[] { _modelDimension }, NumOps.One);
+        // Mix coefficients as [1, 1, modelDim] so they broadcast over [batch, seqLen, modelDim].
+        var mixR3 = Engine.Reshape(_timeMixR, new[] { 1, 1, _modelDimension });
+        var mixK3 = Engine.Reshape(_timeMixK, new[] { 1, 1, _modelDimension });
+        var mixV3 = Engine.Reshape(_timeMixV, new[] { 1, 1, _modelDimension });
+        var mixA3 = Engine.Reshape(_timeMixA, new[] { 1, 1, _modelDimension });
+        var mixB3 = Engine.Reshape(_timeMixB, new[] { 1, 1, _modelDimension });
+        var invR3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixR), new[] { 1, 1, _modelDimension });
+        var invK3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixK), new[] { 1, 1, _modelDimension });
+        var invV3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixV), new[] { 1, 1, _modelDimension });
+        var invA3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixA), new[] { 1, 1, _modelDimension });
+        var invB3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixB), new[] { 1, 1, _modelDimension });
+
+        // Token-shifted input over the whole sequence: xShifted[:, t, :] = x[:, t-1, :], with the
+        // t=0 slot taken from the previous token (zeros in training; the streaming cache otherwise).
+        // GetSliceAlongDimension / TensorSliceAxis / TensorConcatenate record their backward on the
+        // tape (AiDotNet.Tensors >= 0.85.3, PR #487), so the shift's gradient scatters to the right
+        // positions exactly as the prior per-step zero-copy slice did.
+        var xPrev0 = (!IsTrainingMode && _prevToken != null)
+            ? Engine.Reshape(_prevToken, new[] { batchSize, 1, _modelDimension })
+            : new Tensor<T>(new[] { batchSize, 1, _modelDimension });
+        Tensor<T> xShifted = seqLen > 1
+            ? Engine.TensorConcatenate(new[] { xPrev0, Engine.TensorNarrow(x, 1, 0, seqLen - 1) }, axis: 1)
+            : xPrev0;
+
+        // Batched token-shift lerps: mix*x_t + (1-mix)*x_prev over all timesteps at once.
+        var rIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixR3), Engine.TensorBroadcastMultiply(xShifted, invR3));
+        var kIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixK3), Engine.TensorBroadcastMultiply(xShifted, invK3));
+        var vIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixV3), Engine.TensorBroadcastMultiply(xShifted, invV3));
+        var aIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixA3), Engine.TensorBroadcastMultiply(xShifted, invA3));
+        var bIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixB3), Engine.TensorBroadcastMultiply(xShifted, invB3));
+
+        // Batched projections: [batch*seqLen, modelDim] @ [modelDim, modelDim] -> reshape back to 3D.
+        int bsl = batchSize * seqLen;
+        var Rall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(rIn, new[] { bsl, _modelDimension }), _receptanceWeights), new[] { batchSize, seqLen, _modelDimension });
+        var Kall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(kIn, new[] { bsl, _modelDimension }), _keyWeights), new[] { batchSize, seqLen, _modelDimension });
+        var Vall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(vIn, new[] { bsl, _modelDimension }), _valueWeights), new[] { batchSize, seqLen, _modelDimension });
+        var aBias3 = Engine.Reshape(_aBias, new[] { 1, 1, _modelDimension });
+        var bBias3 = Engine.Reshape(_bBias, new[] { 1, 1, _modelDimension });
+        var Aall = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(aIn, new[] { bsl, _modelDimension }), _aWeights), new[] { batchSize, seqLen, _modelDimension }), aBias3);
+        var Ball = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(bIn, new[] { bsl, _modelDimension }), _bWeights), new[] { batchSize, seqLen, _modelDimension }), bBias3);
+
+        // ---- #1464: the entire WKV state recurrence (diagonal decay + rank-1 injection + gated
+        // readout) runs in ONE fused, differentiable engine op instead of ~10 tape micro-ops per
+        // timestep. The kernel applies the r/a/b sigmoids internally and records a single tape node
+        // whose backward is the BPTT adjoint of the recurrence, so the projection-weight gradients
+        // are identical to the per-step formulation (clone-parity preserved) — it just removes the
+        // per-timestep tape-dispatch overhead that made the memorization test exceed the 180s budget.
+        //   S_t[di,vi] = sigmoid(a)[di]*S_{t-1}[di,vi] + (sigmoid(b)[di]*k[di])*v[vi]
+        //   wkv_t[di]  = sigmoid(r)[di] * sum_vi S_t[di,vi]*k[vi]
+        var wkvAll = Engine.Rwkv7SequenceForward(Rall, Kall, Vall, Aall, Ball, _numHeads);
+
+        // Group-normalize (per head, per position) and project to the output — both batched over all
+        // positions as [batch*seqLen, modelDim], so NO per-timestep ops remain in time-mixing.
+        var wkv2d = Engine.Reshape(wkvAll, new[] { bsl, _modelDimension });
+        var normed2d = ApplyGroupNorm(wkv2d, bsl);
+        // These projections are paper-faithfully initialized to exactly zero, but
+        // they are trainable parameters. Keep an explicit graph dependency on the
+        // parameter so compilation cannot mistake the initial value for a static
+        // sparse inference constant and discard its backward path.
+        var trainableOutputWeights = Engine.Reshape(
+            _outputWeights, _outputWeights.Shape.ToArray());
+        var output = Engine.Reshape(
+            Engine.TensorMatMul(normed2d, trainableOutputWeights),
+            new[] { batchSize, seqLen, _modelDimension });
+
+        // Recurrent-state persistence. In TRAINING each sequence is independent and the carried state is
+        // never read back (the read gate above is `!IsTrainingMode`), so we skip the recurrence entirely —
+        // keeping the #1464 per-step-overhead win. In INFERENCE the autoregressive streaming contract
+        // requires the final WKV state S_T so the next call can continue the sequence; the fused
+        // Rwkv7SequenceForward returns only the gated outputs (not S_T), so compute S_T from the same
+        // documented recurrence (off-tape; inference only):
+        //   S_t[di,vi] = sigmoid(A_t)[di]*S_{t-1}[di,vi] + (sigmoid(B_t)[di]*K_t[di])*V_t[vi]
+        // seeded from the prior state (`state`) so token-by-token streaming accumulates correctly.
+        if (IsTrainingMode)
+        {
+            // Training sequences are independent — clear ALL carried state,
+            // including the token-shift caches. Leaving _prevToken /
+            // _prevChannelToken live would mix the first inference token with
+            // the last training token if the block is reused for streaming
+            // without an explicit ResetState().
+            _recurrentState = null;
+            _prevToken = null;
+            _prevChannelToken = null;
+        }
+        else
+        {
+            _recurrentState = ComputeFinalWkvState(state, Aall, Ball, Kall, Vall, batchSize, seqLen);
+            _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1) : xPrev;
+        }
+
+        // Cache for backward
+        _cachedWkvOut = allWkv;
+        _cachedR = allR;
+        _cachedK = allK;
+        _cachedV = allV;
+        _cachedTimeMixNormed1 = x;
+        _cachedWkvGated = allWkvGated;
+
+        // Previous tokens reconstructed from _cachedTimeMixNormed1 during backward:
+        // prevToken[t=0] = zeros, prevToken[t>0] = x[t-1]
+
+        return output;
+    }
+
+    /// <summary>
+    /// Computes the final WKV recurrent state S_T after processing a sequence, for autoregressive streaming
+    /// inference. Mirrors the recurrence the fused <c>Rwkv7SequenceForward</c> kernel applies internally:
+    /// <c>S_t[h,di,vi] = sigmoid(A_t)[h,di]*S_{t-1}[h,di,vi] + sigmoid(B_t)[h,di]*K_t[h,di]*V_t[h,vi]</c>,
+    /// per head. Runs off the autodiff tape (scalar arithmetic over the projected A/B/K/V values) since the
+    /// streaming state carries no gradient — it only seeds the next inference call.
+    /// </summary>
+    /// <param name="seed">The prior state to continue from (zeros on the first call), [batch, heads, headDim, headDim].</param>
+    /// <param name="aAll">Decay projection A over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="bAll">Injection-gate projection B over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="kAll">Key projection over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="vAll">Value projection over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="batchSize">The batch size.</param>
+    /// <param name="seqLen">The sequence length.</param>
+    /// <returns>The final state S_T, shape [batch, numHeads, headDim, headDim].</returns>
+    private Tensor<T> ComputeFinalWkvState(
+        Tensor<T> seed, Tensor<T> aAll, Tensor<T> bAll, Tensor<T> kAll, Tensor<T> vAll, int batchSize, int seqLen)
+    {
+        int hd = _headDimension;
+        var s = new Tensor<T>(new[] { batchSize, _numHeads, hd, hd });
+
+        // Seed from the prior state so streaming (seqLen == 1 per call) accumulates across calls.
+        for (int bi = 0; bi < batchSize; bi++)
+            for (int h = 0; h < _numHeads; h++)
+                for (int di = 0; di < hd; di++)
+                    for (int vi = 0; vi < hd; vi++)
+                        s[new[] { bi, h, di, vi }] = seed[new[] { bi, h, di, vi }];
+
+        for (int t = 0; t < seqLen; t++)
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int h = 0; h < _numHeads; h++)
+                    for (int di = 0; di < hd; di++)
+                    {
+                        int idx = (h * hd) + di;
+                        T a = Sigmoid(aAll[new[] { bi, t, idx }]);
+                        T bk = NumOps.Multiply(Sigmoid(bAll[new[] { bi, t, idx }]), kAll[new[] { bi, t, idx }]);
+                        for (int vi = 0; vi < hd; vi++)
+                        {
+                            T v = vAll[new[] { bi, t, (h * hd) + vi }];
+                            T prev = s[new[] { bi, h, di, vi }];
+                            s[new[] { bi, h, di, vi }] = NumOps.Add(NumOps.Multiply(a, prev), NumOps.Multiply(bk, v));
+                        }
+                    }
+
+        return s;
+    }
+
+    private T Sigmoid(T x) =>
+        NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.FromDouble(Math.Exp(-NumOps.ToDouble(x)))));
+
+    /// <summary>
+    /// Channel mixing forward with SiLU gating (RWKV-7 style).
+    /// </summary>
+    private Tensor<T> ChannelMixingForward(Tensor<T> x, int batchSize, int seqLen)
+    {
+        // ---- #1464: channel mixing is purely position-wise (token-shift + a SiLU-gated FFN, NO
+        // recurrence), so the whole sub-layer runs as batched GEMMs over [batch*seqLen, modelDim]
+        // — no per-timestep loop. The previous per-step loop issued ~8 Engine dispatches × seqLen ×
+        // numLayers (≈16K dispatches/forward at seqLen=512, 4 layers); that per-op DISPATCH overhead
+        // — NOT GEMM FLOPs (the GEMMs run at 30–90 GFLOP/s) — dominated the forward (~9.5s measured
+        // for one Predict) and the training step. The tape backs the gradients automatically (the
+        // layer has no manual backward), so weights/activations are identical to the per-step form.
+        int bsl = batchSize * seqLen;
+        var ones1D = Tensor<T>.CreateDefault(new[] { _modelDimension }, NumOps.One);
+        var mixR3 = Engine.Reshape(_channelMixR, new[] { 1, 1, _modelDimension });
+        var mixK3 = Engine.Reshape(_channelMixK, new[] { 1, 1, _modelDimension });
+        var invR3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _channelMixR), new[] { 1, 1, _modelDimension });
+        var invK3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _channelMixK), new[] { 1, 1, _modelDimension });
+
+        // Token-shift over the whole sequence: xShifted[:, t, :] = x[:, t-1, :].
+        var xPrev0 = (!IsTrainingMode && _prevChannelToken != null)
+            ? Engine.Reshape(_prevChannelToken, new[] { batchSize, 1, _modelDimension })
+            : new Tensor<T>(new[] { batchSize, 1, _modelDimension });
+        Tensor<T> xShifted = seqLen > 1
+            ? Engine.TensorConcatenate(new[] { xPrev0, Engine.TensorNarrow(x, 1, 0, seqLen - 1) }, axis: 1)
+            : xPrev0;
+
+        var rIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixR3), Engine.TensorBroadcastMultiply(xShifted, invR3));
+        var kIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixK3), Engine.TensorBroadcastMultiply(xShifted, invK3));
+
+        // r = sigmoid(W_r · rIn); k = W_k · kIn; SiLU(k); v = W_v · SiLU(k); out = sigmoid(r) · v.
+        var rGate = Engine.Sigmoid(Engine.TensorMatMul(Engine.Reshape(rIn, new[] { bsl, _modelDimension }), _channelReceptanceWeights)); // [bsl, modelDim]
+        var kProj = Engine.TensorMatMul(Engine.Reshape(kIn, new[] { bsl, _modelDimension }), _channelKeyWeights); // [bsl, ffnDim]
+        var kSiLU = Engine.TensorMultiply(kProj, Engine.Sigmoid(kProj));
+        // Preserve the trainable dependency for the other zero-initialized RWKV
+        // projection for the same reason as the time-mix output projection above.
+        var trainableChannelValueWeights = Engine.Reshape(
+            _channelValueWeights, _channelValueWeights.Shape.ToArray());
+        var vProj = Engine.TensorMatMul(kSiLU, trainableChannelValueWeights); // [bsl, modelDim]
+        var y = Engine.TensorMultiply(rGate, vProj); // [bsl, modelDim]
+
+        // Carry the channel token-shift cache only for the inference streaming
+        // contract; in training the sequences are independent and a live cache
+        // would leak the last training token into a later inference call.
+        if (!IsTrainingMode && seqLen > 0)
+        {
+            _prevChannelToken = x.GetSliceAlongDimension(seqLen - 1, 1);
+        }
+
+        return Engine.Reshape(y, new[] { batchSize, seqLen, _modelDimension });
+    }
+
+    /// <summary>
+    /// Applies group normalization across heads. Each head's dimensions are normalized independently.
+    /// </summary>
+    private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize)
+    {
+        // Group normalization per head: each head's _headDimension contiguous
+        // channels share a (mean, variance), with independent gamma/beta per
+        // channel. That's exactly Engine.GroupNorm with numGroups=numHeads over
+        // a [batchSize, modelDimension, 1, 1] 4D reshape. The previous manual
+        // loop did 4 × batchSize × numHeads × headDimension scalar NumOps calls
+        // (mean + variance + normalize + scale/bias passes); this is one fused
+        // call.
+        int modelDim = _numHeads * _headDimension;
+        var input4D = Engine.Reshape(input, new[] { batchSize, modelDim, 1, 1 });
+        var output4D = Engine.GroupNorm(input4D, _numHeads, _groupNormGamma, _groupNormBeta, 1e-6, out _, out _);
+        return Engine.Reshape(output4D, input._shape);
+    }
+
+    /// <summary>
+    /// Applies layer normalization.
+    /// </summary>
+    private Tensor<T> ApplyLayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
+        int batchSize, int seqLen)
+    {
+        var shaped = Engine.Reshape(input, new[] { batchSize, seqLen, _modelDimension });
+        return Engine.LayerNorm(shaped, gamma, beta, 1e-6, out _, out _);
+    }
+
+    /// <summary>
+    /// Computes gradients for all time mixing parameters: timeMixR/K/V/A/B,
+    /// receptance/key/value weights, a/b weights+biases, groupNorm gamma/beta.
+    /// </summary>
+    private void AccumulateTimeMixParameterGradients(Tensor<T> dTimeMixOut, Tensor<T> normedInput,
+        int batchSize, int seqLen)
+    {
+        if (_cachedWkvOut == null || _cachedR == null || _cachedK == null || _cachedV == null ||
+            _cachedWkvGated == null)
+            return;
+
+        // Per-timestep backward through output projection → groupNorm → receptance gate
+        for (int t = 0; t < seqLen; t++)
+        {
+            var dOut_t = dTimeMixOut.GetSliceAlongDimension(t, 1); // [batch, modelDim]
+            var r_t = _cachedR.GetSliceAlongDimension(t, 1); // [batch, modelDim]
+            var x_t = normedInput.GetSliceAlongDimension(t, 1); // [batch, modelDim]
+            var gated_t = _cachedWkvGated.GetSliceAlongDimension(t, 1); // [batch, modelDim] pre-groupNorm
+
+            // 1. Output projection backward: dNormedWkv = dOut @ W_out^T
+            var dNormedWkv = Engine.TensorMatMul(dOut_t, _outputWeights.Transpose(new[] { 1, 0 }));
+
+            // 2. GroupNorm backward (per-head normalization)
+            // GroupNorm: for each head h, output[d] = gamma[d] * (x[d] - mean_h) / std_h + beta[d]
+            // Backward: proper group norm backward with mean/std dependency
+            var dGated = GroupNormBackward(dNormedWkv, gated_t, batchSize);
+
+            // 3. Receptance gate backward
+            // Forward: gated[d] = sigmoid(r[d]) * wkv_num[d]
+            // d(gated)/d(r) = sigmoid'(r) * wkv_num = sig*(1-sig) * wkv_num
+            // d(gated)/d(wkv_num) = sigmoid(r)
+            // We need wkv_num = gated / sigmoid(r)
+
+            var sigR = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            var wkvNum = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            for (int bi = 0; bi < batchSize; bi++)
+            {
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T rVal = r_t[new[] { bi, d }];
+                    T sig = NumOps.Divide(NumOps.One,
+                        NumOps.Add(NumOps.One, NumOps.FromDouble(Math.Exp(-NumOps.ToDouble(rVal)))));
+                    sigR[new[] { bi, d }] = sig;
+
+                    // Recover wkv_num from gated output: wkv_num = gated / sigmoid(r)
+                    T g = gated_t[new[] { bi, d }];
+                    wkvNum[new[] { bi, d }] = NumOps.GreaterThan(NumOps.Abs(sig), NumOps.FromDouble(1e-10))
+                        ? NumOps.Divide(g, sig) : NumOps.Zero;
+                }
+            }
+
+            // dR = dGated * wkv_num * sigmoid'(r)
+            var ones = Tensor<T>.CreateDefault(sigR._shape, NumOps.One);
+            var sigDeriv = Engine.TensorMultiply(sigR, Engine.TensorSubtract(ones, sigR));
+            var dR = Engine.TensorMultiply(Engine.TensorMultiply(dGated, wkvNum), sigDeriv);
+
+            // 4. dRInput = dR @ W_r^T
+            var dRInput = Engine.TensorMatMul(dR, _receptanceWeights.Transpose(new[] { 1, 0 }));
+
+            // 5. Token shift gradient: rInput = timeMixR * x_t + (1-timeMixR) * x_prev
+            // dTimeMixR[d] += sum_b(dRInput[b,d] * (x_t[b,d] - x_prev[b,d]))
+            Tensor<T> x_prev;
+            if (t == 0)
+            {
+                x_prev = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension }); // zeros
+            }
+            else
+            {
+                x_prev = normedInput.GetSliceAlongDimension(t - 1, 1);
+            }
+
+            for (int d = 0; d < _modelDimension; d++)
+            {
+                T gradSum = NumOps.Zero;
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    T diff = NumOps.Subtract(x_t[new[] { bi, d }], x_prev[new[] { bi, d }]);
+                    gradSum = NumOps.Add(gradSum, NumOps.Multiply(dRInput[new[] { bi, d }], diff));
+                }
+                if (_timeMixRGrad is not null)
+                    _timeMixRGrad[d] = NumOps.Add(_timeMixRGrad[d], gradSum);
+            }
+
+            // 6. Receptance weight gradient: dW_r += rInput_t^T @ dR_t
+            // Reconstruct rInput from token shift
+            var rInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            for (int bi = 0; bi < batchSize; bi++)
+            {
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T curr = x_t[new[] { bi, d }];
+                    T prev = x_prev[new[] { bi, d }];
+                    rInput_t[new[] { bi, d }] = NumOps.Add(
+                        NumOps.Multiply(_timeMixR[d], curr),
+                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixR[d]), prev));
+                }
+            }
+            if (_receptanceWeightsGrad is not null)
+            {
+                var dW = Engine.TensorMatMul(rInput_t.Transpose(new[] { 1, 0 }), dR);
+                _receptanceWeightsGrad = Engine.TensorAdd(_receptanceWeightsGrad, dW);
+            }
+
+            // Similarly accumulate K, V, A, B token shift and weight gradients
+            // (same pattern as R but through different paths — approximate contribution)
+            var dK = Engine.TensorMatMul(dGated, _keyWeights.Transpose(new[] { 1, 0 }));
+            var kInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            for (int bi = 0; bi < batchSize; bi++)
+            {
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T curr = x_t[new[] { bi, d }];
+                    T prev = x_prev[new[] { bi, d }];
+                    kInput_t[new[] { bi, d }] = NumOps.Add(
+                        NumOps.Multiply(_timeMixK[d], curr),
+                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixK[d]), prev));
+
+                    T diff = NumOps.Subtract(curr, prev);
+                    if (_timeMixKGrad is not null)
+                        _timeMixKGrad[d] = NumOps.Add(_timeMixKGrad[d],
+                            NumOps.Multiply(dK[new[] { bi, d }], diff));
+                }
+            }
+            if (_keyWeightsGrad is not null)
+            {
+                var dWk = Engine.TensorMatMul(kInput_t.Transpose(new[] { 1, 0 }), dK);
+                _keyWeightsGrad = Engine.TensorAdd(_keyWeightsGrad, dWk);
+            }
+
+            // V gradient
+            var dV = Engine.TensorMatMul(dGated, _valueWeights.Transpose(new[] { 1, 0 }));
+            for (int bi = 0; bi < batchSize; bi++)
+            {
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T diff = NumOps.Subtract(x_t[new[] { bi, d }], x_prev[new[] { bi, d }]);
+                    if (_timeMixVGrad is not null)
+                        _timeMixVGrad[d] = NumOps.Add(_timeMixVGrad[d],
+                            NumOps.Multiply(dV[new[] { bi, d }], diff));
+                }
+            }
+            var vInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int d = 0; d < _modelDimension; d++)
+                    vInput_t[new[] { bi, d }] = NumOps.Add(
+                        NumOps.Multiply(_timeMixV[d], x_t[new[] { bi, d }]),
+                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixV[d]), x_prev[new[] { bi, d }]));
+            if (_valueWeightsGrad is not null)
+                _valueWeightsGrad = Engine.TensorAdd(_valueWeightsGrad,
+                    Engine.TensorMatMul(vInput_t.Transpose(new[] { 1, 0 }), dV));
+
+            // A and B gradients (through sigmoid activation)
+            var dAInput = Engine.TensorMatMul(dGated, _aWeights.Transpose(new[] { 1, 0 }));
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T diff = NumOps.Subtract(x_t[new[] { bi, d }], x_prev[new[] { bi, d }]);
+                    if (_timeMixAGrad is not null)
+                        _timeMixAGrad[d] = NumOps.Add(_timeMixAGrad[d],
+                            NumOps.Multiply(dAInput[new[] { bi, d }], diff));
+                }
+            var aInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int d = 0; d < _modelDimension; d++)
+                    aInput_t[new[] { bi, d }] = NumOps.Add(
+                        NumOps.Multiply(_timeMixA[d], x_t[new[] { bi, d }]),
+                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixA[d]), x_prev[new[] { bi, d }]));
+            if (_aWeightsGrad is not null)
+                _aWeightsGrad = Engine.TensorAdd(_aWeightsGrad,
+                    Engine.TensorMatMul(aInput_t.Transpose(new[] { 1, 0 }), dAInput));
+            if (_aBiasGrad is not null)
+                _aBiasGrad = Engine.TensorAdd(_aBiasGrad, Engine.ReduceSum(dAInput, new[] { 0 }));
+
+            var dBInput = Engine.TensorMatMul(dGated, _bWeights.Transpose(new[] { 1, 0 }));
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T diff = NumOps.Subtract(x_t[new[] { bi, d }], x_prev[new[] { bi, d }]);
+                    if (_timeMixBGrad is not null)
+                        _timeMixBGrad[d] = NumOps.Add(_timeMixBGrad[d],
+                            NumOps.Multiply(dBInput[new[] { bi, d }], diff));
+                }
+            var bInput_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int d = 0; d < _modelDimension; d++)
+                    bInput_t[new[] { bi, d }] = NumOps.Add(
+                        NumOps.Multiply(_timeMixB[d], x_t[new[] { bi, d }]),
+                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixB[d]), x_prev[new[] { bi, d }]));
+            if (_bWeightsGrad is not null)
+                _bWeightsGrad = Engine.TensorAdd(_bWeightsGrad,
+                    Engine.TensorMatMul(bInput_t.Transpose(new[] { 1, 0 }), dBInput));
+            if (_bBiasGrad is not null)
+                _bBiasGrad = Engine.TensorAdd(_bBiasGrad, Engine.ReduceSum(dBInput, new[] { 0 }));
+        }
+    }
+
+    /// <summary>
+    /// GroupNorm backward pass. Computes input gradient with proper normalization chain rule.
+    /// Uses the standard formula: dx = (1/N) * gamma / std * (N*dy - sum(dy) - xhat*sum(dy*xhat))
+    /// </summary>
+    private Tensor<T> GroupNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize)
+    {
+        var dInput = TensorAllocator.Rent<T>(input._shape);
+        T eps = NumOps.FromDouble(1e-6);
+
+        for (int bi = 0; bi < batchSize; bi++)
+        {
+            for (int hi = 0; hi < _numHeads; hi++)
+            {
+                int dimStart = hi * _headDimension;
+
+                // Compute mean and variance for this head
+                T mean = NumOps.Zero;
+                for (int d = 0; d < _headDimension; d++)
+                    mean = NumOps.Add(mean, input[new[] { bi, dimStart + d }]);
+                mean = NumOps.Divide(mean, NumOps.FromDouble(_headDimension));
+
+                T variance = NumOps.Zero;
+                for (int d = 0; d < _headDimension; d++)
+                {
+                    T diff = NumOps.Subtract(input[new[] { bi, dimStart + d }], mean);
+                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+                }
+                variance = NumOps.Divide(variance, NumOps.FromDouble(_headDimension));
+                T stdInv = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
+
+                // Compute xhat and the two sums needed for BN backward
+                T sumDy = NumOps.Zero;
+                T sumDyXhat = NumOps.Zero;
+                var xhat = new T[_headDimension];
+                var dyGamma = new T[_headDimension];
+
+                for (int d = 0; d < _headDimension; d++)
+                {
+                    int flatD = dimStart + d;
+                    xhat[d] = NumOps.Multiply(NumOps.Subtract(input[new[] { bi, flatD }], mean), stdInv);
+                    dyGamma[d] = NumOps.Multiply(dOutput[new[] { bi, flatD }], _groupNormGamma[flatD]);
+                    sumDy = NumOps.Add(sumDy, dyGamma[d]);
+                    sumDyXhat = NumOps.Add(sumDyXhat, NumOps.Multiply(dyGamma[d], xhat[d]));
+
+                    // Accumulate groupNorm gamma/beta gradients
+                    if (_groupNormGammaGrad is not null)
+                        _groupNormGammaGrad[flatD] = NumOps.Add(_groupNormGammaGrad[flatD],
+                            NumOps.Multiply(dOutput[new[] { bi, flatD }], xhat[d]));
+                    if (_groupNormBetaGrad is not null)
+                        _groupNormBetaGrad[flatD] = NumOps.Add(_groupNormBetaGrad[flatD],
+                            dOutput[new[] { bi, flatD }]);
+                }
+
+                // Standard normalization backward:
+                // dx = (1/N) * stdInv * (N * dyGamma - sumDy - xhat * sumDyXhat)
+                T invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(_headDimension));
+                for (int d = 0; d < _headDimension; d++)
+                {
+                    int flatD = dimStart + d;
+                    T nDy = NumOps.Multiply(NumOps.FromDouble(_headDimension), dyGamma[d]);
+                    T term = NumOps.Subtract(NumOps.Subtract(nDy, sumDy),
+                        NumOps.Multiply(xhat[d], sumDyXhat));
+                    dInput[new[] { bi, flatD }] = NumOps.Multiply(NumOps.Multiply(invN, stdInv), term);
+                }
+            }
+        }
+
+        return dInput;
+    }
+
+    /// <summary>
+    /// Accumulates gradients for LayerNorm gamma and beta parameters.
+    /// LayerNorm: output = gamma * (input - mean) / std + beta
+    /// </summary>
+    /// <summary>
+    /// Copies a 2D slice [batch, dim] into a 3D tensor [batch, seqLen, dim] at time position t.
+    /// Uses explicit per-element copy to avoid SetSlice position bugs.
+    /// </summary>
+    private static void SafeSetSlice(Tensor<T> dest, int t, Tensor<T> slice, int batch, int dim)
+    {
+        for (int bi = 0; bi < batch; bi++)
+            for (int d = 0; d < dim; d++)
+                dest[new[] { bi, t, d }] = slice[new[] { bi, d }];
+    }
+
+
+    /// <summary>
+    /// LayerNorm backward: returns gradient w.r.t. input.
+    /// Forward: output = gamma * (x - mean) / std + beta
+    /// Backward: dx = (gamma*dy - normalized*mean(gamma*dy*normalized)) / std (per the LN paper)
+    /// </summary>
+    private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input,
+        Tensor<T> gamma, int batchSize, int seqLen)
+    {
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        T eps = NumOps.FromDouble(1e-6);
+        T invDim = NumOps.FromDouble(1.0 / _modelDimension);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int t = 0; t < seqLen; t++)
+            {
+                T mean = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                    mean = NumOps.Add(mean, input[new[] { b, t, d }]);
+                mean = NumOps.Multiply(mean, invDim);
+
+                T variance = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T diff = NumOps.Subtract(input[new[] { b, t, d }], mean);
+                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+                }
+                variance = NumOps.Multiply(variance, invDim);
+                T stdInv = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
+
+                // Compute normalized and the correction term
+                var normalized = new T[_modelDimension];
+                T dotProduct = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    normalized[d] = NumOps.Multiply(NumOps.Subtract(input[new[] { b, t, d }], mean), stdInv);
+                    dotProduct = NumOps.Add(dotProduct,
+                        NumOps.Multiply(NumOps.Multiply(gamma[d], dOutput[new[] { b, t, d }]), normalized[d]));
+                }
+                T meanDot = NumOps.Multiply(dotProduct, invDim);
+
+                // Compute sum of gamma * dy for the mean subtraction correction
+                T sumGammaDy = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                    sumGammaDy = NumOps.Add(sumGammaDy, NumOps.Multiply(gamma[d], dOutput[new[] { b, t, d }]));
+                T meanGammaDy = NumOps.Multiply(sumGammaDy, invDim);
+
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T gammaDy = NumOps.Multiply(gamma[d], dOutput[new[] { b, t, d }]);
+                    T correction = NumOps.Multiply(normalized[d], meanDot);
+                    dInput[new[] { b, t, d }] = NumOps.Multiply(
+                        NumOps.Subtract(NumOps.Subtract(gammaDy, meanGammaDy), correction), stdInv);
+                }
+            }
+        }
+
+        return dInput;
+    }
+
+    private void AccumulateLayerNormGradients(Tensor<T> dOutput, Tensor<T> input,
+        Tensor<T> gamma, ref Tensor<T>? gammaGrad, ref Tensor<T>? betaGrad,
+        int batchSize, int seqLen)
+    {
+        if (gammaGrad == null || betaGrad == null) return;
+
+        T eps = NumOps.FromDouble(1e-6);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int t = 0; t < seqLen; t++)
+            {
+                // Compute mean and std for this position
+                T mean = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                    mean = NumOps.Add(mean, input[new[] { b, t, d }]);
+                mean = NumOps.Divide(mean, NumOps.FromDouble(_modelDimension));
+
+                T variance = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T diff = NumOps.Subtract(input[new[] { b, t, d }], mean);
+                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+                }
+                variance = NumOps.Divide(variance, NumOps.FromDouble(_modelDimension));
+                T stdInv = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
+
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T normalized = NumOps.Multiply(
+                        NumOps.Subtract(input[new[] { b, t, d }], mean), stdInv);
+                    T dOut = dOutput[new[] { b, t, d }];
+
+                    gammaGrad[d] = NumOps.Add(gammaGrad[d], NumOps.Multiply(dOut, normalized));
+                    betaGrad[d] = NumOps.Add(betaGrad[d], dOut);
+                }
+            }
+        }
+    }
+
+    private void InitializeGradients()
+    {
+        _timeMixRGrad = new Tensor<T>([_modelDimension]);
+        _timeMixKGrad = new Tensor<T>([_modelDimension]);
+        _timeMixVGrad = new Tensor<T>([_modelDimension]);
+        _timeMixAGrad = new Tensor<T>([_modelDimension]);
+        _timeMixBGrad = new Tensor<T>([_modelDimension]);
+        _receptanceWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
+        _keyWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
+        _valueWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
+        _outputWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
+        _aWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
+        _aBiasGrad = new Tensor<T>([_modelDimension]);
+        _bWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
+        _bBiasGrad = new Tensor<T>([_modelDimension]);
+        _groupNormGammaGrad = new Tensor<T>([_modelDimension]);
+        _groupNormBetaGrad = new Tensor<T>([_modelDimension]);
+        _channelMixRGrad = new Tensor<T>([_modelDimension]);
+        _channelMixKGrad = new Tensor<T>([_modelDimension]);
+        _channelKeyWeightsGrad = new Tensor<T>([_modelDimension, _ffnDimension]);
+        _channelValueWeightsGrad = new Tensor<T>([_ffnDimension, _modelDimension]);
+        _channelReceptanceWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
+        _normGamma1Grad = new Tensor<T>([_modelDimension]);
+        _normBeta1Grad = new Tensor<T>([_modelDimension]);
+        _normGamma2Grad = new Tensor<T>([_modelDimension]);
+        _normBeta2Grad = new Tensor<T>([_modelDimension]);
+    }
+
+    /// <summary>
+    /// Accumulates gradients for the output projection weights from the time mixing sub-layer.
+    /// </summary>
+    private void AccumulateTimeMixGradients(Tensor<T> dOutput, Tensor<T> normedInput,
+        int batchSize, int seqLen)
+    {
+        if (_cachedWkvOut == null || _outputWeightsGrad == null) return;
+
+        // dOutput flows through output projection: y = wkv * W_out
+        // dW_out += wkv^T * dOutput
+        for (int t = 0; t < seqLen; t++)
+        {
+            var dOut_t = dOutput.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+            var wkv_t = _cachedWkvOut.GetSliceAlongDimension(t, 1);
+
+            var dW = Engine.TensorMatMul(wkv_t.Transpose(new[] { 1, 0 }), dOut_t);
+
+            for (int i = 0; i < _modelDimension; i++)
+                for (int j = 0; j < _modelDimension; j++)
+                    _outputWeightsGrad[new[] { i, j }] = NumOps.Add(
+                        _outputWeightsGrad[new[] { i, j }], dW[new[] { i, j }]);
+        }
+    }
+
+    /// <summary>
+    /// Accumulates gradients for the channel mixing sub-layer.
+    /// </summary>
+    /// <remarks>
+    /// Channel mixing: output = sigmoid(r) * (W_v * SiLU(W_k * kInput))
+    /// Gradients computed for W_v (value weights) and W_r (receptance weights).
+    /// </remarks>
+    private void AccumulateChannelMixGradients(Tensor<T> dOutput, Tensor<T> normedInput,
+        int batchSize, int seqLen)
+    {
+        if (_cachedChannelRGate == null || _cachedChannelSiLU == null ||
+            _cachedChannelVProj == null || _channelValueWeightsGrad == null ||
+            _channelReceptanceWeightsGrad == null)
+            return;
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            var dOut_t = dOutput.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+            var rGate_t = _cachedChannelRGate.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+            var siLU_t = _cachedChannelSiLU.GetSliceAlongDimension(t, 1);    // [batch, ffnDim]
+            var vProj_t = _cachedChannelVProj.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+
+            // dOutput flows through: y = rGate * vProj
+            // d(vProj) = rGate * dOutput (element-wise)
+            var dVProj = Engine.TensorMultiply(rGate_t, dOut_t);
+
+            // d(W_v) += SiLU^T * d(vProj)
+            var dWv = Engine.TensorMatMul(siLU_t.Transpose(new[] { 1, 0 }), dVProj);
+            for (int i = 0; i < _ffnDimension; i++)
+                for (int j = 0; j < _modelDimension; j++)
+                    _channelValueWeightsGrad[new[] { i, j }] = NumOps.Add(
+                        _channelValueWeightsGrad[new[] { i, j }], dWv[new[] { i, j }]);
+
+            // d(rGate) = vProj * dOutput (element-wise) - for receptance weight gradients
+            // rGate = sigmoid(W_r * rInput), so d(W_r) involves sigmoid derivative
+            // Simplified: accumulate W_r gradient via dRGate * sigmoid'(rGate) * rInput^T
+            var dRGate = Engine.TensorMultiply(vProj_t, dOut_t);
+
+            // sigmoid derivative: sigmoid(x) * (1 - sigmoid(x)) = rGate * (1 - rGate)
+            var sigmoidDeriv = new Tensor<T>(rGate_t._shape);
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T r = rGate_t[new[] { bi, d }];
+                    sigmoidDeriv[new[] { bi, d }] = NumOps.Multiply(r, NumOps.Subtract(NumOps.One, r));
+                }
+
+            var dRProj = Engine.TensorMultiply(dRGate, sigmoidDeriv);
+            var normed_t = normedInput.GetSliceAlongDimension(t, 1);
+
+            var dWr = Engine.TensorMatMul(normed_t.Transpose(new[] { 1, 0 }), dRProj);
+            for (int i = 0; i < _modelDimension; i++)
+                for (int j = 0; j < _modelDimension; j++)
+                    _channelReceptanceWeightsGrad[new[] { i, j }] = NumOps.Add(
+                        _channelReceptanceWeightsGrad[new[] { i, j }], dWr[new[] { i, j }]);
+        }
+    }
+
+    /// <inheritdoc />
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_timeMixRGrad == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        T negLR = NumOps.Negate(learningRate);
+
+        var allParams = GetAllParameterTensors();
+        var allGrads = GetAllGradientTensors();
+
+        for (int i = 0; i < allParams.Length; i++)
+        {
+            var grad = allGrads[i];
+            if (grad != null)
+            {
+                var updated = Engine.TensorAdd(allParams[i],
+                    Engine.TensorMultiplyScalar(grad, negLR));
+                CopyTensorData(updated, allParams[i]);
+            }
+        }
+    }
+
+    private static void CopyTensorData(Tensor<T> source, Tensor<T> destination)
+    {
+        for (int i = 0; i < source.Length; i++)
+            destination[i] = source[i];
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        int index = 0;
+        foreach (var tensor in GetAllParameterTensors())
+        {
+            for (int i = 0; i < tensor.Length; i++)
+                parameters[index++] = tensor[i];
+        }
+        return parameters;
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameterGradients()
+    {
+        var allParams = GetAllParameterTensors();
+        var allGrads = GetAllGradientTensors();
+        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        int index = 0;
+
+        for (int i = 0; i < allParams.Length; i++)
+        {
+            var grad = allGrads[i];
+            if (grad != null)
+            {
+                for (int j = 0; j < grad.Length; j++)
+                    result[index++] = grad[j];
+            }
+            else
+            {
+                index += allParams[i].Length;
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _timeMixRGrad = null;
+        _timeMixKGrad = null;
+        _timeMixVGrad = null;
+        _timeMixAGrad = null;
+        _timeMixBGrad = null;
+        _receptanceWeightsGrad = null;
+        _keyWeightsGrad = null;
+        _valueWeightsGrad = null;
+        _outputWeightsGrad = null;
+        _aWeightsGrad = null;
+        _aBiasGrad = null;
+        _bWeightsGrad = null;
+        _bBiasGrad = null;
+        _groupNormGammaGrad = null;
+        _groupNormBetaGrad = null;
+        _channelMixRGrad = null;
+        _channelMixKGrad = null;
+        _channelKeyWeightsGrad = null;
+        _channelValueWeightsGrad = null;
+        _channelReceptanceWeightsGrad = null;
+        _normGamma1Grad = null;
+        _normBeta1Grad = null;
+        _normGamma2Grad = null;
+        _normBeta2Grad = null;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+
+        int index = 0;
+        foreach (var tensor in GetAllParameterTensors())
+        {
+            for (int i = 0; i < tensor.Length; i++)
+                tensor[i] = parameters[index++];
+        }
+    }
+
+    /// <summary>
+    /// Gets the recurrent state for autoregressive continuation.
+    /// </summary>
+    public Tensor<T>? GetRecurrentState() => _recurrentState?.Clone();
+
+    /// <summary>
+    /// Sets the recurrent state for autoregressive continuation.
+    /// </summary>
+    public void SetRecurrentState(Tensor<T>? state)
+    {
+        _recurrentState = state?.Clone();
+    }
+
+    /// <summary>
+    /// Gets the previous token for token-shift continuation.
+    /// </summary>
+    public Tensor<T>? GetPreviousToken() => _prevToken?.Clone();
+
+    /// <summary>
+    /// Sets the previous token for token-shift continuation.
+    /// </summary>
+    public void SetPreviousToken(Tensor<T>? token)
+    {
+        _prevToken = token?.Clone();
+        _prevChannelToken = null;  // Channel prev token resets with time mixing prev token
+    }
+
+    /// <inheritdoc />
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastOutput = null;
+        _lastTimeMixOutput = null;
+        _lastChannelMixOutput = null;
+        _lastNormed1 = null;
+        _lastNormed2 = null;
+        _lastAfterTimeMix = null;
+        _originalInputShape = null;
+        _cachedWkvOut = null;
+        _cachedChannelRGate = null;
+        _cachedChannelSiLU = null;
+        _cachedChannelVProj = null;
+        _recurrentState = null;
+        _prevToken = null;
+        _prevChannelToken = null;
+        ClearAllGradients();
+    }
+
+    private void ClearAllGradients()
+    {
+        _timeMixRGrad = null;
+        _timeMixKGrad = null;
+        _timeMixVGrad = null;
+        _timeMixAGrad = null;
+        _timeMixBGrad = null;
+        _receptanceWeightsGrad = null;
+        _keyWeightsGrad = null;
+        _valueWeightsGrad = null;
+        _outputWeightsGrad = null;
+        _aWeightsGrad = null;
+        _aBiasGrad = null;
+        _bWeightsGrad = null;
+        _bBiasGrad = null;
+        _groupNormGammaGrad = null;
+        _groupNormBetaGrad = null;
+        _channelMixRGrad = null;
+        _channelMixKGrad = null;
+        _channelKeyWeightsGrad = null;
+        _channelValueWeightsGrad = null;
+        _channelReceptanceWeightsGrad = null;
+        _normGamma1Grad = null;
+        _normBeta1Grad = null;
+        _normGamma2Grad = null;
+        _normBeta2Grad = null;
+    }
+
+    private Tensor<T>[] GetAllParameterTensors() =>
+    [
+        _timeMixR, _timeMixK, _timeMixV, _timeMixA, _timeMixB,
+        _receptanceWeights, _keyWeights, _valueWeights, _outputWeights,
+        _aWeights, _aBias, _bWeights, _bBias,
+        _groupNormGamma, _groupNormBeta,
+        _channelMixR, _channelMixK,
+        _channelKeyWeights, _channelValueWeights, _channelReceptanceWeights,
+        _normGamma1, _normBeta1, _normGamma2, _normBeta2
+    ];
+
+    private Tensor<T>?[] GetAllGradientTensors() =>
+    [
+        _timeMixRGrad, _timeMixKGrad, _timeMixVGrad, _timeMixAGrad, _timeMixBGrad,
+        _receptanceWeightsGrad, _keyWeightsGrad, _valueWeightsGrad, _outputWeightsGrad,
+        _aWeightsGrad, _aBiasGrad, _bWeightsGrad, _bBiasGrad,
+        _groupNormGammaGrad, _groupNormBetaGrad,
+        _channelMixRGrad, _channelMixKGrad,
+        _channelKeyWeightsGrad, _channelValueWeightsGrad, _channelReceptanceWeightsGrad,
+        _normGamma1Grad, _normBeta1Grad, _normGamma2Grad, _normBeta2Grad
+    ];
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["ModelDimension"] = _modelDimension.ToString();
+        metadata["NumHeads"] = _numHeads.ToString();
+        metadata["HeadDimension"] = _headDimension.ToString();
+        metadata["FFNDimension"] = _ffnDimension.ToString();
+        metadata["Architecture"] = "RWKV-7";
+        return metadata;
+    }
+}

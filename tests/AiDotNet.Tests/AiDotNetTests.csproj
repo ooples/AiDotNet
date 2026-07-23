@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	  <TargetFrameworks>net10.0;net471</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+	  <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <DotNetCliToolReference Include="JetBrains.dotCover.CommandLineTools" Version="2023.2.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="System.Net.Http" />
+    <PackageReference Include="System.Text.RegularExpressions" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Moq" />
+    <PackageReference Include="Xunit.SkippableFact" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+    <!-- Opt-in metapackages extracted in audit-2026-05 phase 2c (#14). The test
+         project references them so the tests for their types compile after the
+         types moved out of the core package:
+           - Privacy.HE     → FederatedLearning/SealHomomorphicEncryptionProviderTests.cs
+           - Storage.Sqlite → Storage/SqliteSqlSyntaxValidatorTests.cs -->
+    <ProjectReference Include="..\..\src\AiDotNet.Privacy.HE\AiDotNet.Privacy.HE.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Storage.Sqlite\AiDotNet.Storage.Sqlite.csproj" />
+  </ItemGroup>
+
+  <!-- Source generator for auto-generating test scaffolds for untested models -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Shared-compile the generator's Roslyn-free floatify helper so its (#1679) logic can be
+       unit-tested directly. The generator above is referenced only as an analyzer, so its
+       compiled assembly is not callable from tests; this pulls in just the pure-string helper. -->
+  <ItemGroup>
+    <Compile Include="..\..\src\AiDotNet.Generators\GeneratedTestFloatify.cs" Link="Generators\GeneratedTestFloatify.cs" />
+    <!-- Shared-compile the model-metadata validator so its assembly-scoping logic (AIDN001 must
+         fire for AiDotNet's own library models but NOT for consumer/test IFullModel doubles) can
+         be driven directly in a Roslyn generator unit test. Referenced above only as an analyzer,
+         whose compiled assembly is not callable from tests. -->
+    <Compile Include="..\..\src\AiDotNet.Generators\ModelMetadataValidationGenerator.cs" Link="Generators\ModelMetadataValidationGenerator.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ProjectReference Include="..\..\tools\AiDotNet.ProgramSynthesis.Tooling\AiDotNet.ProgramSynthesis.Tooling.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Serving\AiDotNet.Serving.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Storage.Postgres\AiDotNet.Storage.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Storage.Redis\AiDotNet.Storage.Redis.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Storage.Neo4j\AiDotNet.Storage.Neo4j.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Storage.Elasticsearch\AiDotNet.Storage.Elasticsearch.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="IntegrationTests\Clustering\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

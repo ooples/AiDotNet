@@ -1,0 +1,2946 @@
+using AiDotNet.Helpers;
+using AiDotNet.Caching;
+using AiDotNet.Deployment.Configuration;
+using AiDotNet.Data.Sampling;
+using AiDotNet.Engines;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.MixedPrecision;
+// Alias the namespace because `Regularization` is also a property name on the
+// base class, which would otherwise shadow the namespace at member-access sites.
+using RegularizationNs = AiDotNet.Regularization;
+// 0.68.0 of AiDotNet.Tensors introduced its own MixedPrecisionConfig under
+// Engines.Autodiff (the engine-side fp16/bf16 mixed-precision plumbing the
+// repo asked for in ooples/AiDotNet.Tensors#276). Alias the local one to a
+// distinct name so the two coexist without ambiguity at every reference.
+using LocalMixedPrecisionConfig = AiDotNet.MixedPrecision.MixedPrecisionConfig;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
+using System.Collections.Concurrent;
+using System.Reflection;
+
+namespace AiDotNet.Optimizers;
+
+/// <summary>
+/// Represents a base class for gradient-based optimization algorithms.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Gradient-based optimizers use the gradient of the loss function to update the model parameters
+/// in a direction that minimizes the loss. This base class provides common functionality for
+/// various gradient-based optimization techniques.
+/// </para>
+/// <para><b>For Beginners:</b> Think of gradient-based optimization like finding the bottom of a valley:
+/// 
+/// - You start at a random point on a hilly landscape (your initial model parameters)
+/// - You look around to see which way is steepest downhill (calculate the gradient)
+/// - You take a step in that direction (update the parameters)
+/// - You repeat this process until you reach the bottom of the valley (optimize the model)
+/// 
+/// This approach helps the model learn by gradually adjusting its parameters to minimize errors.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IGradientBasedOptimizer<T, TInput, TOutput>
+{
+    /// <summary>
+    /// Options specific to gradient-based optimization algorithms.
+    /// </summary>
+    protected GradientBasedOptimizerOptions<T, TInput, TOutput> GradientOptions;
+
+    /// <summary>
+    /// Gradient-based optimizers ALWAYS skip <c>model.Train()</c> during the
+    /// pre-epoch <c>PrepareAndEvaluateSolution</c> call. They update parameters
+    /// exclusively via <see cref="UpdateSolution"/> inside the mini-batched
+    /// epoch loop in <c>Optimize()</c> — the initial Train pass would push the
+    /// entire <c>XTrain</c> tensor through the model in one shot, ignoring
+    /// the configured <c>BatchSize</c>. For Transformer-style architectures
+    /// the resulting activation footprint scales like <c>O(B · S²)</c> for
+    /// attention scores (B = full-corpus batch, S = sequence length), which
+    /// OOMs on any non-trivial corpus — see #1296 for the repro. Adam's
+    /// <c>_m</c> / <c>_v</c> are deferred-allocated until the first
+    /// <see cref="UpdateSolution"/> (#1221), so the model's initial
+    /// untrained-state evaluation is correct as the optimization baseline.
+    /// </summary>
+    protected override bool SkipTrainingInEvaluation => true;
+
+    /// <summary>
+    /// No-op for gradient-based optimizers — <see cref="SkipTrainingInEvaluation"/>
+    /// is already <c>true</c> from the very first call. Kept on the override
+    /// surface so future tape-aware optimizer subclasses that DO need a
+    /// one-shot warm-up Train can re-enable it via composition rather than
+    /// re-implementing the flag.
+    /// </summary>
+    protected override void OnInitialTrainingCompleted()
+    {
+    }
+
+    /// <summary>
+    /// The current learning rate used in the optimization process.
+    /// </summary>
+    private double _currentLearningRate;
+
+    /// <summary>
+    /// The current momentum factor used in the optimization process.
+    /// </summary>
+    private double _currentMomentum;
+
+    /// <summary>
+    /// The gradient from the previous optimization step, used for momentum calculations.
+    /// </summary>
+    protected Vector<T> _previousGradient;
+
+    /// <summary>
+    /// The gradients computed during the last optimization step.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the gradients calculated in the most recent call to CalculateGradient().
+    /// It enables external access to gradients for features like gradient clipping, distributed
+    /// training (true DDP), debugging, and visualization.
+    /// Returns Vector&lt;T&gt;.Empty() if no gradients have been computed yet.
+    /// </remarks>
+    protected Vector<T> _lastComputedGradients;
+
+    private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
+
+    private readonly ConcurrentDictionary<Tensor<T>, int> _tapeParameterIndices =
+        new(TensorReferenceComparer<Tensor<T>>.Instance);
+
+    private readonly Dictionary<string, Dictionary<int, Tensor<T>>> _pendingTapeTensorStates =
+        new(StringComparer.Ordinal);
+
+    private readonly object _tapeStateSync = new();
+
+    // The context.Parameters.Count the tape index map was last rebuilt for, plus the identity of the
+    // parameter-collection instance it was built from. Together they drive the steady-state fast paths in
+    // PrepareTapeState: same collection instance + same count => skip even the verification scan. -1/null
+    // = never built.
+    private int _tapeIndexedParameterCount = -1;
+    private object? _tapeIndexedParametersRef;
+
+    /// <summary>
+    /// A cache for storing and retrieving gradients to improve performance.
+    /// </summary>
+    protected IGradientCache<T> GradientCache;
+
+    /// <summary>
+    /// Applies a <see cref="CacheConfig"/> to this optimizer's caches. Extends the base (which handles
+    /// the model-evaluation cache) by also replacing the gradient cache with one bounded to the
+    /// configured <see cref="CacheConfig.GradientCacheCapacity"/> + <see cref="CacheConfig.OptimizerCacheEvictionPolicy"/>
+    /// (or a disabled pass-through when <see cref="CacheConfig.Enabled"/> is false).
+    /// </summary>
+    /// <param name="config">The cache configuration to apply (must not be null).</param>
+    internal override void ApplyCacheConfiguration(CacheConfig config)
+    {
+        base.ApplyCacheConfiguration(config);
+        int capacity = config.GradientCacheCapacity > 0
+            ? config.GradientCacheCapacity
+            : DefaultGradientCache<T>.DefaultCapacity;
+        GradientCache = new DefaultGradientCache<T>(capacity, config.OptimizerCacheEvictionPolicy, config.Enabled);
+    }
+
+    /// <summary>
+    /// A method used to compare the predicted values vs the actual values.
+    /// </summary>
+    protected ILossFunction<T> LossFunction;
+
+    /// <summary>
+    /// The loss function currently used by the optimizer's gradient path.
+    /// Internal — exposed so regression tests in <c>AiDotNetTests</c> can verify
+    /// the result of the model-default auto-sync in <see cref="OnModelChanged"/>
+    /// without expanding the public optimizer surface (optimizers are an
+    /// implementation detail; users should interact via <c>AiModelBuilder</c>).
+    /// </summary>
+    internal ILossFunction<T> CurrentLossFunction => LossFunction;
+
+    /// <summary>
+    /// A method used to regularize the parameters so they don't get out of control.
+    /// </summary>
+    protected IRegularization<T, TInput, TOutput> Regularization;
+
+    /// <summary>
+    /// Replaces the active regularization on this optimizer at runtime.
+    /// Internal because this is builder-wiring, not a user-facing API
+    /// — mirrors the <see cref="EnableMixedPrecision"/> pattern at L626.
+    /// </summary>
+    /// <remarks>
+    /// Used by <see cref="AiModelBuilder{T, TInput, TOutput}"/> when the
+    /// caller invokes <c>ConfigureRegularization</c> after constructing
+    /// the optimizer — without this setter the field is set on the
+    /// builder but never reaches the optimizer that owns the L1/L2 /
+    /// dropout / elastic-net term during gradient application.
+    /// Discovered by AiDotNet#1345 Bucket7 ConfigureRegularization test.
+    /// </remarks>
+    /// <param name="regularization">Replacement regularization strategy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when
+    /// <paramref name="regularization"/> is null.</exception>
+    internal void SetRegularization(IRegularization<T, TInput, TOutput> regularization)
+    {
+        Guard.NotNull(regularization);
+        Regularization = regularization;
+    }
+
+    /// <summary>
+    /// The active regularization applied during gradient updates. Set
+    /// by <see cref="SetRegularization"/>; defaults to L2 if the
+    /// constructor was not given an explicit regularization.
+    /// </summary>
+    /// <remarks>
+    /// Promoted from a test-only internal accessor
+    /// (<c>GetRegularizationForTests</c>) to a public read-only property
+    /// in PR #1368 (review comment: production code should not carry
+    /// test-only APIs). Production consumers can use this to introspect
+    /// the configured regularization without reflection.
+    /// </remarks>
+    public IRegularization<T, TInput, TOutput> ActiveRegularization => Regularization;
+
+    /// <summary>
+    /// Mixed-precision training context (null if mixed-precision is disabled).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training uses both 16-bit (FP16) and 32-bit (FP32) floating-point
+    /// numbers during optimization. This context manages the conversion between precisions and handles
+    /// loss scaling to prevent numerical issues. When enabled, this can provide:
+    /// - 2-3x faster training on modern GPUs (V100, A100, RTX 3000+)
+    /// - ~50% memory reduction
+    /// - Maintained accuracy through careful precision management
+    /// </para>
+    /// </remarks>
+    protected MixedPrecisionContext? _mixedPrecisionContext;
+
+    /// <summary>
+    /// The learning rate scheduler to use for adjusting learning rate during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A learning rate scheduler automatically adjusts how fast your model
+    /// learns during training. Common strategies include starting high and decreasing over time,
+    /// or using warmup to slowly increase the learning rate at the beginning.
+    /// </para>
+    /// </remarks>
+    protected ILearningRateScheduler? _learningRateScheduler;
+
+    /// <summary>
+    /// Specifies when to step the learning rate scheduler.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Controls whether the scheduler updates after each batch, each epoch, or uses warmup
+    /// followed by per-epoch stepping.
+    /// </para>
+    /// </remarks>
+    protected SchedulerStepMode _schedulerStepMode;
+
+    /// <summary>
+    /// Puts the model into training mode at the start of an Optimize run.
+    /// Mirror call: <see cref="EndOptimizeRun"/>. Lifted to base in
+    /// PR #1364 so every gradient optimizer can satisfy the H2 contract
+    /// (training-mode toggle around the epoch loop) with a single call
+    /// without duplicating the type-check + cast across 27 subclass
+    /// Optimize methods (review #1364 C4nLO).
+    /// </summary>
+    /// <param name="solution">The model being optimized.</param>
+    protected static void BeginOptimizeRun(object? solution)
+    {
+        (solution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
+    }
+
+    /// <summary>
+    /// Returns the model to eval mode at the end of an Optimize run.
+    /// MUST be called from a finally block so the eval-mode invariant
+    /// holds even if the epoch loop throws (next Predict / evaluation
+    /// call would otherwise accidentally engage dropout / batchnorm
+    /// running-stats).
+    /// </summary>
+    /// <param name="solution">The model being optimized.</param>
+    protected static void EndOptimizeRun(object? solution)
+    {
+        (solution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Returns true when the per-epoch convergence signal is below
+    /// <paramref name="tolerance"/>. Implements the H6/issue-#1340 fix:
+    /// compares CURRENT against PREVIOUS epoch fitness (not against
+    /// best, which would false-positive-converge on epoch 0 because
+    /// UpdateBestSolution copies currentStepData into bestStepData on
+    /// the first iteration) and SKIPS the check on epoch 0 (where
+    /// previousStepData is the pre-training baseline and a small
+    /// delta is meaningless — review #1364 C4nK1).
+    /// </summary>
+    /// <param name="epoch">The current epoch number (0-based).</param>
+    /// <param name="current">Fitness data from this epoch.</param>
+    /// <param name="previous">Fitness data from the prior epoch.</param>
+    /// <param name="tolerance">The convergence threshold.</param>
+    /// <returns>True if the optimizer should stop; false otherwise.</returns>
+    protected bool IsConvergedAgainstPreviousEpoch(
+        int epoch,
+        OptimizationStepData<T, TInput, TOutput> current,
+        OptimizationStepData<T, TInput, TOutput> previous,
+        double tolerance)
+    {
+        if (epoch <= 0) return false;
+        return NumOps.LessThan(
+            NumOps.Abs(NumOps.Subtract(previous.FitnessScore, current.FitnessScore)),
+            NumOps.FromDouble(tolerance));
+    }
+
+    /// <summary>
+    /// The current step (batch) number for scheduler tracking.
+    /// </summary>
+    protected int _currentStep = 0;
+
+    /// <summary>
+    /// The current epoch number for scheduler tracking.
+    /// </summary>
+    protected int _currentEpoch = 0;
+
+    /// <summary>
+    /// Gets whether mixed-precision training is enabled for this optimizer.
+    /// </summary>
+    public bool IsMixedPrecisionEnabled => _mixedPrecisionContext != null;
+
+    /// <summary>
+    /// Gets the current learning rate scheduler, if one is configured.
+    /// </summary>
+    public ILearningRateScheduler? LearningRateScheduler => _learningRateScheduler;
+
+    /// <summary>
+    /// Resolves this optimizer's attached LR scheduler (if any) into a fused-side
+    /// <see cref="Tensors.Engines.Compilation.LrSchedule"/> for
+    /// <see cref="Fused.IFusedOptimizerSpec"/> implementations. Shared so the
+    /// per-optimizer specs don't each repeat the mapping.
+    /// <para>
+    /// Returns <c>false</c> only for an UNKNOWN scheduler type (so a configured
+    /// schedule is never silently dropped — the caller falls back to eager). A
+    /// null scheduler or a constant scheduler yields <c>true</c> with
+    /// <paramref name="schedule"/> = null (constant LR; the spec's
+    /// <c>GetCurrentLearningRate</c> supplies the rate). The supported set mirrors
+    /// the fused kernel's implemented schedule shapes; new shapes are added here
+    /// alongside their kernel support.
+    /// </para>
+    /// </summary>
+    protected bool TryGetFusedLrSchedule(out Tensors.Engines.Compilation.LrSchedule? schedule)
+    {
+        schedule = null;
+        switch (_learningRateScheduler)
+        {
+            case null:
+            case LearningRateSchedulers.ConstantLRScheduler:
+                return true;
+            case LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
+                // Denominator reconciliation: eager CosineAnnealing uses
+                // cos(π·(N-1)/tMax) on batch N, but the fused CosineLr uses
+                // cos(π·(s-1)/(totalSteps-1)). Passing totalSteps = tMax+1 makes
+                // (s-1)/(totalSteps-1) = (N-1)/tMax, so the fused per-step
+                // sequence is bit-identical to eager (previously off by ~4e-6/
+                // step from passing tMax directly).
+                schedule = Tensors.Engines.Compilation.LrSchedule.Cosine(
+                    cosine.BaseLearningRate, cosine.TMax + 1, cosine.EtaMin);
+                return true;
+            case LearningRateSchedulers.ExponentialLRScheduler expo:
+                schedule = Tensors.Engines.Compilation.LrSchedule.Exponential(
+                    expo.BaseLearningRate, expo.Gamma);
+                return true;
+            case LearningRateSchedulers.NoamSchedule noam:
+                // Vaswani-2017 warmup + inverse-sqrt. The fused kernel evaluates
+                // GetLr(step) per optimizer step, so the Noam ramp runs on the
+                // fused fast path with the SAME per-step LR sequence as the eager
+                // NoamSchedule (both use t = step, 1-based) — no eager fallback,
+                // no constant-rate freeze (AiDotNet#1470).
+                schedule = Tensors.Engines.Compilation.LrSchedule.Noam(
+                    noam.ModelDimension, noam.WarmupSteps, noam.Factor);
+                return true;
+            case LearningRateSchedulers.LinearWarmupScheduler warmup:
+                // Linear warmup → Constant/Linear/Cosine decay (Vaswani/most modern
+                // foundation-model recipes start with a warmup ramp). The fused
+                // kernel evaluates GetLr(step) per optimizer step, so the warmup
+                // ramp runs on the fused fast path with the SAME per-step LR sequence
+                // as the eager LinearWarmupScheduler — batch 1 = warmupInitLr, batch n
+                // = max(endLr, ComputeLearningRate(n-1)). Without this case the warmup
+                // recipe fell through to `default` → eager tape → no CUDA-graph capture
+                // (a 14–23× slowdown on the GPU-captured training path). Requires the
+                // general LrSchedule.LinearWarmup + WarmupDecayMode API published in
+                // AiDotNet.Tensors 0.106.1.
+                schedule = Tensors.Engines.Compilation.LrSchedule.LinearWarmup(
+                    warmup.BaseLearningRate,
+                    warmup.WarmupSteps,
+                    warmup.TotalSteps,
+                    warmup.WarmupInitLr,
+                    warmup.CurrentDecayMode switch
+                    {
+                        LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear
+                            => Tensors.Engines.Compilation.WarmupDecayMode.Linear,
+                        LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Cosine
+                            => Tensors.Engines.Compilation.WarmupDecayMode.Cosine,
+                        _ => Tensors.Engines.Compilation.WarmupDecayMode.Constant,
+                    },
+                    warmup.EndLr);
+                return true;
+            case LearningRateSchedulers.StepLRScheduler stepLr:
+                // lr0 · gamma^decayCount. The Tensors StepLr's max(0, step-1)/stepSize
+                // exactly matches the eager (N-1)/stepSize decay count on batch N.
+                schedule = Tensors.Engines.Compilation.LrSchedule.Step(
+                    stepLr.BaseLearningRate, stepLr.StepSize, stepLr.Gamma);
+                return true;
+            case LearningRateSchedulers.CyclicLRScheduler cyclic
+                    when cyclic.Mode == LearningRateSchedulers.CyclicLRScheduler.CyclicMode.Triangular
+                         && cyclic.StepSizeUp == cyclic.StepSizeDown:
+                // Fused Cyclic is symmetric-triangular only (single stepSize).
+                // Triangular2 / ExponentialRange / asymmetric up≠down have no
+                // fused equivalent → fall through to eager.
+                schedule = Tensors.Engines.Compilation.LrSchedule.Cyclic(
+                    cyclic.BaseLearningRate, cyclic.MaxLearningRate, cyclic.StepSizeUp);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets the current scheduler step mode.
+    /// </summary>
+    public SchedulerStepMode SchedulerStepMode => _schedulerStepMode;
+
+    /// <summary>
+    /// Initializes a new instance of the GradientBasedOptimizerBase class.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This sets up the gradient-based optimizer with its initial settings.
+    /// It's like preparing for your hike by choosing your starting point, deciding how big your steps
+    /// will be, and how much you'll consider your previous direction when choosing your next step.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The model to optimize (can be null if set later).</param>
+    /// <param name="options">Options for the gradient-based optimizer.</param>
+    protected GradientBasedOptimizerBase(
+        IFullModel<T, TInput, TOutput>? model,
+        GradientBasedOptimizerOptions<T, TInput, TOutput> options) :
+        base(model, options)
+    {
+        GradientOptions = options;
+        _currentMomentum = GradientOptions.InitialMomentum;
+        _previousGradient = Vector<T>.Empty();
+        _lastComputedGradients = Vector<T>.Empty();
+        LossFunction = options.LossFunction;
+        GradientCache = options.GradientCache;
+        Regularization = options.Regularization;
+
+        // Initialize learning rate scheduler from options.
+        //
+        // UseAdaptiveLearningRate is itself a schedule — shrink while improving, grow while stalled
+        // — so it is expressed as one rather than as a competing rule that writes the learning rate
+        // behind the scheduler's back (which is what it used to do in
+        // OptimizerBase.UpdateAdaptiveParameters, silently overwriting any configured schedule every
+        // step). Installing it here means there is exactly one writer, an explicitly configured
+        // scheduler simply replaces it, and the flag keeps its existing behavior for callers who
+        // never touched schedulers.
+        _learningRateScheduler = options.LearningRateScheduler;
+        if (_learningRateScheduler is null && options.UseAdaptiveLearningRate)
+        {
+            // Stepped per fitness observation rather than on the SchedulerStepMode cadence, because
+            // that is exactly when the inline rule it replaces used to run (UpdateAdaptiveParameters,
+            // which most optimizers call per iteration). Only AdamOptimizer drives OnEpochEnd, so
+            // leaving this one to the epoch cadence would silently stop every other optimizer from
+            // adapting at all.
+            _adaptiveSchedulerStepsOnFitness = true;
+            _learningRateScheduler = new LearningRateSchedulers.AdaptiveFitnessScheduler(
+                baseLearningRate: options.InitialLearningRate,
+                decay: options.LearningRateDecay,
+                minLearningRate: options.MinLearningRate,
+                maxLearningRate: options.MaxLearningRate,
+                // The metric fed to the scheduler is this optimizer's fitness score, whose direction
+                // depends on the calculator (a loss vs R²/accuracy). Passing the direction keeps the
+                // rule identical to the inline one it replaces, which compared via IsBetterFitness.
+                higherIsBetter: FitnessCalculator.IsHigherScoreBetter);
+        }
+
+        _schedulerStepMode = options.SchedulerStepMode;
+
+        // Use scheduler's current learning rate if available, otherwise use initial rate
+        // Sync both learning rate fields so derived classes using either will get the correct value
+        SetLearningRate(_learningRateScheduler?.CurrentLearningRate
+            ?? GradientOptions.InitialLearningRate);
+    }
+
+    /// <summary>
+    /// When the optimizer's model is (re-)set and the caller did NOT explicitly configure
+    /// <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}.LossFunction"/>, adopt
+    /// the model's <see cref="IFullModel{T, TInput, TOutput}.DefaultLossFunction"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this, a model configured with e.g. <c>CategoricalCrossEntropyLoss&lt;float&gt;</c>
+    /// silently trains under the optimizer-options default
+    /// <c>MeanSquaredErrorLoss&lt;float&gt;</c>, because
+    /// <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}"/> reads its loss from the
+    /// optimizer options at construction time. The shape mismatch (one-hot
+    /// <c>[batch, vocab]</c> target vs MSE-on-<c>[batch, vocab]</c> prediction) typically
+    /// blows up downstream in <c>TensorSubtract</c>.
+    /// </para>
+    /// <para>
+    /// The caller's explicit choice always wins: if the options' loss was set explicitly
+    /// (tracked by <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}.LossFunctionExplicitlySet"/>),
+    /// we don't touch it. This means a user who genuinely wants to optimize a CCE-model
+    /// under MSE can still do so by setting the optimizer's loss themselves.
+    /// </para>
+    /// </remarks>
+    protected override void OnModelChanged(
+        IFullModel<T, TInput, TOutput>? oldModel,
+        IFullModel<T, TInput, TOutput> newModel)
+    {
+        base.OnModelChanged(oldModel, newModel);
+
+        if (GradientOptions.LossFunctionExplicitlySet)
+        {
+            return;
+        }
+
+        ILossFunction<T>? modelDefault = null;
+        try
+        {
+            modelDefault = newModel.DefaultLossFunction;
+        }
+        catch (InvalidOperationException)
+        {
+            // Some IFullModel implementations throw if accessed before configuration;
+            // treat that as "no model-side default available" and keep the optimizer's
+            // default (MSE).
+        }
+
+        if (modelDefault is null)
+        {
+            return;
+        }
+
+        LossFunction = modelDefault;
+        // Mirror to the options so consumers that read GradientOptions.LossFunction
+        // (e.g. AiModelBuilder facade, debug logging) see the synced value too.
+        // The back-door setter does NOT flip LossFunctionExplicitlySet, so a future
+        // SetModel call still re-syncs from the new model's default.
+        GradientOptions.SetLossFunctionFromAutoSync(modelDefault);
+    }
+
+    /// <summary>
+    /// Sets the current learning rate, synchronizing both the double field (_currentLearningRate)
+    /// and the generic T field (CurrentLearningRate) used by derived optimizers.
+    /// </summary>
+    /// <param name="learningRate">The new learning rate value.</param>
+    private void SetLearningRate(double learningRate)
+    {
+        _currentLearningRate = learningRate;
+        CurrentLearningRate = NumOps.FromDouble(learningRate);
+    }
+
+    #region DataLoader Integration
+
+    /// <summary>
+    /// Creates a data batcher for the given optimization input data using configured sampling options.
+    /// </summary>
+    /// <param name="inputData">The optimization input data to batch.</param>
+    /// <param name="batchSize">The batch size for training.</param>
+    /// <returns>An OptimizationDataBatcher configured with the optimizer's sampling options.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a helper that splits your training data
+    /// into smaller batches for efficient training. The batching behavior is controlled by:
+    /// - DataSampler (if set): Advanced sampling strategies like weighted/curriculum learning
+    /// - ShuffleData: Whether to randomize the order each epoch
+    /// - DropLastBatch: Whether to discard incomplete final batches
+    /// - RandomSeed: For reproducible randomization
+    ///
+    /// **Example usage:**
+    /// <code>
+    /// var batcher = CreateBatcher(inputData, batchSize: 32);
+    /// foreach (var (xBatch, yBatch, indices) in batcher.GetBatches())
+    /// {
+    ///     var gradient = CalculateGradient(model, xBatch, yBatch);
+    ///     model = UpdateSolution(model, gradient);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected OptimizationDataBatcher<T, TInput, TOutput> CreateBatcher(
+        OptimizationInputData<T, TInput, TOutput> inputData,
+        int batchSize,
+        int epoch = 0)
+    {
+        return new OptimizationDataBatcher<T, TInput, TOutput>(
+            inputData,
+            batchSize,
+            shuffle: GradientOptions.ShuffleData,
+            dropLast: GradientOptions.DropLastBatch,
+            seed: GradientOptions.RandomSeed,
+            sampler: GradientOptions.DataSampler,
+            epoch: epoch);
+    }
+
+    /// <summary>
+    /// Creates a data batcher with a custom sampler, overriding the configured options.
+    /// </summary>
+    /// <param name="inputData">The optimization input data to batch.</param>
+    /// <param name="batchSize">The batch size for training.</param>
+    /// <param name="sampler">The custom sampler to use for advanced sampling strategies.</param>
+    /// <returns>An OptimizationDataBatcher with the custom sampler.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this when you want to try a different sampling strategy
+    /// without changing the optimizer's default configuration.
+    ///
+    /// **Example:**
+    /// <code>
+    /// // Create a curriculum learning sampler
+    /// var sampler = Samplers.Curriculum(difficulties, totalEpochs: 100);
+    /// var batcher = CreateBatcher(inputData, batchSize: 32, sampler: sampler);
+    ///
+    /// // Use balanced sampling for class imbalance
+    /// var sampler = Samplers.Balanced(labels, numClasses: 10);
+    /// var batcher = CreateBatcher(inputData, batchSize: 32, sampler: sampler);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected OptimizationDataBatcher<T, TInput, TOutput> CreateBatcher(
+        OptimizationInputData<T, TInput, TOutput> inputData,
+        int batchSize,
+        IDataSampler sampler,
+        int epoch = 0)
+    {
+        return new OptimizationDataBatcher<T, TInput, TOutput>(
+            inputData,
+            batchSize,
+            shuffle: GradientOptions.ShuffleData,
+            dropLast: GradientOptions.DropLastBatch,
+            seed: GradientOptions.RandomSeed,
+            sampler: sampler,
+            epoch: epoch);
+    }
+
+    /// <summary>
+    /// Notifies the sampler that a new epoch has started (for epoch-aware samplers).
+    /// </summary>
+    /// <param name="currentEpoch">The current epoch number (0-based).</param>
+    /// <remarks>
+    /// <para>Call this at the beginning of each training epoch when using adaptive samplers
+    /// like curriculum learning or self-paced learning that adjust their behavior over time.</para>
+    /// </remarks>
+    protected void NotifyEpochStart(int currentEpoch)
+    {
+        GradientOptions.DataSampler?.OnEpochStart(currentEpoch);
+    }
+
+    #endregion
+
+    /// <inheritdoc/>
+    public virtual Vector<T> LastComputedGradients => _lastComputedGradients;
+
+    /// <summary>
+    /// Gets the last computed gradients, unscaled from loss scaling if mixed precision is enabled.
+    /// </summary>
+    /// <returns>The unscaled gradients, or an empty vector if none have been computed.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When using mixed-precision training with loss scaling,
+    /// the stored gradients are scaled by a large factor to prevent underflow.
+    /// This method returns the "true" gradients by dividing out the scale factor,
+    /// which is necessary for accurate gradient health checks.</para>
+    /// </remarks>
+    private Vector<T> GetUnscaledGradients()
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+            return _lastComputedGradients ?? new Vector<T>(0);
+
+        if (_mixedPrecisionContext == null)
+            return _lastComputedGradients;
+
+        double scale = _mixedPrecisionContext.LossScaler.Scale;
+        if (scale <= 0 || double.IsNaN(scale) || double.IsInfinity(scale))
+            scale = 1.0;
+
+        return _lastComputedGradients.Divide(NumOps.FromDouble(scale));
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>Note:</b> This overload extracts parameters from the model. For distributed training,
+    /// use the safer 3-parameter overload that accepts originalParameters explicitly to prevent
+    /// double-stepping bugs.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
+    {
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        // Delegate to the safe 3-parameter overload
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
+        return ApplyGradients(parameters, gradients, model);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>Production-Ready for Distributed Training:</b>
+    /// This overload prevents double-stepping by accepting originalParameters explicitly.
+    /// The model parameter is used only as a template for structure.
+    /// </para>
+    /// <para>
+    /// Correct implementation: applies gradients to originalParameters (not model.GetParameters()),
+    /// ensuring single-step behavior even if model contains post-update parameters.
+    /// </para>
+    /// <para><b>Mixed-Precision Support:</b> When mixed-precision is enabled via
+    /// <see cref="EnableMixedPrecision"/>, this method automatically routes through
+    /// <see cref="ApplyGradientsWithMixedPrecision"/> for gradient unscaling and overflow detection.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> originalParameters, Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
+    {
+        if (originalParameters == null)
+            throw new ArgumentNullException(nameof(originalParameters));
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        if (gradients.Length != originalParameters.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient size ({gradients.Length}) must match original parameter count ({originalParameters.Length})",
+                nameof(gradients));
+        }
+
+        // Route through mixed-precision handler when enabled
+        // ApplyGradientsWithMixedPrecision will call ApplyGradientsCore internally
+        if (_mixedPrecisionContext != null)
+        {
+            return ApplyGradientsWithMixedPrecision(originalParameters, gradients, model);
+        }
+
+        // Standard path without mixed precision
+        return ApplyGradientsCore(originalParameters, gradients, model);
+    }
+
+    /// <summary>
+    /// Applies gradients to parameters with explicit control over whether gradients are already unscaled.
+    /// </summary>
+    /// <param name="originalParameters">The original parameters before the update.</param>
+    /// <param name="gradients">The gradients to apply.</param>
+    /// <param name="model">The model to update.</param>
+    /// <param name="gradientsAlreadyUnscaled">If true, skips the mixed-precision unscaling step.</param>
+    /// <returns>The updated model with new parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This overload is useful when you've already unscaled the gradients
+    /// manually (e.g., after checking for overflow) and want to avoid double-unscaling.</para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> ApplyGradients(
+        Vector<T> originalParameters,
+        Vector<T> gradients,
+        IFullModel<T, TInput, TOutput> model,
+        bool gradientsAlreadyUnscaled)
+    {
+        if (originalParameters == null)
+            throw new ArgumentNullException(nameof(originalParameters));
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        if (gradients.Length != originalParameters.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient size ({gradients.Length}) must match original parameter count ({originalParameters.Length})",
+                nameof(gradients));
+        }
+
+        // Skip mixed-precision path if gradients are already unscaled
+        if (_mixedPrecisionContext != null && !gradientsAlreadyUnscaled)
+            return ApplyGradientsWithMixedPrecision(originalParameters, gradients, model);
+
+        return ApplyGradientsCore(originalParameters, gradients, model);
+    }
+
+    /// <summary>
+    /// Core implementation of gradient application without mixed-precision handling.
+    /// </summary>
+    /// <param name="originalParameters">The original parameters before the update.</param>
+    /// <param name="gradients">The gradients to apply.</param>
+    /// <param name="model">The model to update.</param>
+    /// <returns>The updated model with new parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the core method that actually applies gradients to parameters.
+    /// It's called by both the standard <see cref="ApplyGradients"/> method and the mixed-precision
+    /// variant <see cref="ApplyGradientsWithMixedPrecision"/>.</para>
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> ApplyGradientsCore(Vector<T> originalParameters, Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
+    {
+        // CRITICAL: Apply gradients to originalParameters (explicitly passed in),
+        // NOT to model.GetParameters(). This prevents double-stepping.
+        //
+        // UpdateParameters applies optimizer-specific logic: params_new = params_old - optimizer_update(gradients)
+        var updatedParameters = UpdateParameters(originalParameters, gradients);
+
+        // Create new model instance with updated parameters
+        return InterfaceGuard.Parameterizable(model).WithParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Reverses a gradient update to recover original parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This base implementation uses the vanilla SGD reversal formula:
+    /// params_old = params_new + learning_rate * gradients
+    /// </para>
+    /// <para>
+    /// <b>For Adaptive Optimizers (Adam, RMSprop, etc.):</b>
+    /// This method should be overridden to account for optimizer-specific state.
+    /// The base implementation is only accurate for vanilla SGD.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where the parameters were before
+    /// a gradient update was applied. Think of it like rewinding a step you took.
+    /// </para>
+    /// </remarks>
+    /// <param name="updatedParameters">Parameters after gradient application</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Estimated original parameters</returns>
+    public virtual Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        // Use current learning rate (may differ from initial due to decay/scheduling)
+        var lr = NumOps.FromDouble(_currentLearningRate);
+
+        // Reverse the SGD update using vectorized operations: params_old = params_new + lr * gradients
+        var lrTimesGradients = (Vector<T>)Engine.Multiply(appliedGradients, lr);
+        return (Vector<T>)Engine.Add(updatedParameters, lrTimesGradients);
+    }
+
+    /// <summary>
+    /// Enables mixed-precision training for this optimizer.
+    /// </summary>
+    /// <param name="config">Configuration for mixed-precision training (optional, uses defaults if null).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training uses a mix of 16-bit (FP16) and 32-bit (FP32) floating-point
+    /// numbers during optimization to achieve faster training while maintaining accuracy.
+    ///
+    /// Benefits:
+    /// - **2-3x faster** on modern GPUs with Tensor Cores (V100, A100, RTX 3000+)
+    /// - **~50% memory reduction** allows larger batches or models
+    /// - **Maintained accuracy** through FP32 master weights and loss scaling
+    ///
+    /// When to use:
+    /// - ✅ Training large models with gradient-based optimizers
+    /// - ✅ Using modern GPUs with Tensor Core support
+    /// - ✅ Memory-constrained scenarios
+    /// - ❌ CPU-only training (minimal benefit)
+    /// - ❌ Non-gradient optimizers (genetic algorithms, etc.)
+    ///
+    /// Note: Only works with float (FP32) as the base type T.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var optimizer = new AdamOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
+    /// optimizer.EnableMixedPrecision();
+    ///
+    /// // Or with custom configuration
+    /// optimizer.EnableMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// </code>
+    /// </example>
+    /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
+    internal virtual void EnableMixedPrecision(LocalMixedPrecisionConfig? config = null)
+    {
+        // Check that T is float
+        if (typeof(T) != typeof(float))
+        {
+            throw new NotSupportedException(
+                $"Mixed-precision training is only supported for optimizers with type parameter float. " +
+                $"Current type: {typeof(T).Name}. " +
+                $"Use Optimizer<float, ...> to enable mixed-precision training.");
+        }
+
+        if (_mixedPrecisionContext != null)
+        {
+            throw new InvalidOperationException(
+                "Mixed-precision training is already enabled. Call DisableMixedPrecision() first if you want to change the configuration.");
+        }
+
+        _mixedPrecisionContext = new MixedPrecisionContext(config);
+    }
+
+    /// <summary>
+    /// Disables mixed-precision training and releases associated resources.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This turns off mixed-precision training and returns the optimizer to
+    /// standard FP32 operation. Useful for debugging or comparing performance.
+    /// </para>
+    /// </remarks>
+    internal virtual void DisableMixedPrecision()
+    {
+        if (_mixedPrecisionContext != null)
+        {
+            _mixedPrecisionContext.Dispose();
+            _mixedPrecisionContext = null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the mixed-precision training context (if enabled).
+    /// </summary>
+    /// <returns>The mixed-precision context, or null if mixed-precision is disabled.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This provides access to the mixed-precision training internals,
+    /// such as the current loss scale and overflow statistics. Useful for monitoring and debugging.
+    /// </para>
+    /// </remarks>
+    internal virtual MixedPrecisionContext? GetMixedPrecisionContext()
+    {
+        return _mixedPrecisionContext;
+    }
+
+    /// <summary>
+    /// Applies gradients with mixed-precision support (if enabled).
+    /// </summary>
+    /// <param name="originalParameters">The original parameters in FP32.</param>
+    /// <param name="gradients">The gradients (may be in FP16 if mixed-precision is enabled).</param>
+    /// <param name="model">The model to update.</param>
+    /// <param name="scaledLoss">Optional scaled loss value (if mixed-precision is enabled).</param>
+    /// <returns>The updated model with new parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method handles gradient application with mixed-precision support.
+    /// If mixed-precision is enabled, it:
+    /// 1. Unscales the gradients
+    /// 2. Checks for overflow/underflow
+    /// 3. Updates parameters in FP32 (master weights)
+    /// 4. Skips the update if overflow is detected
+    /// </para>
+    /// </remarks>
+    internal virtual IFullModel<T, TInput, TOutput> ApplyGradientsWithMixedPrecision(
+        Vector<T> originalParameters,
+        Vector<T> gradients,
+        IFullModel<T, TInput, TOutput> model)
+    {
+        // If mixed-precision is not enabled, use standard application
+        if (_mixedPrecisionContext == null)
+        {
+            return ApplyGradientsCore(originalParameters, gradients, model);
+        }
+
+        // Cast to float (required for mixed-precision context)
+        var gradientsFloat = gradients as Vector<float>
+            ?? throw new InvalidOperationException("Gradients must be Vector<float> for mixed-precision training.");
+
+        // Unscale gradients and check for overflow
+        // The gradients are assumed to be scaled (multiplied by loss scale during backward pass)
+        bool isValid = _mixedPrecisionContext.LossScaler.UnscaleGradientsAndCheck(gradientsFloat);
+
+        if (!isValid)
+        {
+            // Overflow detected - skip this update and return model unchanged
+            // The LossScaler has already reduced the scale factor for the next iteration
+            return model;
+        }
+
+        // Apply gradients normally (now unscaled)
+        return ApplyGradientsCore(originalParameters, gradients, model);
+    }
+
+    /// <summary>
+    /// Creates a regularization technique based on the provided options.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method sets up a way to prevent the model from becoming too complex.
+    /// It's like adding rules to your hiking strategy to avoid taking unnecessarily complicated paths.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The options specifying the regularization technique to use.</param>
+    /// <returns>An instance of the specified regularization technique.</returns>
+    protected IRegularization<T, TInput, TOutput> CreateRegularization(GradientDescentOptimizerOptions<T, TInput, TOutput> options)
+    {
+        return RegularizationFactory.CreateRegularization<T, TInput, TOutput>(options.RegularizationOptions);
+    }
+
+    /// <summary>
+    /// Calculates the gradient for the given model and input data.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method calculates how steep the hill is and in which direction.
+    /// It helps determine which way the optimizer should step to improve the model.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The current model.</param>
+    /// <param name="X">The input features.</param>
+    /// <param name="y">The target values.</param>
+    /// <returns>The calculated gradient.</returns>
+    /// <summary>
+    /// Calculates the gradient for the given solution and input data.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method calculates how steep the hill is and in which direction.
+    /// It helps determine which way the optimizer should step to improve the model.
+    /// This implementation uses the loss function's derivative for efficient gradient calculation.
+    /// </para>
+    /// <para><b>Production Enhancement:</b>
+    /// If the model implements IGradientComputable, this method automatically uses efficient
+    /// backpropagation-based gradient computation. Otherwise, it falls back to the traditional
+    /// approach using loss function derivatives.
+    /// </para>
+    /// </remarks>
+    /// <param name="solution">The current solution.</param>
+    /// <param name="X">The input features.</param>
+    /// <param name="y">The target values.</param>
+    /// <returns>The calculated gradient.</returns>
+    protected virtual Vector<T> CalculateGradient(
+        IFullModel<T, TInput, TOutput> solution,
+        TInput X,
+        TOutput y)
+    {
+        string cacheKey = GenerateGradientCacheKey(solution, X, y);
+        var cachedGradient = GradientCache.GetCachedGradient(cacheKey);
+        if (cachedGradient != null)
+        {
+            // CRITICAL: Clone the cached gradient to prevent external modifications from corrupting the cache.
+            // If we return the cached vector directly, callers could modify it (e.g., during AllReduce operations),
+            // which would corrupt the cache for future calls with the same key.
+            var clonedGradient = new Vector<T>(cachedGradient.Parameters.ToArray());
+
+            // Note: Cached gradients are already scaled for mixed-precision (scaling applied before caching).
+            // Do NOT scale again here to avoid double-scaling.
+
+            _lastComputedGradients = clonedGradient;
+            return clonedGradient;
+        }
+
+        Vector<T> gradient;
+
+        // Track whether the gradient came from the IGradientComputable fast-path
+        // (which back-propagates through a tape-built scalar loss whose
+        // ComputeTapeLoss already averages over the batch via ReduceMean) or
+        // the loss-derivative fallback (which returns the per-element loss
+        // derivative summed over the batch). The fast-path gradient is
+        // ALREADY the mean-batch gradient — dividing again by the batch size
+        // below produces a 1/N² scale and reduces effective step magnitude
+        // proportionally, which mode-collapses Transformer training under
+        // BuildAsync's batched Optimize loop (Adam.UpdateSolution at
+        // BatchSize=8 sees gradients 8× too small for any meaningful step).
+        // Fixes the residual mode collapse left by PR #1351.
+        bool gradientIsAlreadyMeanScaled;
+
+        // Try to use explicit gradient computation if available (more efficient and accurate)
+        if (solution is IGradientComputable<T, TInput, TOutput> gradientComputable)
+        {
+            gradient = gradientComputable.ComputeGradients(X, y, LossFunction);
+            gradientIsAlreadyMeanScaled = true;
+        }
+        else
+        {
+            // Fallback to traditional gradient computation via loss function derivative
+            TOutput predictions = solution.Predict(X);
+            gradientIsAlreadyMeanScaled = false;
+
+            if (predictions is Tensor<T> tensorPredictions && y is Tensor<T> tensorY)
+            {
+                // When prediction and target have different shapes (e.g.,
+                // Transformer output [B, S, V] vs target [B, S] integer
+                // indices), one-hot encode the target to match before
+                // flattening to vectors. Without this, ToVector() produces
+                // different-length vectors and CalculateDerivative throws.
+                // Fixes #1115 — affects ALL gradient-based optimizers.
+                //
+                // Only one-hot encode when target rank is exactly 1 less than
+                // predicted rank (classification shape contract). For singleton
+                // dimension mismatches (e.g., [B] vs [B,1]), reshape instead.
+                if (tensorPredictions.Shape.Length > tensorY.Shape.Length)
+                {
+                    int numClasses = tensorPredictions.Shape[tensorPredictions.Shape.Length - 1];
+
+                    if (numClasses > 1 && tensorY.Shape.Length == tensorPredictions.Shape.Length - 1)
+                    {
+                        // Validate shape prefix matches
+                        for (int d = 0; d < tensorY.Shape.Length; d++)
+                        {
+                            if (tensorY.Shape[d] != tensorPredictions.Shape[d])
+                            {
+                                throw new ArgumentException(
+                                    $"Target shape dimension {d} ({tensorY.Shape[d]}) does not match " +
+                                    $"predicted shape dimension {d} ({tensorPredictions.Shape[d]}).");
+                            }
+                        }
+
+                        var numOps = MathHelper.GetNumericOperations<T>();
+                        var oneHot = new Tensor<T>(tensorPredictions.Shape.ToArray());
+                        int batchElements = tensorY.Length;
+                        for (int i = 0; i < batchElements; i++)
+                        {
+                            double rawVal = numOps.ToDouble(tensorY[i]);
+                            int classIdx = (int)rawVal;
+                            if (rawVal != classIdx)
+                            {
+                                throw new ArgumentException(
+                                    $"Target value {rawVal} at position {i} is not an integer class index.");
+                            }
+                            if (classIdx < 0 || classIdx >= numClasses)
+                            {
+                                throw new ArgumentOutOfRangeException(nameof(y),
+                                    $"Class index {classIdx} at position {i} is out of range [0, {numClasses}).");
+                            }
+                            oneHot[i * numClasses + classIdx] = numOps.One;
+                        }
+                        tensorY = oneHot;
+                    }
+                    else if (tensorY.Length == tensorPredictions.Length)
+                    {
+                        // Singleton dimension alignment (e.g., [B] → [B,1])
+                        tensorY = tensorY.Reshape(tensorPredictions.Shape.ToArray());
+                    }
+                }
+                gradient = LossFunction.CalculateDerivative(tensorPredictions.ToVector(), tensorY.ToVector());
+            }
+            else if (predictions is Vector<T> vectorPredictions && y is Vector<T> vectorY)
+            {
+                gradient = LossFunction.CalculateDerivative(vectorPredictions, vectorY);
+            }
+            else
+            {
+                throw new ArgumentException("Unsupported prediction or target type");
+            }
+        }
+
+        // Apply regularization to the gradient. The previous code called the
+        // 1-arg Regularize(Vector<T>) overload on the parameters, then ADDED
+        // its return value to the gradient — but that overload is defined as
+        // "return the regularized COEFFICIENTS" (e.g. L2 returns (1-λ)·params),
+        // not "return the regularization gradient contribution". For default
+        // L2 (strength=0.01) this added 0.99·params to every gradient on
+        // every step, which alone collapsed every weight toward zero and was
+        // the root cause of the residual mode collapse left by PR #1351.
+        //
+        // Correct semantics: the regularization gradient contribution is
+        // d/dθ(R(θ)). For L2 R(θ)=½λ‖θ‖² that's λ·θ; for L1 R(θ)=λ‖θ‖₁ that
+        // is λ·sign(θ). Both can be derived from the 1-arg overload via
+        // `params - Regularize(params)` (= λ·θ for L2; = soft-thresholding
+        // shift for L1), so the gradient contribution is the DIFFERENCE
+        // between params and the regularizer's coefficient transform — the
+        // exact opposite of what the previous code computed.
+        // Scale the gradient by the batch size ONLY for the loss-derivative
+        // fallback path. The IGradientComputable fast-path returns a gradient
+        // that the loss function's ComputeTapeLoss already averaged over the
+        // batch (and over any sequence/spatial axes) — dividing by batchSize
+        // a second time would compound to 1/N² and collapse Transformer
+        // training under BuildAsync's batched Optimize loop.
+        //
+        // CRITICAL: this divide must run BEFORE the regularization
+        // contribution is added — otherwise non-IGradientComputable
+        // models optimize `mean(loss) + R(θ)/N` while
+        // IGradientComputable models optimize `mean(loss) + R(θ)`, and
+        // the effective regularization strength becomes batch-size
+        // dependent and inconsistent across paths. (PR #1364 review.)
+        if (!gradientIsAlreadyMeanScaled)
+        {
+            int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
+            gradient = gradient.Divide(NumOps.FromDouble(batchSize));
+        }
+
+        // Use the regularizer's gradient-aware Regularize overload
+        // (Regularize(gradient, coefficients)) which adds the proper
+        // gradient contribution: 2*lambda*p for L2, sign(p)*lambda for
+        // L1 (the SOFT-THRESHOLD identity `params - Regularize(params)`
+        // is WRONG for L1 — it only holds on the convex envelope, not
+        // on individual entries that crossed zero). Each regularizer
+        // already implements its own gradient math via this overload
+        // (see RegularizationBase.Regularize(TOutput, TOutput)) — the
+        // optimizer should ALWAYS go through it instead of
+        // reconstructing the gradient from the prox transform
+        // (review #1364 C4nKJ).
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
+
+        // `gradient` and the model's flat `parameters` are both
+        // Vector<T> here. Route through the Vector-direct overload on
+        // RegularizationBase when available — bypasses the TOutput
+        // surface entirely and avoids the per-batch
+        // Tensor<T>.ToVector() copy the generic
+        // Regularize(TOutput, TOutput) round-trip would cost when
+        // TOutput is Tensor<T> (the canonical NN optimizer
+        // parameterization). The Vector-direct method is on the base
+        // CLASS — NOT the interface — so external IRegularization
+        // implementers stay binary-compatible. For non-base
+        // implementations we wrap via Tensor<T>.FromVector and call
+        // the TOutput overload (slower but correct).
+        //
+        // Pre-PR-#1381 this site called
+        // `(TOutput)(object)gradient` which threw InvalidCastException
+        // for TOutput = Tensor<T> (Vector<T> doesn't derive from
+        // Tensor<T>) — that exception was the root cause of #1380's
+        // "BuildAsync produces uniform output" symptom (model never
+        // got past its first batch step).
+        if (Regularization is RegularizationNs.RegularizationBase<T, TInput, TOutput> regBase)
+        {
+            gradient = regBase.Regularize(gradient, parameters);
+        }
+        else
+        {
+            // External IRegularization implementations: route through the
+            // shared Vector↔TOutput bridge so the wrap/unwrap logic stays
+            // in one place. RegularizationBase's Vector-direct fallback
+            // uses the same bridge — adding a new TOutput shape only
+            // requires updating RegularizationVectorBridge.
+            gradient = RegularizationNs.RegularizationVectorBridge<T, TInput, TOutput>
+                .Invoke(Regularization, gradient, parameters);
+        }
+
+        // Apply gradient clipping if enabled
+        gradient = ApplyGradientClipping(gradient);
+
+        // Scale gradients for mixed-precision training
+        // The gradients will be unscaled in ApplyGradientsWithMixedPrecision before the optimizer step
+        gradient = ApplyMixedPrecisionScaling(gradient);
+
+        var gradientModel = new GradientModel<T>(gradient);
+        GradientCache.CacheGradient(cacheKey, gradientModel);
+
+        // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
+        _lastComputedGradients = gradient;
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Scales gradients for mixed-precision training if enabled.
+    /// </summary>
+    /// <param name="gradient">The gradient to scale.</param>
+    /// <returns>The scaled gradient if mixed-precision is enabled, otherwise the original gradient.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> In mixed-precision training, gradients can become very small
+    /// when computed in FP16. Loss scaling multiplies gradients by a large factor to prevent
+    /// them from underflowing to zero. The gradients are later unscaled before the optimizer step.
+    /// </para>
+    /// </remarks>
+    protected virtual Vector<T> ApplyMixedPrecisionScaling(Vector<T> gradient)
+    {
+        if (_mixedPrecisionContext == null)
+        {
+            return gradient;
+        }
+
+        // Scale gradient by the loss scale factor using efficient vector multiplication
+        double scale = _mixedPrecisionContext.LossScaler.Scale;
+        return gradient.Multiply(NumOps.FromDouble(scale));
+    }
+
+    /// <summary>
+    /// Applies gradient clipping based on the configured options.
+    /// </summary>
+    /// <param name="gradient">The gradient to clip.</param>
+    /// <returns>The clipped gradient.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Gradient clipping prevents training instability by limiting
+    /// how large gradients can become. This is especially important for deep networks and RNNs
+    /// where gradients can "explode" (become extremely large) during backpropagation.
+    /// </para>
+    /// </remarks>
+    protected virtual Vector<T> ApplyGradientClipping(Vector<T> gradient)
+    {
+        if (!GradientOptions.EnableGradientClipping)
+        {
+            return gradient;
+        }
+
+        return GradientOptions.GradientClippingMethod switch
+        {
+            GradientClippingMethod.ByNorm => GradientClippingHelper.ClipByNorm(gradient, GradientOptions.MaxGradientNorm) ?? gradient,
+            GradientClippingMethod.ByValue => GradientClippingHelper.ClipByValue(gradient, GradientOptions.MaxGradientValue) ?? gradient,
+            _ => gradient
+        };
+    }
+
+    /// <summary>
+    /// Checks if the current gradients are exhibiting exploding gradient behavior.
+    /// </summary>
+    /// <param name="threshold">The threshold above which gradients are considered exploding. Default is 1000.</param>
+    /// <returns>True if gradients are exploding, false otherwise.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method helps detect when training is becoming unstable.
+    /// If gradients become too large, it usually indicates a problem with the learning rate
+    /// or model architecture that needs to be addressed.
+    /// </para>
+    /// </remarks>
+    public bool AreGradientsExploding(double threshold = 1000.0)
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+        {
+            return false;
+        }
+
+        return GradientClippingHelper.AreGradientsExploding(GetUnscaledGradients(), threshold);
+    }
+
+    /// <summary>
+    /// Checks if the current gradients are exhibiting vanishing gradient behavior.
+    /// </summary>
+    /// <param name="threshold">The threshold below which gradients are considered vanishing. Default is 1e-7.</param>
+    /// <returns>True if gradients are vanishing, false otherwise.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Vanishing gradients occur when gradients become so small that
+    /// learning effectively stops. This is common in deep networks and can indicate the need
+    /// for techniques like residual connections, batch normalization, or different activation functions.
+    /// </para>
+    /// </remarks>
+    public bool AreGradientsVanishing(double threshold = 1e-7)
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+        {
+            return false;
+        }
+
+        return GradientClippingHelper.AreGradientsVanishing(GetUnscaledGradients(), threshold);
+    }
+
+    /// <summary>
+    /// Gets the L2 norm of the last computed gradients.
+    /// </summary>
+    /// <returns>The gradient norm, or 0 if no gradients have been computed.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The gradient norm is a measure of how "strong" the overall
+    /// gradient is. Monitoring this value during training can help diagnose issues with
+    /// exploding or vanishing gradients.
+    /// </para>
+    /// </remarks>
+    public T GetGradientNorm()
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        return GradientClippingHelper.ComputeNorm(GetUnscaledGradients());
+    }
+
+    /// <summary>
+    /// Computes the Hessian matrix (second derivatives) more efficiently when the model supports explicit gradient computation.
+    /// </summary>
+    /// <param name="model">The model to compute Hessian for.</param>
+    /// <param name="inputData">The input data for optimization.</param>
+    /// <returns>The Hessian matrix.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The Hessian tells us how the gradient changes - it's the "curvature" of the loss landscape.
+    /// This is crucial for second-order optimization methods like Newton's method.
+    /// </para>
+    /// <para><b>Production Enhancement:</b>
+    /// If the model implements IGradientComputable, this method computes the Hessian by taking gradients
+    /// of the gradient (using finite differences on the gradient function), which is much more efficient
+    /// than the traditional double finite differences approach. This is O(n) gradient evaluations instead
+    /// of O(n²) loss evaluations.
+    /// </para>
+    /// <para><b>Note:</b>
+    /// For models implementing IGradientComputable with ComputeSecondOrderGradients support,
+    /// true Hessian-vector products could be computed even more efficiently. This is currently
+    /// a middle ground that works with any model implementing ComputeGradients.
+    /// </para>
+    /// </remarks>
+    protected virtual Matrix<T> ComputeHessianEfficiently(
+        IFullModel<T, TInput, TOutput> model,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
+        int n = parameters.Length;
+        var hessian = new Matrix<T>(n, n);
+        var epsilon = NumOps.FromDouble(1e-5);
+
+        // Check if model supports explicit gradient computation
+        if (model is IGradientComputable<T, TInput, TOutput> gradientComputable)
+        {
+            // Efficient approach: Compute gradients at perturbed points
+            // This is O(n) gradient computations instead of O(n²) loss computations
+            var baseGradient = gradientComputable.ComputeGradients(
+                inputData.XTrain,
+                inputData.YTrain,
+                LossFunction);
+
+            for (int i = 0; i < n; i++)
+            {
+                // Perturb parameter i
+                var perturbedParams = parameters.Clone();
+                perturbedParams[i] = NumOps.Add(perturbedParams[i], epsilon);
+
+                var perturbedModel = InterfaceGuard.Parameterizable(model).WithParameters(perturbedParams);
+
+                if (perturbedModel is not IGradientComputable<T, TInput, TOutput> perturbedGradientModel)
+                {
+                    // Fallback to finite differences when perturbed model loses IGradientComputable
+                    return ComputeHessianFiniteDifferences(model, inputData);
+                }
+
+                var perturbedGradient = perturbedGradientModel.ComputeGradients(
+                    inputData.XTrain,
+                    inputData.YTrain,
+                    LossFunction);
+
+                // Hessian column i = (∇f(x + εe_i) - ∇f(x)) / ε
+                for (int j = 0; j < n; j++)
+                {
+                    var diff = NumOps.Subtract(perturbedGradient[j], baseGradient[j]);
+                    hessian[j, i] = NumOps.Divide(diff, epsilon);
+                }
+            }
+        }
+        else
+        {
+            // Fallback: Traditional finite differences (slower but works for all models)
+            hessian = ComputeHessianFiniteDifferences(model, inputData);
+        }
+
+        return hessian;
+    }
+
+    /// <summary>
+    /// Computes the Hessian matrix using traditional finite differences (fallback method).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the slower but more universally applicable method.
+    /// It approximates the curvature by testing small changes in parameters.
+    /// </para>
+    /// </remarks>
+    protected virtual Matrix<T> ComputeHessianFiniteDifferences(
+        IFullModel<T, TInput, TOutput> model,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
+        int n = parameters.Length;
+        var hessian = new Matrix<T>(n, n);
+        var epsilon = NumOps.FromDouble(1e-5);
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = i; j < n; j++)  // Symmetric matrix, only compute upper triangle
+            {
+                // Compute second partial derivative ∂²f/∂xi∂xj using finite differences
+                // f''(x,y) ≈ [f(x+h,y+h) - f(x+h,y-h) - f(x-h,y+h) + f(x-h,y-h)] / (4h²)
+
+                var params_pp = parameters.Clone();
+                params_pp[i] = NumOps.Add(params_pp[i], epsilon);
+                params_pp[j] = NumOps.Add(params_pp[j], epsilon);
+                var model_pp = InterfaceGuard.Parameterizable(model).WithParameters(params_pp);
+                var loss_pp = CalculateLoss(model_pp, inputData);
+
+                var params_pm = parameters.Clone();
+                params_pm[i] = NumOps.Add(params_pm[i], epsilon);
+                params_pm[j] = NumOps.Subtract(params_pm[j], epsilon);
+                var model_pm = InterfaceGuard.Parameterizable(model).WithParameters(params_pm);
+                var loss_pm = CalculateLoss(model_pm, inputData);
+
+                var params_mp = parameters.Clone();
+                params_mp[i] = NumOps.Subtract(params_mp[i], epsilon);
+                params_mp[j] = NumOps.Add(params_mp[j], epsilon);
+                var model_mp = InterfaceGuard.Parameterizable(model).WithParameters(params_mp);
+                var loss_mp = CalculateLoss(model_mp, inputData);
+
+                var params_mm = parameters.Clone();
+                params_mm[i] = NumOps.Subtract(params_mm[i], epsilon);
+                params_mm[j] = NumOps.Subtract(params_mm[j], epsilon);
+                var model_mm = InterfaceGuard.Parameterizable(model).WithParameters(params_mm);
+                var loss_mm = CalculateLoss(model_mm, inputData);
+
+                // Compute second derivative
+                var numerator = NumOps.Add(
+                    NumOps.Subtract(loss_pp, loss_pm),
+                    NumOps.Subtract(loss_mm, loss_mp));
+                var denominator = NumOps.Multiply(
+                    NumOps.Multiply(NumOps.FromDouble(4.0), epsilon),
+                    epsilon);
+                var secondDerivative = NumOps.Divide(numerator, denominator);
+
+                hessian[i, j] = secondDerivative;
+                hessian[j, i] = secondDerivative;  // Symmetric
+            }
+        }
+
+        return hessian;
+    }
+
+    /// <summary>
+    /// Performs a line search to find an appropriate step size.
+    /// </summary>
+    /// <param name="currentSolution">The current solution.</param>
+    /// <param name="direction">The search direction.</param>
+    /// <param name="gradient">The current gradient.</param>
+    /// <param name="inputData">The input data for the optimization process.</param>
+    /// <returns>The step size to use.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method determines how big of a step to take in the chosen direction.
+    /// It tries to find a step size that sufficiently decreases the function value while not being too small.
+    /// </para>
+    /// </remarks>
+    protected T LineSearch(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, Vector<T> gradient, OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        var alpha = NumOps.FromDouble(1.0);
+        var c1 = NumOps.FromDouble(1e-4);
+        var c2 = NumOps.FromDouble(0.9);
+        var xTrain = inputData.XTrain;
+        var yTrain = inputData.YTrain;
+
+        var initialValue = CalculateLoss(currentSolution, inputData);
+        var initialSlope = gradient.DotProduct(direction);
+
+        while (true)
+        {
+            var newCoefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters().Add(direction.Multiply(alpha));
+            var newSolution = InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
+            var newValue = CalculateLoss(newSolution, inputData);
+
+            if (NumOps.LessThanOrEquals(newValue, NumOps.Add(initialValue, NumOps.Multiply(NumOps.Multiply(c1, alpha), initialSlope))))
+            {
+                var newGradient = CalculateGradient(newSolution, xTrain, yTrain);
+                var newSlope = newGradient.DotProduct(direction);
+
+                if (NumOps.GreaterThanOrEquals(NumOps.Abs(newSlope), NumOps.Multiply(c2, NumOps.Abs(initialSlope))))
+                {
+                    return alpha;
+                }
+            }
+
+            alpha = NumOps.Multiply(alpha, NumOps.FromDouble(0.5));
+
+            if (NumOps.LessThan(alpha, NumOps.FromDouble(1e-10)))
+            {
+                return NumOps.FromDouble(1e-10);
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Calculates the gradient for a given solution using a batch of training data.
+    /// </summary>
+    /// <param name="solution">The current solution (model).</param>
+    /// <param name="xTrain">The training input data.</param>
+    /// <param name="yTrain">The training target data.</param>
+    /// <param name="batchIndices">The indices to use for the current batch.</param>
+    /// <returns>A vector representing the gradient of the loss function with respect to the model parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This overload historically shipped a fallback that computed
+    /// <c>gradient[j] += loss × input_feature[j]</c>. That formula is algebraically wrong for
+    /// every model class — <c>error</c> is <see cref="ILossFunction{T}.CalculateLoss"/>, a scalar
+    /// mean-squared-error, NOT the per-element residual <c>(pred − target)</c>. Even for linear
+    /// regression (the case it was likely intended for), the correct formula is
+    /// <c>(pred − target) × x_j</c>. For any neural network the correct gradient requires
+    /// backprop through the chain rule. On top of that, the inner loop indexed the input
+    /// feature vector by <c>j &lt; parameters.Length</c> — for models with more parameters than
+    /// input dimensions (every non-trivial model), <c>GetFeatureValue(input, j)</c> either
+    /// threw or returned garbage past the input dimension.
+    /// </para>
+    /// <para>
+    /// The fallback was unreachable in the shipped model set because
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}"/> implements
+    /// <see cref="IGradientComputable{T, TInput, TOutput}"/> and the 3-argument
+    /// <see cref="CalculateGradient(IFullModel{T, TInput, TOutput}, TInput, TOutput)"/>
+    /// overload dispatches through that interface. But it was a landmine — any subclass that
+    /// overrode this virtual "to extend the base," or any future model class that skipped
+    /// <c>IGradientComputable</c>, silently trained with algebraic garbage.
+    /// </para>
+    /// <para>
+    /// The fix removes the wrong-formula body and routes callers to the correct path via
+    /// <see cref="InterfaceGuard.GradientComputable{T, TInput, TOutput}"/> — matching PyTorch,
+    /// Keras, and JAX's fail-fast convention when a model can't compute gradients. Closes #1837.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <paramref name="solution"/> does not implement
+    /// <see cref="IGradientComputable{T, TInput, TOutput}"/> — gradient-based optimizers require
+    /// a model that supports backprop. Inherit from <see cref="NeuralNetworks.NeuralNetworkBase{T}"/>
+    /// (which implements the interface) or implement <c>IGradientComputable&lt;T, TInput, TOutput&gt;</c>
+    /// directly.
+    /// </exception>
+    protected virtual Vector<T> CalculateGradient(
+        IFullModel<T, TInput, TOutput> solution,
+        TInput xTrain,
+        TOutput yTrain,
+        int[] batchIndices)
+    {
+        // Route through the proper gradient path. InterfaceGuard.GradientComputable throws
+        // with a clear message if the model doesn't implement IGradientComputable — the same
+        // fail-fast convention PyTorch/Keras/JAX use when a model can't backprop.
+        var gradientComputable = InterfaceGuard.GradientComputable(solution);
+        var xBatch = InputHelper<T, TInput>.GetBatch(xTrain, batchIndices);
+        var yBatch = InputHelper<T, TOutput>.GetBatch(yTrain, batchIndices);
+
+        var gradient = gradientComputable.ComputeGradients(xBatch, yBatch, LossFunction);
+        _lastComputedGradients = gradient;
+        return gradient;
+    }
+
+    /// <summary>
+    /// Updates the current solution based on the calculated gradient.
+    /// </summary>
+    /// <param name="currentSolution">The current solution being optimized.</param>
+    /// <param name="gradient">The calculated gradient.</param>
+    /// <returns>A new solution with updated parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method moves the model's parameters in the direction
+    /// indicated by the gradient, hopefully improving the model's performance.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> UpdateSolution(
+        IFullModel<T, TInput, TOutput> currentSolution,
+        Vector<T> gradient)
+    {
+        // #1380 / #1413 CONSOLIDATION: when the solution is an
+        // INeuralNetwork<T>, synthesize a TapeStepContext from the flat
+        // gradient and delegate to Step(TapeStepContext). This collapses the
+        // historical two-Adam-implementations split (Step vs UpdateSolution)
+        // that caused BuildAsync's batched Optimize loop to diverge while the
+        // per-sample nn.Train bypass converged on identical hyperparameters.
+        // ONE update implementation per optimizer (matches PyTorch /
+        // TensorFlow / JAX-Optax single-method optimizer contract).
+        // Subclasses that need different flat-path semantics can still
+        // override; default path is now safe-by-construction.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T> nn)
+        {
+            var ctx = SynthesizeTapeStepContext(nn, gradient);
+            if (ctx is not null)
+            {
+                Step(ctx);
+                // Step mutates the parameter tensors in place via tape semantics;
+                // since we passed the live parameter-chunk refs, the model is
+                // already updated. No SetParameters call needed.
+                //
+                // GPU-cache coherency: Step writes the new weights straight into each parameter
+                // tensor's backing storage (via GetLiveBackingArrayOrNull()/AsWritableSpan()) WITHOUT
+                // going through a Tensor API that bumps the version. A GPU engine caches an uploaded
+                // copy of each weight tensor keyed by that backing array; without an explicit
+                // invalidation the version gate ('_gpuBufferVersion == Version') still matches and the
+                // NEXT forward reads the STALE device weights from step 0, so the model appears to
+                // train on the host (GetParameters changes) while the GPU forward never sees the
+                // update — GPU-engine training then diverges from the CPU engine. Tell the engine each
+                // updated parameter changed so it re-uploads on the next use. On the CPU engine this is
+                // a no-op. (The legacy SetParameters path below already refreshes device state.)
+                var updatedParams = ctx.Parameters;
+                var residentEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current
+                    as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+                for (int pi = 0; pi < updatedParams.Count; pi++)
+                {
+                    var updated = updatedParams[pi];
+                    if (updated is null) continue;
+                    // Bump the version so a GPU engine's version gate re-uploads the mutated weights
+                    // from the host backing store on the next forward.
+                    updated.IncrementVersion();
+                    // GPU-cache coherency (the ACTUAL fix): IncrementVersion alone is INSUFFICIENT.
+                    // The GPU forward's upload fast-path returns the cached per-tensor device buffer
+                    // WITHOUT re-checking Version when a resident scope is active, and the activation
+                    // cache (keyed by the weight's backing array) also holds the stale device buffer.
+                    // Observed: after the in-place Adam update the HOST weight is correct (GetParameters
+                    // matches the CPU engine bit-for-bit) but the next forward's prediction diverges from
+                    // CPU — the device buffer is STALE — so GPU training silently trains against frozen
+                    // device weights (held-out accuracy pinned at chance while CPU learns). Fully
+                    // invalidate the resident device buffer + activation-cache entries so the next forward
+                    // re-uploads the current host weights. No-op on the CPU engine.
+                    residentEngine?.InvalidateResidentWeightBuffer(updated);
+                }
+                return currentSolution;
+            }
+            // Fall through to legacy path if synthesis declined (e.g. no chunks).
+        }
+        var parameterizable = InterfaceGuard.Parameterizable(currentSolution);
+        var parameters = parameterizable.GetParameters();
+        var newParameters = UpdateParameters(parameters, gradient);
+
+        // In-place update: SetParameters modifies the existing model directly,
+        // avoiding the Clone+Serialize+Deserialize overhead of WithParameters.
+        // WithParameters was called 1600+ times per optimization run, each time
+        // doing a full serialization roundtrip — the dominant training bottleneck.
+        parameterizable.SetParameters(newParameters);
+        return currentSolution;
+    }
+
+    /// <summary>
+    /// #1413 helper: build a <see cref="TapeStepContext{T}"/> from a model's
+    /// live parameter chunks plus a flat gradient vector. Each parameter
+    /// chunk's gradient is sliced from the flat vector at the corresponding
+    /// offset, matching the alignment that <c>GetParameters</c> +
+    /// <c>GetParameterChunks</c> guarantee.
+    /// </summary>
+    /// <param name="nn">The neural-network solution to bind context to.</param>
+    /// <param name="flatGradient">Concatenated parameter gradients from CalculateGradient.</param>
+    /// <returns>A synthesized first-order TapeStepContext, or <c>null</c> if no
+    /// trainable parameters are present (caller falls back to legacy path).</returns>
+    protected virtual TapeStepContext<T>? SynthesizeTapeStepContext(
+        AiDotNet.Interfaces.INeuralNetwork<T> nn,
+        Vector<T> flatGradient)
+    {
+        // Collect live parameter-chunk references. These ARE the model's
+        // backing storage — mutating them via Step's Adam math updates the
+        // model in place. GetParameterChunks is on NeuralNetworkBase; cast
+        // to access it, return null if the model isn't a NeuralNetworkBase
+        // subclass (caller takes the legacy path).
+        if (nn is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase) return null;
+        var chunks = new List<Tensor<T>>();
+        foreach (var c in nnBase.GetParameterChunks())
+        {
+            if (c is null || c.Length == 0) continue;
+            chunks.Add(c);
+        }
+        if (chunks.Count == 0) return null;
+
+        // Slice the flat gradient into per-chunk gradient tensors. Fail
+        // fast (return null) if the flat gradient is short of what the
+        // chunks need — silently breaking out of the loop would produce
+        // a TapeStepContext that covers only a prefix of parameters, and
+        // Step(...) would then mutate the prefix while leaving the rest
+        // un-updated. That partial step is worse than skipping the tape
+        // path entirely: the caller's fallback (legacy flat-vector
+        // UpdateSolution) updates everything, which is at least
+        // self-consistent. Likewise demand exact length at the end —
+        // any leftover bytes in flatGradient mean the chunk list is
+        // out of sync with what produced the gradient, so we'd be
+        // operating on a different model than the gradient describes.
+        var gradients = new Dictionary<Tensor<T>, Tensor<T>>();
+        int offset = 0;
+        foreach (var p in chunks)
+        {
+            int len = p.Length;
+            if (offset + len > flatGradient.Length) return null;
+            var gradTensor = new Tensor<T>(p.Shape.ToArray());
+            var gradSpan = gradTensor.AsWritableSpan();
+            for (int i = 0; i < len; i++) gradSpan[i] = flatGradient[offset + i];
+            gradients[p] = gradTensor;
+            offset += len;
+        }
+        if (gradients.Count == 0 || offset != flatGradient.Length) return null;
+        return new TapeStepContext<T>(chunks, gradients, NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Generates a unique key for caching gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method creates a unique identifier for each gradient calculation.
+    /// It's like labeling each spot on the hill so you can remember what the gradient was there.
+    /// </para>
+    /// <para>
+    /// Issue #1340: the previous implementation keyed only by
+    /// <c>(modelType, batchSize, inputSize, optionsType)</c>, which made every
+    /// mini-batch within a training run produce the SAME cache key.
+    /// <c>AdamOptimizer.Optimize</c> calls <see cref="CalculateGradient"/> once
+    /// per batch; the FIRST batch's gradient was cached and every subsequent
+    /// call returned that stale cached gradient regardless of which batch was
+    /// actually fed in. The optimizer therefore replayed the same step over
+    /// and over and the model's parameters never drifted away from their
+    /// initial Xavier weights — the bug surfaced as
+    /// <c>AiModelBuilder.BuildAsync(...)</c> producing uniform predictions
+    /// despite a model that trains fine via per-sample <c>model.Train(x, y)</c>.
+    /// </para>
+    /// <para>
+    /// The fix is to also key by the runtime identity of the model, the batch
+    /// inputs, and the batch targets, plus a parameter-state fingerprint that
+    /// changes whenever <see cref="UpdateSolution"/> writes back new
+    /// parameters. <c>OptimizationDataBatcher.ExtractBatch</c> allocates fresh
+    /// <c>Tensor&lt;T&gt;</c> / <c>Matrix&lt;T&gt;</c> instances per iteration,
+    /// so reference identity alone differentiates batches even when shuffle is
+    /// off; the parameter fingerprint additionally guards against (1) legitimate
+    /// re-evaluation of the same (X, y) pair after a parameter update
+    /// (e.g. trust-region accept/reject cycles, line search) and (2) the
+    /// existing-mode case where the user calls <c>CalculateGradient</c> twice
+    /// in a row with the same arguments (cache should hit). The legitimate
+    /// caching scenarios still work because identity-based keys only collide
+    /// when the caller actually reuses the same tensor instances.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The current model.</param>
+    /// <param name="X">The input features.</param>
+    /// <param name="y">The target values.</param>
+    /// <returns>A string key for caching the gradient.</returns>
+    protected virtual string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
+    {
+        int modelIdentity = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(model);
+        int xIdentity = X is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(X);
+        int yIdentity = y is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(y);
+        long paramFingerprint = ComputeParameterFingerprint(model);
+
+        return $"{model.GetType().Name}_{InputHelper<T, TInput>.GetBatchSize(X)}_{InputHelper<T, TInput>.GetInputSize(X)}"
+            + $"_{GradientOptions.GetType().Name}_{modelIdentity:X8}_{xIdentity:X8}_{yIdentity:X8}_{paramFingerprint:X16}";
+    }
+
+    /// <summary>
+    /// Computes a fast fingerprint of the model's current parameter state for
+    /// gradient cache invalidation. Returns 0 for non-parameterizable models
+    /// (the cache key still differentiates via reference identity for those).
+    /// </summary>
+    /// <remarks>
+    /// Uses a strided XOR of bit-cast parameter values so a single weight
+    /// changing flips the fingerprint, but the scan is O(min(N, 256)) — cheap
+    /// even for foundation-class models. Stride is chosen so 256 samples span
+    /// the full parameter vector. For tiny vectors (&lt; 256 params) every
+    /// parameter contributes.
+    /// </remarks>
+    private static long ComputeParameterFingerprint(IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is not IParameterizable<T, TInput, TOutput> parameterizable
+            || !parameterizable.SupportsParameterInitialization)
+        {
+            return 0L;
+        }
+
+        // Stream over GetParameterChunks (the per-layer parameter tensors)
+        // and feed a strided sample of bit patterns into a 64-bit FNV-1a
+        // hash. Zero-allocation hot path — replaces the previous
+        // GetParameters() call that materialized a full flat Vector<T>
+        // per batch on every gradient-cache lookup. For foundation
+        // models (hundreds of millions of params) this was a real
+        // allocator + GC hit (review #1364 C4nJL).
+        //
+        // FNV-1a chosen over System.HashCode because the latter is
+        // unstable across process restarts (uses a random seed), which
+        // would break gradient-cache-hit semantics if the cache ever
+        // persists. FNV-1a is deterministic across runs and works on
+        // both net10 and net471 without conditional compilation.
+        const long Fnv1aOffset = unchecked((long)14695981039346656037UL);
+        const long Fnv1aPrime = 1099511628211L;
+        const int MaxSamples = 256;
+
+        IEnumerable<Tensor<T>> chunks;
+        try
+        {
+            chunks = ResolveParameterChunks(parameterizable);
+        }
+        catch (InvalidOperationException)
+        {
+            // Lazy-init models throw InvalidOperationException when chunks
+            // are requested before the first forward has resolved their
+            // shapes. Fingerprint of 0 is safe here — the model identity
+            // in the cache key already differentiates models, and a
+            // not-yet-built model can't have stale cached gradients to
+            // invalidate. Narrowed from a bare `catch` (PR #1364 review).
+            return 0L;
+        }
+        catch (NotSupportedException)
+        {
+            return 0L;
+        }
+
+        // First pass: total parameter count + index of the next sample
+        // we want to read. We don't want to enumerate twice (would
+        // double-cost on IEnumerable backings) — keep state inline.
+        long hash = Fnv1aOffset;
+        long globalIndex = 0;
+        long nextSample = 0;
+        long totalLength = -1; // resolved by first-of-second-pass below
+
+        // Two-pass design over a materializing IEnumerable: first
+        // get the length to compute the stride, then walk again to
+        // sample. For non-buffered IEnumerable this would re-execute
+        // the producer — but GetParameterChunks returns the SAME
+        // tensor references on each call (they're the layer's own
+        // parameter tensors), so re-enumeration is cheap.
+        long count = 0;
+        foreach (var chunk in chunks)
+        {
+            if (chunk is not null) count += chunk.Length;
+        }
+        totalLength = count;
+        if (totalLength <= 0)
+        {
+            return 0L;
+        }
+        // Seed with length so size changes flip the fingerprint.
+        hash = unchecked((hash ^ totalLength) * Fnv1aPrime);
+
+        long stride = System.Math.Max(1L, totalLength / MaxSamples);
+        nextSample = 0;
+        foreach (var chunk in ResolveParameterChunks(parameterizable))
+        {
+            if (chunk is null || chunk.Length == 0) continue;
+            // Walk the chunk's storage and pick samples at the global
+            // stride. globalIndex is the running absolute index across
+            // all chunks; nextSample is the next absolute index we want.
+            int chunkLen = chunk.Length;
+            // Skip whole chunks that don't contain any sample positions.
+            if (nextSample >= globalIndex + chunkLen)
+            {
+                globalIndex += chunkLen;
+                continue;
+            }
+            // Use the chunk's Span<T> view to avoid per-element generic
+            // box-and-unbox if the chunk type is float / double.
+            var span = chunk.Data.Span;
+            while (nextSample < globalIndex + chunkLen)
+            {
+                int localIdx = (int)(nextSample - globalIndex);
+                long bits = ParameterBitsToLong(span[localIdx]);
+                hash = unchecked((hash ^ bits) * Fnv1aPrime);
+                // Mix the absolute index too so identical values at
+                // different positions produce different contributions.
+                hash = unchecked((hash ^ nextSample) * Fnv1aPrime);
+                nextSample += stride;
+            }
+            globalIndex += chunkLen;
+        }
+        return hash;
+    }
+
+    /// <summary>
+    /// Resolves the per-layer parameter chunks for an arbitrary
+    /// <see cref="IParameterizable{T, TInput, TOutput}"/>. On net6+ the
+    /// IParameterizable default-interface-method is callable directly;
+    /// on net471 default interface methods aren't supported by the
+    /// runtime, so we have to reach the override through the concrete
+    /// type (<see cref="NeuralNetworks.NeuralNetworkBase{T}"/> defines
+    /// the override). Falls back to a single chunk built from
+    /// <see cref="IParameterizable{T, TInput, TOutput}.GetParameters"/>
+    /// when the concrete type isn't recognized — that path preserves
+    /// correctness (the fingerprint still flips on parameter changes)
+    /// at the cost of paying the flat-Vector allocation on that one
+    /// path (review #1364 C4nJL).
+    /// </summary>
+    private static IEnumerable<Tensor<T>> ResolveParameterChunks(IParameterizable<T, TInput, TOutput> parameterizable)
+    {
+#if !NETFRAMEWORK
+        return parameterizable.GetParameterChunks();
+#else
+        if (parameterizable is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
+        {
+            return nn.GetParameterChunks();
+        }
+        return ParameterChunksFlatFallback(parameterizable);
+#endif
+    }
+
+#if NETFRAMEWORK
+    private static IEnumerable<Tensor<T>> ParameterChunksFlatFallback(IParameterizable<T, TInput, TOutput> parameterizable)
+    {
+        var flat = parameterizable.GetParameters();
+        if (flat is null || flat.Length == 0) yield break;
+        var single = new Tensor<T>(new[] { flat.Length });
+        for (int i = 0; i < flat.Length; i++) single[i] = flat[i];
+        yield return single;
+    }
+#endif
+
+    /// <summary>
+    /// Converts a numeric parameter value into a stable 64-bit bit pattern for
+    /// fingerprint mixing. Float/double get IEEE-754 bit reinterpretation;
+    /// other numeric types fall back to <c>Convert.ToDouble</c> then bit-cast.
+    /// </summary>
+    private static long ParameterBitsToLong(T value)
+    {
+        if (value is float f)
+        {
+            // BitConverter.SingleToInt32Bits is .NET Core 2.1+ — net471 needs
+            // the BitConverterHelper shim that wraps an unsafe-union fallback.
+            return AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(f);
+        }
+        if (value is double d)
+        {
+            return BitConverter.DoubleToInt64Bits(d);
+        }
+        try
+        {
+            return BitConverter.DoubleToInt64Bits(Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch (InvalidCastException)
+        {
+            return 0L;
+        }
+        catch (FormatException)
+        {
+            return 0L;
+        }
+        catch (OverflowException)
+        {
+            return 0L;
+        }
+    }
+
+    /// <summary>
+    /// Resets the optimizer to its initial state.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method clears all the remembered information and starts fresh.
+    /// It's like wiping your map clean and starting your hike from the beginning.
+    /// </para>
+    /// </remarks>
+    public override void Reset()
+    {
+        base.Reset();
+        GradientCache.ClearCache();
+        ClearSerializedTapeState();
+
+        // Reset learning rate scheduler state
+        _learningRateScheduler?.Reset();
+        _currentStep = 0;
+        _currentEpoch = 0;
+
+        // Restore initial learning rate (synced to both fields)
+        SetLearningRate(_learningRateScheduler?.CurrentLearningRate
+            ?? GradientOptions.InitialLearningRate);
+    }
+
+    /// <summary>
+    /// Steps the learning rate scheduler and updates the current learning rate.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method advances the scheduler by one step and synchronizes the optimizer's
+    /// learning rate with the scheduler's current value.
+    /// </para>
+    /// <para><b>For Beginners:</b> Call this method to update the learning rate according
+    /// to the scheduler's policy. The scheduler will automatically adjust the learning rate
+    /// based on how many steps have been taken.
+    /// </para>
+    /// </remarks>
+    /// <returns>The new learning rate after stepping.</returns>
+    public double StepScheduler()
+    {
+        if (_learningRateScheduler != null)
+        {
+            // Always step WITH the metric. Metric-driven schedules (adaptive, reduce-on-plateau)
+            // cannot react without one, and stepping them through the metric-less overload would
+            // leave them silently inert — a plateau schedule that never plateaus. Step-driven
+            // schedules ignore the argument, so this is uniformly correct.
+            SetLearningRate(_learningRateScheduler.Step(_lastSchedulerMetric));
+        }
+
+        return _currentLearningRate;
+    }
+
+    /// <summary>
+    /// The most recent fitness score, fed to the learning-rate schedule.
+    /// </summary>
+    /// <remarks>
+    /// Starts non-finite so that a schedule stepped before any fitness has been observed treats the
+    /// epoch as non-improving rather than acting on a fabricated value.
+    /// </remarks>
+    private double _lastSchedulerMetric = double.NaN;
+
+    /// <summary>
+    /// Whether the schedule is the one auto-installed for <c>UseAdaptiveLearningRate</c>, and so
+    /// must step on every fitness observation to preserve that flag's original cadence.
+    /// </summary>
+    private readonly bool _adaptiveSchedulerStepsOnFitness;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Captures the fitness so <see cref="StepScheduler"/> can hand it to a metric-driven schedule,
+    /// and drives the auto-installed adaptive schedule here so that <c>UseAdaptiveLearningRate</c>
+    /// keeps adapting at the same points it always did — every optimizer that calls
+    /// <c>UpdateAdaptiveParameters</c>, not merely the one that happens to raise epoch events.
+    /// </remarks>
+    protected override void OnFitnessObserved(T fitness)
+    {
+        base.OnFitnessObserved(fitness);
+        _lastSchedulerMetric = Convert.ToDouble(fitness);
+
+        if (_adaptiveSchedulerStepsOnFitness && _learningRateScheduler is not null)
+        {
+            SetLearningRate(_learningRateScheduler.Step(_lastSchedulerMetric));
+        }
+    }
+
+    /// <summary>
+    /// Called at the end of each training epoch to update scheduler state if applicable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>When to call this method:</b> This method must be called at the end of each epoch if you are using
+    /// <see cref="SchedulerStepMode.StepPerEpoch"/> or <see cref="SchedulerStepMode.WarmupThenEpoch"/>.
+    /// Failure to call this method will prevent the learning rate scheduler from advancing, resulting
+    /// in a constant learning rate throughout training.
+    /// </para>
+    /// <para><b>For Beginners:</b> An epoch is one complete pass through all your training data.
+    /// Many learning rate schedules (like step decay or cosine annealing) work on an epoch basis,
+    /// reducing the learning rate after each complete pass through the data.
+    /// </para>
+    /// </remarks>
+    public virtual void OnEpochEnd()
+    {
+        _currentEpoch++;
+
+        if (_learningRateScheduler != null)
+        {
+            bool shouldStep = _schedulerStepMode switch
+            {
+                SchedulerStepMode.StepPerEpoch => true,
+                SchedulerStepMode.WarmupThenEpoch => !IsInWarmupPhase(),
+                _ => false
+            };
+
+            // The auto-installed adaptive schedule already steps on every fitness observation, which
+            // is the cadence of the inline rule it replaces. Stepping it again here would adapt it
+            // twice per epoch for the one optimizer that raises epoch events, and once for the rest.
+            if (shouldStep && !_adaptiveSchedulerStepsOnFitness)
+            {
+                StepScheduler();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Called at the end of each training batch to update scheduler state if applicable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>When to call this method:</b> This method must be called after each batch if you are using
+    /// <see cref="SchedulerStepMode.StepPerBatch"/>, or during the warmup phase when using
+    /// <see cref="SchedulerStepMode.WarmupThenEpoch"/>. Failure to call this method will prevent
+    /// the learning rate scheduler from advancing on a per-batch basis.
+    /// </para>
+    /// <para><b>For Beginners:</b> A batch is a small subset of your training data processed at once.
+    /// Some schedulers (like warmup or cyclical learning rates) need to update after every batch
+    /// for smooth, fine-grained control of the learning rate.
+    /// </para>
+    /// </remarks>
+    public virtual void OnBatchEnd()
+    {
+        _currentStep++;
+
+        if (_learningRateScheduler != null)
+        {
+            bool shouldStep = _schedulerStepMode switch
+            {
+                SchedulerStepMode.StepPerBatch => true,
+                SchedulerStepMode.WarmupThenEpoch => IsInWarmupPhase(),
+                _ => false
+            };
+
+            if (shouldStep)
+            {
+                StepScheduler();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Determines whether the scheduler is currently in the warmup phase.
+    /// </summary>
+    /// <returns>True if in warmup phase, false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// Warmup is a technique where the learning rate starts very low and gradually increases
+    /// to the base learning rate over a specified number of steps. This helps stabilize
+    /// training in the early phases.
+    /// </para>
+    /// <para>
+    /// <b>Detection Logic:</b> For <see cref="LinearWarmupScheduler"/>, this method uses the
+    /// explicit warmup step count for accurate detection. For other schedulers, warmup detection
+    /// is not supported and this method returns false. The heuristic of comparing current LR to
+    /// base LR was removed because it incorrectly identifies decay phases (e.g., cosine annealing)
+    /// as warmup when the learning rate drops below the base learning rate.
+    /// </para>
+    /// </remarks>
+    protected virtual bool IsInWarmupPhase()
+    {
+        if (_learningRateScheduler == null)
+        {
+            return false;
+        }
+
+        // Check if the scheduler is a LinearWarmupScheduler with explicit warmup steps
+        if (_learningRateScheduler is LinearWarmupScheduler warmupScheduler)
+        {
+            // Use the scheduler's explicit warmup step count for accurate detection
+            return _learningRateScheduler.CurrentStep < warmupScheduler.WarmupSteps;
+        }
+
+        // For other schedulers, we cannot reliably detect warmup
+        // The heuristic currentLr < baseLr is flawed as it triggers during decay phases
+        // Return false to avoid incorrect behavior with WarmupThenEpoch mode
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the current learning rate being used by this optimizer.
+    /// </summary>
+    /// <returns>The current learning rate.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The learning rate controls how big each update step is.
+    /// This value may change during training if a learning rate scheduler is configured.
+    /// </para>
+    /// </remarks>
+    public double GetCurrentLearningRate()
+    {
+        return _currentLearningRate;
+    }
+
+    /// <summary>
+    /// Gets the current training step (batch count).
+    /// </summary>
+    public int CurrentStep => _currentStep;
+
+    /// <summary>
+    /// Gets the current training epoch.
+    /// </summary>
+    public int CurrentEpoch => _currentEpoch;
+
+    /// <summary>
+    /// Applies momentum to the gradient calculation.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method considers the direction you were moving in previously
+    /// when deciding which way to go next. It's like considering your momentum when hiking -
+    /// you might keep going in roughly the same direction rather than abruptly changing course.
+    /// </para>
+    /// </remarks>
+    /// <param name="gradient">The current gradient.</param>
+    /// <returns>The gradient adjusted for momentum.</returns>
+    protected virtual Vector<T> ApplyMomentum(Vector<T> gradient)
+    {
+        if (_previousGradient == null || _previousGradient.Length == 0 || _previousGradient.Length != gradient.Length)
+        {
+            _previousGradient = gradient;
+            return gradient;
+        }
+
+        var momentumGradient = _previousGradient.Add(gradient.Multiply(NumOps.FromDouble(_currentMomentum)));
+        _previousGradient = momentumGradient;
+        return momentumGradient;
+    }
+
+    /// <summary>
+    /// Updates the parameters of the model based on the calculated gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts the model's parameters to improve its performance.
+    /// It's like taking steps in the direction that will lead to better results, based on what we've learned
+    /// from the data.</para>
+    /// </remarks>
+    /// <param name="layers">The layers of the neural network containing the parameters to update.</param>
+    public virtual void UpdateParameters(List<ILayer<T>> layers)
+    {
+        // Use per-layer direct update instead of serialize/update/deserialize.
+        // The old path (GetParameters → SGD → SetParameters) allocated and copied
+        // the entire parameter vector twice per layer per step. The new path calls
+        // layer.UpdateParameters(lr) which updates weights in-place using Engine
+        // tensor operations — zero allocation, 14x+ speedup for large models.
+        var lr = NumOps.FromDouble(_currentLearningRate);
+        foreach (var layer in layers)
+        {
+            if (layer.SupportsTraining)
+            {
+                layer.UpdateParameters(lr);
+                layer.ClearGradients();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the current learning rate as the generic type T.
+    /// Useful for models that need to pass the optimizer's LR to per-layer updates.
+    /// </summary>
+    internal T GetCurrentLearningRateAsT()
+    {
+        return NumOps.FromDouble(_currentLearningRate);
+    }
+
+    /// <summary>
+    /// Rebinds optimizer tape state loaded from a checkpoint to the current
+    /// parameter tensors and records the current parameter order for future
+    /// serialization.
+    /// </summary>
+    protected void PrepareTapeState(TapeStepContext<T> context)
+    {
+        Guard.NotNull(context);
+
+        lock (_tapeStateSync)
+        {
+            var parameters = context.Parameters;
+            int count = parameters.Count;
+
+            // O(1) fast path: the same parameter-collection INSTANCE passed again (with no pending
+            // deserialized state to rebind) means nothing to re-index — skip even the verification scan.
+            // This is the common steady-state signal; a model/parameter replacement hands over a different
+            // collection instance (or a different count), which misses here and falls through to verify +
+            // rebuild. Reference identity is the accepted "unchanged" signal — parameter lists in this
+            // codebase are not mutated in place across steps (a change produces new tensors/a new list).
+            if (_pendingTapeTensorStates.Count == 0
+                && count == _tapeIndexedParameterCount
+                && ReferenceEquals(parameters, _tapeIndexedParametersRef))
+            {
+                return;
+            }
+
+            // Steady-state fast path: when there is no pending deserialized state to rebind AND the
+            // current parameter set is EXACTLY the one we already indexed, the existing map is still
+            // correct, so skip the clear+repopulate (and the per-parameter RestorePendingTapeTensorStates
+            // work) that otherwise ran under the lock every Step(). We fully verify the map here rather
+            // than trusting endpoints only: an interior slot changing (or a null→tensor transition) while
+            // the first/last references stay the same would otherwise return a STALE map and corrupt
+            // checkpoint indexing. This verification is still cheaper than the rebuild — plain dictionary
+            // lookups, with no clear, no re-inserts, and no restore-state calls — and the counts guard
+            // catches a replaced parameter set (different count) or added/removed null slots.
+            if (_pendingTapeTensorStates.Count == 0 && count == _tapeIndexedParameterCount && count > 0)
+            {
+                int nonNullParameterCount = 0;
+                bool mapMatchesCurrentParameters = true;
+                for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
+                {
+                    var parameter = parameters[parameterIndex];
+                    if (parameter is null) continue;
+
+                    nonNullParameterCount++;
+                    if (!_tapeParameterIndices.TryGetValue(parameter, out int indexedParameter)
+                        || indexedParameter != parameterIndex)
+                    {
+                        mapMatchesCurrentParameters = false;
+                        break;
+                    }
+                }
+
+                if (mapMatchesCurrentParameters && _tapeParameterIndices.Count == nonNullParameterCount)
+                {
+                    // Remember this instance so a subsequent call with the same collection hits the O(1)
+                    // reference fast path above instead of re-scanning.
+                    _tapeIndexedParametersRef = parameters;
+                    return;
+                }
+            }
+
+            // Rebuild the index from the CURRENT parameters. Without clearing, tensors that are no longer
+            // part of the active model (e.g. after a parameter set is replaced, or an optimizer is reused
+            // across models without a full Reset) would linger as stale references and could be serialized
+            // as state for parameters that no longer exist.
+            _tapeParameterIndices.Clear();
+            for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
+            {
+                var parameter = parameters[parameterIndex];
+                if (parameter is null) continue;
+
+                _tapeParameterIndices[parameter] = parameterIndex;
+                RestorePendingTapeTensorStates(parameterIndex, parameter);
+            }
+            _tapeIndexedParameterCount = count;
+            _tapeIndexedParametersRef = parameters;
+        }
+    }
+
+    /// <summary>
+    /// Gets the stable parameter-order index recorded from the latest tape step.
+    /// </summary>
+    protected bool TryGetTapeParameterIndex(Tensor<T> parameter, out int parameterIndex)
+    {
+        return _tapeParameterIndices.TryGetValue(parameter, out parameterIndex);
+    }
+
+    /// <inheritdoc />
+    public abstract void Step(TapeStepContext<T> context);
+
+    /// <inheritdoc />
+    private protected override void SerializeExtensionData(BinaryWriter writer)
+    {
+        writer.Write(TapeStateExtensionMarker);
+
+        var tapeStepFields = EnumerateOptimizerFields()
+            .Where(field => field.Name == "_tapeStep" && field.FieldType == typeof(int))
+            .ToList();
+
+        // Guard against field shadowing: if a derived optimizer also declared `_tapeStep`, the hierarchy
+        // walk yields multiple same-named fields. DeserializeExtensionData resolves by name only, so it
+        // would repeatedly bind the first match and silently restore the WRONG step counter. No optimizer
+        // shadows it today (all derive directly from this base); fail fast with a clear message if one
+        // ever does, rather than corrupt the restored state. This keeps the on-wire count <= 1, which in
+        // turn makes the name-only resolve on the deserialize side unambiguous.
+        if (tapeStepFields.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} declares multiple '_tapeStep' fields across its type hierarchy " +
+                $"({string.Join(", ", tapeStepFields.Select(f => f.DeclaringType?.Name))}). Tape-state " +
+                $"serialization requires a single '_tapeStep'; rename the shadowing field.");
+        }
+
+        writer.Write(tapeStepFields.Count);
+        foreach (var field in tapeStepFields)
+        {
+            writer.Write(field.Name);
+            writer.Write((int)(field.GetValue(this) ?? 0));
+        }
+
+        var tensorStateFields = EnumerateTapeTensorStateFields().ToList();
+        writer.Write(tensorStateFields.Count);
+        foreach (var field in tensorStateFields)
+        {
+            writer.Write(field.Name);
+            WriteTapeTensorStateDictionary(writer, field);
+        }
+    }
+
+    /// <inheritdoc />
+    private protected override void DeserializeExtensionData(BinaryReader reader)
+    {
+        if (reader.BaseStream.Position >= reader.BaseStream.Length)
+        {
+            return;
+        }
+
+        // Checkpoints can be untrusted or partially written; a truncated payload makes ReadString/
+        // ReadInt32 throw a low-level EndOfStream/IO exception mid-parse. Translate those into a
+        // deterministic "corrupt optimizer checkpoint" error so callers get a clear, catchable failure
+        // instead of a leaked stream exception. (The marker-mismatch InvalidOperationException below is
+        // NOT an IO exception, so the filter lets it propagate unchanged.)
+        try
+        {
+            string marker = reader.ReadString();
+            if (!string.Equals(marker, TapeStateExtensionMarker, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Unknown optimizer extension payload '{marker}'.");
+            }
+
+            ClearSerializedTapeState();
+
+            // Validate the declared table sizes against what the writer can
+            // legally emit BEFORE looping/allocating, so a truncated or hostile
+            // checkpoint is rejected up front rather than driving a huge/negative
+            // loop count or a bad allocation. The writer emits at most one
+            // '_tapeStep' field (it throws on field shadowing), and a non-negative
+            // number of tensor-state fields.
+            int tapeStepFieldCount = reader.ReadInt32();
+            if (tapeStepFieldCount < 0 || tapeStepFieldCount > 1)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint declares an invalid tape-step field count {tapeStepFieldCount} " +
+                    "(expected 0 or 1).");
+            }
+            for (int i = 0; i < tapeStepFieldCount; i++)
+            {
+                string fieldName = reader.ReadString();
+                int value = reader.ReadInt32();
+                var field = EnumerateOptimizerFields()
+                    .FirstOrDefault(candidate => candidate.Name == fieldName && candidate.FieldType == typeof(int));
+                field?.SetValue(this, value);
+            }
+
+            int tensorStateFieldCount = reader.ReadInt32();
+            if (tensorStateFieldCount < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint declares a negative tensor-state field count {tensorStateFieldCount}.");
+            }
+            lock (_tapeStateSync)
+            {
+                for (int i = 0; i < tensorStateFieldCount; i++)
+                {
+                    string fieldName = reader.ReadString();
+                    _pendingTapeTensorStates[fieldName] = ReadTapeTensorStateDictionary(reader);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.EndOfStreamException or System.IO.IOException)
+        {
+            throw new InvalidOperationException(
+                "Optimizer tape-state extension payload is truncated or corrupted (unexpected end of the " +
+                "checkpoint stream while reading optimizer state).", ex);
+        }
+    }
+
+    private void WriteTapeTensorStateDictionary(BinaryWriter writer, FieldInfo field)
+    {
+        var entries = new SortedDictionary<int, Tensor<T>>();
+
+        lock (_tapeStateSync)
+        {
+            if (_pendingTapeTensorStates.TryGetValue(field.Name, out var pendingEntries))
+            {
+                foreach (var entry in pendingEntries)
+                {
+                    entries[entry.Key] = entry.Value;
+                }
+            }
+
+            if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeEntries)
+            {
+                foreach (var entry in activeEntries)
+                {
+                    if (_tapeParameterIndices.TryGetValue(entry.Key, out int parameterIndex))
+                    {
+                        entries[parameterIndex] = entry.Value;
+                    }
+                }
+            }
+        }
+
+        writer.Write(entries.Count);
+        foreach (var entry in entries)
+        {
+            writer.Write(entry.Key);
+            WriteTapeTensor(writer, entry.Value);
+        }
+    }
+
+    private Dictionary<int, Tensor<T>> ReadTapeTensorStateDictionary(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+        if (count < 0)
+        {
+            throw new InvalidOperationException(
+                $"Optimizer checkpoint declares a negative tape-tensor entry count {count}.");
+        }
+
+        // Reject a count that cannot possibly fit in the remaining stream before
+        // pre-sizing the dictionary: every entry writes at least a parameter index
+        // (4B) plus the tensor's rank (4B) and element count (4B) = 12B, so a count
+        // larger than remaining/12 can only come from a corrupt/hostile checkpoint
+        // and would otherwise reserve a huge dictionary capacity from a bad length.
+        if (reader.BaseStream.CanSeek)
+        {
+            long remaining = reader.BaseStream.Length - reader.BaseStream.Position;
+            if ((long)count * 12L > remaining)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint declares {count} tape-tensor entries, which exceeds the " +
+                    $"{remaining} bytes remaining in the stream.");
+            }
+        }
+
+        var entries = new Dictionary<int, Tensor<T>>(count);
+        for (int i = 0; i < count; i++)
+        {
+            int parameterIndex = reader.ReadInt32();
+            if (parameterIndex < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint contains a negative tape-tensor parameter index {parameterIndex}.");
+            }
+            if (entries.ContainsKey(parameterIndex))
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint contains a duplicate tape-tensor parameter index {parameterIndex}.");
+            }
+            entries[parameterIndex] = ReadTapeTensor(reader);
+        }
+
+        return entries;
+    }
+
+    private void WriteTapeTensor(BinaryWriter writer, Tensor<T> tensor)
+    {
+        writer.Write(tensor._shape.Length);
+        foreach (int dimension in tensor._shape)
+        {
+            writer.Write(dimension);
+        }
+
+        var span = tensor.AsSpan();
+        writer.Write(span.Length);
+        for (int i = 0; i < span.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(span[i]));
+        }
+    }
+
+    private Tensor<T> ReadTapeTensor(BinaryReader reader)
+    {
+        var stream = reader.BaseStream;
+        long Remaining() => stream.CanSeek ? stream.Length - stream.Position : long.MaxValue;
+
+        int rank = reader.ReadInt32();
+        // Each rank dimension is a 4-byte int on the wire; reject a negative/absurd rank against the
+        // bytes physically remaining before allocating the shape array (untrusted checkpoint data).
+        if (rank < 0 || (long)rank * sizeof(int) > Remaining())
+        {
+            throw new InvalidOperationException($"Invalid optimizer tensor rank {rank}.");
+        }
+
+        var shape = new int[rank];
+        long declaredElements = rank == 0 ? 0 : 1;
+        for (int i = 0; i < rank; i++)
+        {
+            shape[i] = reader.ReadInt32();
+            if (shape[i] < 0)
+            {
+                throw new InvalidOperationException($"Invalid optimizer tensor dimension {shape[i]} at axis {i}.");
+            }
+            // checked: an unchecked long product can silently overflow/wrap for a malicious shape,
+            // yielding a small (or negative) count that slips past the byte-remaining guard below and
+            // triggers an oversized allocation. Overflow => corrupt/hostile checkpoint => fail fast.
+            try
+            {
+                declaredElements = checked(declaredElements * shape[i]);
+            }
+            catch (OverflowException)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer tensor shape overflows its element count at axis {i}. Checkpoint is corrupted or malicious.");
+            }
+        }
+
+        // A single in-memory tensor cannot exceed int.MaxValue elements (Tensor.Length is Int32); reject
+        // an out-of-range count here so a wrapped/absurd shape can't slip past the byte-bound check.
+        if (declaredElements > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Optimizer tensor shape declares {declaredElements} elements, exceeding the maximum supported tensor size.");
+        }
+
+        // Bound the element count (8-byte doubles on the wire) against the remaining bytes BEFORE
+        // allocating the tensor, so a malformed shape can't force a huge allocation / OOM on restore.
+        if (declaredElements * sizeof(double) > Remaining())
+        {
+            throw new InvalidOperationException(
+                $"Optimizer tensor shape declares {declaredElements} elements but only {Remaining()} bytes remain in the checkpoint stream.");
+        }
+
+        int length = reader.ReadInt32();
+        var tensor = new Tensor<T>(shape);
+        if (tensor.Length != length)
+        {
+            throw new InvalidOperationException(
+                $"Serialized optimizer tensor length {length} does not match shape length {tensor.Length}.");
+        }
+
+        var span = tensor.AsWritableSpan();
+        for (int i = 0; i < length; i++)
+        {
+            span[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        return tensor;
+    }
+
+    private void RestorePendingTapeTensorStates(int parameterIndex, Tensor<T> parameter)
+    {
+        // Fast path: pending tape-tensor state only exists transiently after a checkpoint Deserialize
+        // and is consumed as parameters are rebound. In steady-state training the dictionary is empty,
+        // so bail before the EnumerateTapeTensorStateFields() reflection walk (Type.GetFields over the
+        // hierarchy) that would otherwise run once per parameter on every Step().
+        if (_pendingTapeTensorStates.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var field in EnumerateTapeTensorStateFields())
+        {
+            if (!_pendingTapeTensorStates.TryGetValue(field.Name, out var pendingEntries) ||
+                !pendingEntries.TryGetValue(parameterIndex, out var restoredState))
+            {
+                continue;
+            }
+
+            if (restoredState.Length != parameter.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Checkpoint optimizer state for {GetType().Name}.{field.Name}[{parameterIndex}] has length " +
+                    $"{restoredState.Length}, but the current parameter has length {parameter.Length}.");
+            }
+
+            if (!restoredState._shape.SequenceEqual(parameter._shape))
+            {
+                var reshapedState = new Tensor<T>(parameter._shape);
+                restoredState.AsSpan().CopyTo(reshapedState.AsWritableSpan());
+                restoredState = reshapedState;
+            }
+
+            if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeState)
+            {
+                activeState[parameter] = restoredState;
+            }
+
+            pendingEntries.Remove(parameterIndex);
+            if (pendingEntries.Count == 0)
+            {
+                _pendingTapeTensorStates.Remove(field.Name);
+            }
+        }
+    }
+
+    private void ClearSerializedTapeState()
+    {
+        lock (_tapeStateSync)
+        {
+            _tapeParameterIndices.Clear();
+            _tapeIndexedParameterCount = -1;
+            _tapeIndexedParametersRef = null;
+            _pendingTapeTensorStates.Clear();
+
+            foreach (var field in EnumerateTapeTensorStateFields())
+            {
+                if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeState)
+                {
+                    activeState.Clear();
+                }
+            }
+        }
+    }
+
+    private IEnumerable<FieldInfo> EnumerateTapeTensorStateFields()
+    {
+        return EnumerateOptimizerFields()
+            .Where(field => field.Name.StartsWith("_tape", StringComparison.Ordinal) &&
+                            field.FieldType == typeof(ConcurrentDictionary<Tensor<T>, Tensor<T>>));
+    }
+
+    private IEnumerable<FieldInfo> EnumerateOptimizerFields()
+    {
+        for (var type = GetType(); type is not null && type != typeof(object); type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            {
+                yield return field;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies PyTorch-style global-norm gradient clipping across every gradient
+    /// in the tape step's <see cref="TapeStepContext{T}.Gradients"/> dictionary.
+    /// Mirrors <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>:
+    /// computes <c>sqrt(Σ_p ‖grad_p‖²)</c>; if it exceeds <paramref name="maxNorm"/>,
+    /// scales every gradient by <c>maxNorm / globalNorm</c> in place so the
+    /// post-clip global norm is exactly <paramref name="maxNorm"/>. Without
+    /// clipping, randomly-initialised classifiers paired with CrossEntropyLoss
+    /// and non-distribution targets diverge in a few iterations (ODISE: initial
+    /// MSE 0.24 → final 184.69, 770× explosion). Pre-clipping every tape-path
+    /// optimizer that opts in keeps that loss-explosion contained at the
+    /// canonical PyTorch transformer default <c>MaxGradientNorm = 1.0</c>.
+    /// </summary>
+    protected static void ApplyTapeGlobalNormGradientClipping(
+        TapeStepContext<T> context, double maxNorm)
+    {
+        // Reject NaN/Inf maxNorm before computing scale — otherwise `scale =
+        // maxNorm / globalNorm` becomes NaN and the for-loop below silently
+        // overwrites every gradient element with NaN, distorting the next
+        // optimizer step instead of being a no-op.
+        if (maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm)) return;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        double globalNormSq = 0.0;
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                double v = numOps.ToDouble(span[i]);
+                globalNormSq += v * v;
+            }
+        }
+        double globalNorm = Math.Sqrt(globalNormSq);
+        if (globalNorm <= maxNorm || globalNorm == 0.0
+            || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
+            return;
+
+        double scale = maxNorm / globalNorm;
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+                span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
+        }
+    }
+
+    /// <summary>
+    /// PyTorch <c>clip_grad_value_</c>-style element-wise clamp across
+    /// every gradient in the tape step's
+    /// <see cref="TapeStepContext{T}.Gradients"/> dictionary: each element
+    /// is bounded to <c>[-maxValue, +maxValue]</c>. Companion to
+    /// <see cref="ApplyTapeGlobalNormGradientClipping"/> — tape-path
+    /// optimizers select between them via
+    /// <see cref="Models.Options.GradientBasedOptimizerOptions{T,TInput,TOutput}.GradientClippingMethod"/>.
+    /// </summary>
+    protected static void ApplyTapeValueGradientClipping(
+        TapeStepContext<T> context, double maxValue)
+    {
+        if (maxValue <= 0.0 || double.IsNaN(maxValue) || double.IsInfinity(maxValue)) return;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                double v = numOps.ToDouble(span[i]);
+                if (v > maxValue) v = maxValue;
+                else if (v < -maxValue) v = -maxValue;
+                span[i] = numOps.FromDouble(v);
+            }
+        }
+    }
+
+    /// <summary>
+    /// PyTorch GradScaler-style anomaly probe across every gradient in the tape
+    /// step's <see cref="TapeStepContext{T}.Gradients"/> dictionary: returns
+    /// <c>true</c> if any element is NaN or ±Inf. Tape-path optimizers should
+    /// SKIP the entire <see cref="Step(TapeStepContext{T})"/> when this returns
+    /// <c>true</c> — Adam-family updates with NaN/Inf gradients permanently
+    /// poison the m/v moment accumulators, after which every subsequent step
+    /// produces NaN weights. The narrow trigger is single-sample memorization
+    /// where <c>v_hat</c> collapses toward 0 after loss converges, paired with
+    /// even a tiny non-zero <c>m_hat</c> producing a float-cliff NaN gradient
+    /// at one specific step (HopeNetwork verified empirically — finite for
+    /// the first 9 steps, then NaN at step ~10).
+    /// </summary>
+    protected static bool HasAnomalousTapeGradients(TapeStepContext<T> context)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                double v = numOps.ToDouble(span[i]);
+                if (double.IsNaN(v) || double.IsInfinity(v)) return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Updates a matrix of parameters based on the calculated gradient.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts the model's parameters to improve its performance.
+    /// It's like taking a step in the direction you've determined will lead you downhill.
+    /// </para>
+    /// </remarks>
+    /// <param name="parameters">The current parameters.</param>
+    /// <param name="gradient">The calculated gradient.</param>
+    /// <returns>The updated parameters.</returns>
+    public virtual Matrix<T> UpdateParameters(Matrix<T> parameters, Matrix<T> gradient)
+    {
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        return parameters.Subtract(gradient.Multiply(learningRate));
+    }
+
+    /// <summary>
+    /// Updates a tensor of parameters based on the calculated gradient.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method adjusts the model's parameters stored in tensor format to improve its performance.
+    /// It's like taking a step in the direction you've determined will lead you downhill, but for more complex
+    /// multi-dimensional data structures. Tensors are useful for representing parameters in deep neural networks
+    /// where data has multiple dimensions (like images with width, height, and channels).
+    /// </para>
+    /// </remarks>
+    /// <param name="parameters">The current tensor parameters.</param>
+    /// <param name="gradient">The calculated gradient tensor.</param>
+    /// <returns>The updated tensor parameters.</returns>
+    public virtual Tensor<T> UpdateParameters(Tensor<T> parameters, Tensor<T> gradient)
+    {
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
+
+        // Scale the gradient by the learning rate
+        var scaledGradient = gradient.Multiply(learningRate);
+
+        // Subtract the scaled gradient from the parameters
+        return parameters.Subtract(scaledGradient);
+    }
+
+    /// <summary>
+    /// Updates a vector of parameters based on the calculated gradient.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method is similar to UpdateMatrix, but for when the parameters
+    /// are in a vector format instead of a matrix. It's another way of taking a step to improve the model.
+    /// </para>
+    /// </remarks>
+    /// <param name="parameters">The current parameters.</param>
+    /// <param name="gradient">The calculated gradient.</param>
+    /// <returns>The updated parameters.</returns>
+    public virtual Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        return parameters.Subtract(gradient.Multiply(learningRate));
+    }
+
+    /// <summary>
+    /// Updates the options for the gradient-based optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method allows you to change the settings of the optimizer
+    /// while it's running. It's like adjusting your hiking strategy mid-journey based on the terrain you encounter.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The new options to apply to the optimizer.</param>
+    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+        if (options is GradientBasedOptimizerOptions<T, TInput, TOutput> gradientOptions)
+        {
+            GradientOptions = gradientOptions;
+        }
+    }
+
+    #region GPU Optimizer Support
+
+    /// <summary>
+    /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Override this in derived classes that have GPU kernel implementations.
+    /// The base class returns false since it has no specific GPU kernel.</para>
+    /// </remarks>
+    public virtual bool SupportsGpuUpdate => false;
+
+    /// <summary>
+    /// GPU-resident optimizer state. Derived classes override to store their specific state.
+    /// </summary>
+    protected IGpuBuffer? _gpuState;
+
+    /// <summary>
+    /// Whether GPU state has been initialized.
+    /// </summary>
+    protected bool _gpuStateInitialized;
+
+    /// <summary>
+    /// Updates parameters on the GPU using optimizer-specific GPU kernels.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The base implementation throws since there's no generic GPU kernel.
+    /// Derived classes that support GPU updates override this method.</para>
+    /// </remarks>
+    /// <param name="parameters">GPU buffer containing parameters to update (modified in-place).</param>
+    /// <param name="gradients">GPU buffer containing gradients.</param>
+    /// <param name="parameterCount">Number of parameters.</param>
+    /// <param name="backend">The GPU backend to use for execution.</param>
+    public virtual void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
+    {
+        throw new NotSupportedException(
+            $"GPU parameter updates are not supported by {GetType().Name}. " +
+            $"Check SupportsGpuUpdate before calling this method, or use CPU-based UpdateParameters instead.");
+    }
+
+    /// <summary>
+    /// Initializes optimizer state on the GPU for a given parameter count.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The base implementation does nothing. Derived classes that
+    /// maintain optimizer state (like momentum or adaptive learning rates) override this.</para>
+    /// </remarks>
+    /// <param name="parameterCount">Number of parameters to initialize state for.</param>
+    /// <param name="backend">The GPU backend to use for memory allocation.</param>
+    public virtual void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
+    {
+        // Base implementation - no state to initialize
+        _gpuStateInitialized = true;
+    }
+
+    /// <summary>
+    /// Disposes GPU-allocated optimizer state.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The base implementation disposes _gpuState if set.
+    /// Derived classes with multiple state buffers should override.</para>
+    /// </remarks>
+    public virtual void DisposeGpuState()
+    {
+        _gpuState?.Dispose();
+        _gpuState = null;
+        _gpuStateInitialized = false;
+    }
+
+    #endregion
+}

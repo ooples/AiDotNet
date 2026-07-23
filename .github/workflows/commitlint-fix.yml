@@ -1,0 +1,143 @@
+name: Fix Commit Messages
+
+on:
+  # Only at PR creation — NOT on every synchronize. Rewriting already-pushed commits
+  # requires a force-push, which on an active PR overrides in-flight local work and
+  # orphans the in-progress CI run's commit (showing it "cancelled"), so CI never
+  # completes. Commits are now auto-fixed at commit time by the local .githooks/commit-msg
+  # hook (so they land compliant and this fires as a no-op anyway); the commitlint.yml
+  # check still enforces compliance non-destructively for anyone without the hook enabled.
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Prevent concurrent runs on the same PR to avoid force-push races.
+concurrency:
+  group: commitlint-fix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-and-fix-commits:
+    name: Check and Fix Non-Compliant Commits
+    runs-on: ubuntu-latest
+    # Skip dependabot PRs (restricted token can't force-push) and release-please
+    # release PRs (their bot commits must not be rewritten). Merged from master's
+    # guard; the old handle-dependabot job was not restored — the rewritten fixer
+    # replaces that broken, lowercase-only path.
+    if: ${{ (github.actor != 'dependabot[bot]') && !startsWith(github.head_ref, 'release-please--') }}
+
+    steps:
+      # Check out the PR's HEAD BRANCH by name (not the detached pull/N/merge ref),
+      # so filter-branch rewrites the real branch and we can push it back. Prefer the
+      # AUTOFIX_PAT so the follow-up push is authenticated as a real user and therefore
+      # re-triggers the required checks (pushes made with GITHUB_TOKEN do not).
+      - name: Checkout PR head branch
+        uses: actions/checkout@v7.0.0
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          token: ${{ secrets.AUTOFIX_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Rewrite EVERY commit in origin/<base>..HEAD through the shared fixer via
+      # --msg-filter. This preserves each commit's diff and all merge topology (no
+      # destructive squash); commits whose message already passes hash back to the
+      # exact same SHA, so a fully-compliant branch is a no-op.
+      - name: Auto-fix commit messages
+        id: fix
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_REF"
+
+          RANGE="origin/${BASE_REF}..HEAD"
+          COUNT=$(git rev-list --count "$RANGE")
+          echo "Commits in range: $COUNT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No commits to check."
+            exit 0
+          fi
+
+          # First pass: does ANY commit's MESSAGE actually change under the fixer?
+          # We compare message CONTENT (not SHAs) because filter-branch resets
+          # committer dates and would otherwise churn a fully-compliant branch on
+          # every run (new SHAs -> force-push -> re-trigger). Command substitution
+          # strips trailing newlines on both sides, so the compare is exact on
+          # content and immune to trailing-newline noise.
+          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/commit-msg-autofix.py"
+          NEEDS_FIX=0
+          while IFS= read -r sha; do
+            [ -z "$sha" ] && continue
+            orig=$(git log -1 --format=%B "$sha")
+            fixed=$(printf '%s' "$orig" | python3 "$SCRIPT")
+            if [ "$orig" != "$fixed" ]; then
+              echo "Will fix: $(git log -1 --format=%s "$sha")"
+              NEEDS_FIX=1
+            fi
+          done < <(git rev-list --reverse "$RANGE")
+
+          if [ "$NEEDS_FIX" -eq 0 ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "All commit messages already compliant — nothing to fix."
+            exit 0
+          fi
+
+          # Apply the fixes in place (preserving diffs + merge topology).
+          export FILTER_BRANCH_SQUELCH_WARNING=1
+          git filter-branch -f \
+            --msg-filter "python3 \"$SCRIPT\"" \
+            "$RANGE"
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "Rewrote non-compliant commit messages:"
+          git log --format='  %h %s' "$RANGE"
+
+      # Push the rewritten branch back with a correct lease (guards against a
+      # concurrent push clobber) using the freshly fetched remote tip.
+      - name: Force-push fixed commits
+        if: steps.fix.outputs.changed == 'true'
+        env:
+          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BRANCH"
+          REMOTE_SHA=$(git rev-parse "origin/$BRANCH")
+
+          if [ -n "${AUTOFIX_PAT:-}" ]; then
+            PUSH_URL="https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          else
+            echo "::warning::AUTOFIX_PAT is not set — pushing with GITHUB_TOKEN. The commit messages will be fixed, but the required checks may not auto-re-run; push any trivial change or re-run them to clear the required check."
+            PUSH_URL="origin"
+          fi
+
+          git push "$PUSH_URL" "HEAD:refs/heads/$BRANCH" \
+            --force-with-lease="refs/heads/$BRANCH:$REMOTE_SHA"
+
+      - name: Comment on PR
+        if: steps.fix.outputs.changed == 'true'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const body = [
+              '### Commit messages auto-fixed',
+              '',
+              'One or more commit messages did not follow Conventional Commits, so they were rewritten to comply (subject case, header length ≤ 100, valid type). **Each commit and its diff were preserved — no squashing.**',
+              '',
+              'The branch was force-pushed with the corrected messages. If you have local work on this branch, run `git pull --rebase` (or reset to the remote) before pushing again.',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

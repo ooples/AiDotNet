@@ -1,0 +1,660 @@
+using AiDotNet.Attributes;
+using AiDotNet.Clustering.Base;
+using AiDotNet.Clustering.DistanceMetrics;
+using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+
+namespace AiDotNet.Clustering.Neural;
+
+/// <summary>
+/// Self-Organizing Map (SOM) / Kohonen Network implementation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// A Self-Organizing Map is an unsupervised neural network that learns a
+/// low-dimensional representation of high-dimensional input data. The map
+/// preserves topological relationships: similar inputs activate nearby neurons.
+/// </para>
+/// <para>
+/// Algorithm:
+/// 1. Initialize neuron weights randomly
+/// 2. For each training sample:
+///    a. Find the Best Matching Unit (BMU) - closest neuron
+///    b. Update BMU and neighbors to be more like the input
+///    c. Decay learning rate and neighborhood radius over time
+/// 3. Repeat for many iterations
+/// </para>
+/// <para><b>For Beginners:</b> SOM creates a "neural map" of your data.
+///
+/// Think of it like training a room full of students:
+/// - Each student (neuron) specializes in a topic
+/// - Students sitting near each other learn similar topics
+/// - Over time, each student becomes expert in their area
+///
+/// The result is a 2D map where:
+/// - Each neuron represents a prototype pattern
+/// - Nearby neurons represent similar patterns
+/// - You can visualize high-dimensional data on a 2D grid
+///
+/// Great for:
+/// - Data visualization
+/// - Finding cluster structure
+/// - Understanding data topology
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new SelfOrganizingMapOptions&lt;double&gt;();
+/// var selfOrganizingMap = new SelfOrganizingMap&lt;double&gt;(options);
+/// selfOrganizingMap.Train(dataMatrix);
+/// Vector<double> labels = selfOrganizingMap.Labels;
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Clustering)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ResearchPaper("Self-Organized Formation of Topologically Correct Feature Maps", "https://doi.org/10.1007/BF00337288", Year = 1982, Authors = "Teuvo Kohonen")]
+public class SelfOrganizingMap<T> : ClusteringBase<T>
+{
+    private readonly SOMOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+    private T[,][]? _weights;
+    private T[,][] FittedWeights => _weights ?? throw new InvalidOperationException("SOM not fitted. Call Fit() or FitPredict() first.");
+    private int[]? _neuronLabels;
+
+    /// <summary>
+    /// Initializes a new SOM instance.
+    /// </summary>
+    /// <param name="options">The SOM options.</param>
+    public SelfOrganizingMap(SOMOptions<T>? options = null)
+        : base(options ?? new SOMOptions<T>())
+    {
+        _options = options ?? new SOMOptions<T>();
+    }
+
+    /// <summary>
+    /// Gets the neuron weight vectors (GridHeight x GridWidth x NumFeatures).
+    /// </summary>
+    public T[,][]? Weights => _weights;
+
+    /// <summary>
+    /// Gets the cluster label assigned to each neuron (GridHeight x GridWidth).
+    /// </summary>
+    public int[]? NeuronLabels => _neuronLabels;
+
+    /// <inheritdoc />
+
+    /// <inheritdoc />
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        return new SelfOrganizingMap<T>(new SOMOptions<T>
+        {
+            GridWidth = _options.GridWidth,
+            GridHeight = _options.GridHeight,
+            InitialLearningRate = _options.InitialLearningRate,
+            InitialNeighborhoodRadius = _options.InitialNeighborhoodRadius,
+            NeighborhoodType = _options.NeighborhoodType,
+            Topology = _options.Topology,
+            MaxIterations = _options.MaxIterations,
+            DistanceMetric = _options.DistanceMetric
+        });
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (SelfOrganizingMap<T>)CreateNewInstance();
+        if (_weights is not null)
+        {
+            int h = _weights.GetLength(0);
+            int w = _weights.GetLength(1);
+            clone._weights = new T[h, w][];
+            for (int r = 0; r < h; r++)
+                for (int c = 0; c < w; c++)
+                    clone._weights[r, c] = (T[])_weights[r, c].Clone();
+        }
+        clone._neuronLabels = _neuronLabels?.ToArray();
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    {
+        var newInstance = (SelfOrganizingMap<T>)CreateNewInstance();
+        newInstance.SetParameters(parameters);
+        return newInstance;
+    }
+
+    /// <inheritdoc />
+    public override void Train(Matrix<T> x, Vector<T> y)
+    {
+        int n = x.Rows;
+        int d = x.Columns;
+        NumFeatures = d;
+
+        int width = _options.GridWidth;
+        int height = _options.GridHeight;
+
+        var rand = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
+
+        // Compute data range per feature for proper weight initialization
+        var minVals = new double[d];
+        var maxVals = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            minVals[j] = double.MaxValue;
+            maxVals[j] = double.MinValue;
+        }
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                double val = NumOps.ToDouble(x[i, j]);
+                if (val < minVals[j]) minVals[j] = val;
+                if (val > maxVals[j]) maxVals[j] = val;
+            }
+        }
+
+        // Initialize weights randomly within the data range
+        _weights = new T[height, width][];
+        for (int r = 0; r < height; r++)
+        {
+            for (int c = 0; c < width; c++)
+            {
+                _weights[r, c] = new T[d];
+                for (int j = 0; j < d; j++)
+                {
+                    double range = maxVals[j] - minVals[j];
+                    if (range < 1e-10) range = 1.0;
+                    _weights[r, c][j] = NumOps.FromDouble(minVals[j] + rand.NextDouble() * range);
+                }
+            }
+        }
+
+        // Get initial parameters
+        double initialRadius = _options.InitialNeighborhoodRadius > 0
+            ? _options.InitialNeighborhoodRadius
+            : Math.Max(width, height) / 2.0;
+
+        double timeConstant = Options.MaxIterations / Math.Log(initialRadius);
+
+        // Training
+        for (int iter = 0; iter < Options.MaxIterations; iter++)
+        {
+            // Decay parameters
+            double radius = initialRadius * Math.Exp(-iter / timeConstant);
+            double learningRate = _options.InitialLearningRate * Math.Exp(-(double)iter / Options.MaxIterations);
+
+            // Select a random training sample
+            int sampleIdx = rand.Next(n);
+            var sample = new T[d];
+            for (int j = 0; j < d; j++)
+            {
+                sample[j] = x[sampleIdx, j];
+            }
+
+            // Find BMU
+            var (bmuRow, bmuCol) = FindBMU(sample, d);
+
+            // Update BMU and neighbors
+            for (int r = 0; r < height; r++)
+            {
+                for (int c = 0; c < width; c++)
+                {
+                    double distance = GetGridDistance(bmuRow, bmuCol, r, c);
+                    double influence = GetNeighborhoodInfluence(distance, radius);
+
+                    if (influence > 0.001)
+                    {
+                        T scaleFactor = NumOps.FromDouble(learningRate * influence);
+                        for (int j = 0; j < d; j++)
+                        {
+                            _weights[r, c][j] = NumOps.Add(_weights[r, c][j],
+                                NumOps.Multiply(scaleFactor,
+                                    NumOps.Subtract(sample[j], _weights[r, c][j])));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Cluster the neurons using K-Means on weight vectors
+        ClusterNeurons(width, height, d);
+
+        // Set labels for each training sample
+        Labels = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            var sample = new T[d];
+            for (int j = 0; j < d; j++)
+            {
+                sample[j] = x[i, j];
+            }
+
+            var (bmuRow, bmuCol) = FindBMU(sample, d);
+            int neuronIdx = bmuRow * width + bmuCol;
+            if (_neuronLabels is not null)
+            {
+                Labels[i] = NumOps.FromDouble(_neuronLabels[neuronIdx]);
+            }
+        }
+
+        // Recompute ClusterCenters from actual data (not neuron weights)
+        // so MergeDegenerateClusters can accurately assess inter-cluster distances
+        var dataCenters = new Matrix<T>(NumClusters, d);
+        var clusterCounts = new int[NumClusters];
+        for (int i = 0; i < n; i++)
+        {
+            int c = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+            if (c >= 0 && c < NumClusters)
+            {
+                for (int j = 0; j < d; j++)
+                    dataCenters[c, j] = NumOps.Add(dataCenters[c, j], x[i, j]);
+                clusterCounts[c]++;
+            }
+        }
+        for (int c = 0; c < NumClusters; c++)
+        {
+            if (clusterCounts[c] > 0)
+            {
+                for (int j = 0; j < d; j++)
+                    dataCenters[c, j] = NumOps.Divide(dataCenters[c, j], NumOps.FromDouble(clusterCounts[c]));
+            }
+        }
+        ClusterCenters = dataCenters;
+
+        int premergeK = NumClusters;
+        MergeDegenerateClusters(x);
+
+        // Update _neuronLabels to match merged cluster IDs so Predict() is consistent
+        if (NumClusters < premergeK && _neuronLabels is not null)
+        {
+            // Build mapping from old labels to new labels using the merged Labels vector
+            var labelMap = new Dictionary<int, int>();
+            for (int i = 0; i < n; i++)
+            {
+                int neuronIdx2 = 0;
+                var sample2 = new T[d];
+                for (int j = 0; j < d; j++) sample2[j] = x[i, j];
+                var (br, bc) = FindBMU(sample2, d);
+                neuronIdx2 = br * width + bc;
+                int oldLabel = _neuronLabels[neuronIdx2];
+                int newLabel = Labels is not null ? (int)Math.Round(NumOps.ToDouble(Labels[i])) : 0;
+                labelMap[oldLabel] = newLabel;
+            }
+
+            // Remap ALL neurons (not just BMU winners) to valid post-merge labels.
+            // Neurons that never won a BMU could retain stale labels >= NumClusters.
+            for (int ni = 0; ni < _neuronLabels.Length; ni++)
+            {
+                if (labelMap.TryGetValue(_neuronLabels[ni], out int mapped))
+                {
+                    _neuronLabels[ni] = mapped;
+                }
+                else
+                {
+                    // This neuron was never a BMU winner — assign it to the nearest cluster center
+                    int nr = ni / width;
+                    int nc = ni % width;
+                    T[] neuronWeights = FittedWeights[nr, nc];
+                    int bestCluster = 0;
+                    T bestDist = NumOps.MaxValue;
+                    for (int ci = 0; ci < ClusterCenters.Rows; ci++)
+                    {
+                        T dist = NumOps.Zero;
+                        for (int fi = 0; fi < d; fi++)
+                        {
+                            T diff = NumOps.Subtract(neuronWeights[fi], ClusterCenters[ci, fi]);
+                            dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
+                        }
+                        if (NumOps.ToDouble(dist) < NumOps.ToDouble(bestDist))
+                        {
+                            bestDist = dist;
+                            bestCluster = ci;
+                        }
+                    }
+                    _neuronLabels[ni] = bestCluster;
+                }
+            }
+        }
+
+        IsTrained = true;
+    }
+
+    private (int row, int col) FindBMU(T[] sample, int d)
+    {
+        int bmuRow = 0;
+        int bmuCol = 0;
+        T minDist = NumOps.MaxValue;
+
+        var sampleVec = new Vector<T>(sample);
+
+        for (int r = 0; r < _options.GridHeight; r++)
+        {
+            for (int c = 0; c < _options.GridWidth; c++)
+            {
+                var weightVec = new Vector<T>(FittedWeights[r, c]);
+                // Inline sum-of-squares — see ClusteringBase.ComputeDistance for
+                // the rationale (Engine.DotProduct on tiny vectors dispatches
+                // to GPU when AutoDetectAndConfigureGpu has switched backends
+                // and produces wrong values, surfaced as #1224 Cluster B).
+                T dist = NumOps.Zero;
+                for (int j = 0; j < d; j++)
+                {
+                    T diffJ = NumOps.Subtract(sampleVec[j], weightVec[j]);
+                    dist = NumOps.Add(dist, NumOps.Multiply(diffJ, diffJ));
+                }
+
+                if (NumOps.LessThan(dist, minDist))
+                {
+                    minDist = dist;
+                    bmuRow = r;
+                    bmuCol = c;
+                }
+            }
+        }
+
+        return (bmuRow, bmuCol);
+    }
+
+    private double GetGridDistance(int r1, int c1, int r2, int c2)
+    {
+        int width = _options.GridWidth;
+        int height = _options.GridHeight;
+
+        double dr = r1 - r2;
+        double dc = c1 - c2;
+
+        if (_options.Topology == SOMTopology.Toroidal)
+        {
+            // Handle wrapping
+            if (Math.Abs(dr) > height / 2.0) dr = height - Math.Abs(dr);
+            if (Math.Abs(dc) > width / 2.0) dc = width - Math.Abs(dc);
+        }
+
+        if (_options.Topology == SOMTopology.Hexagonal)
+        {
+            // Adjust for hexagonal grid distance
+            double xDist = dc + (r1 % 2 - r2 % 2) * 0.5;
+            return Math.Sqrt(dr * dr + xDist * xDist);
+        }
+
+        return Math.Sqrt(dr * dr + dc * dc);
+    }
+
+    private double GetNeighborhoodInfluence(double distance, double radius)
+    {
+        switch (_options.NeighborhoodType)
+        {
+            case NeighborhoodFunction.Gaussian:
+                return Math.Exp(-(distance * distance) / (2 * radius * radius));
+
+            case NeighborhoodFunction.Bubble:
+                return distance <= radius ? 1.0 : 0.0;
+
+            case NeighborhoodFunction.MexicanHat:
+                double normalized = distance / radius;
+                return (1 - 2 * normalized * normalized) * Math.Exp(-normalized * normalized);
+
+            default:
+                return Math.Exp(-(distance * distance) / (2 * radius * radius));
+        }
+    }
+
+    private void ClusterNeurons(int width, int height, int d)
+    {
+        // Flatten weights to a list for clustering
+        int numNeurons = width * height;
+        var neuronWeights = new T[numNeurons][];
+
+        for (int r = 0; r < height; r++)
+        {
+            for (int c = 0; c < width; c++)
+            {
+                neuronWeights[r * width + c] = FittedWeights[r, c];
+            }
+        }
+
+        // Determine optimal number of clusters using simple heuristic
+        int k = Math.Min((int)Math.Sqrt(numNeurons), 10);
+        NumClusters = k;
+
+        // Simple K-Means clustering of neurons
+        _neuronLabels = new int[numNeurons];
+        var centers = new T[k][];
+        var rand = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
+
+        // Initialize centers randomly from neurons
+        var indices = Enumerable.Range(0, numNeurons).OrderBy(_ => rand.Next()).Take(k).ToArray();
+        for (int i = 0; i < k; i++)
+        {
+            centers[i] = (T[])neuronWeights[indices[i]].Clone();
+        }
+
+        // K-Means iterations
+        for (int iter = 0; iter < 20; iter++)
+        {
+            // Assign neurons to nearest center
+            for (int i = 0; i < numNeurons; i++)
+            {
+                T minDist = NumOps.MaxValue;
+                int bestCluster = 0;
+
+                for (int c = 0; c < k; c++)
+                {
+                    T dist = NumOps.Zero;
+                    for (int j = 0; j < d; j++)
+                    {
+                        T diff = NumOps.Subtract(neuronWeights[i][j], centers[c][j]);
+                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
+                    }
+
+                    if (NumOps.LessThan(dist, minDist))
+                    {
+                        minDist = dist;
+                        bestCluster = c;
+                    }
+                }
+
+                _neuronLabels[i] = bestCluster;
+            }
+
+            // Update centers
+            var counts = new int[k];
+            var newCenters = new T[k][];
+            for (int c = 0; c < k; c++)
+            {
+                newCenters[c] = new T[d];
+                for (int j = 0; j < d; j++)
+                {
+                    newCenters[c][j] = NumOps.Zero;
+                }
+            }
+
+            for (int i = 0; i < numNeurons; i++)
+            {
+                int cluster = _neuronLabels[i];
+                counts[cluster]++;
+                for (int j = 0; j < d; j++)
+                {
+                    newCenters[cluster][j] = NumOps.Add(newCenters[cluster][j], neuronWeights[i][j]);
+                }
+            }
+
+            for (int c = 0; c < k; c++)
+            {
+                if (counts[c] > 0)
+                {
+                    T countT = NumOps.FromDouble(counts[c]);
+                    for (int j = 0; j < d; j++)
+                    {
+                        centers[c][j] = NumOps.Divide(newCenters[c][j], countT);
+                    }
+                }
+            }
+        }
+
+        // Set cluster centers
+        ClusterCenters = new Matrix<T>(k, d);
+        for (int c = 0; c < k; c++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                ClusterCenters[c, j] = centers[c][j];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the 2D grid position for a data point.
+    /// </summary>
+    /// <param name="point">The data point.</param>
+    /// <returns>Grid position (row, column).</returns>
+    public (int row, int col) GetGridPosition(Vector<T> point)
+    {
+        ValidateIsTrained();
+
+        int d = NumFeatures;
+        var sample = new T[d];
+        for (int j = 0; j < d; j++)
+        {
+            sample[j] = point[j];
+        }
+
+        return FindBMU(sample, d);
+    }
+
+    /// <summary>
+    /// Gets the U-Matrix (unified distance matrix) for visualization.
+    /// </summary>
+    /// <returns>Matrix of average distances to neighbors.</returns>
+    public T[,] GetUMatrix()
+    {
+        ValidateIsTrained();
+
+        int width = _options.GridWidth;
+        int height = _options.GridHeight;
+        int d = NumFeatures;
+        var uMatrix = new T[height, width];
+
+        for (int r = 0; r < height; r++)
+        {
+            for (int c = 0; c < width; c++)
+            {
+                T sum = NumOps.Zero;
+                int count = 0;
+
+                // Check all neighbors
+                for (int dr = -1; dr <= 1; dr++)
+                {
+                    for (int dc = -1; dc <= 1; dc++)
+                    {
+                        if (dr == 0 && dc == 0) continue;
+
+                        int nr = r + dr;
+                        int nc = c + dc;
+
+                        if (_options.Topology == SOMTopology.Toroidal)
+                        {
+                            nr = (nr + height) % height;
+                            nc = (nc + width) % width;
+                        }
+                        else if (nr < 0 || nr >= height || nc < 0 || nc >= width)
+                        {
+                            continue;
+                        }
+
+                        T distSq = NumOps.Zero;
+                        for (int j = 0; j < d; j++)
+                        {
+                            T diff = NumOps.Subtract(FittedWeights[r, c][j], FittedWeights[nr, nc][j]);
+                            distSq = NumOps.Add(distSq, NumOps.Multiply(diff, diff));
+                        }
+
+                        sum = NumOps.Add(sum, NumOps.Sqrt(distSq));
+                        count++;
+                    }
+                }
+
+                uMatrix[r, c] = count > 0 ? NumOps.Divide(sum, NumOps.FromDouble(count)) : NumOps.Zero;
+            }
+        }
+
+        return uMatrix;
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> Predict(Matrix<T> x)
+    {
+        ValidateIsTrained();
+
+        // Return stored labels for in-sample prediction (preserves merge results)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
+            return new Vector<T>(Labels);
+
+        int n = x.Rows;
+        int d = NumFeatures;
+        int width = _options.GridWidth;
+        var labels = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            var sample = new T[d];
+            for (int j = 0; j < d; j++)
+            {
+                sample[j] = x[i, j];
+            }
+
+            var (bmuRow, bmuCol) = FindBMU(sample, d);
+            int neuronIdx = bmuRow * width + bmuCol;
+            if (_neuronLabels is not null)
+            {
+                labels[i] = NumOps.FromDouble(_neuronLabels[neuronIdx]);
+            }
+        }
+
+        return labels;
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> FitPredict(Matrix<T> x)
+    {
+        Train(x);
+        return Labels ?? new Vector<T>(0);
+    }
+}

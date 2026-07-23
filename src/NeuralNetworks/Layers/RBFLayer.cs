@@ -1,0 +1,632 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a Radial Basis Function (RBF) layer for neural networks.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The RBF layer implements a type of artificial neural network that uses radial basis functions as 
+/// activation functions. Each neuron in this layer has a center point in the input space and responds
+/// most strongly to inputs near that center. The response decreases as the distance from the center
+/// increases, controlled by the width parameter of each neuron.
+/// </para>
+/// <para><b>For Beginners:</b> This layer works like a collection of specialized detectors.
+/// 
+/// Think of each neuron in this layer as a spotlight:
+/// - Each spotlight has a specific location (center) in the input space
+/// - Each spotlight has a certain brightness range (width)
+/// - When input comes in, spotlights that are close to that input light up brightly
+/// - Spotlights far from the input barely light up at all
+/// 
+/// For example, if you're recognizing handwritten digits:
+/// - One spotlight might be positioned to detect curved lines (like in "8")
+/// - Another might detect vertical lines (like in "1")
+/// - When a "3" comes in, the spotlights for curves light up strongly, while others stay dim
+/// 
+/// This layer is particularly good at classification problems and function approximation
+/// where the relationship between inputs and outputs is complex or non-linear.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true)]
+public partial class RBFLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// Tensor storing the center positions of each RBF neuron in the input space.
+    /// </summary>
+    /// <remarks>
+    /// This tensor has shape [outputSize, inputSize], where each row represents the coordinates
+    /// of a center point for one RBF neuron. These centers are the primary trainable parameters of
+    /// the layer and determine where in the input space each neuron responds most strongly.
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _centers;
+
+    /// <summary>
+    /// Tensor storing the width parameters for each RBF neuron.
+    /// </summary>
+    /// <remarks>
+    /// This tensor has shape [outputSize], where each element controls how quickly the response of
+    /// the corresponding RBF neuron decreases as the distance from its center increases. Larger
+    /// width values mean the neuron responds more broadly, while smaller values make the response
+    /// more focused around the center.
+    /// </remarks>
+    // TODO: Change to PersistentTensorRole.ScaleParameters once Tensors NuGet ships PR #152
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    private Tensor<T> _widths;
+
+    /// <summary>
+    /// The radial basis function implementation used to compute neuron activations.
+    /// </summary>
+    /// <remarks>
+    /// This interface provides methods to compute the activation of an RBF neuron based on the
+    /// distance from the center, as well as derivatives for these computations needed during
+    /// backpropagation. Common implementations include Gaussian, Multiquadric, and Inverse Quadratic
+    /// functions, each providing different response patterns.
+    /// </remarks>
+    private IRadialBasisFunction<T> _rbf;
+
+    /// <summary>
+    /// Stores the input tensor from the most recent forward pass for use in backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// This cached input is needed during the backward pass to compute gradients. It holds the
+    /// batch of input vectors that were processed in the most recent forward pass. The tensor
+    /// is null before the first forward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the output tensor from the most recent forward pass for use in backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// This cached output is needed during the backward pass to compute certain derivatives.
+    /// It holds the batch of output vectors that were produced in the most recent forward pass.
+    /// The tensor is null before the first forward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// Stores the gradients of the loss with respect to the center parameters.
+    /// </summary>
+    /// <remarks>
+    /// This tensor holds the accumulated gradients for all center parameters during the backward pass.
+    /// It has the same shape as the _centers tensor and is used to update the centers during
+    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _centersGradient;
+
+    /// <summary>
+    /// Stores the gradients of the loss with respect to the width parameters.
+    /// </summary>
+    /// <remarks>
+    /// This tensor holds the accumulated gradients for all width parameters during the backward pass.
+    /// It has the same shape as the _widths tensor and is used to update the widths during
+    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _widthsGradient;
+
+    /// <summary>
+    /// Number of RBF neurons (output size).
+    /// </summary>
+    private readonly int _numCenters;
+
+    /// <summary>
+    /// Lazy-init flag. False after the lazy ctor until OnFirstForward
+    /// resolves _inputSize and EnsureInitialized allocates parameter
+    /// tensors. True after construction for the eager ctor path.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <summary>
+    /// Number of input features.
+    /// </summary>
+    // Non-readonly: the lazy ctor leaves this as -1 until OnFirstForward
+    // resolves it from input.Shape[^1]. Eager ctor sets it at construction.
+    private int _inputSize;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> for RBF layers, indicating that the layer can be trained through backpropagation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that the RBF layer has trainable parameters (centers and widths) that
+    /// can be optimized during the training process using backpropagation. The gradients of these parameters
+    /// are calculated during the backward pass and used to update the parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
+    /// 
+    /// A value of true means:
+    /// - The layer has values (centers and widths) that can be adjusted during training
+    /// - It will improve its performance as it sees more data
+    /// - It participates in the learning process of the neural network
+    /// 
+    /// When you train a neural network containing this layer, the centers and widths will 
+    /// automatically adjust to better match the patterns in your specific data.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount => GetParameters().Length;
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0) throw new ArgumentException("RBFLayer requires an input tensor.");
+        var input = inputs[0];
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy-ctor RBFLayer that takes the GPU path on first use would
+        // send the [0,0] / [0] zero-sized centers / widths placeholders
+        // into RbfKernelGpu. OnFirstForward resolves _inputSize from
+        // input.Shape and EnsureInitialized allocates the parameter
+        // tensors at the right size.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
+        // Input: [batch, inputSize] (ensure 2D)
+        int batch = input.Shape[0];
+        var input2D = input.Shape.Length == 1 ? gpuEngine.ReshapeGpu(input, [1, input.Shape[0]]) : input;
+
+        // Use custom RBF kernel on GPU
+        // Weights are persistent tensors, handled by engine
+        var output = gpuEngine.RbfKernelGpu(input2D, _centers, _widths);
+
+        if (ShouldCacheForBackward) // #1668: skip backward caches in inference (arena safety)
+        {
+            _lastInput = input;
+            _lastOutput = output;
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RBFLayer{T}"/> class with specified dimensions and radial basis function.
+    /// </summary>
+    /// <param name="inputSize">The size of the input to the layer.</param>
+    /// <param name="outputSize">The size of the output from the layer (number of RBF neurons).</param>
+    /// <param name="rbf">The radial basis function to use for computing neuron activations.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new RBF layer with the specified dimensions and radial basis function.
+    /// The centers are initialized randomly around the origin, and the widths are initialized with random
+    /// values between 0 and 1. The scale of the random initialization for centers depends on the layer dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new RBF layer for your neural network.
+    /// 
+    /// When you create this layer, you specify:
+    /// - inputSize: How many numbers come into the layer (features of your data)
+    /// - outputSize: How many RBF neurons to create (more neurons can capture more complex patterns)
+    /// - rbf: The specific mathematical function that determines how neurons respond to input
+    /// 
+    /// For example, if you're analyzing images with 784 pixels and want 100 different pattern detectors,
+    /// you might use inputSize=784 and outputSize=100.
+    /// 
+    /// Common radial basis functions include Gaussian (bell-shaped), Multiquadric, and Inverse Quadratic.
+    /// Each creates a different pattern of responsiveness around the neuron centers.
+    /// </para>
+    /// </remarks>
+    public RBFLayer(int inputSize, int outputSize, IRadialBasisFunction<T> rbf,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base([inputSize], [outputSize])
+    {
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
+        _inputSize = inputSize;
+        _numCenters = outputSize;
+        _centers = new Tensor<T>([outputSize, inputSize]);
+        _widths = new Tensor<T>([outputSize]);
+        _rbf = rbf;
+
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor: resolves <c>inputSize</c> from <c>input.Shape[^1]</c>
+    /// on first <see cref="Forward"/>. <paramref name="outputSize"/> (the
+    /// number of RBF centers / output neurons) is architectural and stays
+    /// required; only the input feature dimension is shape-dependent.
+    /// </summary>
+    /// <param name="outputSize">Number of RBF neurons (centers).</param>
+    /// <param name="rbf">Radial basis function implementation.</param>
+    /// <param name="initializationStrategy">Optional weight init strategy.</param>
+    public RBFLayer(int outputSize, IRadialBasisFunction<T> rbf,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base([-1], [outputSize])
+    {
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size (number of RBF centers) must be positive.");
+
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
+        _inputSize = -1;
+        _numCenters = outputSize;
+        // Empty placeholders — EnsureInitialized re-allocates against
+        // resolved _inputSize. Keeping the not-null reference contract
+        // intact for code paths that walk these fields unconditionally.
+        _centers = new Tensor<T>([0, 0]);
+        _widths = new Tensor<T>([0]);
+        _rbf = rbf;
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads the input feature count from <c>input.Shape[^1]</c> and
+    /// resolves the lazy shape so the rest of the forward pass + parameter
+    /// access can index against a real <c>InputShape[0]</c>.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"RBFLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputSize = input.Shape[rank - 1];
+        if (inputSize <= 0)
+            throw new ArgumentException(
+                $"RBFLayer's input feature dimension must be positive; got {inputSize} from input shape.",
+                nameof(input));
+
+        _inputSize = inputSize;
+        ResolveShapes(new[] { inputSize }, OutputShape);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate centers and widths against the resolved
+    /// <c>_inputSize</c> and run RBF parameter initialization. Eager-ctor
+    /// instances bypass this path because <see cref="_isInitialized"/> is
+    /// set to true at construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_inputSize <= 0)
+            throw new InvalidOperationException(
+                "RBFLayer cannot initialize until OnFirstForward has resolved the input feature dimension from input shape.");
+
+        _centers = AllocateLazyWeight([_numCenters, _inputSize]);
+        _widths = AllocateLazyWeight([_numCenters]);
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the RBF layer.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after RBF processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the RBF layer. For each neuron (center), it calculates
+    /// the Euclidean distance between the input vector and the center, then applies the radial basis function
+    /// to this distance to produce the neuron's activation. The input and output are cached for use during
+    /// the backward pass.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method processes your data through the RBF neurons.
+    /// 
+    /// During the forward pass:
+    /// 1. For each input example, the layer measures how far it is from each neuron's center
+    /// 2. The distance is plugged into the radial basis function (like a mathematical formula)
+    /// 3. The result determines how strongly each neuron activates
+    /// 4. Neurons with centers close to the input activate strongly; distant ones activate weakly
+    /// 
+    /// This is like asking "How similar is this input to each of my known patterns?" The output
+    /// tells you the similarity scores for each pattern.
+    /// 
+    /// The layer saves the input and output for later use during training.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Lazy-ctor instances start with _inputSize = -1; resolve from
+        // input.Shape on first call, then materialize parameter tensors.
+        // Eager-ctor instances are already initialized so both calls no-op.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
+        // Handle unbatched input (1D) by adding batch dimension
+        bool wasUnbatched = input.Rank == 1;
+        var processedInput = wasUnbatched
+            ? Engine.Reshape(input, [1, input.Shape[0]])
+            : input;
+
+        // Store 2D input for backward pass (RBFKernelBackward requires 2D)
+        _lastInput = ShouldCacheForBackward ? processedInput : null; // #1668: skip in inference (arena safety)
+
+        // Use Engine.RBFKernel for GPU/CPU acceleration
+        // This computes exp(-epsilon * ||x - center||²) for Gaussian RBF
+        // Convert widths to epsilons: epsilon = 1 / (2 * width²)
+        var epsilons = ComputeEpsilonsFromWidths();
+        var output = Engine.RBFKernel(processedInput, _centers, epsilons);
+
+        // Store 2D output for backward pass
+        _lastOutput = ShouldCacheForBackward ? output : null; // #1668: skip in inference (arena safety)
+
+        // Remove batch dimension if input was unbatched
+        return wasUnbatched ? Engine.Reshape(output, [output.Shape[1]]) : output;
+    }
+
+    /// <summary>
+    /// Converts width parameters to epsilon values for RBF kernel.
+    /// epsilon = 1 / (2 * width²) for Gaussian RBF.
+    /// </summary>
+    private Tensor<T> ComputeEpsilonsFromWidths()
+    {
+        // Compute epsilon = 1 / (2 * width²) using Engine ops so the tape can
+        // differentiate through _widths → epsilons → RBFKernel. Without this,
+        // the tape sees epsilons as an opaque input with no connection to _widths,
+        // causing parameter count mismatches during RestoreOriginalParameters.
+        var widthSquared = Engine.TensorMultiply(_widths, _widths);
+        var twoWidthSquared = Engine.TensorMultiplyScalar(widthSquared, NumOps.FromDouble(2.0));
+        var ones = Tensor<T>.CreateDefault(_widths._shape, NumOps.One);
+        return Engine.TensorDivide(ones, twoWidthSquared);
+    }
+
+    /// <summary>
+    /// Converts epsilon gradients to width gradients using chain rule.
+    /// </summary>
+    private Tensor<T> ConvertEpsilonGradientsToWidthGradients(Tensor<T> gradEpsilons)
+    {
+        var gradWidths = new Tensor<T>(_widths._shape);
+        for (int i = 0; i < _numCenters; i++)
+        {
+            // depsilon/dwidth = -1/width³
+            var widthCubed = NumOps.Multiply(_widths[i], NumOps.Multiply(_widths[i], _widths[i]));
+            var dEpsilonDWidth = NumOps.Negate(NumOps.Divide(NumOps.One, widthCubed));
+            gradWidths[i] = NumOps.Multiply(gradEpsilons[i], dEpsilonDWidth);
+        }
+        return gradWidths;
+    }
+
+
+    /// <summary>
+    /// Updates the parameters of the RBF layer using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <exception cref="InvalidOperationException">Thrown when UpdateParameters is called before Backward.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates the centers and widths of the RBF layer based on the gradients
+    /// calculated during the backward pass. The learning rate controls the size of the parameter
+    /// updates. This method should be called after the backward pass to apply the calculated updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates the layer's internal values during training.
+    /// 
+    /// When updating parameters:
+    /// 1. The center positions are adjusted based on their gradients
+    /// 2. The widths are adjusted based on their gradients
+    /// 3. The learning rate controls how big each update step is
+    /// 
+    /// Imagine each RBF neuron as a spotlight:
+    /// - Updating the centers moves where the spotlight is pointing
+    /// - Updating the widths changes how broad or narrow the spotlight beam is
+    /// 
+    /// Smaller learning rates mean slower but more stable learning, while larger learning rates
+    /// mean faster but potentially unstable learning.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_centersGradient == null || _widthsGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        // Use Engine.TensorSubtract and TensorMultiplyScalar for GPU/CPU acceleration
+        var scaledCentersGradient = Engine.TensorMultiplyScalar(_centersGradient, learningRate);
+        _centers = Engine.TensorSubtract(_centers, scaledCentersGradient);
+
+        var scaledWidthsGradient = Engine.TensorMultiplyScalar(_widthsGradient, learningRate);
+        _widths = Engine.TensorSubtract(_widths, scaledWidthsGradient);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the RBF layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters (centers and widths).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters (centers and widths) of the RBF layer as a
+    /// single vector. The centers are stored first, followed by the widths. This is useful for optimization
+    /// algorithms that operate on all parameters at once, or for saving and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learnable values from the RBF layer.
+    /// 
+    /// The parameters:
+    /// - Are the centers and widths that the RBF layer learns during training
+    /// - Control where and how widely each neuron responds to inputs
+    /// - Are returned as a single list (vector)
+    /// 
+    /// This is useful for:
+    /// - Saving the model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques that need access to all parameters
+    /// 
+    /// The centers are stored first in the vector, followed by all the width values.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Convert tensors to vectors and concatenate
+        var centersData = _centers.ToArray();
+        var widthsData = _widths.ToArray();
+
+        var centersVector = new Vector<T>(centersData);
+        var widthsVector = new Vector<T>(widthsData);
+
+        return Vector<T>.Concatenate(centersVector, widthsVector);
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the RBF layer.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters (centers and widths) to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets the trainable parameters (centers and widths) of the RBF layer from a single vector.
+    /// The vector should contain the center values first, followed by the width values. This is useful for loading
+    /// saved model weights or for implementing optimization algorithms that operate on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the centers and widths in the RBF layer.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with the correct total length
+    /// - The first part of the vector is used for the centers (positions of the neurons)
+    /// - The second part of the vector is used for the widths (how broadly each neuron responds)
+    /// 
+    /// This is useful for:
+    /// - Loading a previously saved model
+    /// - Transferring parameters from another model
+    /// - Testing different parameter values
+    /// 
+    /// An error is thrown if the input vector doesn't have the expected number of parameters.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Lazy-state guard: the lazy ctor leaves _inputSize = -1 until
+        // OnFirstForward fires. Without this check, a caller passing an
+        // empty Vector that matches the lazy-state ParameterCount==0
+        // would still hit `_numCenters * -1` below and trip a negative-
+        // length slice. Surface a clear contract violation instead so
+        // users know to run a Forward first.
+        if (_inputSize <= 0)
+        {
+            throw new InvalidOperationException(
+                "RBFLayer.SetParameters(): the layer was constructed via the lazy ctor " +
+                "(no inputSize arg) and has not yet seen a Forward call, so its parameter " +
+                "tensors are not yet allocated. Run at least one Forward(input) to resolve " +
+                "the input dimension before loading parameters, or construct via the " +
+                "eager ctor with an explicit inputSize.");
+        }
+
+        int centersSize = _numCenters * _inputSize;
+        int totalParams = centersSize + _numCenters;
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+
+        // Extract and reshape centers from the first portion of parameters
+        var centersVector = parameters.Slice(0, centersSize);
+        _centers = Tensor<T>.FromVector(centersVector, [_numCenters, _inputSize]);
+
+        // Extract widths from the remaining portion
+        var widthsVector = parameters.Slice(centersSize, _numCenters);
+        _widths = Tensor<T>.FromVector(widthsVector, [_numCenters]);
+    }
+
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumCenters"] = _numCenters.ToString();
+        metadata["InputSize"] = _inputSize.ToString();
+        return metadata;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        int centersSize = _numCenters * _inputSize;
+        var gradients = new Vector<T>(centersSize + _numCenters);
+
+        if (_centersGradient != null)
+        {
+            var centersData = _centersGradient.ToArray();
+            for (int i = 0; i < centersData.Length; i++)
+                gradients[i] = centersData[i];
+        }
+
+        if (_widthsGradient != null)
+        {
+            var widthsData = _widthsGradient.ToArray();
+            for (int i = 0; i < widthsData.Length; i++)
+                gradients[centersSize + i] = widthsData[i];
+        }
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Resets the internal state of the RBF layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the RBF layer, including the cached inputs and outputs
+    /// from the forward pass, and the gradients from the backward pass. This is useful when starting to
+    /// process a new sequence or batch of data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - Stored inputs and outputs from previous calculations are cleared
+    /// - Calculated gradients are cleared
+    /// - The layer forgets any information from previous batches
+    /// 
+    /// This is important for:
+    /// - Processing a new, unrelated batch of data
+    /// - Preventing information from one batch affecting another
+    /// - Starting a new training episode
+    /// 
+    /// The centers and widths (the learned parameters) are not reset,
+    /// only the temporary state information.
+    /// </para>
+    /// </remarks>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _centersGradient = null;
+        _widthsGradient = null;
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _centersGradient = null;
+        _widthsGradient = null;
+    }
+
+    /// <summary>
+    /// Initializes the centers and widths of the RBF layer with random values.
+    /// </summary>
+    /// <remarks>
+    /// This private method initializes the centers with random values scaled by the input and output dimensions,
+    /// and initializes the widths with random values between 0 and 1. This provides a good starting point for
+    /// training the RBF layer.
+    /// </remarks>
+    private void InitializeParameters()
+    {
+        InitializeLayerWeights(_centers, _inputSize, _numCenters);
+
+        // Widths are RBF-specific: random positive values, not Xavier
+        var widthSpan = _widths.AsWritableSpan();
+        for (int i = 0; i < widthSpan.Length; i++)
+            widthSpan[i] = NumOps.FromDouble(Random.NextDouble());
+
+        // Register after initialization so tensor references are final
+        RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_widths, PersistentTensorRole.Biases);
+    }
+
+}

@@ -1,0 +1,255 @@
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.VisionLanguage.Interfaces;
+
+namespace AiDotNet.VisionLanguage.Encoders;
+
+/// <summary>
+/// RADIOv2.5 agglomerative vision foundation model distilling DINOv2, SAM, SigLIP, and CLIP.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// RADIOv2.5 (Ranzinger et al., NVIDIA 2025) distills multiple teacher vision models into a single
+/// student via multi-teacher distillation. The student produces features compatible with all teachers,
+/// serving as a universal drop-in replacement for DINOv2, SAM, SigLIP, and CLIP vision encoders.
+/// </para>
+/// <para><b>References:</b>
+/// <list type="bullet"><item>Paper: "AM-RADIO: Agglomerative Vision Foundation Model" (Ranzinger et al., 2025)</item></list></para>
+/// <para><b>For Beginners:</b> RADIO v2.5 from NVIDIA is a "best of all worlds" vision encoder
+/// that distills knowledge from multiple teacher models (DINOv2, SAM, SigLIP, and CLIP) into
+/// a single student model. The result is a universal vision backbone that can be used as a
+/// drop-in replacement for any of those individual models, producing compatible features for
+/// all of them. Default values follow the original paper settings.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a RADIOv2.5 model distilling DINOv2, SAM, SigLIP, and CLIP
+/// // into a single universal vision encoder backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new RADIOv25&lt;double&gt;(architecture, "radiov25.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new RADIOv25&lt;double&gt;(architecture, new RADIOv25Options());
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper(
+    "AM-RADIO: Agglomerative Vision Foundation Model",
+    "https://arxiv.org/abs/2312.06709",
+    Year = 2025,
+    Authors = "Ranzinger et al."
+)]
+public class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+{
+    private readonly RADIOv25Options _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    public RADIOv25(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        RADIOv25Options? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new RADIOv25Options();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.EmbeddingDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    public RADIOv25(
+        NeuralNetworkArchitecture<T> architecture,
+        RADIOv25Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new RADIOv25Options();
+        if (architecture.InputHeight > 0)
+        {
+            if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
+                throw new ArgumentException(
+                    "RADIOv25 requires square image inputs (InputWidth must equal InputHeight).",
+                    nameof(architecture)
+                );
+            if (architecture.InputDepth > 0 && architecture.InputDepth != 3)
+                throw new ArgumentException(
+                    "RADIOv25 requires 3-channel RGB input (InputDepth must equal 3).",
+                    nameof(architecture)
+                );
+            _options = new RADIOv25Options(_options) { ImageSize = architecture.InputHeight };
+        }
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.EmbeddingDim;
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.EmbeddingDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return L2Normalize(c);
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+            Layers.AddRange(Architecture.Layers);
+        else
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultViTLayers(
+                    _options.EmbeddingDim,
+                    _options.NumLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    patchSize: _options.PatchSize
+                )
+            );
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "RADIOv2.5-Native" : "RADIOv2.5-ONNX",
+            Description =
+                "AM-RADIO: Agglomerative Vision Foundation Model (Ranzinger et al., 2025)",
+            FeatureCount = _options.EmbeddingDim,
+            Complexity = _options.NumLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "RADIOv2.5";
+        m.AdditionalInfo["TeacherModels"] = string.Join(", ", _options.TeacherModels);
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.EmbeddingDim);
+        writer.Write(_options.NumLayers);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.AdapterDim);
+        writer.Write(_options.NumSummaryTokens);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.EmbeddingDim = reader.ReadInt32();
+        _options.NumLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        _options.AdapterDim = reader.ReadInt32();
+        _options.NumSummaryTokens = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new RADIOv25<T>(Architecture, mp, _options);
+        return new RADIOv25<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(RADIOv25<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
+}

@@ -1,0 +1,367 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a layer that performs quantum measurement operations on complex-valued input tensors.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The MeasurementLayer transforms complex-valued quantum state amplitudes into classical probabilities.
+/// It calculates the probability distribution from a quantum state vector by taking the squared magnitude
+/// of each complex amplitude and normalizing the results to ensure they sum to 1.0.
+/// </para>
+/// <para><b>For Beginners:</b> This layer converts quantum information into regular probabilities.
+/// 
+/// Think of it like a bridge between the quantum and classical worlds:
+/// - In quantum computing, information exists in "superposition" (multiple states at once)
+/// - This layer converts that quantum information into classical probabilities
+/// - It's similar to how quantum physics says we can only observe probabilities in the real world
+/// 
+/// For example, if you have a quantum state representing a coin that's in both heads and tails
+/// at the same time, the measurement layer would convert this to classical probabilities like
+/// "60% chance of heads, 40% chance of tails."
+/// 
+/// This is a fundamental concept in quantum computing and quantum mechanics.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Other)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(NormalizesInput = true, IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+public class MeasurementLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// The input tensor from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the input tensor from the most recent forward pass, which is needed
+    /// during the backward pass for gradient calculation.
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// The output tensor from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the output tensor from the most recent forward pass, which is needed
+    /// during the backward pass for gradient calculation.
+    /// </remarks>
+    private Tensor<T>? _lastOutput;
+
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c> because the MeasurementLayer has no trainable parameters.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that MeasurementLayer cannot be trained through backpropagation. Since the
+    /// measurement operation is a fixed mathematical procedure with no learnable parameters, this layer always
+    /// returns false for SupportsTraining.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you that this layer doesn't learn from data.
+    /// 
+    /// A value of false means:
+    /// - The layer has no internal values that change during training
+    /// - It always performs the same mathematical operation (converting quantum amplitudes to probabilities)
+    /// - It's a fixed transformation rather than a learned one
+    /// 
+    /// This layer applies the rules of quantum measurement, which are fixed by the laws of physics
+    /// rather than something that can be learned or optimized during training.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => false;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MeasurementLayer{T}"/> class with the specified size.
+    /// </summary>
+    /// <param name="size">The size of the quantum state vector (number of basis states).</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a MeasurementLayer that operates on quantum state vectors of the specified size.
+    /// The input and output shape are both one-dimensional vectors of the specified size.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor sets up the layer with the necessary information.
+    /// 
+    /// When creating a MeasurementLayer, you need to specify:
+    /// - size: The number of possible states in your quantum system
+    /// 
+    /// For example:
+    /// - For a single qubit (quantum bit), size = 2 (states |0? and |1?)
+    /// - For two qubits, size = 4 (states |00?, |01?, |10?, and |11?)
+    /// - For n qubits, size = 2^n (all possible combinations)
+    /// 
+    /// Both the input (quantum amplitudes) and output (classical probabilities) will have this same size.
+    /// </para>
+    /// </remarks>
+    public MeasurementLayer(int size) : base([size], [size])
+    {
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the measurement layer.
+    /// </summary>
+    /// <param name="input">The input tensor containing complex quantum amplitudes.</param>
+    /// <returns>The output tensor containing classical probabilities.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the measurement layer. It calculates the probability
+    /// distribution from a quantum state vector by taking the squared magnitude of each complex amplitude
+    /// (|z|² = real² + imag²) and normalizing the results to ensure they sum to 1.0.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts quantum amplitudes into classical probabilities.
+    /// 
+    /// During the forward pass:
+    /// - The layer receives complex-valued quantum amplitudes
+    /// - For each amplitude, it calculates |z|² = real² + imag² (the squared magnitude)
+    /// - It normalizes these values so they sum to 1.0 (making them valid probabilities)
+    /// - It returns these probabilities as a real-valued tensor
+    /// 
+    /// This process follows the Born rule from quantum mechanics, which states that
+    /// the probability of measuring a particular state is the squared magnitude of
+    /// its amplitude in the state vector.
+    /// 
+    /// For example, if a qubit has amplitudes [0.6+0.3i, 0.7+0.2i], the probabilities
+    /// would be approximately [0.45, 0.55] after normalization.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        _originalInputShape = input._shape;
+        int stateSize = input.Shape[^1];
+        if (stateSize != InputShape[0])
+        {
+            throw new ArgumentException(
+                $"Input size {stateSize} does not match expected {InputShape[0]}.");
+        }
+
+        Tensor<T> input2D;
+        if (input.Rank == 1)
+        {
+            input2D = Engine.Reshape(input, new[] { 1, stateSize });
+        }
+        else if (input.Rank == 2)
+        {
+            input2D = input;
+        }
+        else
+        {
+            int batchDim = 1;
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                batchDim *= input.Shape[i];
+            }
+            input2D = Engine.Reshape(input, new[] { batchDim, stateSize });
+        }
+
+        _lastInput = input2D;
+
+        int batchSize = input2D.Shape[0];
+        var probabilities = TensorAllocator.Rent<T>(new[] { batchSize, stateSize });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int baseIndex = b * stateSize;
+            T sum = NumOps.Zero;
+
+            for (int i = 0; i < stateSize; i++)
+            {
+                var complexValue = Tensor<T>.GetComplex(input2D, baseIndex + i);
+                var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
+                var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
+                var magnitude = NumOps.Add(realSquared, imagSquared);
+                probabilities[b, i] = magnitude;
+                sum = NumOps.Add(sum, magnitude);
+            }
+
+            T invSum = NumOps.Equals(sum, NumOps.Zero)
+                ? NumOps.Zero
+                : NumOps.Divide(NumOps.One, sum);
+
+            for (int i = 0; i < stateSize; i++)
+            {
+                probabilities[b, i] = NumOps.Multiply(probabilities[b, i], invSum);
+            }
+        }
+
+        _lastOutput = probabilities;
+
+        if (input.Rank == 1)
+        {
+            return Engine.Reshape(probabilities, [stateSize]);
+        }
+
+        if (input.Rank > 2)
+        {
+            return Engine.Reshape(probabilities, _originalInputShape);
+        }
+
+        return probabilities;
+    }
+
+    /// <summary>
+    /// Performs the GPU-accelerated forward pass for quantum measurement.
+    /// </summary>
+    /// <param name="inputs">The GPU tensor inputs. First element is the complex-valued quantum state.</param>
+    /// <returns>A GPU tensor containing the classical probability distribution.</returns>
+    /// <remarks>
+    /// The measurement layer converts quantum amplitudes to probabilities via the Born rule.
+    /// This method uses a specialized CUDA kernel to perform measurement entirely on GPU.
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs == null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        var input = inputs[0];
+
+        // Validate GPU engine availability
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend is not available.");
+
+        // Determine batch size and state size from input shape
+        int batchSize;
+        int stateSize = InputShape[0];
+
+        if (input.Shape.Length == 1)
+        {
+            batchSize = 1;
+        }
+        else if (input.Shape.Length == 2)
+        {
+            batchSize = input.Shape[0];
+        }
+        else
+        {
+            // Flatten higher-rank tensors to batch
+            batchSize = 1;
+            for (int d = 0; d < input.Shape.Length - 1; d++)
+            {
+                batchSize *= input.Shape[d];
+            }
+        }
+
+        // Allocate output buffer for probabilities
+        var outputBuffer = backend.AllocateBuffer(batchSize * stateSize);
+
+        // Call the GPU kernel for measurement forward
+        backend.MeasurementForward(input.Buffer, outputBuffer, batchSize, stateSize);
+
+        // Determine output shape
+        int[] outputShape;
+        if (input.Shape.Length == 1)
+        {
+            outputShape = [stateSize];
+        }
+        else if (input.Shape.Length == 2)
+        {
+            outputShape = [batchSize, stateSize];
+        }
+        else
+        {
+            // Restore original shape
+            outputShape = (int[])input._shape.Clone();
+            outputShape[input.Shape.Length - 1] = stateSize;
+        }
+
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+    /// <summary>
+    /// Updates the parameters of the measurement layer using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is part of the training process, but since MeasurementLayer has no trainable parameters,
+    /// this method does nothing.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
+    /// 
+    /// However, since MeasurementLayer just performs a fixed mathematical operation (quantum measurement)
+    /// and doesn't have any internal values that can be learned or adjusted, this method is empty.
+    /// 
+    /// The measurement process follows the fundamental rules of quantum mechanics, which are 
+    /// constant rather than learnable parameters.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // MeasurementLayer doesn't have trainable parameters
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters from the measurement layer as a single vector.
+    /// </summary>
+    /// <returns>An empty vector since MeasurementLayer has no trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters from the layer as a single vector. Since MeasurementLayer
+    /// has no trainable parameters, it returns an empty vector.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
+    /// 
+    /// Since MeasurementLayer:
+    /// - Only performs fixed mathematical operations based on quantum mechanics
+    /// - Has no weights, biases, or other learnable parameters
+    /// - The method returns an empty list
+    /// 
+    /// This is different from layers like Dense layers, which would return their weights and biases.
+    /// The measurement process is governed by the laws of quantum mechanics rather than by
+    /// parameters that can be optimized during training.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // MeasurementLayer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    /// <summary>
+    /// Resets the internal state of the measurement layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the measurement layer, including the cached inputs and outputs.
+    /// This is useful when starting to process a new batch of data or when implementing stateful networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - Stored inputs and outputs from previous processing are cleared
+    /// - The layer forgets any information from previous data batches
+    /// 
+    /// This is important for:
+    /// - Processing a new, unrelated batch of data
+    /// - Ensuring clean state before a new training epoch
+    /// - Preventing information from one batch affecting another
+    /// 
+    /// While the MeasurementLayer doesn't maintain long-term state across samples,
+    /// clearing these cached values helps with memory management and ensuring a clean processing pipeline.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _originalInputShape = null;
+    }
+
+}

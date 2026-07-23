@@ -1,0 +1,594 @@
+﻿using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Finance.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+using AiDotNet.Finance.Base;
+namespace AiDotNet.Finance.Forecasting.Foundation;
+
+/// <summary>
+/// TS2Vec — Contrastive Learning of Universal Time Series Representations.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// TS2Vec learns universal time series representations via hierarchical contrastive learning
+/// across augmented context views, producing contextual representations at arbitrary granularities.
+/// It uses a dilated CNN encoder with temporal and instance contrastive losses.
+/// </para>
+/// <para><b>For Beginners:</b> TS2Vec creates a universal "fingerprint" for time series data
+/// at any time scale. It works by showing the model two different views of the same data
+/// (like seeing a city from two angles) and training it to recognize they represent the same
+/// thing. The resulting representations can be used for forecasting, classification, or
+/// anomaly detection without task-specific retraining.</para>
+/// <para>
+/// <b>Reference:</b> Yue et al., "TS2Vec: Towards Universal Representation of Time Series", AAAI 2022.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a TS2Vec model for universal time series representation learning
+/// // Hierarchical contrastive learning produces contextual representations at any granularity
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with dilated CNN encoder and contrastive objectives
+/// var model = new TS2Vec&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TS2Vec&lt;double&gt;(architecture, "ts2vec.onnx");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("TS2Vec: Towards Universal Representation of Time Series", "https://arxiv.org/abs/2106.10466", Year = 2022, Authors = "Zhihan Yue, Yujing Wang, Juanyong Duan, Tianmeng Yang, Congrui Huang, Yunhai Tong, Bixiong Xu")]
+public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
+{
+    #region Fields
+
+    private readonly bool _useNativeMode;
+    private ILayer<T>? _inputProjection;
+    private readonly List<ILayer<T>> _encoderLayers = [];
+    private ILayer<T>? _outputProjection;
+    private ILayer<T>? _forecastHead;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly TS2VecOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _hiddenDimension;
+    private int _outputDimension;
+    private int _numLayers;
+    private double _dropout;
+    private double _temporalContrastiveWeight;
+    private double _instanceContrastiveWeight;
+
+    // Per-instance RevIN statistics (Kim et al. 2022, "Reversible Instance
+    // Normalization"). ApplyInstanceNormalization removes each series' mean/std;
+    // the forecast head output must be denormalized with the same stats so the
+    // forecast tracks the input's level. Without the reverse step, level-shifted
+    // (e.g. constant) inputs collapse to an identical normalized forecast.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
+
+    #endregion
+
+    #region Properties
+
+    /// <inheritdoc/>
+    public override int SequenceLength => _contextLength;
+    /// <inheritdoc/>
+    public override int PredictionHorizon => _forecastHorizon;
+    /// <inheritdoc/>
+    public override int NumFeatures => 1;
+    /// <inheritdoc/>
+    public override int PatchSize => 1;
+    /// <inheritdoc/>
+    public override int Stride => 1;
+    /// <inheritdoc/>
+    public override bool IsChannelIndependent => true;
+    /// <inheritdoc/>
+    public override bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc/>
+    public override FoundationModelSize ModelSize => FoundationModelSize.Small;
+    /// <inheritdoc/>
+    public override int MaxContextLength => _contextLength;
+    /// <inheritdoc/>
+    public override int MaxPredictionHorizon => _forecastHorizon;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates a TS2Vec model using a pretrained ONNX model.
+    /// </summary>
+    public TS2Vec(
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
+        TS2VecOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
+
+        options ??= new TS2VecOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = false;
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        CopyOptionsToFields(options);
+    }
+
+    /// <summary>
+    /// Creates a TS2Vec model in native mode for training or fine-tuning.
+    /// </summary>
+    public TS2Vec(
+        NeuralNetworkArchitecture<T> architecture,
+        TS2VecOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        options ??= new TS2VecOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = true;
+        OnnxSession = null;
+        OnnxModelPath = null;
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        CopyOptionsToFields(options);
+        InitializeLayers();
+    }
+
+    private void CopyOptionsToFields(TS2VecOptions<T> options)
+    {
+        _contextLength = options.ContextLength;
+        _forecastHorizon = options.ForecastHorizon;
+        _hiddenDimension = options.HiddenDimension;
+        _outputDimension = options.OutputDimension;
+        _numLayers = options.NumLayers;
+        _dropout = options.DropoutRate;
+        _temporalContrastiveWeight = options.TemporalContrastiveWeight;
+        _instanceContrastiveWeight = options.InstanceContrastiveWeight;
+    }
+
+    #endregion
+
+    #region Initialization
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ExtractLayerReferences();
+        }
+        else if (_useNativeMode)
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultTS2VecLayers(
+                Architecture, _contextLength, _forecastHorizon, _hiddenDimension,
+                _outputDimension, _numLayers, _dropout));
+            ExtractLayerReferences();
+        }
+    }
+
+    private void ExtractLayerReferences()
+    {
+        int idx = 0;
+
+        if (idx < Layers.Count)
+            _inputProjection = Layers[idx++];
+
+        _encoderLayers.Clear();
+        for (int i = 0; i < _numLayers && idx < Layers.Count; i++)
+        {
+            // Each dilated CNN block: dense + activation + dropout (optional) + residual dense
+            int layersPerBlock = _dropout > 0 ? 4 : 3;
+            for (int j = 0; j < layersPerBlock && idx < Layers.Count; j++)
+                _encoderLayers.Add(Layers[idx++]);
+        }
+
+        if (idx < Layers.Count)
+            _outputProjection = Layers[idx++];
+
+        if (idx < Layers.Count)
+            _forecastHead = Layers[idx++];
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Overrides
+
+    /// <inheritdoc/>
+    public override bool SupportsTraining => _useNativeMode;
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Currently uses supervised forecasting loss only. The TS2Vec hierarchical contrastive
+    /// objective (temporal + instance contrastive losses weighted by
+    /// <c>_temporalContrastiveWeight</c> and <c>_instanceContrastiveWeight</c>) requires
+    /// batch-level training with augmented views, which will be implemented when batch
+    /// training support is added. The contrastive weights are stored for forward compatibility.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in Train()
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NetworkType", "TS2Vec" },
+                { "ContextLength", _contextLength },
+                { "ForecastHorizon", _forecastHorizon },
+                { "HiddenDimension", _hiddenDimension },
+                { "OutputDimension", _outputDimension },
+                { "NumLayers", _numLayers },
+                { "UseNativeMode", _useNativeMode },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new TS2Vec<T>(Architecture, new TS2VecOptions<T>
+        {
+            ContextLength = _contextLength,
+            ForecastHorizon = _forecastHorizon,
+            HiddenDimension = _hiddenDimension,
+            OutputDimension = _outputDimension,
+            NumLayers = _numLayers,
+            DropoutRate = _dropout,
+            TemporalContrastiveWeight = _temporalContrastiveWeight,
+            InstanceContrastiveWeight = _instanceContrastiveWeight
+        });
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_contextLength);
+        writer.Write(_forecastHorizon);
+        writer.Write(_hiddenDimension);
+        writer.Write(_outputDimension);
+        writer.Write(_numLayers);
+        writer.Write(_dropout);
+        writer.Write(_temporalContrastiveWeight);
+        writer.Write(_instanceContrastiveWeight);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _outputDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _temporalContrastiveWeight = reader.ReadDouble();
+        _instanceContrastiveWeight = reader.ReadDouble();
+
+        // Re-point cached layer references at the freshly deserialized Layers;
+        // otherwise a clone's forward uses the stale random-initialized layers
+        // created by CreateNewInstance and diverges from the original.
+        ExtractLayerReferences();
+    }
+
+    #endregion
+
+    #region IForecastingModel Implementation
+
+    /// <inheritdoc/>
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    {
+        return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    {
+        var predictions = new List<Tensor<T>>();
+        var currentInput = input;
+        int stepsRemaining = steps;
+
+        while (stepsRemaining > 0)
+        {
+            var prediction = Forecast(currentInput, null);
+            predictions.Add(prediction);
+            int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining);
+            stepsRemaining -= stepsUsed;
+
+            if (stepsRemaining > 0)
+                currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed);
+        }
+
+        return ConcatenatePredictions(predictions, steps);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    {
+        var metrics = new Dictionary<string, T>();
+        T mse = NumOps.Zero;
+        T mae = NumOps.Zero;
+        int count = 0;
+
+        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
+        {
+            var diff = NumOps.Subtract(predictions[i], actuals[i]);
+            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
+            mae = NumOps.Add(mae, NumOps.Abs(diff));
+            count++;
+        }
+
+        if (count > 0)
+        {
+            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
+            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
+        }
+
+        metrics["MSE"] = mse;
+        metrics["MAE"] = mae;
+        metrics["RMSE"] = NumOps.Sqrt(mse);
+        return metrics;
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    {
+        // A rank-1 input is a single univariate series (one instance), not one
+        // instance per element — RevIN normalizes over the whole series.
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T mean = NumOps.Zero;
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length)
+                    mean = NumOps.Add(mean, input[idx]);
+            }
+            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
+
+            T variance = NumOps.Zero;
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length)
+                {
+                    var diff = NumOps.Subtract(input[idx], mean);
+                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+                }
+            }
+            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+
+            // Store per-instance stats so DenormalizeForecast can restore the scale.
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length && idx < result.Length)
+                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step: restores each instance's mean/std to the forecast so it
+    /// is expressed on the input's original scale (Kim et al. 2022). The forecast
+    /// rows align with the instances normalized in <see cref="ApplyInstanceNormalization"/>.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch)
+            return forecast;
+
+        // Build per-instance scale/shift as [batch, 1] constants that broadcast
+        // over the forecast's trailing dimension. The multiply/add go through the
+        // Engine so the forecast stays on the autodiff tape (a manual element fill
+        // would detach it and starve the forecast head of gradients).
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank < 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetFinancialMetrics()
+    {
+        T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
+        return new Dictionary<string, T>
+        {
+            ["ContextLength"] = NumOps.FromDouble(_contextLength),
+            ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon),
+            ["HiddenDimension"] = NumOps.FromDouble(_hiddenDimension),
+            ["OutputDimension"] = NumOps.FromDouble(_outputDimension),
+            ["NumLayers"] = NumOps.FromDouble(_numLayers),
+            ["LastLoss"] = lastLoss
+        };
+    }
+
+    #endregion
+
+    #region Forward/Backward Pass
+
+    private Tensor<T> ForwardNative(Tensor<T> input)
+    {
+        var normalized = ApplyInstanceNormalization(input);
+        var current = normalized;
+
+        bool addedBatchDim = false;
+        if (current.Rank == 1)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+            addedBatchDim = true;
+        }
+
+        if (_inputProjection is not null)
+            current = _inputProjection.Forward(current);
+
+        foreach (var layer in _encoderLayers)
+            current = layer.Forward(current);
+
+        if (_outputProjection is not null)
+            current = _outputProjection.Forward(current);
+
+        if (_forecastHead is not null)
+            current = _forecastHead.Forward(current);
+
+        // RevIN reverse: put the forecast back on the input's scale so distinct
+        // input levels yield distinct forecasts (the encoder sees only the
+        // mean/std-normalized series).
+        current = DenormalizeForecast(current);
+
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
+
+        return current;
+    }
+
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
+    {
+        if (OnnxSession == null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+
+        int batchSize = input.Shape[0];
+        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+
+        var inputData = new float[batchSize * seqLen * features];
+        for (int i = 0; i < input.Length && i < inputData.Length; i++)
+            inputData[i] = (float)NumOps.ToDouble(input[i]);
+
+        var inputTensor = new OnnxTensors.DenseTensor<float>(
+            inputData, new[] { batchSize, seqLen, features });
+
+        string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input";
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor(inputName, inputTensor)
+        };
+
+        using var results = OnnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var output = new Tensor<T>(outputShape);
+
+        int totalElements = 1;
+        foreach (var dim in outputShape) totalElements *= dim;
+
+        for (int i = 0; i < totalElements && i < output.Length; i++)
+            output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+
+        return output;
+    }
+
+    #endregion
+
+    #region Parameter Estimation
+
+    private new int GetParameterCount()
+    {
+        long total = (long)_contextLength * _hiddenDimension + _hiddenDimension;
+        long perLayer = 2L * _hiddenDimension * _hiddenDimension + 2 * _hiddenDimension;
+        total += perLayer * _numLayers;
+        total += (long)_hiddenDimension * _outputDimension + _outputDimension;
+        total += (long)_outputDimension * _forecastHorizon + _forecastHorizon;
+        return (int)Math.Min(total, int.MaxValue);
+    }
+
+    #endregion
+}

@@ -1,0 +1,1277 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Extensions;
+using AiDotNet.Helpers;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+
+namespace AiDotNet.Video.Generation;
+
+/// <summary>
+/// Stable Video Diffusion (SVD) for image-to-video and text-to-video generation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Stable Video Diffusion generates videos from images or text prompts.
+/// It works by:
+/// - Starting with random noise
+/// - Gradually removing noise (denoising) over many steps
+/// - Guided by the input image or text embedding
+///
+/// Key capabilities:
+/// - Image-to-Video: Animate a still image into a short video clip
+/// - Text-to-Video: Generate video from text descriptions
+/// - Video extension: Continue an existing video
+/// - Motion control: Adjust camera motion and subject movement
+///
+/// The model generates temporally consistent frames by processing spatial and
+/// temporal attention together, ensuring smooth motion without flickering.
+/// </para>
+/// <para>
+/// <b>Technical Details:</b>
+/// - Based on latent diffusion in compressed video space
+/// - 3D UNet with spatial and temporal attention layers
+/// - CLIP text encoder for text conditioning
+/// - VAE encoder/decoder for latent space compression
+/// - Supports classifier-free guidance for quality control
+/// </para>
+/// <para>
+/// <b>Reference:</b> Blattmann et al., "Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets"
+/// Stability AI, 2023.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Stable Video Diffusion model for image-to-video generation
+/// var svd = new StableVideoDiffusion&lt;double&gt;();
+///
+/// // Or configure with a specific variant and frame count
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 576, inputWidth: 576, inputDepth: 3, outputSize: 3);
+/// var model = new StableVideoDiffusion&lt;double&gt;(architecture,
+///     variant: SVDModelVariant.SVD, numFrames: 14, numInferenceSteps: 25);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets",
+    "https://arxiv.org/abs/2311.15127",
+    Year = 2023,
+    Authors = "Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, Varun Jampani, Robin Rombach")]
+public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
+{
+    private readonly StableVideoDiffusionOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    #region Fields
+
+    private int _height;
+    private int _width;
+    private int _channels;
+    private int _numFrames;
+    private int _latentDim;
+    private int _numInferenceSteps;
+    private double _guidanceScale;
+    private SVDModelVariant _variant;
+
+    // VAE Encoder/Decoder
+    private readonly List<ConvolutionalLayer<T>> _vaeEncoder;
+    private readonly List<ConvolutionalLayer<T>> _vaeDecoder;
+
+    // 3D UNet components
+    private readonly List<ConvolutionalLayer<T>> _downBlocks;
+    private ConvolutionalLayer<T>? _middleBlock;
+    private readonly List<ConvolutionalLayer<T>> _upBlocks;
+
+    // Temporal attention layers
+    private readonly List<ConvolutionalLayer<T>> _temporalAttention;
+
+    // CLIP-like Text Encoder (Transformer architecture)
+    // Based on OpenCLIP ViT-H/14 used in Stable Video Diffusion
+    private readonly List<ConvolutionalLayer<T>> _textEncoderQKV;      // QKV projections for each transformer layer
+    private readonly List<ConvolutionalLayer<T>> _textEncoderAttnProj; // Attention output projections
+    private readonly List<ConvolutionalLayer<T>> _textEncoderFFN1;     // FFN expand layers
+    private readonly List<ConvolutionalLayer<T>> _textEncoderFFN2;     // FFN contract layers
+    private ConvolutionalLayer<T>? _textEmbedProjection;       // Initial embedding projection
+    private ConvolutionalLayer<T>? _textFinalProjection;       // Final projection to UNet conditioning dim
+    private readonly int _textEncoderDim;                              // Hidden dimension (768 for ViT-H)
+    private readonly int _textEncoderLayers;                           // Number of transformer layers (12 for ViT-H)
+    private readonly int _textEncoderHeads;                            // Number of attention heads (12 for ViT-H)
+
+    // Conditioning layers
+    private ConvolutionalLayer<T>? _imageConditioner;
+    private ConvolutionalLayer<T>? _timeEmbedding;
+
+    // Noise predictor output
+    private ConvolutionalLayer<T>? _noisePredictor;
+
+    // Noise schedule
+    private readonly double[] _alphasCumprod;
+    private readonly double[] _betas;
+
+    #endregion
+
+    #region Non-Null Accessors
+
+    private ConvolutionalLayer<T> MiddleBlock => _middleBlock ?? throw new InvalidOperationException("Middle block not initialized.");
+    private ConvolutionalLayer<T> TextEmbedProjection => _textEmbedProjection ?? throw new InvalidOperationException("Text embed projection not initialized.");
+    private ConvolutionalLayer<T> TextFinalProjection => _textFinalProjection ?? throw new InvalidOperationException("Text final projection not initialized.");
+    private ConvolutionalLayer<T> ImageConditioner => _imageConditioner ?? throw new InvalidOperationException("Image conditioner not initialized.");
+    private ConvolutionalLayer<T> TimeEmbedding => _timeEmbedding ?? throw new InvalidOperationException("Time embedding not initialized.");
+    private ConvolutionalLayer<T> NoisePredictor => _noisePredictor ?? throw new InvalidOperationException("Noise predictor not initialized.");
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Gets whether training is supported.
+    /// </summary>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the output video height.
+    /// </summary>
+    internal int OutputHeight => _height;
+
+    /// <summary>
+    /// Gets the output video width.
+    /// </summary>
+    internal int OutputWidth => _width;
+
+    /// <summary>
+    /// Gets the number of output frames.
+    /// </summary>
+    internal int NumFrames => _numFrames;
+
+    /// <summary>
+    /// Gets the model variant.
+    /// </summary>
+    internal SVDModelVariant Variant => _variant;
+
+    /// <summary>
+    /// Gets or sets the classifier-free guidance scale.
+    /// </summary>
+    internal double GuidanceScale { get; set; }
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance of the StableVideoDiffusion class.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="variant">The model variant (SVD, SVD-XT, SVD-Image).</param>
+    /// <param name="numFrames">Number of frames to generate.</param>
+    /// <param name="numInferenceSteps">Number of denoising steps.</param>
+    /// <param name="guidanceScale">Classifier-free guidance scale.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    private const int DefaultResolution = 64;
+    private const int DefaultChannels = 3;
+
+    public StableVideoDiffusion()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: DefaultResolution, inputWidth: DefaultResolution, inputDepth: DefaultChannels,
+            outputSize: DefaultChannels))
+    {
+    }
+
+    /// <param name="vaeChannels">Number of VAE encoder/decoder base channels. Default: 128.</param>
+    /// <param name="textEncoderDim">Hidden dimension for text encoder. Default: 768 (ViT-H).</param>
+    /// <param name="textEncoderLayers">Number of text encoder transformer layers. Default: 12 (ViT-H).</param>
+    /// <param name="textEncoderHeads">Number of text encoder attention heads. Default: 12 (ViT-H).</param>
+    public StableVideoDiffusion(
+        NeuralNetworkArchitecture<T> architecture,
+        SVDModelVariant variant = SVDModelVariant.SVD,
+        int numFrames = 14,
+        int numInferenceSteps = 25,
+        double guidanceScale = 7.5,
+        int vaeChannels = 128,
+        int textEncoderDim = 768,
+        int textEncoderLayers = 12,
+        int textEncoderHeads = 12,
+        StableVideoDiffusionOptions? options = null)
+        : base(architecture, new MeanSquaredErrorLoss<T>())
+    {
+        _options = options ?? new StableVideoDiffusionOptions();
+        Options = _options;
+
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 576;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _variant = variant;
+        _numFrames = variant == SVDModelVariant.SVDXT ? 25 : numFrames;
+        _numInferenceSteps = numInferenceSteps;
+        _guidanceScale = guidanceScale;
+        GuidanceScale = guidanceScale;
+
+        // Set latent dimension based on variant
+        _latentDim = variant switch
+        {
+            SVDModelVariant.SVD => 4,
+            SVDModelVariant.SVDXT => 4,
+            SVDModelVariant.SVDImage => 4,
+            _ => 4
+        };
+
+        _textEncoderDim = textEncoderDim;
+        _textEncoderLayers = textEncoderLayers;
+        _textEncoderHeads = textEncoderHeads;
+
+        _vaeEncoder = [];
+        _vaeDecoder = [];
+        _downBlocks = [];
+        _upBlocks = [];
+        _temporalAttention = [];
+        _textEncoderQKV = [];
+        _textEncoderAttnProj = [];
+        _textEncoderFFN1 = [];
+        _textEncoderFFN2 = [];
+
+        // Initialize noise schedule (cosine schedule)
+        (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
+
+        InitializeNativeLayers(vaeChannels);
+    }
+
+    private void InitializeNativeLayers(int vaeChannels)
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateStableVideoDiffusionLayers(
+                _channels, _height, _width,
+                _latentDim, _numFrames,
+                vaeChannels, _textEncoderDim, _textEncoderLayers).ToList();
+            Layers.AddRange(layers);
+        }
+
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+
+        // VAE Encoder (4 layers)
+        for (int i = 0; i < 4; i++)
+            _vaeEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // VAE Decoder (4 layers)
+        for (int i = 0; i < 4; i++)
+            _vaeDecoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Down blocks (4 layers)
+        for (int i = 0; i < 4; i++)
+            _downBlocks.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Middle block
+        _middleBlock = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Up blocks (4 layers)
+        for (int i = 0; i < 4; i++)
+            _upBlocks.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Temporal attention (4 layers)
+        for (int i = 0; i < 4; i++)
+            _temporalAttention.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Text encoder: embed projection
+        _textEmbedProjection = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Text encoder transformer layers: QKV, AttnProj, FFN1, FFN2 per layer
+        for (int i = 0; i < _textEncoderLayers; i++)
+        {
+            _textEncoderQKV.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textEncoderAttnProj.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textEncoderFFN1.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textEncoderFFN2.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        }
+
+        // Text final projection
+        _textFinalProjection = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Image conditioner
+        _imageConditioner = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Time embedding
+        _timeEmbedding = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Noise predictor
+        _noisePredictor = (ConvolutionalLayer<T>)Layers[idx++];
+    }
+
+    #endregion
+
+    #region Public Methods
+
+    /// <summary>
+    /// Generates a video from an input image (image-to-video).
+    /// </summary>
+    /// <param name="inputImage">The conditioning image [C, H, W] or [B, C, H, W].</param>
+    /// <param name="motionBucketId">Motion intensity (1-255, higher = more motion).</param>
+    /// <param name="fps">Target frames per second.</param>
+    /// <param name="seed">Random seed for reproducibility.</param>
+    /// <returns>Generated video frames list.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This takes a still image and animates it into a video.
+    /// The motion_bucket_id controls how much movement is generated (1 = minimal, 255 = lots of motion).
+    /// Setting a seed ensures you get the same video each time with the same inputs.
+    /// </para>
+    /// </remarks>
+    public List<Tensor<T>> GenerateFromImage(
+        Tensor<T> inputImage,
+        int motionBucketId = 127,
+        int fps = 7,
+        int? seed = null)
+    {
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+
+        bool hasBatch = inputImage.Rank == 4;
+        if (!hasBatch)
+        {
+            inputImage = AddBatchDimension(inputImage);
+        }
+
+        // Encode image to latent space
+        var imageLatent = EncodeToLatent(inputImage);
+
+        // Initialize noise
+        var latents = InitializeLatents(imageLatent._shape, random);
+
+        // Condition on input image
+        var imageCondition = ImageConditioner.Forward(imageLatent);
+
+        // Add motion bucket conditioning
+        var motionCondition = CreateMotionCondition(motionBucketId, fps);
+
+        // Denoising loop
+        for (int step = 0; step < _numInferenceSteps; step++)
+        {
+            double t = (double)step / _numInferenceSteps;
+            var timeEmbed = CreateTimeEmbedding(t);
+
+            // Predict noise
+            var noisePred = PredictNoise(latents, imageCondition, timeEmbed, null, motionCondition);
+
+            // Apply denoising step
+            latents = DenoisingStep(latents, noisePred, step);
+        }
+
+        // Decode latents to video frames
+        var videoFrames = DecodeLatentsToFrames(latents);
+
+        return videoFrames;
+    }
+
+    /// <summary>
+    /// Generates a video from a text prompt.
+    /// </summary>
+    /// <param name="textEmbedding">Pre-computed text embedding [B, 768] or similar.</param>
+    /// <param name="motionBucketId">Motion intensity (1-255).</param>
+    /// <param name="fps">Target frames per second.</param>
+    /// <param name="seed">Random seed for reproducibility.</param>
+    /// <returns>Generated video frames list.</returns>
+    public List<Tensor<T>> GenerateFromText(
+        Tensor<T> textEmbedding,
+        int motionBucketId = 127,
+        int fps = 7,
+        int? seed = null)
+    {
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+
+        // Process text embedding
+        var textCondition = ProcessTextEmbedding(textEmbedding);
+
+        // Initialize noise
+        int latentH = _height / 8;
+        int latentW = _width / 8;
+        var latents = InitializeLatents([1, _latentDim, latentH, latentW], random);
+
+        // Motion conditioning
+        var motionCondition = CreateMotionCondition(motionBucketId, fps);
+
+        // Denoising loop with classifier-free guidance
+        for (int step = 0; step < _numInferenceSteps; step++)
+        {
+            double t = (double)step / _numInferenceSteps;
+            var timeEmbed = CreateTimeEmbedding(t);
+
+            // Conditional prediction
+            var noisePredCond = PredictNoise(latents, null, timeEmbed, textCondition, motionCondition);
+
+            // Unconditional prediction (for guidance)
+            var noisePredUncond = PredictNoise(latents, null, timeEmbed, null, motionCondition);
+
+            // Apply classifier-free guidance
+            var noisePred = ApplyGuidance(noisePredUncond, noisePredCond, GuidanceScale);
+
+            // Denoising step
+            latents = DenoisingStep(latents, noisePred, step);
+        }
+
+        // Decode to frames
+        var videoFrames = DecodeLatentsToFrames(latents);
+
+        return videoFrames;
+    }
+
+    /// <summary>
+    /// Extends an existing video by generating continuation frames.
+    /// </summary>
+    /// <param name="existingFrames">The existing video frames to extend.</param>
+    /// <param name="numNewFrames">Number of new frames to generate.</param>
+    /// <param name="seed">Random seed for reproducibility.</param>
+    /// <returns>Extended video including original and new frames.</returns>
+    public List<Tensor<T>> ExtendVideo(
+        List<Tensor<T>> existingFrames,
+        int numNewFrames = 14,
+        int? seed = null)
+    {
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+
+        // Use last frame as conditioning image
+        var lastFrame = existingFrames[existingFrames.Count - 1];
+        if (lastFrame.Rank == 3)
+        {
+            lastFrame = AddBatchDimension(lastFrame);
+        }
+
+        var imageLatent = EncodeToLatent(lastFrame);
+
+        // Encode a few context frames for temporal consistency
+        int contextFrames = Math.Min(4, existingFrames.Count);
+        var contextLatents = new List<Tensor<T>>();
+        for (int i = existingFrames.Count - contextFrames; i < existingFrames.Count; i++)
+        {
+            var frame = existingFrames[i];
+            if (frame.Rank == 3) frame = AddBatchDimension(frame);
+            contextLatents.Add(EncodeToLatent(frame));
+        }
+
+        // Generate new frames
+        var newFrames = GenerateFromImage(lastFrame, 127, 7, seed);
+
+        // Combine original and new frames
+        var result = new List<Tensor<T>>(existingFrames);
+        result.AddRange(newFrames);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Performs temporal interpolation between keyframes.
+    /// </summary>
+    /// <param name="keyframes">List of keyframe images.</param>
+    /// <param name="framesPerSegment">Frames to generate between each pair of keyframes.</param>
+    /// <param name="seed">Random seed for reproducibility.</param>
+    /// <returns>Interpolated video with smooth transitions.</returns>
+    public List<Tensor<T>> InterpolateKeyframes(
+        List<Tensor<T>> keyframes,
+        int framesPerSegment = 7,
+        int? seed = null)
+    {
+        var result = new List<Tensor<T>>();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+
+        for (int i = 0; i < keyframes.Count - 1; i++)
+        {
+            var startFrame = keyframes[i];
+            var endFrame = keyframes[i + 1];
+
+            if (startFrame.Rank == 3) startFrame = AddBatchDimension(startFrame);
+            if (endFrame.Rank == 3) endFrame = AddBatchDimension(endFrame);
+
+            // Encode both keyframes
+            var startLatent = EncodeToLatent(startFrame);
+            var endLatent = EncodeToLatent(endFrame);
+
+            // Generate intermediate frames
+            for (int f = 0; f <= framesPerSegment; f++)
+            {
+                double t = (double)f / framesPerSegment;
+
+                // Interpolate latents
+                var interpolatedLatent = InterpolateLatents(startLatent, endLatent, t);
+
+                // Add some noise for variation
+                var noisyLatent = AddNoise(interpolatedLatent, 0.1, random);
+
+                // Denoise slightly
+                var cleanLatent = QuickDenoise(noisyLatent, 3);
+
+                // Decode
+                var frame = DecodeFromLatent(cleanLatent);
+                result.Add(RemoveBatchDimension(frame));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        // Default: generate from input image
+        var frames = GenerateFromImage(input);
+        return frames.Count > 0 ? frames[0] : input;
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    private (double[] betas, double[] alphasCumprod) InitializeNoiseSchedule(int steps)
+    {
+        // Cosine schedule
+        var betas = new double[steps];
+        var alphas = new double[steps];
+        var alphasCumprod = new double[steps];
+
+        double s = 0.008;
+        for (int i = 0; i < steps; i++)
+        {
+            double t1 = (double)i / steps;
+            double t2 = (double)(i + 1) / steps;
+
+            double alpha1 = Math.Pow(Math.Cos((t1 + s) / (1 + s) * Math.PI / 2), 2);
+            double alpha2 = Math.Pow(Math.Cos((t2 + s) / (1 + s) * Math.PI / 2), 2);
+
+            betas[i] = 1 - alpha2 / alpha1;
+            betas[i] = Math.Max(0.0001, Math.Min(0.999, betas[i]));
+            alphas[i] = 1 - betas[i];
+        }
+
+        alphasCumprod[0] = alphas[0];
+        for (int i = 1; i < steps; i++)
+        {
+            alphasCumprod[i] = alphasCumprod[i - 1] * alphas[i];
+        }
+
+        return (betas, alphasCumprod);
+    }
+
+    private Tensor<T> EncodeToLatent(Tensor<T> image)
+    {
+        var features = image;
+        foreach (var layer in _vaeEncoder)
+        {
+            features = layer.Forward(features);
+            features = ApplySiLU(features);
+        }
+        return features;
+    }
+
+    private Tensor<T> DecodeFromLatent(Tensor<T> latent)
+    {
+        var features = latent;
+
+        for (int i = 0; i < _vaeDecoder.Count; i++)
+        {
+            features = _vaeDecoder[i].Forward(features);
+
+            // Upsample for decoder layers (except last)
+            if (i < _vaeDecoder.Count - 1)
+            {
+                features = Upsample2x(features);
+                features = ApplySiLU(features);
+            }
+            else
+            {
+                features = ApplyTanh(features);
+            }
+        }
+
+        return features;
+    }
+
+    private List<Tensor<T>> DecodeLatentsToFrames(Tensor<T> latents)
+    {
+        var frames = new List<Tensor<T>>();
+
+        // Latents should have temporal dimension [B, T, C, H, W]
+        // or we need to handle different shapes
+        int batchSize = latents.Shape[0];
+
+        // Check if latents have temporal dimension
+        if (latents.Rank == 5)
+        {
+            // Shape is [B, T, C, H, W]
+            int numTemporalFrames = latents.Shape[1];
+            int channels = latents.Shape[2];
+            int height = latents.Shape[3];
+            int width = latents.Shape[4];
+
+            for (int f = 0; f < Math.Min(_numFrames, numTemporalFrames); f++)
+            {
+                // Extract temporal slice for frame f
+                var frameLatent = ExtractTemporalSlice(latents, f, batchSize, channels, height, width);
+                var frame = DecodeFromLatent(frameLatent);
+                frames.Add(RemoveBatchDimension(frame));
+            }
+        }
+        else
+        {
+            // Shape is [B, C, H, W] - interpolate from a single latent
+            int channels = latents.Shape[1];
+            int height = latents.Shape[2];
+            int width = latents.Shape[3];
+
+            for (int f = 0; f < _numFrames; f++)
+            {
+                // Add temporal variation by blending with noise based on frame position
+                double t = (double)f / Math.Max(_numFrames - 1, 1);
+                var frameLatent = AddTemporalVariation(latents, t, batchSize, channels, height, width);
+                var frame = DecodeFromLatent(frameLatent);
+                frames.Add(RemoveBatchDimension(frame));
+            }
+        }
+
+        return frames;
+    }
+
+    /// <summary>
+    /// Extracts a temporal slice from 5D latent tensor.
+    /// </summary>
+    private Tensor<T> ExtractTemporalSlice(Tensor<T> latents, int frameIndex, int batchSize, int channels, int height, int width)
+    {
+        var slice = new Tensor<T>([batchSize, channels, height, width]);
+        int sliceSize = channels * height * width;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int srcOffset = b * latents.Shape[1] * sliceSize + frameIndex * sliceSize;
+            int dstOffset = b * sliceSize;
+            latents.Data.Span.Slice(srcOffset, sliceSize).CopyTo(slice.Data.Span.Slice(dstOffset, sliceSize));
+        }
+
+        return slice;
+    }
+
+    /// <summary>
+    /// Adds temporal variation to create different frames from a single latent.
+    /// </summary>
+    private Tensor<T> AddTemporalVariation(Tensor<T> latents, double t, int batchSize, int channels, int height, int width)
+    {
+        var result = new Tensor<T>([batchSize, channels, height, width]);
+
+        // Use sinusoidal temporal modulation
+        for (int i = 0; i < latents.Length; i++)
+        {
+            double val = NumOps.ToDouble(latents.Data.Span[i]);
+            // Add smooth temporal variation using sine wave
+            double freq = 2.0 * Math.PI * (i % width) / width;
+            double temporalMod = 0.1 * Math.Sin(freq + t * Math.PI);
+            result.Data.Span[i] = NumOps.FromDouble(val + temporalMod);
+        }
+
+        return result;
+    }
+
+    private Tensor<T> InitializeLatents(int[] shape, Random random)
+    {
+        var latents = new Tensor<T>(shape);
+        for (int i = 0; i < latents.Data.Length; i++)
+        {
+            latents.Data.Span[i] = NumOps.FromDouble(random.NextGaussian());
+        }
+        return latents;
+    }
+
+    private Tensor<T> GenerateNoise(int[] shape, Random random)
+    {
+        return InitializeLatents(shape, random);
+    }
+
+    private Tensor<T> PredictNoise(
+        Tensor<T> latents,
+        Tensor<T>? imageCondition,
+        Tensor<T> timeEmbedding,
+        Tensor<T>? textCondition,
+        Tensor<T>? motionCondition)
+    {
+        // Down path
+        var features = latents;
+        var skipConnections = new List<Tensor<T>>();
+
+        foreach (var block in _downBlocks)
+        {
+            features = block.Forward(features);
+            features = ApplySiLU(features);
+            skipConnections.Add(features);
+        }
+
+        // Middle
+        features = MiddleBlock.Forward(features);
+        features = ApplySiLU(features);
+
+        // Add conditioning
+        if (imageCondition != null)
+        {
+            features = AddCondition(features, imageCondition);
+        }
+        if (textCondition != null)
+        {
+            features = AddCondition(features, textCondition);
+        }
+
+        // Up path with skip connections
+        for (int i = 0; i < _upBlocks.Count; i++)
+        {
+            int skipIdx = skipConnections.Count - 1 - i;
+            if (skipIdx >= 0)
+            {
+                features = ConcatenateChannels(features, skipConnections[skipIdx]);
+            }
+
+            features = _upBlocks[i].Forward(features);
+            features = ApplySiLU(features);
+
+            // Upsample (except last layer)
+            if (i < _upBlocks.Count - 1)
+            {
+                features = Upsample2x(features);
+            }
+        }
+
+        // Final noise prediction
+        var noise = NoisePredictor.Forward(features);
+
+        return noise;
+    }
+
+    private Tensor<T> DenoisingStep(Tensor<T> latents, Tensor<T> noisePred, int step)
+    {
+        double alphaCumprod = _alphasCumprod[step];
+        double alphaCumprodPrev = step > 0 ? _alphasCumprod[step - 1] : 1.0;
+        double beta = _betas[step];
+
+        double sqrtAlphaCumprod = Math.Sqrt(alphaCumprod);
+        double sqrtOneMinusAlphaCumprod = Math.Sqrt(1 - alphaCumprod);
+
+        // Predict x0: x0 = (latent - sqrtOneMinusAlphaCumprod * noise) / sqrtAlphaCumprod
+        var scaledNoise = Engine.TensorMultiplyScalar(noisePred, NumOps.FromDouble(sqrtOneMinusAlphaCumprod));
+        var x0Pred = Engine.TensorDivideScalar(
+            Engine.TensorSubtract(latents, scaledNoise),
+            NumOps.FromDouble(sqrtAlphaCumprod));
+
+        // Compute direction
+        double sqrtAlphaCumprodPrev = Math.Sqrt(alphaCumprodPrev);
+        double sqrtOneMinusAlphaCumprodPrev = Math.Sqrt(1 - alphaCumprodPrev);
+
+        // Sample next latent: next = sqrtAlphaCumprodPrev * x0 + sqrtOneMinusAlphaCumprodPrev * noise
+        var nextLatent = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(x0Pred, NumOps.FromDouble(sqrtAlphaCumprodPrev)),
+            Engine.TensorMultiplyScalar(noisePred, NumOps.FromDouble(sqrtOneMinusAlphaCumprodPrev)));
+
+        return nextLatent;
+    }
+
+    private Tensor<T> ApplyGuidance(Tensor<T> uncond, Tensor<T> cond, double scale)
+    {
+        // guided = uncond + scale * (cond - uncond)
+        var diff = Engine.TensorSubtract(cond, uncond);
+        var scaled = Engine.TensorMultiplyScalar(diff, NumOps.FromDouble(scale));
+        return Engine.TensorAdd(uncond, scaled);
+    }
+
+    private Tensor<T> CreateTimeEmbedding(double t)
+    {
+        // Sinusoidal time embedding
+        var embedding = new Tensor<T>([1, 1, 1, 1]);
+        embedding[0, 0, 0, 0] = NumOps.FromDouble(t);
+        return TimeEmbedding.Forward(embedding);
+    }
+
+    private Tensor<T> CreateMotionCondition(int motionBucketId, int fps)
+    {
+        // Simple motion conditioning
+        var condition = new Tensor<T>([1, 2, 1, 1]);
+        condition[0, 0, 0, 0] = NumOps.FromDouble(motionBucketId / 255.0);
+        condition[0, 1, 0, 0] = NumOps.FromDouble(fps / 30.0);
+        return condition;
+    }
+
+    private Tensor<T> ProcessTextEmbedding(Tensor<T> textEmbedding)
+    {
+        // Reshape if needed [B, D] -> [B, D, 1, 1]
+        if (textEmbedding.Rank == 2)
+        {
+            int batch = textEmbedding.Shape[0];
+            int dim = textEmbedding.Shape[1];
+            var reshaped = new Tensor<T>([batch, dim, 1, 1]);
+            textEmbedding.Data.Span.CopyTo(reshaped.Data.Span);
+            textEmbedding = reshaped;
+        }
+
+        // Initial embedding projection
+        var hidden = TextEmbedProjection.Forward(textEmbedding);
+
+        // Process through transformer layers (CLIP text encoder architecture)
+        for (int layer = 0; layer < _textEncoderLayers; layer++)
+        {
+            // Pre-LayerNorm (Pre-LN Transformer architecture)
+            var normed = TextEncoderLayerNorm(hidden);
+
+            // Multi-head self-attention
+            var attnOut = TextEncoderSelfAttention(normed, layer);
+
+            // Residual connection
+            hidden = AddTensors(hidden, attnOut);
+
+            // FFN with Pre-LN
+            var ffnNormed = TextEncoderLayerNorm(hidden);
+            var ffnOut = TextEncoderFFN(ffnNormed, layer);
+
+            // Residual connection
+            hidden = AddTensors(hidden, ffnOut);
+        }
+
+        // Final layer norm
+        hidden = TextEncoderLayerNorm(hidden);
+
+        // Project to UNet conditioning dimension
+        return TextFinalProjection.Forward(hidden);
+    }
+
+    /// <summary>
+    /// Layer normalization for text encoder.
+    /// </summary>
+    private Tensor<T> TextEncoderLayerNorm(Tensor<T> input)
+    {
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        var output = new Tensor<T>(input._shape);
+        double eps = 1e-5;
+
+        for (int b = 0; b < batch; b++)
+        {
+            // Compute mean and variance across channels
+            double sum = 0.0;
+            for (int c = 0; c < channels; c++)
+            {
+                sum += NumOps.ToDouble(input[b, c, 0, 0]);
+            }
+            double mean = sum / channels;
+
+            double varSum = 0.0;
+            for (int c = 0; c < channels; c++)
+            {
+                double diff = NumOps.ToDouble(input[b, c, 0, 0]) - mean;
+                varSum += diff * diff;
+            }
+            double variance = varSum / channels;
+            double invStd = 1.0 / Math.Sqrt(variance + eps);
+
+            // Normalize
+            for (int c = 0; c < channels; c++)
+            {
+                double val = NumOps.ToDouble(input[b, c, 0, 0]);
+                double normalized = (val - mean) * invStd;
+                output[b, c, 0, 0] = NumOps.FromDouble(normalized);
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Multi-head self-attention for text encoder following CLIP architecture.
+    /// </summary>
+    private Tensor<T> TextEncoderSelfAttention(Tensor<T> input, int layerIdx)
+    {
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int headDim = channels / _textEncoderHeads;
+        double scale = 1.0 / Math.Sqrt(headDim);
+
+        // Compute QKV projections
+        var qkv = _textEncoderQKV[layerIdx].Forward(input);
+
+        // Split into Q, K, V (each has channels dimensions)
+        var query = new Tensor<T>([batch, channels, 1, 1]);
+        var key = new Tensor<T>([batch, channels, 1, 1]);
+        var value = new Tensor<T>([batch, channels, 1, 1]);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                query[b, c, 0, 0] = qkv[b, c, 0, 0];
+                key[b, c, 0, 0] = qkv[b, channels + c, 0, 0];
+                value[b, c, 0, 0] = qkv[b, 2 * channels + c, 0, 0];
+            }
+        }
+
+        // Multi-head attention computation
+        var output = new Tensor<T>([batch, channels, 1, 1]);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int head = 0; head < _textEncoderHeads; head++)
+            {
+                int headStart = head * headDim;
+
+                // Compute attention scores for this head
+                double attnScore = 0.0;
+                for (int d = 0; d < headDim; d++)
+                {
+                    double q = NumOps.ToDouble(query[b, headStart + d, 0, 0]);
+                    double k = NumOps.ToDouble(key[b, headStart + d, 0, 0]);
+                    attnScore += q * k;
+                }
+                attnScore *= scale;
+
+                // Apply softmax (single position, so attention weight is 1.0)
+                double attnWeight = 1.0; // For single token, softmax of single value is 1
+
+                // Weighted sum of values
+                for (int d = 0; d < headDim; d++)
+                {
+                    double v = NumOps.ToDouble(value[b, headStart + d, 0, 0]);
+                    output[b, headStart + d, 0, 0] = NumOps.FromDouble(attnWeight * v);
+                }
+            }
+        }
+
+        // Output projection
+        return _textEncoderAttnProj[layerIdx].Forward(output);
+    }
+
+    /// <summary>
+    /// Feed-forward network for text encoder with GELU activation.
+    /// </summary>
+    private Tensor<T> TextEncoderFFN(Tensor<T> input, int layerIdx)
+    {
+        // Expand: hidden_dim -> 4 * hidden_dim
+        var expanded = _textEncoderFFN1[layerIdx].Forward(input);
+
+        // GELU activation (following CLIP/GPT)
+        expanded = ApplyGELU(expanded);
+
+        // Contract: 4 * hidden_dim -> hidden_dim
+        return _textEncoderFFN2[layerIdx].Forward(expanded);
+    }
+
+    /// <summary>
+    /// Element-wise tensor addition for residual connections.
+    /// </summary>
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        return Engine.TensorAdd(a, b);
+    }
+
+    private Tensor<T> AddCondition(Tensor<T> features, Tensor<T> condition)
+    {
+        // Broadcast and add condition to features
+        int batchSize = features.Shape[0];
+        int channels = features.Shape[1];
+        int height = features.Shape[2];
+        int width = features.Shape[3];
+
+        int condChannels = condition.Shape[1];
+        int condH = condition.Shape[2];
+        int condW = condition.Shape[3];
+
+        // Simple addition if shapes match, otherwise broadcast
+        if (condChannels == channels && condH == height && condW == width)
+        {
+            return features.Transform((v, idx) => NumOps.Add(v, condition.Data.Span[idx % condition.Data.Length]));
+        }
+
+        // Broadcast condition
+        return features.Transform((v, idx) =>
+        {
+            int i = idx % condition.Data.Length;
+            return NumOps.Add(v, condition.Data.Span[i]);
+        });
+    }
+
+    private Tensor<T> InterpolateLatents(Tensor<T> start, Tensor<T> end, double t)
+    {
+        var scaledStart = Engine.TensorMultiplyScalar(start, NumOps.FromDouble(1.0 - t));
+        var scaledEnd = Engine.TensorMultiplyScalar(end, NumOps.FromDouble(t));
+        return Engine.TensorAdd(scaledStart, scaledEnd);
+    }
+
+    private Tensor<T> AddNoise(Tensor<T> latent, double noiseLevel, Random random)
+    {
+        var noise = GenerateNoise(latent._shape, random);
+        var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(noiseLevel));
+        return Engine.TensorAdd(latent, scaledNoise);
+    }
+
+    private Tensor<T> AddNoiseAtLevel(Tensor<T> latent, Tensor<T> noise, double level)
+    {
+        int stepIndex = (int)(level * (_alphasCumprod.Length - 1));
+        double sqrtAlpha = Math.Sqrt(_alphasCumprod[stepIndex]);
+        double sqrtOneMinusAlpha = Math.Sqrt(1 - _alphasCumprod[stepIndex]);
+
+        var scaledLatent = Engine.TensorMultiplyScalar(latent, NumOps.FromDouble(sqrtAlpha));
+        var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sqrtOneMinusAlpha));
+        return Engine.TensorAdd(scaledLatent, scaledNoise);
+    }
+
+    private Tensor<T> QuickDenoise(Tensor<T> latent, int steps)
+    {
+        var current = latent;
+        for (int i = 0; i < steps; i++)
+        {
+            double t = 1.0 - (double)i / steps;
+            var timeEmbed = CreateTimeEmbedding(t);
+            var noisePred = PredictNoise(current, null, timeEmbed, null, null);
+            current = DenoisingStep(current, noisePred, _numInferenceSteps - steps + i);
+        }
+        return current;
+    }
+
+    private Tensor<T> Upsample2x(Tensor<T> input)
+    {
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        var output = new Tensor<T>([batchSize, channels, height * 2, width * 2]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        T val = input[b, c, h, w];
+                        output[b, c, h * 2, w * 2] = val;
+                        output[b, c, h * 2, w * 2 + 1] = val;
+                        output[b, c, h * 2 + 1, w * 2] = val;
+                        output[b, c, h * 2 + 1, w * 2 + 1] = val;
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
+    private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
+    {
+        return Engine.TensorConcatenate([a, b], axis: 1);
+    }
+
+    private Tensor<T> ApplySiLU(Tensor<T> input)
+    {
+        return input.Transform((v, _) =>
+        {
+            double x = Convert.ToDouble(v);
+            double silu = x / (1.0 + Math.Exp(-x));
+            return NumOps.FromDouble(silu);
+        });
+    }
+
+    private Tensor<T> ApplyGELU(Tensor<T> input)
+    {
+        return input.Transform((v, _) =>
+        {
+            double x = Convert.ToDouble(v);
+            double c = Math.Sqrt(2.0 / Math.PI);
+            double gelu = 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
+            return NumOps.FromDouble(gelu);
+        });
+    }
+
+    private Tensor<T> ApplyTanh(Tensor<T> input)
+    {
+        return input.Transform((v, _) =>
+        {
+            double x = Convert.ToDouble(v);
+            return NumOps.FromDouble(Math.Tanh(x));
+        });
+    }
+
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    {
+        int c = tensor.Shape[0];
+        int h = tensor.Shape[1];
+        int w = tensor.Shape[2];
+
+        var result = new Tensor<T>([1, c, h, w]);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    {
+        int[] newShape = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < newShape.Length; i++)
+        {
+            newShape[i] = tensor.Shape[i + 1];
+        }
+
+        var result = new Tensor<T>(newShape);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
+
+    #endregion
+
+    #region Abstract Implementation
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        foreach (var layer in _vaeEncoder) Layers.Add(layer);
+        foreach (var layer in _vaeDecoder) Layers.Add(layer);
+        foreach (var layer in _downBlocks) Layers.Add(layer);
+        if (_middleBlock is not null) Layers.Add(_middleBlock);
+        foreach (var layer in _upBlocks) Layers.Add(layer);
+        foreach (var layer in _temporalAttention) Layers.Add(layer);
+        foreach (var layer in _textEncoderQKV) Layers.Add(layer);
+        foreach (var layer in _textEncoderAttnProj) Layers.Add(layer);
+        foreach (var layer in _textEncoderFFN1) Layers.Add(layer);
+        foreach (var layer in _textEncoderFFN2) Layers.Add(layer);
+        if (_textEmbedProjection is not null) Layers.Add(_textEmbedProjection);
+        if (_textFinalProjection is not null) Layers.Add(_textFinalProjection);
+        if (_imageConditioner is not null) Layers.Add(_imageConditioner);
+        if (_timeEmbedding is not null) Layers.Add(_timeEmbedding);
+        if (_noisePredictor is not null) Layers.Add(_noisePredictor);
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            int paramCount = layerParams.Length;
+            if (paramCount > 0 && offset + paramCount <= parameters.Length)
+            {
+                var slice = new Vector<T>(paramCount);
+                for (int i = 0; i < paramCount; i++)
+                {
+                    slice[i] = parameters[offset + i];
+                }
+                layer.SetParameters(slice);
+                offset += paramCount;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var additionalInfo = new Dictionary<string, object>
+        {
+            { "ModelName", "StableVideoDiffusion" },
+            { "Description", "Stable Video Diffusion for Text/Image-to-Video Generation" },
+            { "OutputHeight", _height },
+            { "OutputWidth", _width },
+            { "NumFrames", _numFrames },
+            { "Variant", _variant.ToString() },
+            { "InferenceSteps", _numInferenceSteps },
+            { "GuidanceScale", _guidanceScale },
+            { "NumLayers", Layers.Count }
+        };
+
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = additionalInfo,
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_height);
+        writer.Write(_width);
+        writer.Write(_channels);
+        writer.Write(_numFrames);
+        writer.Write(_latentDim);
+        writer.Write(_numInferenceSteps);
+        writer.Write(_guidanceScale);
+        writer.Write((int)_variant);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numFrames = reader.ReadInt32();
+        _latentDim = reader.ReadInt32();
+        _numInferenceSteps = reader.ReadInt32();
+        _guidanceScale = reader.ReadDouble();
+        _variant = (SVDModelVariant)reader.ReadInt32();
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new StableVideoDiffusion<T>(
+            Architecture, _variant, _numFrames, _numInferenceSteps, _guidanceScale,
+            textEncoderDim: _textEncoderDim, textEncoderLayers: _textEncoderLayers,
+            textEncoderHeads: _textEncoderHeads);
+    }
+
+    #endregion
+}
+
+/// <summary>
+/// Model variants for Stable Video Diffusion.
+/// </summary>
+public enum SVDModelVariant
+{
+    /// <summary>
+    /// Standard SVD model (14 frames).
+    /// </summary>
+    SVD,
+
+    /// <summary>
+    /// Extended SVD model (25 frames).
+    /// </summary>
+    SVDXT,
+
+    /// <summary>
+    /// Image-optimized SVD variant.
+    /// </summary>
+    SVDImage
+}

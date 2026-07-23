@@ -1,0 +1,1403 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Tensors.Helpers;
+
+namespace AiDotNet.NeuralNetworks;
+
+/// <summary>
+/// Unified multimodal network that handles text, images, audio, and video
+/// in a single architecture with cross-modal attention and any-to-any generation.
+/// </summary>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> This network handles text, images, audio, and video all in
+/// one architecture. Instead of needing separate models for each type of data, it processes
+/// all modalities through shared transformer layers with cross-modal attention. It can both
+/// understand any combination of inputs and generate outputs in any modality, enabling tasks
+/// like describing a video, generating images from text, or answering questions about audio
+/// clips.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new UnifiedMultimodalOptions { ImageSize = 224, EmbeddingDim = 768 };
+/// var model = new UnifiedMultimodalNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("Perceiver: General Perception with Iterative Attention", "https://arxiv.org/abs/2103.03206")]
+public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimodalModel<T>
+{
+    private readonly UnifiedMultimodalNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    #region Constants
+
+    private const int DEFAULT_EMBEDDING_DIM = 768;
+    private const int DEFAULT_MAX_SEQ_LEN = 2048;
+    private const int DEFAULT_NUM_LAYERS = 12;
+
+    #endregion
+
+    #region Fields
+
+    private readonly INumericOperations<T> _numOps;
+    private readonly int _embeddingDimension;
+    private readonly int _maxSequenceLength;
+    private readonly int _numTransformerLayers;
+    private readonly Random _random;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ILossFunction<T> _lossFunction;
+
+    // Modality-specific encoders
+    private DenseLayer<T> _textEncoder;
+    private DenseLayer<T> _imageEncoder;
+    private DenseLayer<T> _audioEncoder;
+    private DenseLayer<T> _videoEncoder;
+
+    // Unified transformer
+    private MultiHeadAttentionLayer<T>[] _transformerLayers;
+
+    // Cross-modal attention
+    private MultiHeadAttentionLayer<T>[] _crossModalAttention;
+
+    // Modality-specific decoders
+    private DenseLayer<T> _textDecoder;
+    private DenseLayer<T> _imageDecoder;
+    private DenseLayer<T> _audioDecoder;
+    private DenseLayer<T> _videoDecoder;
+
+    // Fusion and output heads
+    private DenseLayer<T> _fusionLayer;
+    private DenseLayer<T> _classificationHead;
+    private DenseLayer<T> _generationHead;
+
+    #endregion
+
+    #region Properties
+
+    /// <inheritdoc/>
+    public IReadOnlyList<ModalityType> SupportedInputModalities { get; }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<ModalityType> SupportedOutputModalities { get; }
+
+    /// <inheritdoc/>
+    public int EmbeddingDimension => _embeddingDimension;
+
+    /// <inheritdoc/>
+    public int MaxSequenceLength => _maxSequenceLength;
+
+    /// <inheritdoc/>
+    public bool SupportsStreaming => true;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    private const int DefaultOutputSize = 100;
+
+    public UnifiedMultimodalNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: DEFAULT_EMBEDDING_DIM,
+            outputSize: DefaultOutputSize))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the UnifiedMultimodalNetwork.
+    /// </summary>
+    public UnifiedMultimodalNetwork(
+        NeuralNetworkArchitecture<T> architecture,
+        int embeddingDimension = DEFAULT_EMBEDDING_DIM,
+        int maxSequenceLength = DEFAULT_MAX_SEQ_LEN,
+        int numTransformerLayers = DEFAULT_NUM_LAYERS,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        int? seed = null,
+        UnifiedMultimodalNetworkOptions? options = null)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+    {
+        _options = options ?? new UnifiedMultimodalNetworkOptions();
+        Options = _options;
+
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _embeddingDimension = embeddingDimension;
+        _maxSequenceLength = maxSequenceLength;
+        _numTransformerLayers = numTransformerLayers;
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        // AdamW (decoupled weight decay) is the canonical optimizer for multimodal transformers:
+        // Lumina-T2X (Gao et al. 2024) and its Gemma 2B text encoder both train with AdamW +
+        // weight decay 0.01. Plain Adam has no mechanism to bound the classification-head logits,
+        // so under CrossEntropyWithLogitsLoss the logits inflate without limit as training
+        // continues (correct-class logit → +∞, others → −∞). Decoupled weight decay establishes a
+        // stable equilibrium where the logit magnitude — and therefore the loss — plateaus instead
+        // of drifting, which is the paper-faithful behaviour for a regularized transformer.
+        _optimizer = optimizer ?? new Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        SupportedInputModalities = new List<ModalityType>
+        {
+            ModalityType.Text,
+            ModalityType.Image,
+            ModalityType.Audio,
+            ModalityType.Video
+        }.AsReadOnly();
+
+        SupportedOutputModalities = new List<ModalityType>
+        {
+            ModalityType.Text,
+            ModalityType.Image,
+            ModalityType.Audio
+        }.AsReadOnly();
+
+        InitializeLayers();
+    }
+
+    #endregion
+
+    #region Initialization
+
+    /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_textEncoder), nameof(_imageEncoder), nameof(_audioEncoder), nameof(_videoEncoder),
+        nameof(_transformerLayers), nameof(_crossModalAttention),
+        nameof(_textDecoder), nameof(_imageDecoder), nameof(_audioDecoder), nameof(_videoDecoder),
+        nameof(_fusionLayer), nameof(_classificationHead), nameof(_generationHead))]
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultUnifiedMultimodalLayers(
+                Architecture, _embeddingDimension, _numTransformerLayers));
+        }
+
+        BindLayerFieldsFromLayers();
+    }
+
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_textEncoder), nameof(_imageEncoder), nameof(_audioEncoder), nameof(_videoEncoder),
+        nameof(_transformerLayers), nameof(_crossModalAttention),
+        nameof(_textDecoder), nameof(_imageDecoder), nameof(_audioDecoder), nameof(_videoDecoder),
+        nameof(_fusionLayer), nameof(_classificationHead), nameof(_generationHead))]
+    private void BindLayerFieldsFromLayers()
+    {
+        int expectedLayerCount = 4 + _numTransformerLayers + 4 + 4 + 3;
+        if (Layers.Count < expectedLayerCount)
+        {
+            throw new InvalidDataException(
+                $"UnifiedMultimodalNetwork expected at least {expectedLayerCount} layers, found {Layers.Count}.");
+        }
+
+        TLayer RequireLayer<TLayer>(int index, string role)
+            where TLayer : class, ILayer<T>
+        {
+            if (Layers[index] is TLayer layer)
+                return layer;
+
+            throw new InvalidDataException(
+                $"UnifiedMultimodalNetwork layer {index} for {role} must be {typeof(TLayer).Name}, found {Layers[index].GetType().Name}.");
+        }
+
+        int idx = 0;
+
+        _textEncoder = RequireLayer<DenseLayer<T>>(idx++, "text encoder");
+        _imageEncoder = RequireLayer<DenseLayer<T>>(idx++, "image encoder");
+        _audioEncoder = RequireLayer<DenseLayer<T>>(idx++, "audio encoder");
+        _videoEncoder = RequireLayer<DenseLayer<T>>(idx++, "video encoder");
+
+        _transformerLayers = new MultiHeadAttentionLayer<T>[_numTransformerLayers];
+        for (int i = 0; i < _numTransformerLayers; i++)
+        {
+            _transformerLayers[i] = RequireLayer<MultiHeadAttentionLayer<T>>(idx++, $"transformer layer {i}");
+        }
+
+        _crossModalAttention = new MultiHeadAttentionLayer<T>[4];
+        for (int i = 0; i < 4; i++)
+        {
+            _crossModalAttention[i] = RequireLayer<MultiHeadAttentionLayer<T>>(idx++, $"cross-modal attention {i}");
+        }
+
+        _textDecoder = RequireLayer<DenseLayer<T>>(idx++, "text decoder");
+        _imageDecoder = RequireLayer<DenseLayer<T>>(idx++, "image decoder");
+        _audioDecoder = RequireLayer<DenseLayer<T>>(idx++, "audio decoder");
+        _videoDecoder = RequireLayer<DenseLayer<T>>(idx++, "video decoder");
+
+        _fusionLayer = RequireLayer<DenseLayer<T>>(idx++, "fusion layer");
+        _classificationHead = RequireLayer<DenseLayer<T>>(idx++, "classification head");
+        _generationHead = RequireLayer<DenseLayer<T>>(idx++, "generation head");
+    }
+
+    #endregion
+
+    #region Encoding
+
+    /// <inheritdoc/>
+    public Vector<T> Encode(MultimodalInput<T> input)
+    {
+        var encoded = EncodeModality(input);
+        return ApplyTransformer(encoded);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> EncodeSequence(IEnumerable<MultimodalInput<T>> inputs)
+    {
+        var inputList = inputs.OrderBy(i => i.SequenceIndex).ToList();
+        var embeddings = new List<Vector<T>>();
+
+        foreach (var input in inputList)
+        {
+            embeddings.Add(Encode(input));
+        }
+
+        // Create matrix from embeddings
+        var matrix = new Matrix<T>(embeddings.Count, _embeddingDimension);
+        for (int i = 0; i < embeddings.Count; i++)
+        {
+            for (int j = 0; j < _embeddingDimension && j < embeddings[i].Length; j++)
+            {
+                matrix[i, j] = embeddings[i][j];
+            }
+        }
+
+        return matrix;
+    }
+
+    private Vector<T> EncodeModality(MultimodalInput<T> input)
+    {
+        Tensor<T> inputTensor;
+        DenseLayer<T> encoder;
+
+        switch (input.Modality)
+        {
+            case ModalityType.Text:
+                inputTensor = EncodeText(input.TextContent ?? string.Empty);
+                encoder = _textEncoder;
+                break;
+            case ModalityType.Image:
+                inputTensor = input.InternalData ?? new Tensor<T>(new[] { 768 });
+                encoder = _imageEncoder;
+                break;
+            case ModalityType.Audio:
+                inputTensor = input.InternalData ?? new Tensor<T>(new[] { 128 });
+                encoder = _audioEncoder;
+                break;
+            case ModalityType.Video:
+                inputTensor = input.InternalData ?? new Tensor<T>(new[] { 1024 });
+                encoder = _videoEncoder;
+                break;
+            default:
+                inputTensor = new Tensor<T>(new[] { _embeddingDimension });
+                encoder = _textEncoder;
+                break;
+        }
+
+        // Flatten input if needed
+        var flatInput = FlattenToExpectedSize(inputTensor, encoder);
+        var encoded = encoder.Forward(flatInput);
+        return encoded.ToVector();
+    }
+
+    private Tensor<T> EncodeText(string text)
+    {
+        // Simple character-level encoding
+        var result = new Vector<T>(512);
+        var chars = text.ToCharArray();
+
+        for (int i = 0; i < Math.Min(chars.Length, 512); i++)
+        {
+            result[i] = _numOps.FromDouble(chars[i] / 128.0);
+        }
+
+        return Tensor<T>.FromVector(result);
+    }
+
+    private Tensor<T> FlattenToExpectedSize(Tensor<T> input, DenseLayer<T> layer)
+    {
+        var inputData = input.ToVector();
+        int expectedSize = GetLayerInputSize(layer);
+        var result = new Vector<T>(expectedSize);
+
+        for (int i = 0; i < Math.Min(inputData.Length, expectedSize); i++)
+        {
+            result[i] = inputData[i];
+        }
+
+        return Tensor<T>.FromVector(result);
+    }
+
+    private int GetLayerInputSize(DenseLayer<T> layer)
+    {
+        // Get expected input size from layer parameters
+        var params_ = layer.GetParameters();
+        // Input size is typically first dimension of weight matrix
+        return Math.Max(1, params_.Length / _embeddingDimension);
+    }
+
+    private Vector<T> ApplyTransformer(Vector<T> embedding)
+    {
+        var current = Tensor<T>.FromVector(embedding);
+
+        foreach (var layer in _transformerLayers)
+        {
+            current = layer.Forward(current);
+        }
+
+        return current.ToVector();
+    }
+
+    #endregion
+
+    #region Generation
+
+    /// <inheritdoc/>
+    public MultimodalOutput<T> Generate(
+        IEnumerable<MultimodalInput<T>> inputs,
+        ModalityType outputModality,
+        int maxLength = 1024)
+    {
+        // Encode all inputs
+        var encodedSequence = EncodeSequence(inputs);
+
+        // Apply cross-modal attention
+        var fused = ApplyCrossModalAttention(encodedSequence);
+
+        // Generate in target modality
+        return DecodeToModality(fused, outputModality, maxLength);
+    }
+
+    /// <inheritdoc/>
+    public string GenerateText(
+        IEnumerable<MultimodalInput<T>> inputs,
+        string prompt,
+        int maxTokens = 1024,
+        double temperature = 0.7)
+    {
+        var allInputs = inputs.ToList();
+        allInputs.Add(MultimodalInput<T>.FromText(prompt, allInputs.Count));
+
+        var output = Generate(allInputs, ModalityType.Text, maxTokens);
+        return output.TextContent ?? string.Empty;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GenerateImage(
+        IEnumerable<MultimodalInput<T>> inputs,
+        int width = 512,
+        int height = 512)
+    {
+        var output = Generate(inputs, ModalityType.Image, width * height * 3);
+        return output.InternalData ?? new Tensor<T>(new[] { 3, height, width });
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GenerateAudio(
+        IEnumerable<MultimodalInput<T>> inputs,
+        double durationSeconds = 5.0,
+        int sampleRate = 44100)
+    {
+        int numSamples = (int)(durationSeconds * sampleRate);
+        var output = Generate(inputs, ModalityType.Audio, numSamples);
+        return output.InternalData ?? new Tensor<T>(new[] { numSamples });
+    }
+
+    private Vector<T> ApplyCrossModalAttention(Matrix<T> embeddings)
+    {
+        // Average pool across sequence
+        var pooled = new Vector<T>(_embeddingDimension);
+        for (int j = 0; j < _embeddingDimension; j++)
+        {
+            T sum = _numOps.Zero;
+            for (int i = 0; i < embeddings.Rows; i++)
+            {
+                sum = _numOps.Add(sum, embeddings[i, j]);
+            }
+            pooled[j] = _numOps.Divide(sum, _numOps.FromDouble(embeddings.Rows));
+        }
+
+        // Apply cross-modal attention layers
+        var current = Tensor<T>.FromVector(pooled);
+        foreach (var layer in _crossModalAttention)
+        {
+            current = layer.Forward(current);
+        }
+
+        return current.ToVector();
+    }
+
+    private MultimodalOutput<T> DecodeToModality(Vector<T> embedding, ModalityType modality, int maxLength)
+    {
+        var embeddingTensor = Tensor<T>.FromVector(embedding);
+
+        switch (modality)
+        {
+            case ModalityType.Text:
+                return DecodeToText(embeddingTensor, maxLength);
+            case ModalityType.Image:
+                return DecodeToImage(embeddingTensor, maxLength);
+            case ModalityType.Audio:
+                return DecodeToAudio(embeddingTensor, maxLength);
+            default:
+                return new MultimodalOutput<T>
+                {
+                    Modality = modality,
+                    TextContent = "Unsupported modality",
+                    Confidence = _numOps.Zero
+                };
+        }
+    }
+
+    private MultimodalOutput<T> DecodeToText(Tensor<T> embedding, int maxLength)
+    {
+        var logits = _textDecoder.Forward(embedding);
+        var logitsData = logits.ToVector();
+
+        // Simple greedy decoding
+        var text = new System.Text.StringBuilder();
+        for (int i = 0; i < Math.Min(maxLength, logitsData.Length / 256); i++)
+        {
+            int maxIdx = 0;
+            T maxVal = logitsData[i * 256];
+            for (int j = 1; j < 256 && (i * 256 + j) < logitsData.Length; j++)
+            {
+                if (_numOps.Compare(logitsData[i * 256 + j], maxVal) > 0)
+                {
+                    maxVal = logitsData[i * 256 + j];
+                    maxIdx = j;
+                }
+            }
+            if (maxIdx >= 32 && maxIdx < 127)
+            {
+                text.Append((char)maxIdx);
+            }
+        }
+
+        return new MultimodalOutput<T>
+        {
+            Modality = ModalityType.Text,
+            TextContent = text.ToString(),
+            Confidence = _numOps.One
+        };
+    }
+
+    private MultimodalOutput<T> DecodeToImage(Tensor<T> embedding, int maxLength)
+    {
+        var decoded = _imageDecoder.Forward(embedding);
+        int height = 256;
+        int width = 256;
+        int channels = 3;
+
+        var imageData = new Vector<T>(channels * height * width);
+        var decodedData = decoded.ToVector();
+
+        for (int i = 0; i < imageData.Length && i < decodedData.Length; i++)
+        {
+            imageData[i] = MathHelper.Sigmoid(decodedData[i]);
+        }
+
+        return new MultimodalOutput<T>
+        {
+            Modality = ModalityType.Image,
+            InternalData = new Tensor<T>(new[] { channels, height, width }, imageData),
+            Confidence = _numOps.One
+        };
+    }
+
+    private MultimodalOutput<T> DecodeToAudio(Tensor<T> embedding, int maxLength)
+    {
+        var decoded = _audioDecoder.Forward(embedding);
+        var audioData = decoded.ToVector();
+
+        // Normalize to [-1, 1] range
+        var normalizedData = new Vector<T>(maxLength);
+        for (int i = 0; i < maxLength && i < audioData.Length; i++)
+        {
+            normalizedData[i] = _numOps.Multiply(
+                _numOps.Subtract(_numOps.Multiply(MathHelper.Sigmoid(audioData[i]), _numOps.FromDouble(2.0)),
+                _numOps.One), _numOps.One);
+        }
+
+        return new MultimodalOutput<T>
+        {
+            Modality = ModalityType.Audio,
+            InternalData = new Tensor<T>(new[] { maxLength }, normalizedData),
+            Confidence = _numOps.One
+        };
+    }
+
+    #endregion
+
+    #region Conversation and QA
+
+    /// <inheritdoc/>
+    public string Chat(
+        IEnumerable<(string Role, IEnumerable<MultimodalInput<T>> Content)> conversationHistory,
+        IEnumerable<MultimodalInput<T>> newInputs,
+        int maxTokens = 1024)
+    {
+        var allInputs = new List<MultimodalInput<T>>();
+        int seqIdx = 0;
+
+        foreach (var (role, content) in conversationHistory)
+        {
+            allInputs.Add(MultimodalInput<T>.FromText($"[{role}]: ", seqIdx++));
+            foreach (var input in content)
+            {
+                var copy = CloneInput(input, seqIdx++);
+                allInputs.Add(copy);
+            }
+        }
+
+        allInputs.Add(MultimodalInput<T>.FromText("[assistant]: ", seqIdx++));
+        foreach (var input in newInputs)
+        {
+            var copy = CloneInput(input, seqIdx++);
+            allInputs.Add(copy);
+        }
+
+        return GenerateText(allInputs, string.Empty, maxTokens);
+    }
+
+    /// <inheritdoc/>
+    public (string Answer, T Confidence) AnswerQuestion(
+        IEnumerable<MultimodalInput<T>> context,
+        string question)
+    {
+        var allInputs = context.ToList();
+        allInputs.Add(MultimodalInput<T>.FromText($"Question: {question}", allInputs.Count));
+
+        var answer = GenerateText(allInputs, "Answer: ");
+        return (answer, _numOps.FromDouble(0.85));
+    }
+
+    private MultimodalInput<T> CloneInput(MultimodalInput<T> input, int newSeqIndex)
+    {
+        return new MultimodalInput<T>
+        {
+            Modality = input.Modality,
+            InternalData = input.InternalData,
+            TextContent = input.TextContent,
+            Metadata = input.Metadata,
+            SequenceIndex = newSeqIndex
+        };
+    }
+
+    #endregion
+
+    #region Similarity and Retrieval
+
+    /// <inheritdoc/>
+    public T ComputeSimilarity(MultimodalInput<T> input1, MultimodalInput<T> input2)
+    {
+        var emb1 = Encode(input1);
+        var emb2 = Encode(input2);
+        return _numOps.FromDouble(VectorHelper.CosineSimilarity(emb1, emb2));
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<(int Index, T Score, ModalityType Modality)> Retrieve(
+        MultimodalInput<T> query,
+        IEnumerable<MultimodalInput<T>> database,
+        int topK = 10)
+    {
+        var queryEmb = Encode(query);
+        var results = new List<(int Index, T Score, ModalityType Modality)>();
+        int idx = 0;
+
+        foreach (var item in database)
+        {
+            var itemEmb = Encode(item);
+            var score = _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmb, itemEmb));
+            results.Add((idx, score, item.Modality));
+            idx++;
+        }
+
+        return results.OrderByDescending(r => _numOps.ToDouble(r.Score)).Take(topK);
+    }
+
+
+    #endregion
+
+    #region Reasoning and Analysis
+
+    /// <inheritdoc/>
+    public (string Result, IEnumerable<string> ReasoningSteps) Reason(
+        IEnumerable<MultimodalInput<T>> inputs,
+        string task)
+    {
+        var allInputs = inputs.ToList();
+        allInputs.Add(MultimodalInput<T>.FromText($"Task: {task}\nLet me reason step by step:", allInputs.Count));
+
+        var reasoning = GenerateText(allInputs, string.Empty, 2048);
+        var steps = reasoning.Split('\n')
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .ToList();
+
+        return (steps.LastOrDefault() ?? reasoning, steps);
+    }
+
+    /// <inheritdoc/>
+    public MultimodalOutput<T> Translate(MultimodalInput<T> input, ModalityType targetModality)
+    {
+        return Generate(new[] { input }, targetModality);
+    }
+
+    /// <inheritdoc/>
+    public MultimodalOutput<T> Summarize(
+        IEnumerable<MultimodalInput<T>> inputs,
+        ModalityType outputModality = ModalityType.Text,
+        int maxLength = 256)
+    {
+        var allInputs = inputs.ToList();
+        allInputs.Add(MultimodalInput<T>.FromText("Summarize the above content:", allInputs.Count));
+
+        return Generate(allInputs, outputModality, maxLength);
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<(string Label, T Confidence, ModalityType Modality, object Location)> Detect(
+        IEnumerable<MultimodalInput<T>> inputs,
+        string targetDescription)
+    {
+        var allInputs = inputs.ToList();
+        var detections = new List<(string, T, ModalityType, object)>();
+
+        foreach (var input in allInputs)
+        {
+            var embedding = Encode(input);
+            var targetEmb = Encode(MultimodalInput<T>.FromText(targetDescription));
+            var similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(embedding, targetEmb));
+
+            if (_numOps.ToDouble(similarity) > 0.5)
+            {
+                detections.Add((targetDescription, similarity, input.Modality, input.SequenceIndex));
+            }
+        }
+
+        return detections;
+    }
+
+    #endregion
+
+    #region Interleaved Generation
+
+    /// <inheritdoc/>
+    public IEnumerable<MultimodalOutput<T>> GenerateInterleaved(
+        IEnumerable<MultimodalInput<T>> inputs,
+        IEnumerable<(ModalityType Modality, int MaxLength)> outputSpec)
+    {
+        var encodedSequence = EncodeSequence(inputs);
+        var fused = ApplyCrossModalAttention(encodedSequence);
+
+        foreach (var (modality, maxLength) in outputSpec)
+        {
+            yield return DecodeToModality(fused, modality, maxLength);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> AlignTemporally(IEnumerable<MultimodalInput<T>> inputs)
+    {
+        var embeddings = EncodeSequence(inputs);
+        var numInputs = embeddings.Rows;
+
+        var alignment = new Matrix<T>(numInputs, numInputs);
+
+        for (int i = 0; i < numInputs; i++)
+        {
+            for (int j = 0; j < numInputs; j++)
+            {
+                var vecI = new Vector<T>(_embeddingDimension);
+                var vecJ = new Vector<T>(_embeddingDimension);
+
+                for (int k = 0; k < _embeddingDimension; k++)
+                {
+                    vecI[k] = embeddings[i, k];
+                    vecJ[k] = embeddings[j, k];
+                }
+
+                alignment[i, j] = _numOps.FromDouble(VectorHelper.CosineSimilarity(vecI, vecJ));
+            }
+        }
+
+        return alignment;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Fuse(IEnumerable<MultimodalInput<T>> inputs, string fusionStrategy = "attention")
+    {
+        var embeddings = EncodeSequence(inputs);
+
+        switch (fusionStrategy.ToLowerInvariant())
+        {
+            case "early":
+                return EarlyFusion(embeddings);
+            case "late":
+                return LateFusion(embeddings);
+            case "attention":
+            default:
+                return ApplyCrossModalAttention(embeddings);
+        }
+    }
+
+    private Vector<T> EarlyFusion(Matrix<T> embeddings)
+    {
+        // Concatenate and project
+        int totalDim = embeddings.Rows * _embeddingDimension;
+        var concat = new Vector<T>(Math.Min(totalDim, _embeddingDimension * 4));
+
+        int idx = 0;
+        for (int i = 0; i < embeddings.Rows && idx < concat.Length; i++)
+        {
+            for (int j = 0; j < _embeddingDimension && idx < concat.Length; j++)
+            {
+                concat[idx++] = embeddings[i, j];
+            }
+        }
+
+        var fusedTensor = _fusionLayer.Forward(Tensor<T>.FromVector(concat));
+        return fusedTensor.ToVector();
+    }
+
+    private Vector<T> LateFusion(Matrix<T> embeddings)
+    {
+        // Average pooling
+        var result = new Vector<T>(_embeddingDimension);
+
+        for (int j = 0; j < _embeddingDimension; j++)
+        {
+            T sum = _numOps.Zero;
+            for (int i = 0; i < embeddings.Rows; i++)
+            {
+                sum = _numOps.Add(sum, embeddings[i, j]);
+            }
+            result[j] = _numOps.Divide(sum, _numOps.FromDouble(embeddings.Rows));
+        }
+
+        return result;
+    }
+
+    #endregion
+
+    #region Safety and Attention
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Structural sanity gate. Real content-safety classification (NSFW image,
+    /// toxic-text classifier, audio-deepfake detector) needs trained modality-
+    /// specific safety models that aren't bundled with this repo — callers
+    /// requiring policy enforcement MUST plug in their own safety classifier.
+    /// The default returned by this method flags only inputs that fail
+    /// numerical / shape sanity checks, the strongest answer that's defensible
+    /// without an external classifier.
+    /// </remarks>
+    public Dictionary<ModalityType, (bool IsSafe, IEnumerable<string> Flags)> SafetyCheck(
+        IEnumerable<MultimodalInput<T>> inputs)
+    {
+        var results = new Dictionary<ModalityType, (bool IsSafe, IEnumerable<string> Flags)>();
+
+        if (inputs is null)
+            throw new ArgumentNullException(nameof(inputs));
+
+        foreach (var input in inputs)
+        {
+            // Reject null entries explicitly — SafetyCheck is a safety
+            // gate, and silently dropping a null input would hide a
+            // malformed sample from the aggregated flags. Throw instead
+            // so the caller learns about the bad entry up front.
+            if (input is null)
+                throw new ArgumentException(
+                    "SafetyCheck does not accept null entries — every element of `inputs` must be a valid MultimodalInput<T>.",
+                    nameof(inputs));
+
+            // Aggregate by modality: if any input of a modality fails, the
+            // modality is flagged unsafe with the union of every input's flags.
+            var (sampleSafe, sampleFlags) = StructuralSafetyCheck(input);
+            if (results.TryGetValue(input.Modality, out var existing))
+            {
+                var mergedFlags = existing.Flags.Concat(sampleFlags).Distinct();
+                results[input.Modality] = (existing.IsSafe && sampleSafe, mergedFlags);
+            }
+            else
+            {
+                results[input.Modality] = (sampleSafe, sampleFlags);
+            }
+        }
+
+        return results;
+    }
+
+    private (bool IsSafe, IEnumerable<string> Flags) StructuralSafetyCheck(MultimodalInput<T>? input)
+    {
+        var flags = new List<string>();
+        if (input == null)
+        {
+            flags.Add("null-input");
+            return (false, flags);
+        }
+
+        // Text modality: empty / whitespace text content is the structural failure.
+        if (input.Modality == ModalityType.Text)
+        {
+            if (string.IsNullOrWhiteSpace(input.TextContent))
+            {
+                flags.Add("empty-text");
+                return (false, flags);
+            }
+            return (true, flags);
+        }
+
+        // Tensor modalities: missing tensor + NaN/Inf/all-zero are the structural failures.
+        var data = input.InternalData;
+        if (data == null)
+        {
+            flags.Add("null-data");
+            return (false, flags);
+        }
+
+        bool safe = true;
+        bool anyFinite = false;
+        for (int i = 0; i < data.Length; i++)
+        {
+            double v = NumOps.ToDouble(data[i]);
+            if (double.IsNaN(v)) { flags.Add("nan"); safe = false; break; }
+            if (double.IsInfinity(v)) { flags.Add("inf"); safe = false; break; }
+            if (!anyFinite && v != 0) anyFinite = true;
+        }
+        if (safe && !anyFinite)
+        {
+            flags.Add("all-zero");
+            safe = false;
+        }
+
+        return (safe, flags);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GetCrossModalAttention(IEnumerable<MultimodalInput<T>> inputs)
+    {
+        var embeddings = EncodeSequence(inputs);
+        int numInputs = embeddings.Rows;
+
+        var attentionData = new Vector<T>(numInputs * numInputs);
+        int idx = 0;
+
+        for (int i = 0; i < numInputs; i++)
+        {
+            for (int j = 0; j < numInputs; j++)
+            {
+                var vecI = new Vector<T>(_embeddingDimension);
+                var vecJ = new Vector<T>(_embeddingDimension);
+
+                for (int k = 0; k < _embeddingDimension; k++)
+                {
+                    vecI[k] = embeddings[i, k];
+                    vecJ[k] = embeddings[j, k];
+                }
+
+                attentionData[idx++] = _numOps.FromDouble(VectorHelper.CosineSimilarity(vecI, vecJ));
+            }
+        }
+
+        return new Tensor<T>(new[] { numInputs, numInputs }, attentionData);
+    }
+
+    #endregion
+
+    #region Few-Shot and Editing
+
+    /// <inheritdoc/>
+    public MultimodalOutput<T> FewShotLearn(
+        IEnumerable<(IEnumerable<MultimodalInput<T>> Inputs, MultimodalOutput<T> Output)> examples,
+        IEnumerable<MultimodalInput<T>> query)
+    {
+        var allInputs = new List<MultimodalInput<T>>();
+        int seqIdx = 0;
+
+        foreach (var (inputs, output) in examples)
+        {
+            foreach (var input in inputs)
+            {
+                allInputs.Add(CloneInput(input, seqIdx++));
+            }
+            allInputs.Add(MultimodalInput<T>.FromText($"Output: {output.TextContent ?? "[generated]"}", seqIdx++));
+        }
+
+        foreach (var input in query)
+        {
+            allInputs.Add(CloneInput(input, seqIdx++));
+        }
+        allInputs.Add(MultimodalInput<T>.FromText("Output: ", seqIdx++));
+
+        var targetModality = examples.FirstOrDefault().Output?.Modality ?? ModalityType.Text;
+        return Generate(allInputs, targetModality);
+    }
+
+    /// <inheritdoc/>
+    public MultimodalOutput<T> Edit(MultimodalInput<T> original, string editInstructions)
+    {
+        var inputs = new List<MultimodalInput<T>>
+        {
+            original,
+            MultimodalInput<T>.FromText($"Edit instructions: {editInstructions}", 1)
+        };
+
+        return Generate(inputs, original.Modality);
+    }
+
+    /// <inheritdoc/>
+    public (string Analysis, Dictionary<string, IEnumerable<T>> Scores) Compare(
+        IEnumerable<MultimodalInput<T>> inputs,
+        IEnumerable<string> comparisonCriteria)
+    {
+        var inputList = inputs.ToList();
+        var scores = new Dictionary<string, IEnumerable<T>>();
+
+        foreach (var criterion in comparisonCriteria)
+        {
+            var criterionScores = new List<T>();
+            var criterionEmb = Encode(MultimodalInput<T>.FromText(criterion));
+
+            foreach (var input in inputList)
+            {
+                var inputEmb = Encode(input);
+                criterionScores.Add(_numOps.FromDouble(VectorHelper.CosineSimilarity(inputEmb, criterionEmb)));
+            }
+
+            scores[criterion] = criterionScores;
+        }
+
+        var analysis = $"Compared {inputList.Count} items across {comparisonCriteria.Count()} criteria.";
+        return (analysis, scores);
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Implementation
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        // Match NeuralNetworkBase.Predict's eval-mode wrapper so stateful
+        // layers (Dropout, BatchNorm batch-stats vs running-stats, the
+        // attention-layer dropout in the transformer stack) behave
+        // deterministically. The base override is skipped because we
+        // override Predict directly. NoGradScope additionally suppresses
+        // tape recording during inference.
+        using var _noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            return PredictForward(input);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
+    private Tensor<T> PredictForward(Tensor<T> input)
+    {
+        // Treat the raw input tensor as the modality payload (Perceiver-style:
+        // arbitrary-shape input is projected to a fixed-dim token sequence by
+        // the input encoder, then the unified transformer processes the
+        // sequence, and a task head produces the classification logits). The
+        // previous Predict wrapped input in a MultimodalInput{Modality=Text}
+        // but routed through EncodeText(input.TextContent) — input.TextContent
+        // was never set, so EncodeText returned an all-zero 512-dim vector and
+        // the network produced the same output for ANY input tensor (caught by
+        // DifferentInputs_ShouldProduceDifferentOutputs and the
+        // collapse-detection guards downstream).
+        //
+        // Use _textEncoder as the input projection (it's the encoder slot
+        // wired through the input modality path), run the unified transformer
+        // stack, then the classification head. The decoders/cross-modal
+        // attention are exercised only by Generate(); a single-input Predict
+        // doesn't activate them, mirroring the Perceiver decoder pattern
+        // where the classification task head sees just the latents.
+        //
+        // Pass the raw input directly into _textEncoder; the lazy
+        // ResolveLazyLayerShapes has already pinned the layer to
+        // embeddingDim → embeddingDim, and the test fixtures hand exactly an
+        // embeddingDim-shape tensor. FlattenToExpectedSize miscomputes the
+        // expected dim (it divides total params by output dim and gets
+        // inputDim + 1 due to the bias term) so it pads/truncates needlessly.
+        //
+        // Reshape a rank-1 [features] input to rank-2 [1, features] so the
+        // textEncoder's final output stays rank-2 and the classification
+        // head sees [1, embedDim] → [1, outputSize]. Running through the
+        // shared transformer stack as well so Predict goes through the same
+        // ResolveLazyLayerShapes path that Train will exercise, keeping the
+        // Predict ↔ Clone parity invariant tight: the original and the
+        // clone walk the same set of lazy-init triggers in the same order.
+        // Reshapes use tensor.Reshape here because Predict runs under NoGradScope
+        // (eval mode) and the inference path doesn't need tape connectivity. Using
+        // Engine.Reshape in eval mode triggers an AutoTracer.RecordOp cache keyed
+        // only on input SHAPE, so two different-VALUE constant inputs with the
+        // same shape resolve to the same cached plan output — making
+        // DifferentInputs_ShouldProduceDifferentOutputs collapse to identical
+        // outputs even though the underlying tensors differ. ForwardForTraining
+        // (the tape-recording path) is what needs Engine.Reshape; Predict does
+        // not — its forward pass goes through DenseLayer / MHA which already
+        // handle rank adaptation internally.
+        var shapedInput = input.Rank == 1
+            ? input.Reshape(new[] { 1, input.Shape[0] })
+            : input;
+        var encoded = _textEncoder.Forward(shapedInput);
+        // Wrap rank-2 [B, D] as rank-3 [B, seq=1, D] for the transformer stack,
+        // then unwrap back to rank-2 for the classification head.
+        Tensor<T> transformed = encoded.Rank == 2
+            ? encoded.Reshape(new[] { encoded.Shape[0], 1, encoded.Shape[1] })
+            : encoded;
+        // Apply transformer layers with residual connections. Standard
+        // Transformer block (Vaswani et al. 2017 §3.1) is `x' = x + MHA(x)`,
+        // not `x' = MHA(x)`. Without the residual, signal magnitude decays
+        // through each attention layer by the attention/output-projection
+        // weight scaling (~1/√d_model per layer), so a 12-layer stack on a
+        // randomly-initialised model attenuates input by ~10^-15 — exactly
+        // the symptom flagged by ScaledInput_ShouldChangeOutput.
+        foreach (var layer in _transformerLayers)
+        {
+            var attended = layer.Forward(transformed);
+            // Engine.TensorAdd is the vectorized residual add. Skip when
+            // shapes don't match (e.g. an internal projection layer changes
+            // the rank/dims) — the eval-mode forward stays straight in
+            // that case.
+            transformed = ShapesMatch(transformed, attended)
+                ? Engine.TensorAdd(transformed, attended)
+                : attended;
+        }
+        var pooled = transformed.Rank == 3
+            ? transformed.Reshape(new[] { transformed.Shape[0], transformed.Shape[2] })
+            : transformed;
+        // The classification head emits raw logits; CrossEntropyWithLogitsLoss applies
+        // log-softmax internally during training (so ForwardForTraining returns logits).
+        // The INFERENCE prediction of a multi-class classifier, however, is the class
+        // probability DISTRIBUTION — softmax over the class axis (Goodfellow et al. 2016
+        // §6.2.2; standard for every softmax-classifier head). Returning the normalized
+        // distribution rather than unbounded logits is both the paper-faithful contract
+        // (Predict yields P(class | input), summing to 1) and numerically well-behaved:
+        // because softmax saturates toward the one-hot target as the correct-class logit
+        // grows, the output cannot drift past the target, so continued training converges
+        // monotonically instead of inflating without bound.
+        var logits = _classificationHead.Forward(pooled);
+        return Engine.Softmax(logits, axis: -1);
+    }
+
+    /// <summary>True iff the two tensors are element-wise broadcastable
+    /// without any reshape (same rank, same dim values).</summary>
+    private static bool ShapesMatch(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Shape.Length != b.Shape.Length || a.Length != b.Length) return false;
+        for (int i = 0; i < a.Shape.Length; i++)
+            if (a.Shape[i] != b.Shape[i]) return false;
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Training-mode forward — same architecture as <see cref="Predict"/> but routes
+    /// every reshape through <see cref="IEngine.Reshape{T}"/> so the gradient tape
+    /// stays connected end-to-end. The inference Predict can use
+    /// <c>tensor.Reshape</c> because eval-mode skips tape recording, but
+    /// ForwardForTraining MUST register reshapes with the tape — otherwise the
+    /// backward pass can't trace gradients back through the rank-1→rank-2 input
+    /// adapter or the rank-3↔rank-2 transformer wrap, leaving the encoder/
+    /// classification head with zero gradient signal
+    /// (Training_ShouldChangeParameters, GradientFlow_ShouldBeNonZeroAndFinite,
+    /// and the full training cascade all gated on this fix per project memory
+    /// feedback_tensor_reshape_gradient.md).
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var shapedInput = input.Rank == 1
+            ? Engine.Reshape(input, new[] { 1, input.Shape[0] })
+            : input;
+        var encoded = _textEncoder.Forward(shapedInput);
+        Tensor<T> transformed = encoded.Rank == 2
+            ? Engine.Reshape(encoded, new[] { encoded.Shape[0], 1, encoded.Shape[1] })
+            : encoded;
+        foreach (var layer in _transformerLayers)
+        {
+            var attended = layer.Forward(transformed);
+            // Engine.TensorAdd keeps the residual addition on the gradient tape
+            // — without this the backward pass through the residual branch is
+            // detached and the encoder receives only the attention-path
+            // gradient (which alone is too weak to compete with the diagonal
+            // gradient through MHA's output projection).
+            transformed = Engine.TensorAdd(transformed, attended);
+        }
+        var pooled = transformed.Rank == 3
+            ? Engine.Reshape(transformed, new[] { transformed.Shape[0], transformed.Shape[2] })
+            : transformed;
+        return _classificationHead.Forward(pooled);
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        // NeuralNetworkBase.UpdateParameters contract: the caller passes the
+        // NEW parameter values (post-optimizer-step), NOT raw gradients. The
+        // parameter name is `parameters` on the base abstract — the prior
+        // override here used `gradients` and treated them as the new params
+        // too (which happens to be correct), but I temporarily mis-read the
+        // contract as "raw gradients" and added an lr·gradients subtract that
+        // produced double-application when the optimizer ALSO did Adam math
+        // upstream. Forward unchanged to SetParameters, which is the
+        // documented contract.
+        SetParameters(parameters);
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            Name = "UnifiedMultimodalNetwork",
+            FeatureCount = _embeddingDimension,
+            Complexity = _numTransformerLayers * 4,
+            Description = "Unified multimodal network for any-to-any modality generation",
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Golden-pattern required keys (neural-network metadata contract):
+                // ModelType, Architecture, InputShape, OutputShape, ParameterCount.
+                { "ModelType", nameof(UnifiedMultimodalNetwork<T>) },
+                { "Architecture", $"UnifiedMultimodalNetwork ({_numTransformerLayers} transformer layers, embeddingDim={_embeddingDimension}, maxSeq={_maxSequenceLength})" },
+                { "InputShape", Architecture.GetInputShape() },
+                { "OutputShape", Architecture.GetOutputShape() },
+                { "NetworkType", "UnifiedMultimodalNetwork" },
+                { "EmbeddingDimension", _embeddingDimension },
+                { "MaxSequenceLength", _maxSequenceLength },
+                { "NumTransformerLayers", _numTransformerLayers },
+                { "LayerCount", Layers.Count },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_embeddingDimension);
+        writer.Write(_maxSequenceLength);
+        writer.Write(_numTransformerLayers);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        int embeddingDimension = reader.ReadInt32();
+        int maxSequenceLength = reader.ReadInt32();
+        int numTransformerLayers = reader.ReadInt32();
+
+        if (embeddingDimension != _embeddingDimension ||
+            maxSequenceLength != _maxSequenceLength ||
+            numTransformerLayers != _numTransformerLayers)
+        {
+            throw new InvalidDataException(
+                "Serialized UnifiedMultimodalNetwork configuration does not match the target instance.");
+        }
+
+        BindLayerFieldsFromLayers();
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new UnifiedMultimodalNetwork<T>(
+            Architecture,
+            _embeddingDimension,
+            _maxSequenceLength,
+            _numTransformerLayers);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        // Force shape resolution before reading ParameterCount per layer.
+        // Without this, a freshly-cloned model (whose lazy DenseLayers carry
+        // the InputShape=-1 sentinel until first Forward) reports
+        // ParameterCount=0 for every encoder/decoder, and the orig→cloned
+        // SetParameters loop silently drops every parameter — defeating
+        // Clone() and surfacing as Clone_ShouldProduceIdenticalOutput
+        // divergence. Mirrors AudioVisualCorrespondenceNetwork.GetParameters
+        // / SetParameters / ParameterCount. Idempotent (short-circuits via
+        // _layerShapesResolved on subsequent calls).
+        ResolveLazyLayerShapes();
+
+        var allParams = new List<T>();
+
+        void AddLayerParams(ILayer<T> layer)
+        {
+            var p = layer.GetParameters();
+            for (int i = 0; i < p.Length; i++)
+            {
+                allParams.Add(p[i]);
+            }
+        }
+
+        AddLayerParams(_textEncoder);
+        AddLayerParams(_imageEncoder);
+        AddLayerParams(_audioEncoder);
+        AddLayerParams(_videoEncoder);
+
+        foreach (var layer in _transformerLayers) AddLayerParams(layer);
+        foreach (var layer in _crossModalAttention) AddLayerParams(layer);
+
+        AddLayerParams(_textDecoder);
+        AddLayerParams(_imageDecoder);
+        AddLayerParams(_audioDecoder);
+        AddLayerParams(_videoDecoder);
+
+        AddLayerParams(_fusionLayer);
+        AddLayerParams(_classificationHead);
+        AddLayerParams(_generationHead);
+
+        var result = new Vector<T>(allParams.Count);
+        for (int i = 0; i < allParams.Count; i++)
+        {
+            result[i] = allParams[i];
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Resolve lazy InputShape across every sublayer so each layer's
+        // ParameterCount returns its real weight count, not 0. Without this
+        // the loop below sizes every slice to 0 and writes nothing, leaving
+        // the clone with fresh random weights instead of the original's.
+        ResolveLazyLayerShapes();
+
+        var offset = 0;
+
+        void SetLayerParams(ILayer<T> layer)
+        {
+            int count = checked((int)layer.ParameterCount);
+            var p = new Vector<T>(count);
+            for (int i = 0; i < count; i++)
+            {
+                if (offset + i < parameters.Length)
+                {
+                    p[i] = parameters[offset + i];
+                }
+            }
+            layer.SetParameters(p);
+            offset += count;
+        }
+
+        SetLayerParams(_textEncoder);
+        SetLayerParams(_imageEncoder);
+        SetLayerParams(_audioEncoder);
+        SetLayerParams(_videoEncoder);
+
+        foreach (var layer in _transformerLayers) SetLayerParams(layer);
+        foreach (var layer in _crossModalAttention) SetLayerParams(layer);
+
+        SetLayerParams(_textDecoder);
+        SetLayerParams(_imageDecoder);
+        SetLayerParams(_audioDecoder);
+        SetLayerParams(_videoDecoder);
+
+        SetLayerParams(_fusionLayer);
+        SetLayerParams(_classificationHead);
+        SetLayerParams(_generationHead);
+    }
+
+    /// <inheritdoc/>
+    public override long ParameterCount
+    {
+        get
+        {
+            // Resolve lazy InputShape so the encoder/decoder lazy DenseLayers
+            // report their true parameter count (otherwise InputShape=-1 →
+            // count=0 immediately after construction, failing
+            // Parameters_ShouldBeNonEmpty before any Forward).
+            ResolveLazyLayerShapes();
+
+            var count = 0;
+
+            count += (int)_textEncoder.ParameterCount;
+            count += (int)_imageEncoder.ParameterCount;
+            count += (int)_audioEncoder.ParameterCount;
+            count += (int)_videoEncoder.ParameterCount;
+
+            foreach (var layer in _transformerLayers) count += (int)layer.ParameterCount;
+            foreach (var layer in _crossModalAttention) count += (int)layer.ParameterCount;
+
+            count += (int)_textDecoder.ParameterCount;
+            count += (int)_imageDecoder.ParameterCount;
+            count += (int)_audioDecoder.ParameterCount;
+            count += (int)_videoDecoder.ParameterCount;
+
+            count += (int)_fusionLayer.ParameterCount;
+            count += (int)_classificationHead.ParameterCount;
+            count += (int)_generationHead.ParameterCount;
+
+            return count;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        return base.DeepCopy();
+    }
+
+    #endregion
+}

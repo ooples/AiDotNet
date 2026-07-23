@@ -1,0 +1,455 @@
+// Copyright (c) AiDotNet. All rights reserved.
+// #99 Stage 1b end-to-end: a real (embedding-based) transformer LM served through
+// ServableModelWrapper drives KV-cached incremental decode via per-request sessions. Proves the
+// wrapper builds the incremental path, generation produces in-range tokens, and concurrent requests
+// to the SAME model are isolated (the user's core requirement) — not just layer-level.
+
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Serving.Configuration;
+using AiDotNet.Serving.Models;
+using AiDotNet.Serving.Services;
+using AiDotNet.Serving.StructuredOutput;
+using AiDotNet.Tensors.LinearAlgebra;
+using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
+
+namespace AiDotNet.Serving.Tests.IntegrationTests;
+
+public class IncrementalGenerationEndToEndTests
+{
+    private const int Vocab = 12;
+    private const int EmbDim = 8;
+    private const int Heads = 2;
+
+    private static NeuralNetwork<float> BuildLm()
+    {
+        var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new EmbeddingLayer<float>(Vocab, EmbDim),
+            new MultiHeadAttentionLayer<float>(Heads, EmbDim / Heads,
+                activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
+            new FlattenLayer<float>(),
+            new DenseLayer<float>(Vocab, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.TextGeneration,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1,
+            outputSize: Vocab,
+            layers: layers);
+
+        var model = new NeuralNetwork<float>(architecture);
+        // Deterministic weights so generation is reproducible.
+        var p = model.GetParameters();
+        var det = new float[p.Length];
+        for (int i = 0; i < det.Length; i++) det[i] = ((i % 17) - 8) / 16.0f;
+        model.UpdateParameters(new Vector<float>(det));
+        return model;
+    }
+
+    private static (TextGenerationService Service, ServableModelWrapper<float> Wrapper) BuildService(bool quantize = false)
+    {
+        var model = BuildLm();
+        var wrapper = new ServableModelWrapper<float>(
+            "lm", model, inputShape: new[] { 1 }, generationForward: model.Predict,
+            quantizeIncrementalWeights: quantize);
+        var repo = new OneModelRepo("lm", wrapper);
+        return (new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance), wrapper);
+    }
+
+    private static SpeculativeDecodingRequest Req(int[] tokens) => new()
+    {
+        InputTokens = tokens,
+        MaxNewTokens = 5,
+        EosTokenId = 999, // out of range -> run to the token limit
+        NumDraftTokens = 2,
+        // Greedy (argmax): these tests assert determinism / isolation / no-state-leak, which hold for
+        // greedy decode. The unified engine samples per temperature (temp>0 => stochastic), so the
+        // deterministic assertions require an explicit greedy precondition.
+        Temperature = 0
+    };
+
+    [Fact(Timeout = 120000)]
+    public async Task ServedLm_BuildsIncrementalPath_AndGenerates()
+    {
+        await Task.Yield();
+        var (service, wrapper) = BuildService();
+
+        Assert.True(wrapper.SupportsIncrementalGeneration,
+            "wrapper should build the KV-cached incremental path for an optimizable transformer LM");
+
+        var resp = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 }));
+
+        Assert.Null(resp.Error);
+        Assert.Equal(5, resp.NumGenerated);
+        Assert.Equal(resp.NumGenerated, resp.GeneratedTokens.Length);
+        Assert.All(resp.GeneratedTokens, t => Assert.InRange(t, 0, Vocab - 1));
+        Assert.Equal(new[] { 1, 2, 3 }, resp.AllTokens[..3]);
+    }
+
+    /// <summary>
+    /// A grouped-query (numHeads &gt; numKVHeads) PreLN decoder served through ServableModelWrapper must build
+    /// the paged KV-cached incremental path — the end-to-end proof that the paged-GQA support (GQA-aware kernel
+    /// + narrow-K/V paged layer + optimizer rewrite + PreLNTransformerBlock/GQA cloning) actually engages in
+    /// serving. Before it, BuildIncrementalModel's clone threw and the wrapper silently fell back to the
+    /// stateless path (SupportsIncrementalGeneration was false for every LLaMA/GGUF-style decoder).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ServedGqaDecoder_BuildsIncrementalPagedPath_AndGenerates()
+    {
+        await Task.Yield();
+        var model = BuildGqaLm();
+        var wrapper = new ServableModelWrapper<float>(
+            "gqa", model, inputShape: new[] { 1 }, generationForward: model.Predict);
+        var repo = new OneModelRepo("gqa", wrapper);
+        var service = new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance);
+
+        Assert.True(wrapper.SupportsIncrementalGeneration,
+            "wrapper should build the paged KV-cached incremental path for a grouped-query PreLN decoder");
+
+        var resp = service.Generate("gqa", NumericType.Float, Req(new[] { 1, 2, 3 }));
+
+        Assert.Null(resp.Error);
+        Assert.Equal(5, resp.NumGenerated);
+        Assert.All(resp.GeneratedTokens, t => Assert.InRange(t, 0, Vocab - 1));
+    }
+
+    private static NeuralNetwork<float> BuildGqaLm()
+    {
+        const int numHeads = 4;
+        const int numKVHeads = 2;
+        const int ffnDim = 16;
+
+        var gqa = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: 1,
+            embeddingDimension: EmbDim,
+            numHeads: numHeads,
+            numKVHeads: numKVHeads,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>(),
+            useCausalMask: true);
+        gqa.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta: 10000.0, maxSequenceLength: 512);
+
+        var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new EmbeddingLayer<float>(Vocab, EmbDim),
+            new PreLNTransformerBlock<float>(hiddenSize: EmbDim, ffnDim: ffnDim, attention: gqa, gated: true),
+            new RMSNormalizationLayer<float>(),
+            new DenseLayer<float>(Vocab, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.TextGeneration,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1,
+            outputSize: Vocab,
+            layers: layers);
+
+        var model = new NeuralNetwork<float>(architecture);
+        var p = model.GetParameters();
+        var det = new float[p.Length];
+        for (int i = 0; i < det.Length; i++) det[i] = ((i % 17) - 8) / 16.0f;
+        model.UpdateParameters(new Vector<float>(det));
+        return model;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StructuredConstraint_IsHonored_OnIncrementalPagedPath()
+    {
+        await Task.Yield();
+        var (service, wrapper) = BuildService();
+
+        // This exercises the PRODUCTION path — the KV-cached incremental paged batcher — not the stateless
+        // fallback. The constraint forces an exact token sequence regardless of the model's own logits.
+        Assert.True(wrapper.SupportsIncrementalGeneration);
+
+        var request = new SpeculativeDecodingRequest
+        {
+            InputTokens = new[] { 1, 2, 3 },
+            MaxNewTokens = 5,           // larger than the constrained output
+            EosTokenId = 999,           // out of range -> constraint's stop-on-complete must terminate
+            NumDraftTokens = 2,         // speculation requested; the constraint must disable it
+            Temperature = 0,
+            Constraint = TokenFsmConstraint.FromSequence(new[] { 4, 7, 5 }, eosTokenId: 999)
+        };
+
+        var resp = service.Generate("lm", NumericType.Float, request);
+
+        Assert.Null(resp.Error);
+        Assert.Equal(new[] { 4, 7, 5 }, resp.GeneratedTokens); // forced tokens on the paged path
+        Assert.Equal(3, resp.NumGenerated);                    // stopped exactly when the constraint completed
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task QuantizedIncrementalServing_BuildsAndGenerates()
+    {
+        await Task.Yield();
+        var (service, wrapper) = BuildService(quantize: true);
+
+        Assert.True(wrapper.SupportsIncrementalGeneration,
+            "wrapper should build a quantized KV-cached incremental path");
+
+        var resp = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 }));
+
+        Assert.Null(resp.Error);
+        Assert.Equal(5, resp.NumGenerated);
+        Assert.All(resp.GeneratedTokens, t => Assert.InRange(t, 0, Vocab - 1));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConcurrentRequests_SameModel_AreIsolated()
+    {
+        await Task.Yield();
+        var (service, _) = BuildService();
+
+        var reqA = Req(new[] { 1, 2, 3 });
+        var reqB = Req(new[] { 7, 8 });
+
+        // Sequential references.
+        var refA = service.Generate("lm", NumericType.Float, reqA).GeneratedTokens;
+        var refB = service.Generate("lm", NumericType.Float, reqB).GeneratedTokens;
+
+        // Concurrent — each request opens its own session (distinct cache sequence id) over the
+        // shared optimized model + paged cache.
+        int[]? outA = null, outB = null;
+        await Task.WhenAll(
+            Task.Run(() => outA = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 })).GeneratedTokens),
+            Task.Run(() => outB = service.Generate("lm", NumericType.Float, Req(new[] { 7, 8 })).GeneratedTokens));
+
+        Assert.Equal(refA, outA);
+        Assert.Equal(refB, outB);
+    }
+
+    // Per-position LM (no Flatten): Embedding -> MHA -> Dense(vocab) maps [1,S] -> [1,S,vocab], so it
+    // accepts a multi-token forward (batched prefill / speculative verification).
+    private static NeuralNetwork<float> BuildPerPositionLm()
+    {
+        var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new EmbeddingLayer<float>(Vocab, EmbDim),
+            new MultiHeadAttentionLayer<float>(Heads, EmbDim / Heads,
+                activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
+            new DenseLayer<float>(Vocab, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.TextGeneration,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1,
+            outputSize: Vocab,
+            layers: layers);
+        var model = new NeuralNetwork<float>(architecture);
+        var p = model.GetParameters();
+        var det = new float[p.Length];
+        for (int i = 0; i < det.Length; i++) det[i] = ((i % 17) - 8) / 16.0f;
+        model.UpdateParameters(new Vector<float>(det));
+        return model;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SequenceCollapsingLm_DoesNotAdvertiseBatchedPrefill()
+    {
+        await Task.Yield();
+        // BuildLm is Embedding -> MHA -> Flatten -> Dense: the Flatten collapses the sequence into one
+        // fixed-width row, so a multi-token forward does NOT produce per-position logits (and would make
+        // a shape-dependent Dense re-fit its weights to the wider flattened input). The batched-prefill
+        // probe must reject it (require the position dimension to be preserved) so it uses per-token
+        // prefill. A false positive here fed [1,n] then [1,1] forwards of differing flattened widths and
+        // caused nondeterministic decode (the Dense layer re-initialized on each width change).
+        var model = BuildLm();
+        var wrapper = new ServableModelWrapper<float>("lm", model, inputShape: new[] { 1 }, generationForward: model.Predict);
+        Assert.False(wrapper.SupportsBatchedPrefill,
+            "a Flatten+Dense (sequence-collapsing) LM must not advertise batched prefill");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RepeatedRequests_SamePrompt_AreDeterministic()
+    {
+        await Task.Yield();
+        // Generations of the same prompt over the SAME served model (shared paged cache + prefix
+        // registry) must be byte-for-byte identical across repeated requests — no state leaks between
+        // requests. This is the sequential analogue of ConcurrentRequests_SameModel_AreIsolated and
+        // directly guards the per-token vs batched-prefill width-mismatch regression.
+        var (service, _) = BuildService();
+
+        var first = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 })).GeneratedTokens;
+        _ = service.Generate("lm", NumericType.Float, Req(new[] { 7, 8 })).GeneratedTokens;
+        var third = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 })).GeneratedTokens;
+        var fourth = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 })).GeneratedTokens;
+
+        Assert.Equal(first, third);
+        Assert.Equal(first, fourth);
+    }
+
+    private static (TextGenerationService Service, ServableModelWrapper<float> Wrapper) BuildPerPositionService()
+    {
+        var model = BuildPerPositionLm();
+        // Enable speculation explicitly: the wrapper now honors its EnableSpeculativeDecoding flag (rather
+        // than force-enabling when no facade config is present), and SpeculativeDecode_MatchesGreedy_AndAcceptsDrafts
+        // relies on prompt-lookup speculation actually running.
+        var wrapper = new ServableModelWrapper<float>("lm", model, inputShape: new[] { 1 }, enableSpeculativeDecoding: true, generationForward: model.Predict);
+        var repo = new OneModelRepo("lm", wrapper);
+        return (new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance), wrapper);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeculativeDecode_MatchesGreedy_AndAcceptsDrafts()
+    {
+        await Task.Yield();
+        // Prompt-lookup speculative decode (NumDraftTokens>0) over the paged cache must produce tokens
+        // byte-for-byte identical to plain greedy decode (NumDraftTokens=0): speculation is exact for
+        // greedy, it only changes how many forwards it takes. Rejected drafts roll the KV back via
+        // IGenerationSession.Truncate; accepted drafts keep their (correct) KV.
+        var (service, _) = BuildPerPositionService();
+        var prompt = new[] { 1, 2, 3 };
+
+        SpeculativeDecodingRequest Make(int draftTokens) => new()
+        {
+            InputTokens = prompt,
+            MaxNewTokens = 12,
+            EosTokenId = 999, // out of range -> run to the limit
+            NumDraftTokens = draftTokens,
+            // Prompt-lookup speculation is exact only for greedy decode, so assert equivalence greedily.
+            Temperature = 0
+        };
+
+        var greedy = service.Generate("lm", NumericType.Float, Make(0));
+        var spec = service.Generate("lm", NumericType.Float, Make(4));
+
+        Assert.Null(greedy.Error);
+        Assert.Null(spec.Error);
+        Assert.Equal(greedy.GeneratedTokens, spec.GeneratedTokens);
+        Assert.Equal(12, spec.NumGenerated);
+        // An untrained LM's greedy output is repetitive, so prompt-lookup finds matches and accepts.
+        Assert.True(spec.AcceptanceRate > 0.0,
+            $"prompt-lookup speculation should accept some drafts (acceptance={spec.AcceptanceRate}).");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FromModel_WithGenerationEnabled_YieldsGenerativeWrapper()
+    {
+        await Task.Yield();
+        var model = BuildPerPositionLm();
+
+        // Auto-detect path (the production loader path: ModelLoader.Load -> FromModel). Opting in to
+        // text generation must wire the token-to-logits forward + the KV-cached incremental path.
+        var generative = ServableModelWrapper<float>.FromModel(
+            "lm", model, enableBatching: true, enableSpeculativeDecoding: false,
+            enableTextGeneration: true);
+
+        Assert.True(generative.SupportsGeneration,
+            "enableTextGeneration:true should advertise token-level generation");
+        Assert.True(generative.SupportsIncrementalGeneration,
+            "enableTextGeneration:true should build the KV-cached incremental path");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FromModel_GenerationDisabledByDefault()
+    {
+        await Task.Yield();
+        var model = BuildPerPositionLm();
+
+        // Default: a tensor model is NOT assumed generative (e.g. diffusion models have no
+        // next-token-logits semantics), so generation stays off unless explicitly enabled.
+        var nonGenerative = ServableModelWrapper<float>.FromModel("lm", model);
+
+        Assert.False(nonGenerative.SupportsGeneration,
+            "tensor models must not advertise generation unless enableTextGeneration is set");
+        Assert.False(nonGenerative.SupportsIncrementalGeneration);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FromModel_QuantizedGeneration_BuildsIncrementalPath()
+    {
+        await Task.Yield();
+        var model = BuildPerPositionLm();
+
+        var generative = ServableModelWrapper<float>.FromModel(
+            "lm", model, enableBatching: true, enableSpeculativeDecoding: false,
+            enableTextGeneration: true, quantizeKvCacheWeights: true);
+
+        Assert.True(generative.SupportsIncrementalGeneration,
+            "quantized generation config should still build the incremental path");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FromModel_FacadeResult_UnwrapsInnerNetwork_AndHonorsInferenceConfig()
+    {
+        await Task.Yield();
+
+        // A facade-built generative model is an AiModelResult<T, Tensor, Tensor> that wraps an inner
+        // NeuralNetwork and carries the user's ConfigureInferenceOptimizations settings. Build one with a
+        // DISTINCTIVE inference config so we can prove serving reads it rather than serving-side defaults.
+        var inner = BuildPerPositionLm();
+        var facadeConfig = new AiDotNet.Configuration.InferenceOptimizationConfig
+        {
+            SpeculativeDecoding = new AiDotNet.Configuration.SpeculativeDecodingOptions
+            {
+                Enabled = false,          // deviates from the serving default (true)
+                SpeculationDepth = 7      // deviates from the serving default (4)
+            },
+            MaxBatchSize = 13             // must flow to the batch scheduler
+        };
+        var options = new AiDotNet.Models.Options.AiModelResultOptions<float, Tensor<float>, Tensor<float>>
+        {
+            OptimizationResult = new AiDotNet.Models.Results.OptimizationResult<float, Tensor<float>, Tensor<float>>
+            {
+                BestSolution = inner
+            },
+            InferenceOptimizationConfig = facadeConfig
+        };
+        var facade = new AiDotNet.Models.Results.AiModelResult<float, Tensor<float>, Tensor<float>>(options);
+
+        // Production loader path: FromModel must detect the facade, unwrap its inner network for the paged
+        // incremental path, and thread GetInferenceOptimizationConfigForServing() into the batcher.
+        using var wrapper = ServableModelWrapper<float>.FromModel(
+            "facade-lm", facade, enableBatching: true, enableSpeculativeDecoding: false,
+            enableTextGeneration: true);
+
+        Assert.True(wrapper.SupportsGeneration,
+            "a facade AiModelResult opting into text generation must advertise generation");
+        Assert.True(wrapper.SupportsIncrementalGeneration,
+            "FromModel must unwrap the facade's inner NeuralNetwork and build the KV-cached paged path");
+
+        // The batcher's config must come from the facade's InferenceOptimizationConfig, not hardcoded defaults.
+        var batcher = wrapper.EnsureBatcher();
+        Assert.NotNull(batcher);
+        Assert.False(batcher!.Config.EnableSpeculativeDecoding);
+        Assert.Equal(7, batcher.Config.SpeculationDepth);
+        Assert.Equal(13, batcher.Config.SchedulerConfig.MaxBatchSize);
+
+        // And it actually generates through that path.
+        var repo = new OneModelRepo("facade-lm", wrapper);
+        var service = new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance);
+        var resp = service.Generate("facade-lm", NumericType.Float, Req(new[] { 1, 2, 3 }));
+        Assert.Null(resp.Error);
+        Assert.Equal(5, resp.NumGenerated);
+        Assert.All(resp.GeneratedTokens, t => Assert.InRange(t, 0, Vocab - 1));
+    }
+
+    private sealed class OneModelRepo : IModelRepository
+    {
+        private readonly string _name;
+        private readonly object _model;
+        public OneModelRepo(string name, object model) { _name = name; _model = model; }
+
+        public IServableModel<T>? GetModel<T>(string name)
+            => name == _name && _model is IServableModel<T> m ? m : null;
+
+        public bool LoadModel<T>(string name, IServableModel<T> model, string? sourcePath = null) => throw new NotSupportedException();
+        public bool UnloadModel(string name) => throw new NotSupportedException();
+        public List<ModelInfo> GetAllModelInfo() => [];
+        public ModelInfo? GetModelInfo(string name) => null;
+        public bool ModelExists(string name) => name == _name;
+        public bool LoadModelFromRegistry<T>(string name, IServableModel<T> model, int registryVersion, string registryStage, string? sourcePath = null) => throw new NotSupportedException();
+        public bool LoadMultimodalModel<T>(string name, IServableMultimodalModel<T> model, string? sourcePath = null) => throw new NotSupportedException();
+        public IServableMultimodalModel<T>? GetMultimodalModel<T>(string name) => throw new NotSupportedException();
+    }
+}

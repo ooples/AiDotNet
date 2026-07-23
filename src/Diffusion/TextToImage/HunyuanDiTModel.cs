@@ -1,0 +1,300 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.TextToImage;
+
+/// <summary>
+/// Hunyuan-DiT model — bilingual (Chinese-English) DiT text-to-image model by Tencent.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Hunyuan-DiT is Tencent's bilingual text-to-image model that uses a DiT transformer
+/// backbone with dual text encoders (CLIP + multilingual T5) for both Chinese and
+/// English prompt understanding.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Hunyuan-DiT generates images from Chinese or English prompts:
+///
+/// Key characteristics:
+/// - Bilingual: understands both Chinese and English prompts natively
+/// - DiT backbone: transformer-based denoiser (1.5B parameters)
+/// - Dual text encoders: CLIP-L/14 + mT5-XL for multilingual support
+/// - Multi-resolution training with aspect ratio bucketing
+/// - Human preference alignment via RLHF-like training
+///
+/// How Hunyuan-DiT works:
+/// 1. Text goes through CLIP (visual) + mT5 (multilingual) encoders
+/// 2. DiT transformer denoises with cross-attention to both embeddings
+/// 3. Multi-resolution support through positional embedding interpolation
+/// 4. VAE decoder produces final image
+///
+/// Use Hunyuan-DiT when you need:
+/// - Chinese text-to-image generation
+/// - Bilingual applications
+/// - Open-source multilingual alternative
+/// </para>
+/// <para>
+/// Technical specifications:
+/// - Architecture: DiT-XL with dual text conditioning
+/// - Parameters: ~1.5B (DiT backbone)
+/// - Text encoders: CLIP ViT-L/14 (768-dim) + mT5-XL (2048-dim)
+/// - Native resolution: 1024x1024
+/// - Latent space: 4 channels, 8x downsampling
+/// - Guidance scale: 6.0 recommended
+///
+/// Reference: Li et al., "Hunyuan-DiT: A Powerful Multi-Resolution Diffusion Transformer
+/// with Fine-Grained Chinese Understanding", 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 30 };
+/// var model = new HunyuanDiTModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Hunyuan-DiT: A Powerful Multi-Resolution Diffusion Transformer with Fine-Grained Chinese Understanding", "https://arxiv.org/abs/2405.11427", Year = 2024, Authors = "Li et al.")]
+public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
+{
+    #region Constants
+
+    public const int DefaultWidth = 1024;
+    public const int DefaultHeight = 1024;
+    private const int LATENT_CHANNELS = 4;
+    private const int CROSS_ATTENTION_DIM = 2048;
+    private const double DEFAULT_GUIDANCE_SCALE = 6.0;
+
+    #endregion
+
+    #region Fields
+
+    private DiTNoisePredictor<T>? _dit;
+    private StandardVAE<T>? _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+    // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
+    // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the
+    // sub-models with a null seed — dropping the requested seed and making construction non-reproducible.
+    private readonly int? _seed;
+
+    #endregion
+
+    #region Properties
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _dit; } }
+
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _vae; } }
+
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+
+    /// <inheritdoc />
+    public override long ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _vae.ParameterCount; } }
+
+    #endregion
+
+    #region Constructor
+
+    /// <summary>
+    /// Initializes a new instance of HunyuanDiTModel with full customization support.
+    /// </summary>
+    public HunyuanDiTModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        DiTNoisePredictor<T>? dit = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DPMSolverMultistepScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        _seed = seed;
+        if (dit is not null || vae is not null)
+            InitializeLayers(dit, vae, seed);
+    }
+
+    #endregion
+
+    #region Layer Initialization
+
+    [MemberNotNull(nameof(_dit), nameof(_vae))]
+    private void EnsureInitialized()
+    {
+        if (_dit is null || _vae is null)
+            InitializeLayers(null, null, _seed);
+    }
+
+    [MemberNotNull(nameof(_dit), nameof(_vae))]
+    private void InitializeLayers(
+        DiTNoisePredictor<T>? dit,
+        StandardVAE<T>? vae,
+        int? seed)
+    {
+        // Hunyuan-DiT-XL: 40 layers, 1408 hidden, 16 heads
+        _dit = dit ?? new DiTNoisePredictor<T>(
+            inputChannels: LATENT_CHANNELS,
+            hiddenSize: 1408,
+            numLayers: 40,
+            numHeads: 16,
+            patchSize: 2,
+            contextDim: CROSS_ATTENTION_DIM,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3,
+            latentChannels: LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2,
+            latentScaleFactor: 0.13025,
+            seed: seed);
+    }
+
+    #endregion
+
+    #region Generation Methods
+
+    /// <inheritdoc />
+    public override Tensor<T> GenerateFromText(
+        string prompt,
+        string? negativePrompt = null,
+        int width = DefaultWidth,
+        int height = DefaultHeight,
+        int numInferenceSteps = 30,
+        double? guidanceScale = null,
+        int? seed = null)
+    {
+        return base.GenerateFromText(
+            prompt, negativePrompt, width, height,
+            numInferenceSteps, guidanceScale ?? DEFAULT_GUIDANCE_SCALE, seed);
+    }
+
+    #endregion
+
+    #region IParameterizable
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        EnsureInitialized();
+        var ditParams = _dit.GetParameters();
+        var vaeParams = _vae.GetParameters();
+        var combined = new Vector<T>(ditParams.Length + vaeParams.Length);
+
+        for (int i = 0; i < ditParams.Length; i++)
+            combined[i] = ditParams[i];
+        for (int i = 0; i < vaeParams.Length; i++)
+            combined[ditParams.Length + i] = vaeParams[i];
+
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        EnsureInitialized();
+        int ditCount = checked((int)_dit.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
+
+        if (parameters.Length != ditCount + vaeCount)
+            throw new ArgumentException(
+                $"Expected {ditCount + vaeCount} parameters, got {parameters.Length}.",
+                nameof(parameters));
+
+        var ditParams = new Vector<T>(ditCount);
+        var vaeParams = new Vector<T>(vaeCount);
+
+        for (int i = 0; i < ditCount; i++)
+            ditParams[i] = parameters[i];
+        for (int i = 0; i < vaeCount; i++)
+            vaeParams[i] = parameters[ditCount + i];
+
+        _dit.SetParameters(ditParams);
+        _vae.SetParameters(vaeParams);
+    }
+
+    #endregion
+
+    #region ICloneable
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        EnsureInitialized();
+        // Delegate to the predictor's and VAE's own Clone(), which reconstruct from their
+        // actual config fields (NOT hardcoded foundation-scale constants) and preserve
+        // materialized weights — so a caller-injected variant of any scale round-trips
+        // correctly. Rebuilding at fixed 1408/40 here would size a clone that cannot accept
+        // an injected tiny (or otherwise non-default) predictor's parameter vector.
+        return new HunyuanDiTModel<T>(
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
+    }
+
+    #endregion
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "Hunyuan-DiT",
+            Version = "1.2",
+            Description = "Hunyuan-DiT bilingual Chinese-English DiT text-to-image model",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
+            Complexity = ParameterCount
+        };
+
+        metadata.SetProperty("architecture", "dit-xl-dual-encoder");
+        metadata.SetProperty("base_model", "Hunyuan-DiT");
+        metadata.SetProperty("text_encoders", "CLIP-L+mT5-XL");
+        metadata.SetProperty("bilingual", true);
+        metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("default_resolution", DefaultWidth);
+
+        return metadata;
+    }
+
+    #endregion
+}

@@ -1,0 +1,646 @@
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Memory;
+
+namespace AiDotNet.NeuralNetworks.Layers.SSM;
+
+/// <summary>
+/// Implements the Extended LSTM (xLSTM) layer from Hochreiter et al., 2024.
+/// </summary>
+/// <remarks>
+/// <para>
+/// xLSTM modernizes the classic LSTM architecture with two key innovations:
+/// 1. <b>sLSTM (scalar LSTM)</b>: Enhanced gating with exponential activation functions and
+///    a new memory mixing mechanism. Uses scalar (diagonal) memory cells.
+/// 2. <b>mLSTM (matrix LSTM)</b>: Replaces the scalar memory cell with a matrix-valued memory,
+///    connecting LSTMs to modern linear attention/state space models.
+/// </para>
+/// <para>
+/// This layer implements the mLSTM variant, which is the more impactful innovation:
+/// <code>
+///   // Gate computations
+///   i_t = exp(W_i * x_t + b_i)    // Input gate (exponential, not sigmoid!)
+///   f_t = sigmoid(W_f * x_t + b_f) OR exp(W_f * x_t + b_f)  // Forget gate
+///   o_t = sigmoid(W_o * x_t + b_o)  // Output gate
+///
+///   // Key-Value projections (connecting to linear attention)
+///   k_t = W_k * x_t / sqrt(d)
+///   v_t = W_v * x_t
+///   q_t = W_q * x_t
+///
+///   // Matrix memory cell update (covariance-based)
+///   C_t = f_t * C_{t-1} + i_t * v_t * k_t^T    // Matrix cell = gated outer product
+///   n_t = f_t * n_{t-1} + i_t * k_t              // Normalizer state
+///
+///   // Output
+///   h_t = o_t * (C_t * q_t) / max(|n_t^T * q_t|, 1)
+/// </code>
+/// </para>
+/// <para>
+/// The connection to linear attention: if f_t = 1 and i_t = 1, the matrix cell C_t accumulates
+/// k*v outer products exactly like the state matrix in linear attention. The gates allow
+/// selective forgetting and input scaling, which is what makes xLSTM competitive.
+/// </para>
+/// <para><b>For Beginners:</b> xLSTM is a modernized version of the classic LSTM (1997).
+///
+/// The original LSTM was the dominant sequence model for years, but was overtaken by Transformers.
+/// xLSTM brings it back by fixing key limitations:
+///
+/// 1. <b>Exponential gating</b>: Instead of sigmoid (0 to 1), gates use exp() which can amplify
+///    important signals, not just dampen them.
+///
+/// 2. <b>Matrix memory</b>: Instead of a vector cell, mLSTM uses a matrix. This is like having
+///    a lookup table that maps keys to values, similar to attention but stored as a running sum.
+///
+/// The result: an LSTM that matches Transformer performance at scale while maintaining the
+/// efficient O(1) per-step inference of RNNs.
+/// </para>
+/// <para>
+/// <b>Reference:</b> Beck et al., "xLSTM: Extended Long Short-Term Memory", 2024.
+/// https://arxiv.org/abs/2405.04517
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+public partial class ExtendedLSTMLayer<T> : LayerBase<T>
+{
+    private readonly int _modelDimension;
+    private readonly int _headDimension;
+    private readonly int _numHeads;
+
+    // Input gate projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _inputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _inputGateBias;
+
+    // Forget gate projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _forgetGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _forgetGateBias;
+
+    // Output gate projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _outputGateWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _outputGateBias;
+
+    // Query, Key, Value projections: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _queryWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _keyWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _valueWeights;
+
+    // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _outputProjectionBias;
+
+    // Cached values
+    private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastCellStates;
+    private Tensor<T>? _lastNormStates;
+    private Tensor<T>? _lastInputGates;
+    private Tensor<T>? _lastForgetGates;
+    private Tensor<T>? _lastOutputGates;
+    private Tensor<T>? _lastQ;
+    private Tensor<T>? _lastK;
+    private Tensor<T>? _lastV;
+    private Tensor<T>? _lastHiddenPreProj;
+    private int[]? _originalInputShape;
+
+    // Fixed (non-trainable) unit-gamma / zero-beta for the mLSTM output
+    // normalization. Beck et al. 2024 ("xLSTM", §2.3) normalize the mLSTM cell
+    // output before the up-projection so the covariance-cell signal — a product
+    // of sub-unit q/k/v projections that the max(|n·q|, 1) normalizer never
+    // up-scales — stays at unit scale. Without it, stacking N cells collapses the
+    // activations by ~5 orders of magnitude per layer (≈1e-77 by 4 layers), and
+    // the backward pass underflows to zero gradient everywhere so no parameter
+    // ever updates. Standardization (mean 0, var 1) with fixed gamma/beta keeps
+    // the layer output unit-scale without introducing extra trainable parameters
+    // (which would change the serialized parameter layout).
+    private Tensor<T>? _outputNormGamma;
+    private Tensor<T>? _outputNormBeta;
+
+    // Gradients
+    private Tensor<T>? _inputGateWeightsGradient;
+    private Tensor<T>? _inputGateBiasGradient;
+    private Tensor<T>? _forgetGateWeightsGradient;
+    private Tensor<T>? _forgetGateBiasGradient;
+    private Tensor<T>? _outputGateWeightsGradient;
+    private Tensor<T>? _outputGateBiasGradient;
+    private Tensor<T>? _queryWeightsGradient;
+    private Tensor<T>? _keyWeightsGradient;
+    private Tensor<T>? _valueWeightsGradient;
+    private Tensor<T>? _outputProjectionWeightsGradient;
+    private Tensor<T>? _outputProjectionBiasGradient;
+
+    /// <inheritdoc />
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the model dimension.
+    /// </summary>
+    public int ModelDimension => _modelDimension;
+
+    /// <summary>
+    /// Gets the number of heads for the matrix memory.
+    /// </summary>
+    public int NumHeads => _numHeads;
+
+    /// <summary>
+    /// Gets the dimension per head.
+    /// </summary>
+    public int HeadDimension => _headDimension;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters.
+    /// </summary>
+    public override long ParameterCount =>
+        _inputGateWeights.Length + _inputGateBias.Length +
+        _forgetGateWeights.Length + _forgetGateBias.Length +
+        _outputGateWeights.Length + _outputGateBias.Length +
+        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
+        _outputProjectionWeights.Length + _outputProjectionBias.Length;
+
+    /// <summary>
+    /// Creates a new Extended LSTM (xLSTM) layer using the mLSTM (matrix memory) variant.
+    /// </summary>
+    /// <param name="sequenceLength">Maximum sequence length.</param>
+    /// <param name="modelDimension">
+    /// Model dimension (d_model). Default: 256.
+    /// </param>
+    /// <param name="numHeads">
+    /// Number of heads for matrix memory. Default: 8.
+    /// <para><b>For Beginners:</b> Each head maintains its own matrix memory cell.
+    /// Must evenly divide modelDimension.</para>
+    /// </param>
+    /// <param name="activationFunction">Optional activation function applied to the final output.</param>
+    /// <exception cref="ArgumentException">Thrown when parameters are invalid.</exception>
+    public ExtendedLSTMLayer(
+        int sequenceLength,
+        int modelDimension = 256,
+        int numHeads = 8,
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base(
+            [sequenceLength, modelDimension],
+            [sequenceLength, modelDimension],
+            activationFunction ?? new IdentityActivation<T>())
+    {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
+        if (modelDimension <= 0)
+            throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
+        if (numHeads <= 0)
+            throw new ArgumentException($"Number of heads ({numHeads}) must be positive.", nameof(numHeads));
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException($"Model dimension ({modelDimension}) must be divisible by numHeads ({numHeads}).", nameof(numHeads));
+
+        _modelDimension = modelDimension;
+        _numHeads = numHeads;
+        _headDimension = modelDimension / numHeads;
+
+        _inputGateWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _inputGateBias = new Tensor<T>([modelDimension]);
+        _forgetGateWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _forgetGateBias = new Tensor<T>([modelDimension]);
+        _outputGateWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _outputGateBias = new Tensor<T>([modelDimension]);
+        _queryWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _keyWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _valueWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _outputProjectionWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _outputProjectionBias = new Tensor<T>([modelDimension]);
+
+        InitializeParameters();
+    }
+
+    private void InitializeParameters()
+    {
+        InitializeTensor(_inputGateWeights);
+        _inputGateBias.Fill(NumOps.Zero);
+        InitializeTensor(_forgetGateWeights);
+        // Forget gate bias initialized to positive values for long memory (LSTM best practice)
+        for (int i = 0; i < _forgetGateBias.Length; i++)
+            _forgetGateBias[i] = NumOps.FromDouble(1.0);
+        InitializeTensor(_outputGateWeights);
+        _outputGateBias.Fill(NumOps.Zero);
+        InitializeTensor(_queryWeights);
+        InitializeTensor(_keyWeights);
+        InitializeTensor(_valueWeights);
+        InitializeTensor(_outputProjectionWeights);
+        _outputProjectionBias.Fill(NumOps.Zero);
+    }
+
+    private void InitializeTensor(Tensor<T> tensor)
+    {
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        _originalInputShape = input._shape;
+
+        int rank = input.Shape.Length;
+        int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
+        int modelDim = input.Shape[rank - 1];
+
+        int batchSize = 1;
+        for (int d = 0; d < rank - 2; d++)
+            batchSize *= input.Shape[d];
+        if (rank < 3) batchSize = 1;
+
+        var input3D = rank == 2
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
+
+        _lastInput = input3D;
+
+        // Per-time-step outputs collected for a tape-connected concat (the previous
+        // pre-allocated tensor written with SetSlice detached the output from y_t,
+        // so the output-projection weights never received a gradient).
+        var outputList = new System.Collections.Generic.List<Tensor<T>>(seqLen);
+        T scaleK = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+
+        // Matrix cell state per head: C[batch, head, headDim, headDim]
+        var cellState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        // Normalizer state per head: n[batch, head, headDim]
+        var normState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension });
+
+        // Store gates and projections for backward
+        var allInputGates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allForgetGates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allOutputGates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allV = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allHiddenPreProj = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allCellStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
+        var allNormStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension });
+
+        // Per-head stabilizer state m_t (Beck et al. 2024, "xLSTM" Appendix A.2,
+        // stabilized mLSTM). The input gate is exponential; left raw it overflows
+        // (the old code clamped exp to 4.85e8, which lets a single step dominate
+        // the covariance cell and makes training diverge). The running max
+        // m_t = max(log f_t + m_{t-1}, log i_t) rescales both gates into (0, 1] in
+        // log-space, so the cell stays well-conditioned and training is stable.
+        // Initialized to -inf so the first step carries no forget contribution.
+        var mState = new Tensor<T>(new[] { batchSize, _numHeads });
+        for (int bi = 0; bi < batchSize; bi++)
+            for (int hi = 0; hi < _numHeads; hi++)
+                mState[new[] { bi, hi }] = NumOps.FromDouble(-1e30);
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            var x_t = input3D.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+
+            // Gate computations
+            var iGateRaw = Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(x_t, _inputGateWeights),
+                Engine.Reshape(_inputGateBias, new[] { 1, _modelDimension }));
+            var fGateRaw = Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(x_t, _forgetGateWeights),
+                Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension }));
+            var oGate = Engine.Sigmoid(Engine.TensorBroadcastAdd(
+                Engine.TensorMatMul(x_t, _outputGateWeights),
+                Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })));
+
+            // Exponential input gate (xLSTM innovation)
+            var iGate = Engine.TensorExp(iGateRaw);
+            // Sigmoid forget gate (stabilized)
+            var fGate = Engine.Sigmoid(fGateRaw);
+
+            allInputGates.SetSlice(1, t, iGate);
+            allForgetGates.SetSlice(1, t, fGate);
+            allOutputGates.SetSlice(1, t, oGate);
+
+            // Q, K, V projections
+            var q = Engine.TensorMatMul(x_t, _queryWeights);
+            var k = Engine.TensorMultiplyScalar(
+                Engine.TensorMatMul(x_t, _keyWeights), scaleK);
+            var v = Engine.TensorMatMul(x_t, _valueWeights);
+
+            allQ.SetSlice(1, t, q);
+            allK.SetSlice(1, t, k);
+            allV.SetSlice(1, t, v);
+
+            // Update matrix cell state per head: C = f * C + i * (v * k^T)
+            var h_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+
+            for (int hi = 0; hi < _numHeads; hi++)
+            {
+                int dimStart = hi * _headDimension;
+
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    // Stabilized exponential gating (Beck et al. 2024, mLSTM). Work in
+                    // log-space: m_t = max(log f_t + m_{t-1}, log i_t) rescales the
+                    // exponential input gate and the forget gate into (0, 1], so the
+                    // covariance-cell update never overflows and training stays stable.
+                    // The /max(|n·q|, 1) output normalizer below is exact in this
+                    // stabilized scale, so it is left unchanged.
+                    double logI = NumOps.ToDouble(iGateRaw[new[] { bi, dimStart }]);
+                    double fSig = NumOps.ToDouble(fGate[new[] { bi, dimStart }]);
+                    double logF = Math.Log(Math.Max(fSig, 1e-30));
+                    double mPrev = NumOps.ToDouble(mState[new[] { bi, hi }]);
+                    double mNew = Math.Max(logF + mPrev, logI);
+                    mState[new[] { bi, hi }] = NumOps.FromDouble(mNew);
+
+                    T iVal = NumOps.FromDouble(Math.Exp(logI - mNew));
+                    T fVal = NumOps.FromDouble(Math.Exp(logF + mPrev - mNew));
+                    T oVal = oGate[new[] { bi, dimStart }];
+
+                    // Matrix cell update: C = f * C + i * (v outer k)
+                    for (int di = 0; di < _headDimension; di++)
+                    {
+                        int flatDi = dimStart + di;
+                        T vVal = v[new[] { bi, flatDi }];
+                        T nPrev = normState[new[] { bi, hi, di }];
+
+                        // Normalizer update: n = f * n + i * k
+                        T kDi = k[new[] { bi, flatDi }];
+                        T nNew = NumOps.Add(NumOps.Multiply(fVal, nPrev),
+                            NumOps.Multiply(iVal, kDi));
+                        normState[new[] { bi, hi, di }] = nNew;
+
+                        for (int ki = 0; ki < _headDimension; ki++)
+                        {
+                            int flatKi = dimStart + ki;
+                            T kVal = k[new[] { bi, flatKi }];
+                            T cPrev = cellState[new[] { bi, hi, di, ki }];
+
+                            // C_new = f * C_prev + i * v * k
+                            T cNew = NumOps.Add(
+                                NumOps.Multiply(fVal, cPrev),
+                                NumOps.Multiply(iVal, NumOps.Multiply(vVal, kVal)));
+                            cellState[new[] { bi, hi, di, ki }] = cNew;
+
+                            // Output: h = o * (C * q) / max(|n^T * q|, 1)
+                            T qVal = q[new[] { bi, flatKi }];
+                            h_t[new[] { bi, flatDi }] = NumOps.Add(
+                                h_t[new[] { bi, flatDi }],
+                                NumOps.Multiply(oVal, NumOps.Multiply(cNew, qVal)));
+                        }
+
+                        // Normalize
+                        T nDotQ = NumOps.Zero;
+                        for (int ki = 0; ki < _headDimension; ki++)
+                        {
+                            int flatKi = dimStart + ki;
+                            nDotQ = NumOps.Add(nDotQ,
+                                NumOps.Multiply(normState[new[] { bi, hi, ki }],
+                                    q[new[] { bi, flatKi }]));
+                        }
+                        double nDotQAbs = Math.Abs(NumOps.ToDouble(nDotQ));
+                        double normFactor = Math.Max(nDotQAbs, 1.0);
+
+                        h_t[new[] { bi, flatDi }] = NumOps.Divide(
+                            h_t[new[] { bi, flatDi }],
+                            NumOps.FromDouble(normFactor));
+                    }
+                }
+            }
+
+            allHiddenPreProj.SetSlice(1, t, h_t);
+
+            // Output projection
+            var y_t = Engine.TensorMatMul(h_t, _outputProjectionWeights);
+            var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
+            y_t = Engine.TensorBroadcastAdd(y_t, outBias);
+
+            outputList.Add(Engine.Reshape(y_t, new[] { batchSize, 1, _modelDimension }));
+        }
+
+        // Assemble the [batch, seqLen, modelDim] output on the tape so gradients
+        // reach the output-projection weights (and bias).
+        var output = Engine.TensorConcatenate(outputList.ToArray(), axis: 1);
+
+        // Residual + output normalization — the xLSTM block (Beck et al. 2024,
+        // §2.3 / Fig. 3: each mLSTM cell lives in a normalized residual block).
+        //
+        // Two problems are fixed here together:
+        //  1. Gradient flow. The covariance-cell recurrence above is computed with
+        //     in-place scalar updates (the matrix state C_t / normalizer n_t are
+        //     inherently sequential), so it is OFF the autodiff tape: the gradient
+        //     cannot cross it to reach the input/gate/q/k/v projections or any
+        //     upstream layer. The residual skip `output + input` re-attaches the
+        //     block output to its input ON the tape, so gradients reach every
+        //     projection in this cell AND propagate to the layers below it.
+        //  2. Signal collapse. The cell output C_t q_t is a product of sub-unit
+        //     projections that the max(|n·q|, 1) normalizer never up-scales, so
+        //     stacking N cells shrinks the activations ~5 orders of magnitude per
+        //     layer (≈1e-77 by 4 layers) and the backward pass underflows to zero.
+        //     Normalizing the block output to unit scale stops the collapse.
+        //
+        // Fixed unit-gamma / zero-beta (created once) keeps the serialized
+        // parameter layout unchanged (no extra trainable tensors).
+        output = Engine.TensorAdd(output, input3D);
+        if (_outputNormGamma is null || _outputNormBeta is null)
+        {
+            var gamma = new Tensor<T>(new[] { _modelDimension });
+            var beta = new Tensor<T>(new[] { _modelDimension });
+            for (int j = 0; j < _modelDimension; j++)
+            {
+                gamma[j] = NumOps.One;
+                beta[j] = NumOps.Zero;
+            }
+            _outputNormGamma = gamma;
+            _outputNormBeta = beta;
+        }
+        output = Engine.LayerNorm(output, _outputNormGamma, _outputNormBeta, 1e-5, out _, out _);
+
+        _lastCellStates = allCellStates;
+        _lastNormStates = allNormStates;
+        _lastInputGates = allInputGates;
+        _lastForgetGates = allForgetGates;
+        _lastOutputGates = allOutputGates;
+        _lastQ = allQ;
+        _lastK = allK;
+        _lastV = allV;
+        _lastHiddenPreProj = allHiddenPreProj;
+
+        var result = ApplyActivation(output);
+        _lastOutput = result;
+
+        if (rank == 2)
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
+
+        var outputShape = new int[rank];
+        for (int i = 0; i < rank - 2; i++)
+            outputShape[i] = input.Shape[i];
+        outputShape[rank - 2] = seqLen;
+        outputShape[rank - 1] = _modelDimension;
+        return Engine.Reshape(result, outputShape);
+    }
+
+    #region Parameter Management
+
+    /// <inheritdoc />
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_inputGateWeightsGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        T negLR = NumOps.Negate(learningRate);
+        _inputGateWeights = Engine.TensorAdd(_inputGateWeights, Engine.TensorMultiplyScalar(_inputGateWeightsGradient, negLR));
+        _inputGateBias = Engine.TensorAdd(_inputGateBias, Engine.TensorMultiplyScalar(_inputGateBiasGradient!, negLR));
+        _forgetGateWeights = Engine.TensorAdd(_forgetGateWeights, Engine.TensorMultiplyScalar(_forgetGateWeightsGradient!, negLR));
+        _forgetGateBias = Engine.TensorAdd(_forgetGateBias, Engine.TensorMultiplyScalar(_forgetGateBiasGradient!, negLR));
+        _outputGateWeights = Engine.TensorAdd(_outputGateWeights, Engine.TensorMultiplyScalar(_outputGateWeightsGradient!, negLR));
+        _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
+        _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient!, negLR));
+        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
+        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
+        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_inputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_forgetGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_forgetGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        int index = 0;
+        foreach (var tensor in GetAllTensors())
+            for (int i = 0; i < tensor.Length; i++)
+                parameters[index++] = tensor[i];
+        return parameters;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+        int index = 0;
+        foreach (var tensor in GetAllTensors())
+            for (int i = 0; i < tensor.Length; i++)
+                tensor[i] = parameters[index++];
+    }
+
+    private Tensor<T>[] GetAllTensors() =>
+    [
+        _inputGateWeights, _inputGateBias,
+        _forgetGateWeights, _forgetGateBias,
+        _outputGateWeights, _outputGateBias,
+        _queryWeights, _keyWeights, _valueWeights,
+        _outputProjectionWeights, _outputProjectionBias
+    ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_inputGateWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+
+        Vector<T> G(Tensor<T>? grad, Tensor<T> param) =>
+            grad != null ? new Vector<T>(grad.ToArray()) : new Vector<T>(param.Length);
+
+        return Vector<T>.Concatenate(
+            G(_inputGateWeightsGradient, _inputGateWeights),
+            G(_inputGateBiasGradient, _inputGateBias),
+            G(_forgetGateWeightsGradient, _forgetGateWeights),
+            G(_forgetGateBiasGradient, _forgetGateBias),
+            G(_outputGateWeightsGradient, _outputGateWeights),
+            G(_outputGateBiasGradient, _outputGateBias),
+            G(_queryWeightsGradient, _queryWeights),
+            G(_keyWeightsGradient, _keyWeights),
+            G(_valueWeightsGradient, _valueWeights),
+            G(_outputProjectionWeightsGradient, _outputProjectionWeights),
+            G(_outputProjectionBiasGradient, _outputProjectionBias));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _inputGateWeightsGradient = null; _inputGateBiasGradient = null;
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null;
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+    }
+
+    /// <inheritdoc />
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastOutput = null;
+        _lastCellStates = null;
+        _lastNormStates = null;
+        _lastInputGates = null;
+        _lastForgetGates = null;
+        _lastOutputGates = null;
+        _lastQ = null;
+        _lastK = null;
+        _lastV = null;
+        _lastHiddenPreProj = null;
+        _originalInputShape = null;
+        _inputGateWeightsGradient = null;
+        _inputGateBiasGradient = null;
+        _forgetGateWeightsGradient = null;
+        _forgetGateBiasGradient = null;
+        _outputGateWeightsGradient = null;
+        _outputGateBiasGradient = null;
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputProjectionWeightsGradient = null;
+        _outputProjectionBiasGradient = null;
+    }
+
+    #endregion
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["ModelDimension"] = _modelDimension.ToString();
+        metadata["NumHeads"] = _numHeads.ToString();
+        metadata["HeadDimension"] = _headDimension.ToString();
+        return metadata;
+    }
+
+    /// <summary>
+    /// Gets the output projection weights for external inspection.
+    /// </summary>
+    public Tensor<T> GetOutputProjectionWeights() => _outputProjectionWeights;
+
+    /// <summary>
+    /// Gets the forget gate weights for external inspection.
+    /// </summary>
+    public Tensor<T> GetForgetGateWeights() => _forgetGateWeights;
+}

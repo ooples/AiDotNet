@@ -1,0 +1,419 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a 3D max pooling layer for downsampling volumetric data.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A 3D max pooling layer reduces the spatial dimensions (depth, height, width) of volumetric
+/// data while preserving the most prominent features. This helps reduce computational cost
+/// and provides translation invariance.
+/// </para>
+/// <para><b>For Beginners:</b> Max pooling works like summarizing a 3D region by keeping only
+/// the largest value.
+///
+/// Think of it like this:
+/// - You have a 3D grid of numbers
+/// - You divide it into small cubes (e.g., 2x2x2)
+/// - For each cube, you keep only the largest number
+/// - This makes your data smaller while keeping the important features
+///
+/// This is useful because:
+/// - It reduces the amount of computation needed
+/// - It helps the network focus on the most important features
+/// - It makes the network more robust to small position changes
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerTask(LayerTask.VolumetricProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2, 2")]
+public class MaxPool3DLayer<T> : LayerBase<T>
+{
+    #region Properties
+
+    /// <summary>
+    /// Gets the size of the pooling window (same for depth, height, width).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pool size determines the size of the region from which to extract the maximum value.
+    /// Common values are 2 (halves each spatial dimension) or 3.
+    /// </para>
+    /// </remarks>
+    public int PoolSize { get; private set; }
+
+    /// <summary>
+    /// Gets the stride (step size) for moving the pooling window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stride controls how much the pooling window moves between positions.
+    /// A stride equal to pool size produces non-overlapping regions.
+    /// A stride of 1 with pool size > 1 produces overlapping regions.
+    /// </para>
+    /// </remarks>
+    public int Stride { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training (backpropagation).
+    /// </summary>
+    /// <value>Always <c>true</c> as MaxPool3D supports gradient flow through max indices.</value>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    /// <remarks>
+    /// MaxPool3D supports GPU execution via CUDA, OpenCL, and HIP backends.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
+
+    #endregion
+
+    #region Private Fields
+
+    /// <summary>
+    /// Stores the indices of maximum values from the forward pass for gradient routing.
+    /// Shape: [batch, channels, outD, outH, outW, 3] where the last dimension stores [d, h, w] indices.
+    /// </summary>
+    private int[,,,,,]? _maxIndices;
+
+    /// <summary>
+    /// Cached input from the last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Cached GPU input shape for backward pass.
+    /// </summary>
+    private int[]? _gpuInputShape;
+
+    /// <summary>
+    /// Whether batch dimension was added in ForwardGpu.
+    /// </summary>
+    private bool _addedBatchDimension;
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// GPU buffer containing pooling indices for backward pass.
+    /// </summary>
+    private IGpuBuffer? _gpuIndicesBuffer;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MaxPool3DLayer{T}"/> class.
+    /// </summary>
+    /// <param name="inputShape">The shape of the input tensor [channels, depth, height, width].</param>
+    /// <param name="poolSize">The size of the pooling window (applied to all three dimensions).</param>
+    /// <param name="stride">The stride for moving the pooling window. Defaults to poolSize if 0.</param>
+    /// <exception cref="ArgumentException">Thrown when inputShape has invalid length.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when poolSize or stride is non-positive.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a max pooling layer that shrinks 3D data.</para>
+    /// <para>
+    /// If stride equals pool size, the output will have dimensions reduced by the pool size factor.
+    /// For example, with pool size 2 and stride 2, a 32x32x32 input becomes 16x16x16.
+    /// </para>
+    /// </remarks>
+    public MaxPool3DLayer(int poolSize, int stride = 0)
+        : base(new[] { -1, -1, -1, -1 }, new[] { -1, -1, -1, -1 })
+    {
+        if (poolSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(poolSize), "Pool size must be positive.");
+        if (stride < 0)
+            throw new ArgumentOutOfRangeException(nameof(stride), "Stride cannot be negative.");
+
+        PoolSize = poolSize;
+        Stride = stride == 0 ? poolSize : stride;
+    }
+
+    /// <summary>
+    /// Resolves channel/spatial dims and registers the resolved output shape on first forward.
+    /// Output dims per axis: (input - poolSize) / stride + 1.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int c, d, h, w;
+        if (rank == 5) { c = input.Shape[1]; d = input.Shape[2]; h = input.Shape[3]; w = input.Shape[4]; }
+        else if (rank == 4) { c = input.Shape[0]; d = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
+        else throw new ArgumentException(
+            $"MaxPool3DLayer requires rank-4 [C,D,H,W] or rank-5 [B,C,D,H,W] input; got rank {rank}.",
+            nameof(input));
+
+        int outD = (d - PoolSize) / Stride + 1;
+        int outH = (h - PoolSize) / Stride + 1;
+        int outW = (w - PoolSize) / Stride + 1;
+
+        if (outD <= 0 || outH <= 0 || outW <= 0)
+            throw new ArgumentException(
+                $"Pool size {PoolSize} with stride {Stride} produces invalid output dimensions " +
+                $"[{outD}, {outH}, {outW}] for input [{d}, {h}, {w}].");
+
+        ResolveShapes(new[] { c, d, h, w }, new[] { c, outD, outH, outW });
+    }
+
+    #endregion
+
+    #region Forward Pass
+
+    /// <summary>
+    /// Performs the forward pass of 3D max pooling.
+    /// </summary>
+    /// <param name="input">
+    /// The input tensor with shape [batch, channels, depth, height, width] or [channels, depth, height, width].
+    /// </param>
+    /// <returns>
+    /// The pooled output tensor with reduced spatial dimensions.
+    /// </returns>
+    /// <exception cref="ArgumentException">Thrown when input tensor has invalid rank.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses the vectorized Engine.MaxPool3DWithIndices operation for CPU/GPU acceleration.
+    /// The max indices are cached for use in the backward pass.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        EnsureInitializedFromInput(input);
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        _originalInputShape = input._shape;
+        int rank = input.Rank;
+
+        Tensor<T> batchedInput;
+
+        if (rank == 5)
+        {
+            batchedInput = input;
+        }
+        else if (rank == 4)
+        {
+            batchedInput = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
+        }
+        else if (rank >= 6)
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 4; d++)
+                flatBatch *= input.Shape[d];
+            batchedInput = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
+        }
+        else
+        {
+            throw new ArgumentException(
+                $"MaxPool3D layer requires at least 4D tensor [C,D,H,W]. Got rank {rank}.", nameof(input));
+        }
+
+        var output = Engine.MaxPool3DWithIndices(
+            batchedInput,
+            [PoolSize, PoolSize, PoolSize],
+            [Stride, Stride, Stride],
+            out _maxIndices);
+
+        // Restore original tensor rank
+        if (_originalInputShape.Length > 5)
+        {
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 4] = output.Shape[1];
+            outputShape[_originalInputShape.Length - 3] = output.Shape[2];
+            outputShape[_originalInputShape.Length - 2] = output.Shape[3];
+            outputShape[_originalInputShape.Length - 1] = output.Shape[4];
+            return Engine.Reshape(output, outputShape);
+        }
+        if (_originalInputShape.Length == 4)
+        {
+            return Engine.Reshape(output, new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Performs GPU-resident forward pass of 3D max pooling, keeping all data on GPU.
+    /// </summary>
+    /// <param name="inputs">The input tensors on GPU (uses first input).</param>
+    /// <returns>The pooled output as a GPU-resident tensor.</returns>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var input = inputs[0];
+
+        // Support any rank >= 4
+        if (input.Shape.Length < 4)
+            throw new ArgumentException($"MaxPool3D layer requires at least 4D tensor [C,D,H,W]. Got rank {input.Shape.Length}.");
+
+        Tensor<T> input5D;
+        bool addedBatch = false;
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+
+        if (rank == 4)
+        {
+            addedBatch = true;
+            input5D = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
+        }
+        else if (rank == 5)
+        {
+            input5D = input;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 4; d++)
+                flatBatch *= input.Shape[d];
+            input5D = input.Reshape(new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
+        }
+
+        _gpuInputShape = input5D._shape;
+        _addedBatchDimension = addedBatch;
+
+        var poolSizeArr = new[] { PoolSize, PoolSize, PoolSize };
+        var strideArr = new[] { Stride, Stride, Stride };
+
+        // Dispose previous indices buffer to prevent GPU memory leak
+        (_gpuIndicesBuffer as IDisposable)?.Dispose();
+        var output = gpuEngine.MaxPool3DGpu<T>(input5D, poolSizeArr, strideArr, out _gpuIndicesBuffer);
+
+        // Store _lastInput for backward pass
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+
+        // Restore original tensor rank
+        if (_originalInputShape.Length > 5)
+        {
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 4] = output.Shape[1];
+            outputShape[_originalInputShape.Length - 3] = output.Shape[2];
+            outputShape[_originalInputShape.Length - 2] = output.Shape[3];
+            outputShape[_originalInputShape.Length - 1] = output.Shape[4];
+            return output.Reshape(outputShape);
+        }
+        if (addedBatch)
+        {
+            return output.Reshape(new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
+        }
+        return output;
+    }
+
+    #endregion
+
+    #region Backward Pass
+
+    #endregion
+
+    #region Parameter Management
+
+    /// <summary>
+    /// Updates parameters. Max pooling has no trainable parameters.
+    /// </summary>
+    /// <param name="learningRate">The learning rate (unused).</param>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Max pooling has no trainable parameters - nothing to update
+    }
+
+    /// <summary>
+    /// <summary>
+    /// Returns layer-specific metadata for serialization (PoolSize, Stride).
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["PoolSize"] = PoolSize.ToString();
+        metadata["Stride"] = Stride.ToString();
+        return metadata;
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        return Vector<T>.Empty();
+    }
+
+    #endregion
+
+    #region State Management
+
+    /// <summary>
+    /// Resets the cached state from forward/backward passes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this method to free memory after inference is complete or when
+    /// switching between different inputs.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _maxIndices = null;
+        _gpuInputShape = null;
+        _addedBatchDimension = false;
+        _gpuIndicesBuffer?.Dispose();
+        _gpuIndicesBuffer = null;
+    }
+
+    #endregion
+
+    #region Serialization
+
+    /// <summary>
+    /// Serializes the layer to a binary stream.
+    /// </summary>
+    /// <param name="writer">The binary writer to serialize to.</param>
+    public override void Serialize(BinaryWriter writer)
+    {
+        base.Serialize(writer);
+        writer.Write(PoolSize);
+        writer.Write(Stride);
+    }
+
+    /// <summary>
+    /// Deserializes the layer from a binary stream.
+    /// </summary>
+    /// <param name="reader">The binary reader to deserialize from.</param>
+    public override void Deserialize(BinaryReader reader)
+    {
+        base.Deserialize(reader);
+        PoolSize = reader.ReadInt32();
+        Stride = reader.ReadInt32();
+    }
+
+    #endregion
+
+    #region Activation Info
+
+    /// <summary>
+    /// Gets the activation function types used by this layer.
+    /// </summary>
+    /// <returns>An empty enumerable as max pooling has no activation function.</returns>
+    public override IEnumerable<ActivationFunction> GetActivationTypes()
+    {
+        return [];
+    }
+
+    #endregion
+
+    #region JIT Compilation
+
+    #endregion
+}

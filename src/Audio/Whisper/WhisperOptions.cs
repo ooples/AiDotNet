@@ -1,0 +1,133 @@
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
+
+namespace AiDotNet.Audio.Whisper;
+
+/// <summary>
+/// Configuration options for the Whisper speech recognition model.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Whisper is a speech recognition model developed by OpenAI that can
+/// transcribe audio in multiple languages and perform translation.
+/// </para>
+/// <para><b>For Beginners:</b> Whisper comes in different sizes (tiny to large).
+/// Smaller models are faster but less accurate. Larger models are more accurate but slower.
+/// <list type="bullet">
+/// <item><b>Tiny</b>: ~39M parameters, fastest, good for quick transcription</item>
+/// <item><b>Base</b>: ~74M parameters, balanced speed/accuracy</item>
+/// <item><b>Small</b>: ~244M parameters, good accuracy</item>
+/// <item><b>Medium</b>: ~769M parameters, high accuracy</item>
+/// <item><b>Large</b>: ~1.5B parameters, best accuracy, slow</item>
+/// </list>
+/// </para>
+/// </remarks>
+public class WhisperOptions : ModelOptions
+{
+    /// <summary>Initializes a new instance with default values.</summary>
+    public WhisperOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public WhisperOptions(WhisperOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ModelSize = other.ModelSize;
+        Language = other.Language;
+        Translate = other.Translate;
+        SampleRate = other.SampleRate;
+        NumMels = other.NumMels;
+        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        OnnxOptions = other.OnnxOptions;
+        EncoderModelPath = other.EncoderModelPath;
+        DecoderModelPath = other.DecoderModelPath;
+        MaxTokens = other.MaxTokens;
+        BeamSize = other.BeamSize;
+        Temperature = other.Temperature;
+        ReturnTimestamps = other.ReturnTimestamps;
+        WordTimestamps = other.WordTimestamps;
+    }
+
+    /// <summary>
+    /// Gets or sets the model size to use.
+    /// </summary>
+    public WhisperModelSize ModelSize { get; set; } = WhisperModelSize.Base;
+
+    /// <summary>
+    /// Gets or sets the language code for transcription (e.g., "en", "es", "fr").
+    /// Null for auto-detection.
+    /// </summary>
+    public string? Language { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to translate to English.
+    /// If true, non-English audio will be translated to English.
+    /// </summary>
+    public bool Translate { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the sample rate expected by the model.
+    /// Whisper expects 16kHz audio.
+    /// </summary>
+    public int SampleRate { get; set; } = 16000;
+
+    /// <summary>
+    /// Gets or sets the number of mel filterbank channels.
+    /// Whisper uses 80 mel channels.
+    /// </summary>
+    public int NumMels { get; set; } = 80;
+
+    /// <summary>
+    /// Gets or sets the maximum length of audio to process in seconds.
+    /// Whisper processes 30-second chunks.
+    /// </summary>
+    public int MaxAudioLengthSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Gets or sets the ONNX execution options.
+    /// </summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the path to the encoder ONNX model.
+    /// If null, the model will be downloaded automatically.
+    /// </summary>
+    public string? EncoderModelPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the path to the decoder ONNX model.
+    /// If null, the model will be downloaded automatically.
+    /// </summary>
+    public string? DecoderModelPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum number of tokens to generate.
+    /// </summary>
+    public int MaxTokens { get; set; } = 448;
+
+    /// <summary>
+    /// Gets or sets the beam size for beam search decoding.
+    /// Higher values give better results but are slower.
+    /// </summary>
+    public int BeamSize { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the temperature for sampling.
+    /// Lower values make output more deterministic.
+    /// </summary>
+    public double Temperature { get; set; } = 0.0;
+
+    /// <summary>
+    /// Gets or sets whether to return timestamps with the transcription.
+    /// </summary>
+    public bool ReturnTimestamps { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to include word-level timestamps.
+    /// </summary>
+    public bool WordTimestamps { get; set; } = false;
+}

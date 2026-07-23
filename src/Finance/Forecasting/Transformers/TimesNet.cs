@@ -1,0 +1,1246 @@
+﻿using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Finance.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+using AiDotNet.Finance.Base;
+namespace AiDotNet.Finance.Forecasting.Transformers;
+
+/// <summary>
+/// TimesNet (Temporal 2D-Variation Modeling) neural network for time series analysis.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+/// <remarks>
+/// <para>
+/// TimesNet transforms 1D time series into 2D tensors based on automatically discovered
+/// periods, then applies 2D convolutions to capture both intra-period and inter-period
+/// variations. This approach is particularly effective for time series with multiple
+/// periodic patterns.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> TimesNet thinks about time series data like a calendar:
+/// - Instead of just seeing days in a row (1D), it arranges them into weeks and months (2D)
+/// - This makes it easy to see patterns like "every Monday sales drop" or "end of month peaks"
+/// - It automatically discovers what time scales matter most (daily, weekly, quarterly, etc.)
+///
+/// Key innovations:
+/// - <b>Period Discovery:</b> Uses FFT to automatically find dominant periods
+/// - <b>2D Transformation:</b> Reshapes 1D time series into 2D based on periods
+/// - <b>Inception Module:</b> Multi-scale convolutions capture patterns at different granularities
+/// </para>
+/// <para>
+/// <b>Reference:</b> Wu et al., "TimesNet: Temporal 2D-Variation Modeling for General
+/// Time Series Analysis", ICLR 2023. https://arxiv.org/abs/2210.02186
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimesNet for time series analysis with 2D temporal variation modeling
+/// // Transforms 1D series into 2D based on discovered periods, then applies 2D convolutions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with FFT-based period discovery and inception convolutions
+/// var model = new TimesNet&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimesNet&lt;double&gt;(architecture, "timesnet_electricity.onnx");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("TimesNet: Temporal 2D-Variation Modeling for General Time Series Analysis", "https://arxiv.org/abs/2210.02186", Year = 2023, Authors = "Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, Mingsheng Long")]
+public class TimesNet<T> : ForecastingModelBase<T>
+{
+    #region Execution Mode
+
+    /// <summary>
+    /// Indicates whether this network uses native layers (true) or ONNX model (false).
+    /// </summary>
+    private readonly bool _useNativeMode;
+
+    #endregion
+
+    
+    #region Native Mode Fields
+
+    /// <summary>
+    /// Embedding layer for projecting input features.
+    /// </summary>
+    private ILayer<T>? _embeddingLayer;
+
+    /// <summary>
+    /// Convolutional layers in TimesBlocks.
+    /// </summary>
+    private readonly List<ILayer<T>> _convLayers = [];
+
+    /// <summary>
+    /// Feedforward layers in TimesBlocks.
+    /// </summary>
+    private readonly List<ILayer<T>> _ffnLayers = [];
+
+    /// <summary>
+    /// Dropout layers.
+    /// </summary>
+    private readonly List<ILayer<T>> _dropoutLayers = [];
+
+    /// <summary>
+    /// Layer normalization layers.
+    /// </summary>
+    private readonly List<ILayer<T>> _normLayers = [];
+
+    /// <summary>
+    /// Final layer normalization.
+    /// </summary>
+    private ILayer<T>? _finalNorm;
+
+    /// <summary>
+    /// Output projection layer.
+    /// </summary>
+    private ILayer<T>? _outputProjection;
+
+    /// <summary>
+    /// Instance normalization mean (for RevIN).
+    /// </summary>
+    private Tensor<T>? _instanceMean;
+
+    /// <summary>
+    /// Instance normalization standard deviation (for RevIN).
+    /// </summary>
+    private Tensor<T>? _instanceStd;
+
+    #endregion
+
+    #region Shared Fields
+
+    /// <summary>
+    /// The optimizer for training.
+    /// </summary>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
+    /// The loss function for training.
+    /// </summary>
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly TimesNetOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    /// <summary>
+    /// The input sequence length.
+    /// </summary>
+    private int _sequenceLength;
+
+    /// <summary>
+    /// The prediction horizon.
+    /// </summary>
+    private int _predictionHorizon;
+
+    /// <summary>
+    /// The number of input features.
+    /// </summary>
+    private int _numFeatures;
+
+    /// <summary>
+    /// The model dimension (embedding size).
+    /// </summary>
+    private int _modelDimension;
+
+    /// <summary>
+    /// The feedforward network dimension.
+    /// </summary>
+    private int _feedForwardDimension;
+
+    /// <summary>
+    /// Number of TimesBlock layers.
+    /// </summary>
+    private int _numLayers;
+
+    /// <summary>
+    /// Number of dominant periods to discover.
+    /// </summary>
+    private int _topK;
+
+    /// <summary>
+    /// Convolution kernel size.
+    /// </summary>
+    private int _convKernelSize;
+
+    /// <summary>
+    /// Dropout rate for regularization.
+    /// </summary>
+    private double _dropout;
+
+    /// <summary>
+    /// Whether to use instance normalization (RevIN).
+    /// </summary>
+    private bool _useInstanceNormalization;
+
+    #endregion
+
+    #region IForecastingModel Properties
+
+    /// <inheritdoc/>
+    public override int SequenceLength => _sequenceLength;
+
+    /// <inheritdoc/>
+    public override int PredictionHorizon => _predictionHorizon;
+
+    /// <inheritdoc/>
+    public override int NumFeatures => _numFeatures;
+
+    /// <inheritdoc/>
+    public override int PatchSize => 1; // TimesNet doesn't use patching in the traditional sense
+
+    /// <inheritdoc/>
+    public override int Stride => 1;
+
+    /// <inheritdoc/>
+    public override bool IsChannelIndependent => false; // TimesNet processes all channels together
+
+    /// <inheritdoc/>
+    public override bool UseNativeMode => _useNativeMode;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates a TimesNet network using pretrained ONNX model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model file.</param>
+    /// <param name="options">Configuration options for the model.</param>
+    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
+    /// <param name="lossFunction">Optional loss function.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this constructor when you have a pretrained ONNX model.
+    /// ONNX models are pre-trained and ready to use for predictions immediately.
+    /// </para>
+    /// </remarks>
+    public TimesNet(
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
+        TimesNetOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
+
+        options ??= new TimesNetOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = false;
+        OnnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        _sequenceLength = options.SequenceLength;
+        _predictionHorizon = options.PredictionHorizon;
+        _numFeatures = options.NumFeatures;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _numLayers = options.NumLayers;
+        _topK = options.TopK;
+        _convKernelSize = options.ConvKernelSize;
+        _dropout = options.Dropout;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+    }
+
+    /// <summary>
+    /// Creates a TimesNet network in native mode for training from scratch.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="options">Configuration options for the model.</param>
+    /// <param name="optimizer">Optional optimizer.</param>
+    /// <param name="lossFunction">Optional loss function.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this constructor to train a new TimesNet model from scratch.
+    /// TimesNet excels at:
+    /// - Capturing periodic patterns (daily, weekly, monthly cycles)
+    /// - General time series tasks (forecasting, classification, anomaly detection)
+    /// - Learning multi-scale temporal variations
+    /// </para>
+    /// </remarks>
+    public TimesNet(
+        NeuralNetworkArchitecture<T> architecture,
+        TimesNetOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        options ??= new TimesNetOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = true;
+        OnnxSession = null;
+        OnnxModelPath = null;
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        _sequenceLength = options.SequenceLength;
+        _predictionHorizon = options.PredictionHorizon;
+        _numFeatures = options.NumFeatures;
+        _modelDimension = options.ModelDimension;
+        _feedForwardDimension = options.FeedForwardDimension;
+        _numLayers = options.NumLayers;
+        _topK = options.TopK;
+        _convKernelSize = options.ConvKernelSize;
+        _dropout = options.Dropout;
+        _useInstanceNormalization = options.UseInstanceNormalization;
+
+        InitializeLayers();
+    }
+
+    #endregion
+
+    #region Initialization
+
+    /// <summary>
+    /// Initializes the neural network layers for TimesNet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TimesNet has several specialized components:
+    /// </para>
+    /// <para>
+    /// <list type="number">
+    /// <item><b>Embedding:</b> Projects input features to model dimension</item>
+    /// <item><b>TimesBlock:</b> Discovers periods and applies 2D convolutions</item>
+    /// <item><b>Layer Normalization:</b> Stabilizes training</item>
+    /// <item><b>Output Projection:</b> Maps to prediction horizon</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else if (_useNativeMode)
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultTimesNetLayers(
+                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                _modelDimension, _feedForwardDimension, _numLayers, _topK,
+                _convKernelSize, _dropout));
+
+            ExtractLayerReferences();
+        }
+    }
+
+    /// <summary>
+    /// Extracts references to specific layers from the layer collection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TimesNet has multiple types of layers that need
+    /// to be accessed during the forward pass. This organizes them for efficient access.
+    /// </para>
+    /// </remarks>
+    private void ExtractLayerReferences()
+    {
+        int idx = 0;
+
+        // Embedding layer
+        if (Layers.Count > idx)
+            _embeddingLayer = Layers[idx++];
+
+        // TimesBlock layers
+        for (int i = 0; i < _numLayers; i++)
+        {
+            // Conv layer
+            if (Layers.Count > idx)
+                _convLayers.Add(Layers[idx++]);
+
+            // FFN layers (2 dense layers)
+            if (Layers.Count > idx)
+                _ffnLayers.Add(Layers[idx++]);
+            if (Layers.Count > idx)
+                _ffnLayers.Add(Layers[idx++]);
+
+            // Dropout
+            if (Layers.Count > idx)
+                _dropoutLayers.Add(Layers[idx++]);
+
+            // Layer norm
+            if (Layers.Count > idx)
+                _normLayers.Add(Layers[idx++]);
+        }
+
+        // Final norm and output projection
+        if (Layers.Count > idx)
+            _finalNorm = Layers[idx++];
+        if (Layers.Count > idx)
+            _outputProjection = Layers[idx];
+    }
+
+    /// <summary>
+    /// Validates that custom layers meet TimesNet's architectural requirements.
+    /// </summary>
+    /// <param name="layers">The list of custom layers to validate.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TimesNet requires minimum layers for embedding,
+    /// convolution processing, and output projection.
+    /// </para>
+    /// </remarks>
+    protected override void ValidateCustomLayers(List<ILayer<T>> layers)
+    {
+        base.ValidateCustomLayers(layers);
+        if (layers.Count < 4)
+        {
+            throw new ArgumentException(
+                "TimesNet requires at least 4 layers: embedding, conv, norm, and output projection.",
+                nameof(layers));
+        }
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Overrides
+
+    /// <inheritdoc/>
+    public override bool SupportsTraining => _useNativeMode;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TimesNet model, Predict produces predictions from input data. This is the main inference step of the TimesNet architecture.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TimesNet model, Train performs a training step. This updates the TimesNet architecture so it learns from data.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+
+        base.Train(input, target);
+    }
+
+    /// <summary>
+    /// Training-mode forward: calls <see cref="Forward"/> directly so
+    /// <c>_dropoutLayers</c> between the Inception blocks fire during
+    /// backprop. Default would go through <c>ForecastNative</c>, which
+    /// disables training mode first.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Propagates training mode to every layer. The base class only flips
+    /// the network-level flag, so DropoutLayer stays at its default
+    /// <c>IsTrainingMode = true</c> and continues firing during
+    /// <see cref="Predict"/>. That breaks determinism invariants
+    /// (<c>Predict_ShouldBeDeterministic</c>, <c>Clone_ShouldProduceIdenticalOutput</c>)
+    /// because each call samples a fresh dropout mask.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
+    /// Captures named activations along TimesNet's actual forward path. The
+    /// base implementation just iterates <c>Layers</c> linearly, which fails
+    /// for TimesNet because the conv blocks expect NCHW (rank-4) but follow
+    /// a Dense embedding that emits [B, S, C] (rank-3). Per Wu et al. 2023
+    /// §3.2 the conv input is built by transpose+reshape inside the block,
+    /// so we replay that here.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var current = input;
+        if (current.Rank == 1)
+            current = current.Reshape(1, current.Shape[0], 1);
+        else if (current.Rank == 2)
+            current = current.Reshape(current.Shape[0], current.Shape[1], 1);
+
+        int layerIdx = 0;
+
+        if (_embeddingLayer is not null)
+        {
+            current = _embeddingLayer.Forward(current);
+            activations[$"Layer_{layerIdx++}_{_embeddingLayer.GetType().Name}"] = current.Clone();
+        }
+
+        int ffnIdx = 0;
+        for (int i = 0; i < _convLayers.Count; i++)
+        {
+            var residual = current;
+
+            int batchSize = current.Shape[0];
+            int seqLen = current.Shape[1];
+            int channels = current.Shape[2];
+            var convInput = Engine.Reshape(
+                Engine.TensorPermute(current, new[] { 0, 2, 1 }),
+                new[] { batchSize, channels, 1, seqLen });
+            var convOutput = _convLayers[i].Forward(convInput);
+            activations[$"Layer_{layerIdx++}_{_convLayers[i].GetType().Name}"] = convOutput.Clone();
+
+            int outSeqLen = convOutput.Shape[3];
+            int outChannels = convOutput.Shape[1];
+            current = Engine.Reshape(
+                Engine.TensorPermute(convOutput, new[] { 0, 3, 1, 2 }),
+                new[] { batchSize, outSeqLen, outChannels });
+
+            if (ffnIdx < _ffnLayers.Count)
+            {
+                current = _ffnLayers[ffnIdx].Forward(current);
+                activations[$"Layer_{layerIdx++}_{_ffnLayers[ffnIdx].GetType().Name}"] = current.Clone();
+                ffnIdx++;
+            }
+            if (ffnIdx < _ffnLayers.Count)
+            {
+                current = _ffnLayers[ffnIdx].Forward(current);
+                activations[$"Layer_{layerIdx++}_{_ffnLayers[ffnIdx].GetType().Name}"] = current.Clone();
+                ffnIdx++;
+            }
+
+            if (i < _dropoutLayers.Count)
+            {
+                current = _dropoutLayers[i].Forward(current);
+                activations[$"Layer_{layerIdx++}_{_dropoutLayers[i].GetType().Name}"] = current.Clone();
+            }
+
+            current = AddResidualConnection(residual, current);
+
+            if (i < _normLayers.Count)
+            {
+                current = _normLayers[i].Forward(current);
+                activations[$"Layer_{layerIdx++}_{_normLayers[i].GetType().Name}"] = current.Clone();
+            }
+        }
+
+        if (_finalNorm is not null)
+        {
+            current = _finalNorm.Forward(current);
+            activations[$"Layer_{layerIdx++}_{_finalNorm.GetType().Name}"] = current.Clone();
+        }
+
+        if (_outputProjection is not null)
+        {
+            current = _outputProjection.Forward(current);
+            activations[$"Layer_{layerIdx++}_{_outputProjection.GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TimesNet model, UpdateParameters updates internal parameters or state. This keeps the TimesNet architecture aligned with the latest values.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in Train method
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TimesNet model, GetModelMetadata performs a supporting step in the workflow. It keeps the TimesNet architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NetworkType", "TimesNet" },
+                { "SequenceLength", _sequenceLength },
+                { "PredictionHorizon", _predictionHorizon },
+                { "ModelDimension", _modelDimension },
+                { "NumLayers", _numLayers },
+                { "TopK", _topK },
+                { "ConvKernelSize", _convKernelSize },
+                { "UseNativeMode", _useNativeMode },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+        };
+    }
+
+    /// <summary>
+    /// Creates a new instance of this model with the same configuration.
+    /// </summary>
+    /// <returns>A new TimesNet model instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
+    /// but new (randomly initialized) weights. Useful for ensemble training or cross-validation.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new TimesNetOptions<T>
+        {
+            SequenceLength = _sequenceLength,
+            PredictionHorizon = _predictionHorizon,
+            NumFeatures = _numFeatures,
+            ModelDimension = _modelDimension,
+            FeedForwardDimension = _feedForwardDimension,
+            NumLayers = _numLayers,
+            TopK = _topK,
+            ConvKernelSize = _convKernelSize,
+            Dropout = _dropout,
+            UseInstanceNormalization = _useInstanceNormalization
+        };
+
+        return new TimesNet<T>(Architecture, options);
+    }
+
+    /// <summary>
+    /// Writes TimesNet-specific configuration during serialization.
+    /// </summary>
+    /// <param name="writer">Binary writer for output.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This saves TimesNet settings like model dimension and TopK
+    /// to a file so the model can be loaded later with the same configuration.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_sequenceLength);
+        writer.Write(_predictionHorizon);
+        writer.Write(_numFeatures);
+        writer.Write(_modelDimension);
+        writer.Write(_feedForwardDimension);
+        writer.Write(_numLayers);
+        writer.Write(_topK);
+        writer.Write(_convKernelSize);
+        writer.Write(_dropout);
+        writer.Write(_useInstanceNormalization);
+    }
+
+    /// <summary>
+    /// Reads TimesNet-specific configuration during deserialization.
+    /// </summary>
+    /// <param name="reader">Binary reader for input.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This reads back TimesNet settings when loading a saved model
+    /// and restores the model configuration.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _sequenceLength = reader.ReadInt32();
+        _predictionHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _feedForwardDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _topK = reader.ReadInt32();
+        _convKernelSize = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _useInstanceNormalization = reader.ReadBoolean();
+
+        // Re-bind the typed layer-reference fields against the freshly
+        // deserialized Layers list. Without this, Forward() sees null for
+        // _embeddingLayer / _outputProjection / etc. and short-circuits to
+        // returning the input unchanged — which makes the cloned network
+        // produce all-zero output and breaks Clone_ShouldProduceIdenticalOutput.
+        _embeddingLayer = null;
+        _convLayers.Clear();
+        _ffnLayers.Clear();
+        _dropoutLayers.Clear();
+        _normLayers.Clear();
+        _finalNorm = null;
+        _outputProjection = null;
+        ExtractLayerReferences();
+    }
+
+    #endregion
+
+    #region IForecastingModel Implementation
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TimesNet model, Forecast produces predictions from input data. This is the main inference step of the TimesNet architecture.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    {
+        if (_useInstanceNormalization)
+            historicalData = ApplyInstanceNormalization(historicalData);
+
+        var forecast = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
+
+        if (_useInstanceNormalization)
+            forecast = ApplyRevIN(forecast, normalize: false);
+
+        return forecast;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TimesNet model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the TimesNet architecture.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    {
+        var predictions = new List<Tensor<T>>();
+        var currentInput = input;
+
+        int stepsRemaining = steps;
+        while (stepsRemaining > 0)
+        {
+            var prediction = Forecast(currentInput, null);
+            predictions.Add(prediction);
+
+            int stepsUsed = Math.Min(_predictionHorizon, stepsRemaining);
+            stepsRemaining -= stepsUsed;
+
+            if (stepsRemaining > 0)
+            {
+                currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed);
+            }
+        }
+
+        return ConcatenatePredictions(predictions, steps);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TimesNet model, Evaluate performs a supporting step in the workflow. It keeps the TimesNet architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    {
+        var metrics = new Dictionary<string, T>();
+
+        // Calculate MSE and MAE
+        T mse = NumOps.Zero;
+        T mae = NumOps.Zero;
+        int count = 0;
+
+        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
+        {
+            var diff = NumOps.Subtract(predictions[i], actuals[i]);
+            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
+            mae = NumOps.Add(mae, NumOps.Abs(diff));
+            count++;
+        }
+
+        if (count > 0)
+        {
+            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
+            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
+        }
+
+        metrics["MSE"] = mse;
+        metrics["MAE"] = mae;
+        metrics["RMSE"] = NumOps.Sqrt(mse);
+
+        return metrics;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TimesNet model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the TimesNet architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    {
+        return ApplyRevIN(input, normalize: true);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TimesNet model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the TimesNet architecture is performing.
+    /// </para>
+    /// </remarks>
+    public override Dictionary<string, T> GetFinancialMetrics()
+    {
+        return new Dictionary<string, T>
+        {
+            ["SequenceLength"] = NumOps.FromDouble(_sequenceLength),
+            ["PredictionHorizon"] = NumOps.FromDouble(_predictionHorizon),
+            ["ModelDimension"] = NumOps.FromDouble(_modelDimension),
+            ["NumLayers"] = NumOps.FromDouble(_numLayers),
+            ["TopK"] = NumOps.FromDouble(_topK),
+            ["ConvKernelSize"] = NumOps.FromDouble(_convKernelSize)
+        };
+    }
+
+    #endregion
+
+    #region Forward/Backward Pass
+
+    /// <summary>
+    /// Performs the forward pass through the TimesNet network.
+    /// </summary>
+    /// <param name="input">Input tensor of shape [batch, sequence_length, features].</param>
+    /// <returns>Output tensor of shape [batch, prediction_horizon, features].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The TimesNet forward pass has several stages:
+    /// 1. Embedding: Project input to model dimension
+    /// 2. TimesBlocks (repeated): Apply 2D convolutions after period-based reshaping
+    /// 3. Layer Normalization: Stabilize outputs
+    /// 4. Output Projection: Generate predictions
+    /// </para>
+    /// </remarks>
+    private Tensor<T> Forward(Tensor<T> input)
+    {
+        // Per Wu et al. 2023 ("TimesNet: Temporal 2D-Variation Modeling for
+        // General Time Series Analysis"), TimesNet operates on
+        // [batch, sequence_length, features]. Univariate inputs from the
+        // forecasting test harness arrive as rank-1 [contextLength] or
+        // rank-2 [batch, contextLength]; promote them so the downstream
+        // shape math (current.Shape[1] / [2]) does not OOR.
+        var current = input;
+        if (current.Rank == 1)
+            current = current.Reshape(1, current.Shape[0], 1);
+        else if (current.Rank == 2)
+            current = current.Reshape(current.Shape[0], current.Shape[1], 1);
+
+        // Embedding
+        if (_embeddingLayer is not null)
+        {
+            current = _embeddingLayer.Forward(current);
+        }
+
+        // TimesBlock layers
+        int ffnIdx = 0;
+        for (int i = 0; i < _convLayers.Count; i++)
+        {
+            var residual = current;
+
+            // Convolution expects NCHW; reshape [B, S, C] -> [B, C, 1, S].
+            // Engine.TensorPermute / Engine.Reshape so the gradient tape
+            // records both ops — Tensor<T>.Transpose / .Reshape skip the tape
+            // (TrainWithTape:2787 uses Engine.Reshape for the same reason),
+            // breaking gradient flow back through the conv layer and leaving
+            // every parameter at zero gradient (the failing
+            // GradientFlow_ShouldBeNonZeroAndFinite invariant).
+            int batchSize = current.Shape[0];
+            int seqLen = current.Shape[1];
+            int channels = current.Shape[2];
+            var convInput = Engine.Reshape(
+                Engine.TensorPermute(current, new[] { 0, 2, 1 }),
+                new[] { batchSize, channels, 1, seqLen });
+            var convOutput = _convLayers[i].Forward(convInput);
+
+            // Reshape back to [B, S, C] via tape-tracked permute + reshape.
+            int outSeqLen = convOutput.Shape[3];
+            int outChannels = convOutput.Shape[1];
+            current = Engine.Reshape(
+                Engine.TensorPermute(convOutput, new[] { 0, 3, 1, 2 }),
+                new[] { batchSize, outSeqLen, outChannels });
+
+            // FFN (2 layers)
+            if (ffnIdx < _ffnLayers.Count)
+                current = _ffnLayers[ffnIdx++].Forward(current);
+            if (ffnIdx < _ffnLayers.Count)
+                current = _ffnLayers[ffnIdx++].Forward(current);
+
+            // Dropout
+            if (i < _dropoutLayers.Count)
+                current = _dropoutLayers[i].Forward(current);
+
+            // Residual connection
+            current = AddResidualConnection(residual, current);
+
+            // Layer norm
+            if (i < _normLayers.Count)
+                current = _normLayers[i].Forward(current);
+        }
+
+        // Final normalization
+        if (_finalNorm is not null)
+        {
+            current = _finalNorm.Forward(current);
+        }
+
+        // Output projection
+        if (_outputProjection is not null)
+        {
+            current = _outputProjection.Forward(current);
+        }
+
+        return AdjustToPredictionHorizon(current);
+    }
+
+    /// <summary>
+    /// Performs native mode forecasting.
+    /// </summary>
+    /// <param name="input">Input historical data.</param>
+    /// <returns>Forecasted values.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Native mode uses the layers defined in this library
+    /// for inference. This allows full control and training capability.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ForecastNative(Tensor<T> input)
+    {
+        SetTrainingMode(false);
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Performs ONNX mode forecasting.
+    /// </summary>
+    /// <param name="input">Input historical data.</param>
+    /// <returns>Forecasted values.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ONNX mode uses a pre-trained model file for inference.
+    /// This is typically faster but doesn't support training.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
+    {
+        if (OnnxSession is null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+
+        // Convert to ONNX format
+        var inputData = new float[input.Length];
+        for (int i = 0; i < input.Length; i++)
+        {
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        }
+
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
+        var inputMeta = OnnxSession.InputMetadata;
+        string inputName = inputMeta.Keys.First();
+
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
+        };
+
+        using var results = OnnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var outputData = new T[outputTensor.Length];
+        for (int i = 0; i < outputTensor.Length; i++)
+        {
+            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    #endregion
+
+    #region Model-Specific Processing
+
+    /// <summary>
+    /// Adds a residual connection between input and processed output.
+    /// </summary>
+    /// <param name="input">Original input tensor.</param>
+    /// <param name="processed">Processed tensor from layer.</param>
+    /// <returns>Sum of input and processed tensors.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Residual connections add the original input to the
+    /// processed output. This helps with gradient flow during training.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> AddResidualConnection(Tensor<T> input, Tensor<T> processed)
+    {
+        if (input.Length != processed.Length)
+        {
+            int minLen = Math.Min(input.Length, processed.Length);
+            var result = new Tensor<T>(input._shape);
+            for (int i = 0; i < minLen; i++)
+                result[i] = NumOps.Add(input[i], processed[i]);
+            for (int i = minLen; i < input.Length; i++)
+                result[i] = input[i];
+            return result;
+        }
+
+        return Engine.TensorAdd(input, processed);
+    }
+
+    /// <summary>
+    /// Applies RevIN normalization/denormalization.
+    /// </summary>
+    /// <param name="input">Input tensor.</param>
+    /// <param name="normalize">True to normalize, false to denormalize.</param>
+    /// <returns>Normalized or denormalized tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> RevIN (Reversible Instance Normalization) handles
+    /// distribution shifts in time series data.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
+    {
+        if (normalize)
+        {
+            int batchSize = input.Shape[0];
+            int seqLen = input.Shape[1];
+            int features = input.Shape[2];
+
+            _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
+            _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
+
+            var normalized = new Tensor<T>(input._shape);
+            T epsilon = NumOps.FromDouble(1e-5);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int f = 0; f < features; f++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int t = 0; t < seqLen; t++)
+                    {
+                        sum = NumOps.Add(sum, input[b, t, f]);
+                    }
+                    T mean = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
+                    _instanceMean[b, 0, f] = mean;
+
+                    T varSum = NumOps.Zero;
+                    for (int t = 0; t < seqLen; t++)
+                    {
+                        var diff = NumOps.Subtract(input[b, t, f], mean);
+                        varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
+                    }
+                    T std = NumOps.Sqrt(NumOps.Add(NumOps.Divide(varSum, NumOps.FromDouble(seqLen)), epsilon));
+                    _instanceStd[b, 0, f] = std;
+
+                    for (int t = 0; t < seqLen; t++)
+                    {
+                        normalized[b, t, f] = NumOps.Divide(NumOps.Subtract(input[b, t, f], mean), std);
+                    }
+                }
+            }
+
+            return normalized;
+        }
+        else
+        {
+            if (_instanceMean is null || _instanceStd is null)
+                return input;
+
+            var denormalized = new Tensor<T>(input._shape);
+            int batchSize = input.Shape[0];
+            int horizonLen = input.Shape[1];
+            int features = input.Shape[2];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int t = 0; t < horizonLen; t++)
+                {
+                    for (int f = 0; f < features; f++)
+                    {
+                        var scaled = NumOps.Multiply(input[b, t, f], _instanceStd[b, 0, f]);
+                        denormalized[b, t, f] = NumOps.Add(scaled, _instanceMean[b, 0, f]);
+                    }
+                }
+            }
+
+            return denormalized;
+        }
+    }
+
+    /// <summary>
+    /// Trims the sequence dimension to <see cref="_predictionHorizon"/>,
+    /// taking the LAST <c>pred_len</c> timesteps per Wu et al. 2023's official
+    /// implementation (<c>dec_out[:, -self.pred_len:, :]</c>). Uses
+    /// <see cref="Engine"/> ops so the gradient tape sees the slice — manual
+    /// per-element copy bypasses the tape and zeroes every gradient that
+    /// would flow back through the trimmed timesteps.
+    /// </summary>
+    private Tensor<T> AdjustToPredictionHorizon(Tensor<T> output)
+    {
+        int currentLen = output.Shape[1];
+        if (currentLen == _predictionHorizon)
+            return output;
+
+        if (currentLen > _predictionHorizon)
+        {
+            // Take the last predictionHorizon timesteps along axis=1.
+            // Engine.TensorSlice records the slice on the tape so backward
+            // can propagate gradients into the embedded/conv/FFN stack.
+            int batchSize = output.Shape[0];
+            int features = output.Shape[2];
+            int seqOffset = currentLen - _predictionHorizon;
+            return Engine.TensorSlice(output,
+                new[] { 0, seqOffset, 0 },
+                new[] { batchSize, _predictionHorizon, features });
+        }
+
+        // currentLen < predictionHorizon: zero-pad. Rare in practice and only
+        // relevant when an external caller bypasses the helper layer sizing.
+        var padded = new Tensor<T>(new[] { output.Shape[0], _predictionHorizon, output.Shape[2] });
+        for (int b = 0; b < output.Shape[0]; b++)
+            for (int t = 0; t < currentLen; t++)
+                for (int f = 0; f < output.Shape[2]; f++)
+                    padded[b, t, f] = output[b, t, f];
+        return padded;
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Shifts input and appends predictions for autoregressive forecasting.
+    /// </summary>
+    /// <param name="input">Current input tensor.</param>
+    /// <param name="predictions">Predictions to append.</param>
+    /// <param name="steps">Number of steps to shift.</param>
+    /// <returns>Shifted input tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> For forecasting beyond the prediction horizon,
+    /// we need to "roll" the input window forward.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
+    {
+        int batchSize = input.Shape[0];
+        int features = input.Shape[2];
+        var newInput = new Tensor<T>(new[] { batchSize, _sequenceLength, features });
+
+        int keepLen = _sequenceLength - steps;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int t = 0; t < keepLen; t++)
+            {
+                for (int f = 0; f < features; f++)
+                {
+                    newInput[b, t, f] = input[b, t + steps, f];
+                }
+            }
+
+            for (int t = 0; t < steps; t++)
+            {
+                for (int f = 0; f < features; f++)
+                {
+                    newInput[b, keepLen + t, f] = predictions[b, t, f];
+                }
+            }
+        }
+
+        return newInput;
+    }
+
+    /// <summary>
+    /// Concatenates multiple prediction tensors.
+    /// </summary>
+    /// <param name="predictions">List of prediction tensors.</param>
+    /// <param name="totalSteps">Total number of steps to include.</param>
+    /// <returns>Concatenated predictions tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When forecasting multiple horizons autoregressively,
+    /// we accumulate predictions and combine them into a single output.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    {
+        if (predictions.Count == 0)
+            return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
+
+        int batchSize = predictions[0].Shape[0];
+        var result = new Tensor<T>(new[] { batchSize, totalSteps, _numFeatures });
+
+        int currentStep = 0;
+        foreach (var pred in predictions)
+        {
+            int stepsToAdd = Math.Min(pred.Shape[1], totalSteps - currentStep);
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int t = 0; t < stepsToAdd; t++)
+                {
+                    for (int f = 0; f < _numFeatures; f++)
+                    {
+                        result[b, currentStep + t, f] = pred[b, t, f];
+                    }
+                }
+            }
+            currentStep += stepsToAdd;
+        }
+
+        return result;
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Disposes resources used by the TimesNet model.
+    /// </summary>
+    /// <param name="disposing">True if disposing managed resources.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Proper disposal ensures that ONNX sessions and other
+    /// resources are released when the model is no longer needed.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            OnnxSession?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+
+    #endregion
+}
+

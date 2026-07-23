@@ -1,0 +1,234 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.NeuralNetworks.Tabular;
+
+/// <summary>
+/// AutoInt implementation for classification tasks.
+/// </summary>
+/// <remarks>
+/// <para>
+/// AutoIntClassifier uses multi-head self-attention to automatically learn
+/// feature interactions for classification on tabular data.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Use AutoInt for classification when:
+/// - Feature interactions matter (e.g., age + product_category)
+/// - You don't want to manually engineer feature crosses
+/// - You want interpretable interaction patterns
+///
+/// Example:
+/// <code>
+/// var options = new AutoIntOptions&lt;double&gt;
+/// {
+///     EmbeddingDimension = 16,
+///     NumLayers = 3,
+///     NumHeads = 2
+/// };
+/// var classifier = new AutoIntClassifier&lt;double&gt;(numFeatures: 10, numClasses: 2, options);
+///
+/// // Train and predict
+/// var predictions = classifier.Predict(features);
+///
+/// // See learned interactions
+/// var interactions = classifier.GetInteractionWeights();
+/// </code>
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("AutoInt: Automatic Feature Interaction Learning via Self-Attentive Neural Networks",
+    "https://arxiv.org/abs/1810.11921",
+    Year = 2019,
+    Authors = "Song, W., Shi, C., Xiao, Z., Duan, Z., Xu, Y., Zhang, M., & Tang, J.")]
+public class AutoIntClassifier<T> : AutoIntBase<T>
+{
+    private readonly int _numClasses;
+    private readonly FullyConnectedLayer<T> _classificationHead;
+
+    // Cache
+    private Tensor<T>? _backboneOutputCache;
+    private Tensor<T>? _logitsCache;
+    private Tensor<T>? _probabilitiesCache;
+
+    /// <summary>
+    /// Gets the number of output classes.
+    /// </summary>
+    public int NumClasses => _numClasses;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters.
+    /// </summary>
+    public override long ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
+
+    /// <summary>
+    /// Initializes a new instance of the AutoIntClassifier class.
+    /// </summary>
+    /// <param name="numNumericalFeatures">Number of numerical input features.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="options">Model configuration options.</param>
+    public AutoIntClassifier(
+        int numNumericalFeatures,
+        int numClasses,
+        AutoIntOptions<T>? options = null)
+        : base(numNumericalFeatures, options)
+    {
+        if (numClasses < 2)
+        {
+            throw new ArgumentException("Number of classes must be at least 2", nameof(numClasses));
+        }
+
+        _numClasses = numClasses;
+
+        _classificationHead = new FullyConnectedLayer<T>(
+            numClasses,
+            (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Performs the forward pass to get class logits.
+    /// </summary>
+    public Tensor<T> Forward(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
+    {
+        var backboneOutput = ForwardBackbone(numericalFeatures, categoricalIndices);
+        _backboneOutputCache = backboneOutput;
+
+        var logits = _classificationHead.Forward(backboneOutput);
+        _logitsCache = logits;
+
+        return logits;
+    }
+
+    /// <summary>
+    /// Predicts class probabilities using softmax.
+    /// </summary>
+    public Tensor<T> PredictProbabilities(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
+    {
+        var logits = Forward(numericalFeatures, categoricalIndices);
+        var probabilities = ApplySoftmax(logits);
+        _probabilitiesCache = probabilities;
+        return probabilities;
+    }
+
+    /// <summary>
+    /// Predicts the most likely class for each sample.
+    /// </summary>
+    public Vector<int> Predict(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
+    {
+        var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
+        int batchSize = probabilities.Shape[0];
+        var predictions = new Vector<int>(batchSize);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int maxIdx = 0;
+            var maxProb = probabilities[b * _numClasses + 0];
+
+            for (int c = 1; c < _numClasses; c++)
+            {
+                var prob = probabilities[b * _numClasses + c];
+                if (NumOps.Compare(prob, maxProb) > 0)
+                {
+                    maxProb = prob;
+                    maxIdx = c;
+                }
+            }
+
+            predictions[b] = maxIdx;
+        }
+
+        return predictions;
+    }
+
+    /// <summary>
+    /// Computes the cross-entropy loss.
+    /// </summary>
+    public T ComputeCrossEntropyLoss(Tensor<T> probabilities, Vector<int> targets)
+    {
+        int batchSize = probabilities.Shape[0];
+
+        if (targets.Length != batchSize)
+        {
+            throw new ArgumentException(
+                $"Targets length ({targets.Length}) must match batch size ({batchSize}).");
+        }
+
+        var totalLoss = NumOps.Zero;
+        var epsilon = NumOps.FromDouble(1e-15);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int targetClass = targets[b];
+            var prob = probabilities[b * _numClasses + targetClass];
+            var safeProb = NumOps.Add(prob, epsilon);
+            var loss = NumOps.Negate(NumOps.Log(safeProb));
+            totalLoss = NumOps.Add(totalLoss, loss);
+        }
+
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Performs a single training step.
+    /// </summary>
+    public T TrainStep(Tensor<T> numericalFeatures, Vector<int> targets, T learningRate, Matrix<int>? categoricalIndices = null)
+    {
+        var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
+        var loss = ComputeCrossEntropyLoss(probabilities, targets);
+        UpdateParameters(learningRate);
+        ResetState();
+
+        return loss;
+    }
+
+    /// <summary>
+    /// Computes classification accuracy.
+    /// </summary>
+    public T ComputeAccuracy(Tensor<T> numericalFeatures, Vector<int> targets, Matrix<int>? categoricalIndices = null)
+    {
+        var predictions = Predict(numericalFeatures, categoricalIndices);
+        int correct = 0;
+
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (predictions[i] == targets[i])
+                correct++;
+        }
+
+        return NumOps.FromDouble((double)correct / predictions.Length);
+    }
+
+    private Tensor<T> ApplySoftmax(Tensor<T> logits)
+    {
+        return Engine.Softmax(logits, -1);
+    }
+
+    /// <summary>
+    /// Updates all parameters.
+    /// </summary>
+    public override void UpdateParameters(T learningRate)
+    {
+        base.UpdateParameters(learningRate);
+        _classificationHead.UpdateParameters(learningRate);
+    }
+
+    /// <summary>
+    /// Resets internal state.
+    /// </summary>
+    public override void ResetState()
+    {
+        base.ResetState();
+        _backboneOutputCache = null;
+        _logitsCache = null;
+        _probabilitiesCache = null;
+        _classificationHead.ResetState();
+    }
+}

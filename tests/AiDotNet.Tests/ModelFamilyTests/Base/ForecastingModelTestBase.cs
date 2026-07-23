@@ -1,0 +1,56 @@
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
+using Xunit;
+using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
+
+namespace AiDotNet.Tests.ModelFamilyTests.Base;
+
+/// <summary>
+/// Base test class for financial forecasting models. Inherits financial model invariants
+/// and adds forecasting-specific: temporal ordering preserved, horizon consistency,
+/// and trend sensitivity.
+/// </summary>
+public abstract class ForecastingModelTestBase<T> : FinancialModelTestBase<T>
+{
+    [Fact(Timeout = 60000)]
+    public async Task ForecastHorizon_ShouldProduceOutput()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+        var output = network.Predict(input);
+        Assert.True(output.Length > 0, "Forecasting model produced empty forecast.");
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DifferentHistories_DifferentForecasts()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var network = CreateNetwork();
+        var history1 = CreateConstantTensor(InputShape, 0.1);
+        var history2 = CreateConstantTensor(InputShape, 0.9);
+
+        var forecast1 = network.Predict(history1);
+        var forecast2 = network.Predict(history2);
+
+        bool anyDifferent = false;
+        int minLen = Math.Min(forecast1.Length, forecast2.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            if (Math.Abs(ConvertToDouble(forecast1[i]) - ConvertToDouble(forecast2[i])) > 1e-12)
+            {
+                anyDifferent = true;
+                break;
+            }
+        }
+        Assert.True(anyDifferent,
+            "Forecasting model produces identical forecasts for different histories — ignoring input.");
+    }
+}
+
+/// <summary>Non-generic &lt;double&gt; alias — the default for forecasting models that are not floated.</summary>
+public abstract class ForecastingModelTestBase : ForecastingModelTestBase<double> { }

@@ -1,0 +1,1712 @@
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a self-attention layer that allows a sequence to attend to itself, capturing relationships between elements.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The SelfAttentionLayer implements the self-attention mechanism, a key component of transformer architectures.
+/// It allows each position in a sequence to attend to all positions within the same sequence, enabling the model
+/// to capture long-range dependencies and relationships. The layer uses the scaled dot-product attention mechanism
+/// with multiple attention heads, which allows it to focus on different aspects of the input simultaneously.
+/// </para>
+/// <para><b>For Beginners:</b> This layer helps a neural network understand relationships between different parts of a sequence.
+/// 
+/// Think of the SelfAttentionLayer like a group of spotlights at a theater performance:
+/// - Each spotlight (attention head) can focus on different actors on stage
+/// - For each actor, the spotlights decide which other actors are most relevant to them
+/// - The spotlights assign importance scores to these relationships
+/// - This helps the network understand who is interacting with whom, and how
+/// 
+/// For example, in a sentence like "The cat sat on the mat because it was tired":
+/// - Traditional networks might struggle to figure out what "it" refers to
+/// - Self-attention can learn that "it" has a strong relationship with "cat"
+/// - This helps the network understand that the cat was tired, not the mat
+/// 
+/// Multi-head attention (using multiple "spotlights") allows the layer to focus on different types
+/// of relationships simultaneously, such as grammatical structure, semantic meaning, and contextual clues.
+/// 
+/// Self-attention is a cornerstone of modern natural language processing and has revolutionized
+/// how neural networks handle sequential data like text, time series, and even images.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+{
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (attention sparsity regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Attention sparsity regularization encourages the attention mechanism to focus on relevant positions
+    /// while ignoring irrelevant ones. This prevents attention from being too diffuse and improves interpretability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This helps self-attention focus on what matters.
+    ///
+    /// Self-attention works best when it's selective:
+    /// - Without regularization: Attention might spread too thin across all positions
+    /// - With regularization: Attention focuses on truly relevant relationships
+    ///
+    /// This includes:
+    /// 1. Entropy regularization: Prevents overly uniform attention
+    /// 2. Sparsity penalties: Encourages sharp, focused attention patterns
+    ///
+    /// This helps the model:
+    /// - Learn clearer, more interpretable attention patterns
+    /// - Focus computational resources on relevant relationships
+    /// - Improve robustness and generalization
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the attention sparsity auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much attention sparsity regularization contributes to the total loss.
+    /// Typical values range from 0.001 to 0.01.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much we encourage focused attention.
+    ///
+    /// Common values:
+    /// - 0.005 (default): Balanced sparsity regularization
+    /// - 0.001-0.003: Light sparsity enforcement
+    /// - 0.008-0.01: Strong sparsity enforcement
+    ///
+    /// Higher values encourage sharper, more focused attention patterns.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    private T _lastEntropyLoss;
+    private T _lastSparsityLoss;
+
+    /// <summary>
+    /// Tensor of weights for transforming input embeddings into query vectors.
+    /// </summary>
+    /// <remarks>
+    /// This tensor transforms input embeddings into query vectors, which are used to compute attention scores.
+    /// Queries represent what each position in the sequence is looking for in other positions.
+    /// Shape: [embeddingDimension, embeddingDimension]
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _queryWeights;
+
+    /// <summary>
+    /// Tensor of weights for transforming input embeddings into key vectors.
+    /// </summary>
+    /// <remarks>
+    /// This tensor transforms input embeddings into key vectors, which are used to compute attention scores.
+    /// Keys represent what each position in the sequence has to offer to other positions.
+    /// Shape: [embeddingDimension, embeddingDimension]
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _keyWeights;
+
+    /// <summary>
+    /// Tensor of weights for transforming input embeddings into value vectors.
+    /// </summary>
+    /// <remarks>
+    /// This tensor transforms input embeddings into value vectors, which contain the actual content
+    /// that will be aggregated based on attention scores. Values represent the information that
+    /// is being extracted from each position.
+    /// Shape: [embeddingDimension, embeddingDimension]
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _valueWeights;
+
+    /// <summary>
+    /// Tensor of biases added to the output of the attention mechanism.
+    /// </summary>
+    /// <remarks>
+    /// This tensor contains bias terms that are added to the output of the attention mechanism
+    /// before applying the final activation function. Biases allow the network to adjust the
+    /// baseline activation level of the attention output.
+    /// Shape: [embeddingDimension]
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _outputBias;
+
+    /// <summary>
+    /// fp16-resident copies of the Q/K/V weight matrices, used only when
+    /// <see cref="LayerBase{T}.LowPrecisionResident"/> is set (foundation-scale inference). Each is the
+    /// resident master once populated; the full-precision <see cref="_queryWeights"/> etc. are freed after
+    /// the first forward downcasts them. Upcast transiently per forward via
+    /// <see cref="LayerBase{T}.UpcastResidentWeight"/> (shared SIMD scratch). Null on the normal fp32 path.
+    /// </summary>
+    private Tensor<Half>? _queryWeightsHalf;
+    private Tensor<Half>? _keyWeightsHalf;
+    private Tensor<Half>? _valueWeightsHalf;
+
+    /// <summary>
+    /// True once <see cref="EnsureInitialized"/> has allocated and populated the
+    /// Q/K/V weight tensors and the output bias. The lazy-init path leaves these at
+    /// [0,0] until the first Forward / GetParameters / SetParameters call demands
+    /// the real allocation, matching the pattern used by DenseLayer and MHA.
+    /// </summary>
+    private bool _isInitialized = true;
+
+    /// <summary>
+    /// Stores the input tensor from the most recent forward pass for use in backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// This cached input is needed during the backward pass to compute gradients. It holds the
+    /// sequence of input embeddings that were processed in the most recent forward pass.
+    /// The tensor is null before the first forward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Reusable per-layer scratch for the scaled-dot-product-attention OUTPUT
+    /// ([batch, heads, seqQ, headDim]), used only on the #1672
+    /// <see cref="ForwardScratchGate"/> inference path. SDPA's output tensor is the
+    /// single largest per-call allocation in a DiT block; reusing this buffer across
+    /// denoising steps of the same shape removes it from the per-step allocation churn.
+    /// Reallocated whenever the required shape changes. Never aliased by any other live
+    /// tensor: the SDPA <c>*Into</c> kernel fully overwrites every element each call, and
+    /// the result is immediately consumed (permuted + copied) before the next SDPA call,
+    /// so reuse is safe across the multi-step denoise loop. NOT used while a gradient
+    /// tape is active (training needs the recorded allocating op).
+    /// </summary>
+    private Tensor<T>? _sdpaOutScratch;
+
+    /// <summary>
+    /// Cached horizontally-concatenated Q/K/V projection weight <c>[embedDim, 3*embedDim]</c>
+    /// = (qWeights | kWeights | vWeights) column-wise, used only on the #1672
+    /// <see cref="ForwardScratchGate"/> FusedQKV inference path. Built once (weights are constant in
+    /// inference) and reused across forwards; rebuilt only when one of the source weight tensor
+    /// identities changes (see <see cref="_fusedQkvSrcQ"/> etc.). One <c>[seq, D] @ [D, 3D]</c> GEMM
+    /// against this replaces the three separate <c>[seq, D] @ [D, D]</c> projection matmuls, and each
+    /// output row is <c>[q | k | v]</c> so column slicing recovers Q/K/V bit-identically. Null until
+    /// the first FusedQKV-gated forward (placeholder <c>[0,0]</c> until built; <see cref="_fusedQkvBuilt"/>
+    /// gates use). On the fp16-resident (foundation) path this is reduced back to <c>[0,0]</c> by
+    /// <see cref="LayerBase{T}.UpcastResidentWeight"/> and <see cref="_fusedQkvWeightsHalf"/> holds the
+    /// resident master instead.
+    /// </summary>
+    private Tensor<T> _fusedQkvWeights = new Tensor<T>([0, 0]);
+
+    /// <summary>True once <see cref="_fusedQkvWeights"/> / <see cref="_fusedQkvWeightsHalf"/> has been built.</summary>
+    private bool _fusedQkvBuilt;
+
+    /// <summary>
+    /// fp16-resident master for the fused QKV weight <c>[embedDim, 3*embedDim]</c>, populated only
+    /// when <see cref="LayerBase{T}.LowPrecisionResident"/> is set. Built from the same downcast the
+    /// per-projection path produces, then upcast transiently per forward via
+    /// <see cref="LayerBase{T}.UpcastResidentWeight"/> (shared SIMD scratch). Null on the normal fp32 path.
+    /// </summary>
+    private Tensor<Half>? _fusedQkvWeightsHalf;
+
+    /// <summary>
+    /// Identities of the source Q/K/V weight tensors captured when <see cref="_fusedQkvWeights"/> /
+    /// <see cref="_fusedQkvWeightsHalf"/> was last built. If any differs from the current weight tensor
+    /// the fused weight is stale (weights were replaced by SetParameters / a training step / Clone) and
+    /// is rebuilt. Null until first build.
+    /// </summary>
+    private Tensor<T>? _fusedQkvSrcQ;
+    private Tensor<T>? _fusedQkvSrcK;
+    private Tensor<T>? _fusedQkvSrcV;
+
+    /// <summary>
+    /// Stores the output tensor from the most recent forward pass for use in backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// This cached output is needed during the backward pass to compute certain derivatives.
+    /// It holds the sequence of output embeddings that were produced in the most recent forward pass.
+    /// The tensor is null before the first forward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// Stores the attention score tensor from the most recent forward pass for use in backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// This cached tensor contains the attention weights (after softmax) computed during the forward pass.
+    /// These weights represent how much each position attends to every other position in the sequence.
+    /// The tensor is null before the first forward pass or after a reset.
+    /// </remarks>
+    private Tensor<T>? _lastAttentionScores;
+
+    /// <summary>
+    /// Stores the gradients of the loss with respect to the query weight parameters.
+    /// </summary>
+    /// <remarks>
+    /// This tensor holds the accumulated gradients for the query weight parameters during the backward pass.
+    /// It has the same dimensions as the _queryWeights tensor and is used to update the query weights during
+    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
+    /// Shape: [embeddingDimension, embeddingDimension]
+    /// </remarks>
+    private Tensor<T>? _queryWeightsGradient;
+
+    /// <summary>
+    /// Stores the gradients of the loss with respect to the key weight parameters.
+    /// </summary>
+    /// <remarks>
+    /// This tensor holds the accumulated gradients for the key weight parameters during the backward pass.
+    /// It has the same dimensions as the _keyWeights tensor and is used to update the key weights during
+    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
+    /// Shape: [embeddingDimension, embeddingDimension]
+    /// </remarks>
+    private Tensor<T>? _keyWeightsGradient;
+
+    /// <summary>
+    /// Stores the gradients of the loss with respect to the value weight parameters.
+    /// </summary>
+    /// <remarks>
+    /// This tensor holds the accumulated gradients for the value weight parameters during the backward pass.
+    /// It has the same dimensions as the _valueWeights tensor and is used to update the value weights during
+    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
+    /// Shape: [embeddingDimension, embeddingDimension]
+    /// </remarks>
+    private Tensor<T>? _valueWeightsGradient;
+
+    /// <summary>
+    /// Stores the gradients of the loss with respect to the output bias parameters.
+    /// </summary>
+    /// <remarks>
+    /// This tensor holds the accumulated gradients for the output bias parameters during the backward pass.
+    /// It has the same length as the _outputBias tensor and is used to update the output biases during
+    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
+    /// Shape: [embeddingDimension]
+    /// </remarks>
+    private Tensor<T>? _outputBiasGradient;
+
+    private Tensor<T>? _queryWeightsVelocity;
+    private Tensor<T>? _keyWeightsVelocity;
+    private Tensor<T>? _valueWeightsVelocity;
+    private Tensor<T>? _outputBiasVelocity;
+
+    // GPU cached tensors for backward pass
+    private Tensor<T>? _gpuInput2D;
+    private Tensor<T>? _gpuQ;
+    private Tensor<T>? _gpuK;
+    private Tensor<T>? _gpuV;
+    private Tensor<T>? _gpuAttentionWeights;
+    private int _gpuBatchSize;
+    private int _gpuSequenceLength;
+    private int _gpuEmbeddingDimension;
+
+    /// <summary>
+    /// The number of attention heads used in the multi-head attention mechanism.
+    /// </summary>
+    /// <remarks>
+    /// This value determines how many different attention patterns the layer can learn simultaneously.
+    /// Each head can focus on different relationships within the sequence. More heads can capture more
+    /// complex relationships but require more computation.
+    /// </remarks>
+    private int _headCount;
+
+    /// <summary>
+    /// The dimension of each attention head.
+    /// </summary>
+    /// <remarks>
+    /// This value determines the size of each attention head, which is typically the embedding dimension
+    /// divided by the number of heads. It affects the expressive power of each individual attention head.
+    /// </remarks>
+    private int _headDimension;
+
+    /// <summary>
+    /// Returns layer-specific metadata required for cloning/serialization.
+    /// </summary>
+    /// <remarks>
+    /// Self-attention requires the configured head count to reconstruct the layer correctly during
+    /// serialization-based cloning. This mirrors <see cref="MultiHeadAttentionLayer{T}"/> metadata.
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["HeadCount"] = _headCount.ToString();
+        return metadata;
+    }
+
+    /// <summary>
+    /// The dimension of the input and output embeddings.
+    /// </summary>
+    /// <remarks>
+    /// This value determines the size of the input and output embeddings. It is typically the same for
+    /// both input and output to maintain the dimensionality of the sequence representation.
+    /// </remarks>
+    private int _embeddingDimension;
+
+    /// <summary>
+    /// The length of the input sequence.
+    /// </summary>
+    /// <remarks>
+    /// This value determines the number of positions in the input sequence. Each position will attend
+    /// to all other positions in the sequence during the attention computation.
+    /// </remarks>
+    private int _sequenceLength;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> for SelfAttentionLayer, indicating that the layer can be trained through backpropagation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that the SelfAttentionLayer has trainable parameters (query, key, and value weights,
+    /// as well as output biases) that can be optimized during the training process using backpropagation. The gradients
+    /// of these parameters are calculated during the backward pass and used to update the parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
+    /// 
+    /// A value of true means:
+    /// - The layer has values (weights and biases) that can be adjusted during training
+    /// - It will improve its performance as it sees more data
+    /// - It participates in the learning process of the neural network
+    /// 
+    /// When you train a neural network containing this layer, it will automatically learn
+    /// which relationships between sequence positions are important for your specific task.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The total number of parameters: 3 weight matrices (Q, K, V) each of size [embeddingDimension × embeddingDimension],
+    /// plus an output bias of size [embeddingDimension].
+    /// Total = 3 × E² + E = E × (3E + 1) where E is the embedding dimension.
+    /// </value>
+    public override long ParameterCount =>
+        3 * (_embeddingDimension * _embeddingDimension) + _embeddingDimension;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SelfAttentionLayer{T}"/> class with a scalar activation function.
+    /// </summary>
+    /// <param name="sequenceLength">The length of the input sequence.</param>
+    /// <param name="embeddingDimension">The dimension of the input and output embeddings.</param>
+    /// <param name="headCount">The number of attention heads. Defaults to 8.</param>
+    /// <param name="activationFunction">The activation function to apply to the output. Defaults to Identity if not specified.</param>
+    /// <exception cref="ArgumentException">Thrown when the embedding dimension is not divisible by the number of heads.</exception>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new SelfAttentionLayer with the specified dimensions and a scalar activation function.
+    /// It validates that the embedding dimension is divisible by the number of heads and initializes the weight matrices
+    /// and bias vector with appropriate values. A scalar activation function is applied element-wise to each output
+    /// embedding independently.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new self-attention layer for your neural network using a simple activation function.
+    /// 
+    /// When you create this layer, you specify:
+    /// - sequenceLength: How many items (like words) are in your sequence
+    /// - embeddingDimension: How many features each item has
+    /// - headCount: How many different "spotlights" the attention mechanism uses (default: 8)
+    /// - activationFunction: How to transform the output (defaults to Identity, which makes no changes)
+    /// 
+    /// For example, in a language model:
+    /// - sequenceLength might be 512 (the maximum number of words/tokens in a text)
+    /// - embeddingDimension might be 768 (the number of features per word/token)
+    /// - Using 8 attention heads lets the model focus on 8 different types of relationships
+    /// 
+    /// The embedding dimension must be divisible by the number of heads (e.g., 768 ÷ 8 = 96),
+    /// so each head has the same dimension.
+    /// </para>
+    /// </remarks>
+    public SelfAttentionLayer(
+        int sequenceLength,
+        int embeddingDimension,
+        int headCount = 8,
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base(
+            [sequenceLength, embeddingDimension],
+            [sequenceLength, embeddingDimension],
+            activationFunction ?? new IdentityActivation<T>())
+    {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastSparsityLoss = NumOps.Zero;
+
+        _sequenceLength = sequenceLength;
+
+        // Validate headCount and divisibility BEFORE dividing. Without
+        // these guards, headCount=0 throws DivideByZeroException and
+        // non-divisible embeddings produce a silently-wrong _headDimension
+        // that only fails much later during reshape/matmul.
+        if (headCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(headCount),
+                $"headCount must be positive, got {headCount}.");
+        if (embeddingDimension % headCount != 0)
+            throw new ArgumentException(
+                $"embeddingDimension ({embeddingDimension}) must be divisible by headCount ({headCount}).",
+                nameof(headCount));
+
+        _embeddingDimension = embeddingDimension;
+        _headCount = headCount;
+        _headDimension = embeddingDimension / headCount;
+
+        if (initializationStrategy is { IsLazy: true })
+        {
+            // Lazy path: zero-sized placeholders. DiT's SelfAttentionLayer instances
+            // (one per transformer block, 28 per DiT-XL tower) hold Q/K/V weights
+            // + output bias = 3 × hidden² + hidden. At hidden=1152 that's ~32 MB
+            // per block × 28 = ~900 MB per DiT tower, eagerly allocated at model
+            // construction before any test input is ever fed in.
+            _queryWeights = new Tensor<T>([0, 0]);
+            _keyWeights = new Tensor<T>([0, 0]);
+            _valueWeights = new Tensor<T>([0, 0]);
+            _outputBias = new Tensor<T>([0]);
+            _isInitialized = false;
+        }
+        else
+        {
+            _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _outputBias = new Tensor<T>([embeddingDimension]);
+
+
+            InitializeParameters();
+
+            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            _isInitialized = true;
+        }
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SelfAttentionLayer{T}"/> class with a vector activation function.
+    /// </summary>
+    /// <param name="sequenceLength">The length of the input sequence.</param>
+    /// <param name="embeddingDimension">The dimension of the input and output embeddings.</param>
+    /// <param name="headCount">The number of attention heads. Defaults to 8.</param>
+    /// <param name="vectorActivationFunction">The vector activation function to apply to the output. Defaults to Identity if not specified.</param>
+    /// <exception cref="ArgumentException">Thrown when the embedding dimension is not divisible by the number of heads.</exception>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new SelfAttentionLayer with the specified dimensions and a vector activation function.
+    /// It validates that the embedding dimension is divisible by the number of heads and initializes the weight tensors
+    /// and bias tensor with appropriate values. A vector activation function is applied to the entire output vector at once,
+    /// which allows for interactions between different output elements.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new self-attention layer for your neural network using an advanced activation function.
+    ///
+    /// When you create this layer, you specify the same parameters as in the scalar version, but with a vector activation:
+    /// - sequenceLength: How many items are in your sequence
+    /// - embeddingDimension: How many features each item has
+    /// - headCount: How many different "spotlights" the attention mechanism uses
+    /// - vectorActivationFunction: How to transform the entire output as a group
+    ///
+    /// A vector activation can consider relationships between different positions in the output,
+    /// which might be useful for certain advanced applications.
+    ///
+    /// This constructor works the same as the scalar version, but allows for more sophisticated
+    /// activation patterns across the output sequence.
+    /// </para>
+    /// </remarks>
+    public SelfAttentionLayer(
+        int sequenceLength,
+        int embeddingDimension,
+        int headCount = 8,
+        IVectorActivationFunction<T>? vectorActivationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base(
+            [sequenceLength, embeddingDimension],
+            [sequenceLength, embeddingDimension],
+            vectorActivationFunction ?? new IdentityActivation<T>())
+    {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastSparsityLoss = NumOps.Zero;
+
+        _sequenceLength = sequenceLength;
+
+        // Validate BEFORE dividing to avoid DivideByZeroException on
+        // headCount=0 and silently-wrong _headDimension on non-divisible
+        // embeddings. Same guards as the scalar-activation overload.
+        if (headCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(headCount),
+                $"headCount must be positive, got {headCount}.");
+        if (embeddingDimension % headCount != 0)
+            throw new ArgumentException(
+                $"embeddingDimension ({embeddingDimension}) must be divisible by headCount ({headCount}).",
+                nameof(headCount));
+
+        _embeddingDimension = embeddingDimension;
+        _headCount = headCount;
+        _headDimension = embeddingDimension / headCount;
+
+        if (initializationStrategy is { IsLazy: true })
+        {
+            // See scalar-activation overload for rationale.
+            _queryWeights = new Tensor<T>([0, 0]);
+            _keyWeights = new Tensor<T>([0, 0]);
+            _valueWeights = new Tensor<T>([0, 0]);
+            _outputBias = new Tensor<T>([0]);
+            _isInitialized = false;
+        }
+        else
+        {
+            _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _outputBias = new Tensor<T>([embeddingDimension]);
+
+
+            InitializeParameters();
+
+            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            _isInitialized = true;
+        }
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the self-attention layer.
+    /// </summary>
+    /// <param name="input">The input tensor to process, with shape [batchSize, sequenceLength, embeddingDimension].</param>
+    /// <returns>The output tensor after self-attention, with the same shape as the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the self-attention layer. It transforms the input into queries,
+    /// keys, and values, then computes attention scores between each position and all other positions. These scores
+    /// are normalized using the softmax function and used to compute a weighted sum of the values. The result is
+    /// transformed back to the original embedding dimension and passed through an activation function.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method processes your sequence data through the self-attention mechanism.
+    /// 
+    /// During the forward pass:
+    /// 1. The input sequence is transformed into three different representations:
+    ///    - Queries: What each position is looking for
+    ///    - Keys: What each position has to offer
+    ///    - Values: The actual content at each position
+    /// 2. For each position, attention scores are computed by comparing its query with all keys
+    /// 3. These scores are scaled and normalized to create attention weights
+    /// 4. Each position's output is a weighted sum of all values, based on the attention weights
+    /// 5. The result is transformed and passed through an activation function
+    /// 
+    /// Imagine a classroom where each student (position) asks a question (query) to the entire class.
+    /// Other students offer answers (keys) and knowledge (values). Each student pays more attention
+    /// to the most relevant answers and combines that knowledge to form their own understanding.
+    /// 
+    /// The multi-head mechanism allows this process to happen in parallel with different "perspectives"
+    /// or types of questions.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Materialize lazy-init weights before any Q/K/V projection runs — same
+        // contract DenseLayer gives for lazy layers.
+        EnsureInitialized();
+
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: need at least 2D [seqLen, embedDim]
+        Tensor<T> input3D;
+        int batchSize;
+        int sequenceLength;
+        int embeddingDimension;
+
+        // Every shape op must go through Engine so the gradient tape records the
+        // transformation. Direct Tensor<T>.Reshape / .Transpose calls bypass the
+        // tape and silently disconnect the attention block from backward flow.
+        if (rank == 2)
+        {
+            // 2D: [seqLen, embedDim] -> add batch dim
+            batchSize = 1;
+            sequenceLength = input.Shape[0];
+            embeddingDimension = input.Shape[1];
+            input3D = Engine.Reshape(input, new[] { 1, sequenceLength, embeddingDimension });
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D: [batch, seqLen, embedDim]
+            batchSize = input.Shape[0];
+            sequenceLength = input.Shape[1];
+            embeddingDimension = input.Shape[2];
+            input3D = input;
+        }
+        else if (rank > 3)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            sequenceLength = input.Shape[rank - 2];
+            embeddingDimension = input.Shape[rank - 1];
+            input3D = Engine.Reshape(input, new[] { flatBatch, sequenceLength, embeddingDimension });
+        }
+        else
+        {
+            throw new ArgumentException($"SelfAttentionLayer requires at least 2D input, got {rank}D");
+        }
+
+        _lastInput = input3D;
+
+        // 1. Project Input to Q, K, V
+        // Reshape input to 2D [Batch*Seq, EmbedDim] for efficient MatrixMultiply
+        var input2D = Engine.Reshape(input3D, new[] { batchSize * sequenceLength, _embeddingDimension });
+
+        // Compute Projections: [B*S, E] @ [E, E] -> [B*S, E]
+        // Using Engine.TensorMatMul for GPU acceleration.
+        // fp16-resident (foundation inference): upcast each weight from its fp16 master into a shared
+        // reused scratch immediately before its matmul. Each matmul fully consumes the upcast weight
+        // before the next call overwrites the (same-shape) scratch, so one buffer serves Q, K and V.
+        Tensor<T> Q_flat, K_flat, V_flat;
+
+        // #1672 FusedQKV fast path: when the gate is ON and we are NOT recording a gradient tape
+        // (inference), do ONE [B*S, E] @ [E, 3E] GEMM against a cached horizontally-concatenated
+        // weight, then slice the [B*S, 3E] result into Q/K/V — one engine dispatch (+ two fewer
+        // weight matmuls) instead of three. The fused weight column layout is [qW | kW | vW], so
+        // output columns [0,E)/[E,2E)/[2E,3E) reproduce the three separate GEMMs bit-identically.
+        // The custom backward never runs without a tape, so the unfused weights are not needed here.
+        bool qkvTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (ForwardScratchGate.FusedQkv && !qkvTapeActive)
+        {
+            int threeE = 3 * _embeddingDimension;
+            Tensor<T> fusedW = GetOrBuildFusedQkvWeights();
+            int rows = batchSize * sequenceLength;
+
+            // ONE GEMM via the SAME Engine.TensorMatMul op the unfused path uses, so the fused
+            // [rows, 3E] result is bit-identical to the three [rows, E] results column-for-column
+            // (same GEMM tier / accumulation order; the wider N does not change per-element math).
+            Tensor<T> qkvFlat = Engine.TensorMatMul(input2D, fusedW);
+
+            // Slice the [rows, 3E] fused output into three contiguous [rows, E] tensors. Each fused
+            // row is [q(E) | k(E) | v(E)] (row-major), so a per-row block copy reproduces the three
+            // separate projection outputs exactly. Still one GEMM dispatch; the copy is a cheap memcpy.
+            Q_flat = new Tensor<T>([rows, _embeddingDimension]);
+            K_flat = new Tensor<T>([rows, _embeddingDimension]);
+            V_flat = new Tensor<T>([rows, _embeddingDimension]);
+            var src = qkvFlat.AsSpan();
+            var qDst = Q_flat.AsWritableSpan();
+            var kDst = K_flat.AsWritableSpan();
+            var vDst = V_flat.AsWritableSpan();
+            int e = _embeddingDimension;
+            for (int r = 0; r < rows; r++)
+            {
+                int srcRow = r * threeE;
+                int dstRow = r * e;
+                src.Slice(srcRow, e).CopyTo(qDst.Slice(dstRow, e));
+                src.Slice(srcRow + e, e).CopyTo(kDst.Slice(dstRow, e));
+                src.Slice(srcRow + 2 * e, e).CopyTo(vDst.Slice(dstRow, e));
+            }
+        }
+        else
+        {
+            Tensor<T> qWeights = LowPrecisionResident ? UpcastResidentWeight(ref _queryWeights, ref _queryWeightsHalf) : _queryWeights;
+            Q_flat = Engine.TensorMatMul(input2D, qWeights);
+            Tensor<T> kWeights = LowPrecisionResident ? UpcastResidentWeight(ref _keyWeights, ref _keyWeightsHalf) : _keyWeights;
+            K_flat = Engine.TensorMatMul(input2D, kWeights);
+            Tensor<T> vWeights = LowPrecisionResident ? UpcastResidentWeight(ref _valueWeights, ref _valueWeightsHalf) : _valueWeights;
+            V_flat = Engine.TensorMatMul(input2D, vWeights);
+        }
+
+        // Reshape to [Batch, Seq, HeadCount, HeadDim]
+        var queries = Engine.Reshape(Q_flat, new[] { batchSize, sequenceLength, _headCount, _headDimension });
+        var keys = Engine.Reshape(K_flat, new[] { batchSize, sequenceLength, _headCount, _headDimension });
+        var values = Engine.Reshape(V_flat, new[] { batchSize, sequenceLength, _headCount, _headDimension });
+
+        // Transpose for multi-head attention: [Batch, HeadCount, Seq, HeadDim]
+        // This aligns dimensions for batched matrix multiplication
+        var Q = Engine.TensorPermute(queries, new[] { 0, 2, 1, 3 });
+        var K = Engine.TensorPermute(keys, new[] { 0, 2, 1, 3 });
+        var V = Engine.TensorPermute(values, new[] { 0, 2, 1, 3 });
+
+        // 2. Compute Scaled Dot-Product Attention
+        // ScaledDotProductAttention computes: softmax(Q @ K^T / scale) @ V
+        // Input shapes: [batch, heads, seq, head_dim]
+        // Output shape: [batch, heads, seq, head_dim]
+        Tensor<T> output4D;
+        // #1672 destination-buffer fast path: when the scratch gate is ON and we are NOT
+        // recording a gradient tape (inference), compute SDPA straight into a reused
+        // per-layer buffer instead of allocating the scores/weights/output tensors. The
+        // attention-weight matrix is only needed by this layer's custom backward, which
+        // never runs without a tape — so discarding it here is safe. Bit-identical math.
+        bool sdpaTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (ForwardScratchGate.Sdpa && !sdpaTapeActive)
+        {
+            int sq = Q.Shape[2];
+            var needShape = new[] { batchSize, _headCount, sq, _headDimension };
+            if (_sdpaOutScratch == null || !ShapeMatches(_sdpaOutScratch._shape, needShape))
+                _sdpaOutScratch = new Tensor<T>(needShape);
+            Engine.ScaledDotProductAttentionInto(
+                _sdpaOutScratch, Q, K, V,
+                scale: 1.0 / Math.Sqrt(_headDimension));
+            output4D = _sdpaOutScratch;
+            // No attention-weight cache: inference-only path, no backward.
+            _lastAttentionScores = null;
+        }
+        else
+        {
+            output4D = Engine.ScaledDotProductAttention(
+                Q, K, V,
+                mask: null,
+                scale: 1.0 / Math.Sqrt(_headDimension),
+                out var attentionWeights4D);
+
+            // Cache attention weights for backward pass
+            _lastAttentionScores = attentionWeights4D;
+        }
+
+        // 3. Reshape and Project Output
+        var outputTransposed = Engine.TensorPermute(output4D, new[] { 0, 2, 1, 3 });
+        var outputFlat = Engine.Reshape(outputTransposed, new[] { batchSize, sequenceLength, embeddingDimension });
+
+        // 7. Add Bias with engine broadcast for GPU acceleration.
+        // Reshape fresh each call (never cache) so the tape has a live GradFn
+        // chain from _outputBias on every training step — caching a reshape
+        // primed during inference breaks the bias gradient.
+        var biasBroadcast = Engine.Reshape(_outputBias, new[] { 1, 1, embeddingDimension });
+        var outputBiased = Engine.TensorBroadcastAdd(outputFlat, biasBroadcast);
+
+        var output = ApplyActivation(outputBiased);
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 2] = sequenceLength;
+            newShape[_originalInputShape.Length - 1] = embeddingDimension;
+            output = Engine.Reshape(output, newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            // 2D input -> 2D output (remove batch dim)
+            output = Engine.Reshape(output, new[] { sequenceLength, embeddingDimension });
+        }
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = output;
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>A GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs the entire self-attention forward pass on the GPU without downloading
+    /// intermediate results to CPU. All projections, attention computation, and bias addition
+    /// remain GPU-resident for maximum performance.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Materialize lazy Q/K/V/bias tensors before GPU path.
+        EnsureInitialized();
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // Get dimensions from input shape
+        int[] inputShape = input._shape;
+        int rank = inputShape.Length;
+
+        int batchSize;
+        int sequenceLength;
+        int embeddingDimension;
+        Tensor<T> input3D;
+
+        if (rank == 2)
+        {
+            // 2D: [seqLen, embedDim] -> add batch dim
+            batchSize = 1;
+            sequenceLength = inputShape[0];
+            embeddingDimension = inputShape[1];
+            input3D = gpuEngine.ReshapeGpu(input, [1, sequenceLength, embeddingDimension]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D: [batch, seqLen, embedDim]
+            batchSize = inputShape[0];
+            sequenceLength = inputShape[1];
+            embeddingDimension = inputShape[2];
+            input3D = input;
+        }
+        else if (rank > 3)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= inputShape[d];
+            batchSize = flatBatch;
+            sequenceLength = inputShape[rank - 2];
+            embeddingDimension = inputShape[rank - 1];
+            input3D = gpuEngine.ReshapeGpu(input, [flatBatch, sequenceLength, embeddingDimension]);
+        }
+        else
+        {
+            throw new ArgumentException($"SelfAttentionLayer requires at least 2D input, got {rank}D");
+        }
+
+        // 1. Project Input to Q, K, V
+        // Reshape input to 2D [Batch*Seq, EmbedDim] for efficient MatrixMultiply
+        var input2D = gpuEngine.ReshapeGpu(input3D, [batchSize * sequenceLength, _embeddingDimension]);
+
+        // Compute Projections: [B*S, E] @ [E, E] -> [B*S, E]
+        var Q_flat = gpuEngine.BatchedMatMulGpu(input2D, _queryWeights);
+        var K_flat = gpuEngine.BatchedMatMulGpu(input2D, _keyWeights);
+        var V_flat = gpuEngine.BatchedMatMulGpu(input2D, _valueWeights);
+
+        // Reshape to [Batch, Seq, HeadCount, HeadDim]
+        var queries = gpuEngine.ReshapeGpu(Q_flat, [batchSize, sequenceLength, _headCount, _headDimension]);
+        var keys = gpuEngine.ReshapeGpu(K_flat, [batchSize, sequenceLength, _headCount, _headDimension]);
+        var values = gpuEngine.ReshapeGpu(V_flat, [batchSize, sequenceLength, _headCount, _headDimension]);
+
+        // Transpose for multi-head attention: [Batch, HeadCount, Seq, HeadDim]
+        var Q = gpuEngine.PermuteGpu(queries, [0, 2, 1, 3]);
+        var K = gpuEngine.PermuteGpu(keys, [0, 2, 1, 3]);
+        var V = gpuEngine.PermuteGpu(values, [0, 2, 1, 3]);
+
+        // 2. Compute Scaled Dot-Product Attention
+        // Use overload that returns attention weights during training for backward pass
+        double scale = 1.0 / Math.Sqrt(_headDimension);
+        Tensor<T> attnOutput4D;
+        Tensor<T>? attentionWeightsGpu = null;
+
+        if (IsTrainingMode)
+        {
+            // Training mode: get attention weights for backward pass
+            attnOutput4D = gpuEngine.ScaledDotProductAttentionGpu(Q, K, V, scale, out attentionWeightsGpu, isCausal: false);
+        }
+        else
+        {
+            // Inference mode: no need for attention weights
+            attnOutput4D = gpuEngine.ScaledDotProductAttentionGpu(Q, K, V, scale, isCausal: false);
+        }
+
+        // 3. Reshape and Project Output
+        var outputTransposed = gpuEngine.PermuteGpu(attnOutput4D, [0, 2, 1, 3]);
+        var outputFlat = gpuEngine.ReshapeGpu(outputTransposed, [batchSize, sequenceLength, embeddingDimension]);
+
+        // 4. Add Bias
+        var outputBiased = gpuEngine.AddBiasGpu(outputFlat, _outputBias);
+
+        // 5. Apply activation if not identity
+        Tensor<T> output;
+        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var fusedType = MapActivationToFused();
+            output = gpuEngine.ActivationGpu<T>(outputBiased, fusedType);
+        }
+        else
+        {
+            output = outputBiased;
+        }
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            // Cache GPU tensors for GPU-resident backward pass
+            _gpuInput2D = input2D;
+            _gpuQ = Q;
+            _gpuK = K;
+            _gpuV = V;
+            _gpuAttentionWeights = attentionWeightsGpu;
+            _gpuBatchSize = batchSize;
+            _gpuSequenceLength = sequenceLength;
+            _gpuEmbeddingDimension = embeddingDimension;
+
+            // Also cache CPU tensors for fallback backward pass
+            _lastInput = input3D;
+            _lastAttentionScores = attentionWeightsGpu;
+            _lastOutput = output;
+            _originalInputShape = inputShape;
+        }
+
+        // Restore original batch dimensions for any-rank support
+        if (rank > 3)
+        {
+            int[] newShape = new int[rank];
+            for (int d = 0; d < rank - 2; d++)
+                newShape[d] = inputShape[d];
+            newShape[rank - 2] = sequenceLength;
+            newShape[rank - 1] = embeddingDimension;
+            output = gpuEngine.ReshapeGpu(output, newShape);
+        }
+        else if (rank == 2)
+        {
+            // 2D input -> 2D output (remove batch dim)
+            output = gpuEngine.ReshapeGpu(output, [sequenceLength, embeddingDimension]);
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Broadcasts bias vector across the batch dimension.
+    /// </summary>
+    /// <param name="bias">The bias tensor to broadcast.</param>
+    /// <param name="batchSize">The batch size for broadcasting.</param>
+    /// <returns>A tensor with bias replicated across the batch dimension.</returns>
+    private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize)
+    {
+        var biasReshaped = bias.Reshape(1, 1, _embeddingDimension);
+        // Rent and zero-fill for broadcast (used as broadcast target, needs zeros)
+        var target = TensorAllocator.Rent<T>(new[] { batchSize, _sequenceLength, _embeddingDimension });
+        target.Fill(NumOps.Zero);
+        return Engine.TensorBroadcastAdd(target, biasReshaped);
+    }
+
+    /// <summary>
+    /// Updates the parameters of the self-attention layer using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <exception cref="InvalidOperationException">Thrown when UpdateParameters is called before Backward.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates the query weights, key weights, value weights, and output biases of the self-attention
+    /// layer based on the gradients calculated during the backward pass. The learning rate controls the size of the
+    /// parameter updates. This method should be called after the backward pass to apply the calculated updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates the layer's internal values during training.
+    /// 
+    /// When updating parameters:
+    /// 1. The query weight values are adjusted based on their gradients
+    /// 2. The key weight values are adjusted based on their gradients
+    /// 3. The value weight values are adjusted based on their gradients
+    /// 4. The output bias values are adjusted based on their gradients
+    /// 5. The learning rate controls how big each update step is
+    /// 
+    /// These updates help the self-attention mechanism:
+    /// - Focus on more relevant relationships between positions
+    /// - Ignore irrelevant relationships
+    /// - Better understand the structure of your sequences
+    /// 
+    /// Smaller learning rates mean slower but more stable learning, while larger learning rates
+    /// mean faster but potentially unstable learning.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null || _outputBiasGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        if (Engine is DirectGpuTensorEngine gpuEngine)
+        {
+            float lr = (float)NumOps.ToDouble(learningRate);
+
+            if (_queryWeightsVelocity == null)
+            {
+                _queryWeightsVelocity = new Tensor<T>(_queryWeights._shape);
+                _queryWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_queryWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _keyWeightsVelocity = new Tensor<T>(_keyWeights._shape);
+                _keyWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_keyWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _valueWeightsVelocity = new Tensor<T>(_valueWeights._shape);
+                _valueWeightsVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_valueWeightsVelocity, PersistentTensorRole.OptimizerState);
+
+                _outputBiasVelocity = new Tensor<T>(_outputBias._shape);
+                _outputBiasVelocity.Fill(NumOps.Zero);
+                gpuEngine.RegisterPersistentTensor(_outputBiasVelocity, PersistentTensorRole.OptimizerState);
+            }
+
+            gpuEngine.SgdMomentumUpdateGpu(_queryWeights, _queryWeightsGradient, _queryWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_keyWeights, _keyWeightsGradient, _keyWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_valueWeights, _valueWeightsGradient, _valueWeightsVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_outputBias, _outputBiasGradient, _outputBiasVelocity!, lr, 0.0f, 0.0f);
+        }
+        else
+        {
+            _queryWeights = _queryWeights.Subtract(_queryWeightsGradient.Multiply(learningRate));
+            _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
+            _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
+            _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+
+            // Notify GPU that tensor data has changed
+            Engine.InvalidatePersistentTensor(_queryWeights);
+            Engine.InvalidatePersistentTensor(_keyWeights);
+            Engine.InvalidatePersistentTensor(_valueWeights);
+            Engine.InvalidatePersistentTensor(_outputBias);
+        }
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the self-attention layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters (query weights, key weights, value weights, and output biases).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters of the self-attention layer as a single vector. The query weights
+    /// are stored first, followed by the key weights, value weights, and finally the output biases. This is useful for
+    /// optimization algorithms that operate on all parameters at once, or for saving and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learnable values from the self-attention layer.
+    /// 
+    /// The parameters:
+    /// - Are the weights and biases that the self-attention layer learns during training
+    /// - Control how the layer processes sequence information
+    /// - Are returned as a single list (vector)
+    /// 
+    /// This is useful for:
+    /// - Saving the model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques that need access to all parameters
+    /// 
+    /// The query weights are stored first in the vector, followed by the key weights, value weights,
+    /// and finally the output biases.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Force lazy tensors to materialize before copying their data.
+        EnsureInitialized();
+
+        // fp16-resident (#1764): on the separate-projection resident path the fp32 _queryWeights/_keyWeights/
+        // _valueWeights are freed to [0,0] and the fp16 half masters are authoritative. Reading _queryWeights
+        // directly would return a zero-length (or stale) vector, so clone/serialize silently drops the
+        // attention weights. Read the effective full-precision weights (half master upcast when resident,
+        // fp32 tensor otherwise — the latter also covers the fused-QKV path, where the projections stay fp32).
+        Tensor<T> qEff = _queryWeightsHalf is not null ? _queryWeightsHalf.Cast<T>() : _queryWeights;
+        Tensor<T> kEff = _keyWeightsHalf is not null ? _keyWeightsHalf.Cast<T>() : _keyWeights;
+        Tensor<T> vEff = _valueWeightsHalf is not null ? _valueWeightsHalf.Cast<T>() : _valueWeights;
+
+        int qRows = qEff.Shape[0], qCols = qEff.Shape[1];
+        int kRows = kEff.Shape[0], kCols = kEff.Shape[1];
+        int vRows = vEff.Shape[0], vCols = vEff.Shape[1];
+        int biasLen = _outputBias.Shape[0];
+
+        int totalParams = qRows * qCols + kRows * kCols + vRows * vCols + biasLen;
+
+        var parameters = new Vector<T>(totalParams);
+        int index = 0;
+
+        // Copy query weights
+        for (int i = 0; i < qRows; i++)
+        {
+            for (int j = 0; j < qCols; j++)
+            {
+                parameters[index++] = qEff[i, j];
+            }
+        }
+
+        // Copy key weights
+        for (int i = 0; i < kRows; i++)
+        {
+            for (int j = 0; j < kCols; j++)
+            {
+                parameters[index++] = kEff[i, j];
+            }
+        }
+
+        // Copy value weights
+        for (int i = 0; i < vRows; i++)
+        {
+            for (int j = 0; j < vCols; j++)
+            {
+                parameters[index++] = vEff[i, j];
+            }
+        }
+
+        // Copy output bias
+        for (int i = 0; i < biasLen; i++)
+        {
+            parameters[index++] = _outputBias[i];
+        }
+
+        return parameters;
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the self-attention layer.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters (query weights, key weights, value weights, and output biases) to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets the trainable parameters of the self-attention layer from a single vector. The vector should
+    /// contain the query weight values first, followed by the key weight values, value weight values, and finally
+    /// the output bias values. This is useful for loading saved model weights or for implementing optimization
+    /// algorithms that operate on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the weights and biases in the self-attention layer.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with the correct total length
+    /// - The first part of the vector is used for the query weights
+    /// - The second part of the vector is used for the key weights
+    /// - The third part of the vector is used for the value weights
+    /// - The last part of the vector is used for the output biases
+    /// 
+    /// This is useful for:
+    /// - Loading a previously saved model
+    /// - Transferring parameters from another model
+    /// - Testing different parameter values
+    /// 
+    /// An error is thrown if the input vector doesn't have the expected number of parameters.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Force lazy tensors to materialize so the shape reads below report the
+        // real dimensions rather than 0.
+        EnsureInitialized();
+
+        // fp16-resident (#1764): on the separate-projection resident path the fp32 _queryWeights/_keyWeights/
+        // _valueWeights are freed to [0,0] and the fp16 half masters are authoritative — writing into the
+        // fp32 tensors would be silently discarded on the next forward (which re-upcasts the STALE half),
+        // so a clone/deserialize keeps the resident master's old (e.g. random probe-init) values. Downcast
+        // straight into the half master when resident; write the fp32 tensor otherwise (which also covers
+        // the fused-QKV path, where the projections stay fp32). Dimensions come from whichever is live.
+        bool qResident = _queryWeightsHalf is not null;
+        bool kResident = _keyWeightsHalf is not null;
+        bool vResident = _valueWeightsHalf is not null;
+
+        int qRows, qCols, kRows, kCols, vRows, vCols;
+        (qRows, qCols) = qResident ? (_queryWeightsHalf!.Shape[0], _queryWeightsHalf!.Shape[1]) : (_queryWeights.Shape[0], _queryWeights.Shape[1]);
+        (kRows, kCols) = kResident ? (_keyWeightsHalf!.Shape[0], _keyWeightsHalf!.Shape[1]) : (_keyWeights.Shape[0], _keyWeights.Shape[1]);
+        (vRows, vCols) = vResident ? (_valueWeightsHalf!.Shape[0], _valueWeightsHalf!.Shape[1]) : (_valueWeights.Shape[0], _valueWeights.Shape[1]);
+        int biasLen = _outputBias.Shape[0];
+
+        int qLen = qRows * qCols, kLen = kRows * kCols, vLen = vRows * vCols;
+        int totalParams = qLen + kLen + vLen + biasLen;
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+
+        var span = parameters.AsSpan();
+        if (qResident) NumOps.ToHalfSpan(span.Slice(0, qLen), _queryWeightsHalf!.AsWritableSpan());
+        else span.Slice(0, qLen).CopyTo(_queryWeights.Data.Span);
+
+        if (kResident) NumOps.ToHalfSpan(span.Slice(qLen, kLen), _keyWeightsHalf!.AsWritableSpan());
+        else span.Slice(qLen, kLen).CopyTo(_keyWeights.Data.Span);
+
+        if (vResident) NumOps.ToHalfSpan(span.Slice(qLen + kLen, vLen), _valueWeightsHalf!.AsWritableSpan());
+        else span.Slice(qLen + kLen, vLen).CopyTo(_valueWeights.Data.Span);
+
+        span.Slice(qLen + kLen + vLen, biasLen).CopyTo(_outputBias.Data.Span);
+
+        // The cached fused-QKV weight was built from the OLD projection weights; force a rebuild so the
+        // fused path (when enabled) reflects the new values instead of a stale concatenation.
+        _fusedQkvBuilt = false;
+        _fusedQkvWeightsHalf = null;
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
+    }
+
+    /// <summary>
+    /// Resets the internal state of the self-attention layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the self-attention layer, including the cached inputs, outputs,
+    /// attention scores from the forward pass, and the gradients from the backward pass. This is useful when
+    /// starting to process a new batch of data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - Stored inputs, outputs, and attention scores from previous calculations are cleared
+    /// - Calculated gradients for all weights and biases are cleared
+    /// - The layer forgets any information from previous batches
+    /// 
+    /// This is important for:
+    /// - Processing a new, unrelated batch of data
+    /// - Preventing information from one batch affecting another
+    /// - Managing memory usage efficiently
+    /// 
+    /// Since the self-attention layer caches quite a bit of information during the forward
+    /// and backward passes, resetting the state helps prevent memory leaks and ensures
+    /// each new sequence is processed independently.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient.ToArray()),
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _lastAttentionScores = null;
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputBiasGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput2D = null;
+        _gpuQ = null;
+        _gpuK = null;
+        _gpuV = null;
+        _gpuAttentionWeights = null;
+
+        // #1672: drop the reusable SDPA-output scratch so a fresh forward reallocates it.
+        // The cached fused QKV weight (_fusedQkvWeights / _fusedQkvWeightsHalf) is keyed by source
+        // weight identity and rebuilt lazily, so it does not need clearing here.
+        _sdpaOutScratch = null;
+    }
+
+    /// <summary>
+    /// Returns the cached fused QKV projection weight, building it on first use (or rebuilding it if
+    /// any source weight tensor identity has changed since the last build). The fused weight is the
+    /// horizontal (column-wise) concatenation <c>[qW | kW | vW]</c> of the three <c>[E, E]</c>
+    /// projection weights into one <c>[E, 3E]</c> matrix, so a single
+    /// <c>input[rows, E] @ fused[E, 3E]</c> GEMM produces <c>[rows, 3E]</c> rows of <c>[q | k | v]</c>.
+    /// </summary>
+    /// <remarks>
+    /// On the fp16-resident (foundation-scale) path the fp32 fused matrix is downcast into a resident
+    /// <c>[E, 3E]</c> half master and freed via <see cref="LayerBase{T}.UpcastResidentWeight"/>; each
+    /// forward then transiently upcasts that master through the shared SIMD scratch. The downcast is
+    /// element-wise, so the concatenated-then-downcast weight equals the per-projection
+    /// downcast-then-concatenated weight — the fused GEMM stays bit-identical to the three separate ones.
+    /// </remarks>
+    private Tensor<T> GetOrBuildFusedQkvWeights()
+    {
+        // Rebuild when stale: a SetParameters call, an in-place training step, or a Clone replaces the
+        // backing weight tensors, changing their identity. On the fp16-resident path the fp32 weights
+        // are freed to [0,0] after the first build, so identity is pinned by the half master instead
+        // (which only this method ever creates) — the captured-identity guard below still holds.
+        bool needRebuild =
+            !_fusedQkvBuilt
+            || !ReferenceEquals(_fusedQkvSrcQ, _queryWeights)
+            || !ReferenceEquals(_fusedQkvSrcK, _keyWeights)
+            || !ReferenceEquals(_fusedQkvSrcV, _valueWeights);
+
+        if (!needRebuild)
+        {
+            return LowPrecisionResident
+                ? UpcastResidentWeight(ref _fusedQkvWeights, ref _fusedQkvWeightsHalf)
+                : _fusedQkvWeights;
+        }
+
+        int e = _embeddingDimension;
+        int threeE = 3 * e;
+
+        // Build the fp32 fused [E, 3E] = [qW | kW | vW] column-wise. Each weight is [E, E] row-major;
+        // fused row k holds qW[k,:] then kW[k,:] then vW[k,:].
+        var fused = new Tensor<T>([e, threeE]);
+        var fusedSpan = fused.AsWritableSpan();
+        var qSpan = _queryWeights.AsSpan();
+        var kSpan = _keyWeights.AsSpan();
+        var vSpan = _valueWeights.AsSpan();
+        for (int k = 0; k < e; k++)
+        {
+            int dstRow = k * threeE;
+            int srcRow = k * e;
+            qSpan.Slice(srcRow, e).CopyTo(fusedSpan.Slice(dstRow, e));
+            kSpan.Slice(srcRow, e).CopyTo(fusedSpan.Slice(dstRow + e, e));
+            vSpan.Slice(srcRow, e).CopyTo(fusedSpan.Slice(dstRow + 2 * e, e));
+        }
+
+        // Capture source identities BEFORE UpcastResidentWeight frees the fp32 weights (resident path).
+        _fusedQkvSrcQ = _queryWeights;
+        _fusedQkvSrcK = _keyWeights;
+        _fusedQkvSrcV = _valueWeights;
+
+        _fusedQkvWeights = fused;
+        _fusedQkvWeightsHalf = null;
+        _fusedQkvBuilt = true;
+
+        if (LowPrecisionResident)
+        {
+            // Downcast the fused fp32 matrix into the resident half master and free the fp32 fused
+            // copy, matching the per-projection fp16 handling; returns the transient upcast for this
+            // matmul. (The unfused _queryWeights/_keyWeights/_valueWeights stay resident here rather
+            // than being freed, so SetParameters keeps working; their identities pin the rebuild guard.)
+            return UpcastResidentWeight(ref _fusedQkvWeights, ref _fusedQkvWeightsHalf);
+        }
+
+        return fused;
+    }
+
+    /// <summary>
+    /// Returns true when two shape arrays are element-wise equal. Used by the #1672
+    /// scratch-reuse fast path to decide whether the cached SDPA-output buffer still
+    /// matches the current call's shape.
+    /// </summary>
+    private static bool ShapeMatches(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+            if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Initializes the layer's internal parameters based on the sequence length, embedding dimension, and head count.
+    /// </summary>
+    /// <param name="sequenceLength">The length of the input sequence.</param>
+    /// <param name="embeddingDimension">The dimension of the input and output embeddings.</param>
+    /// <param name="headCount">The number of attention heads.</param>
+    /// <exception cref="ArgumentException">Thrown when the embedding dimension is not divisible by the number of heads.</exception>
+    /// <remarks>
+    /// <para>
+    /// This private method initializes the internal parameters of the self-attention layer based on the specified
+    /// dimensions. It validates that the embedding dimension is divisible by the number of heads, calculates the
+    /// dimension of each head, and then calls InitializeParameters to set up the weight matrices and bias vector.
+    /// This method is called by both constructors.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets up the internal structure of the self-attention layer.
+    /// 
+    /// During initialization:
+    /// - The method saves the basic dimensions (sequence length, embedding size, head count)
+    /// - It calculates how large each attention head should be
+    /// - It verifies that the embedding dimension can be evenly divided by the head count
+    /// - It triggers the creation of all the weight matrices with proper initial values
+    /// 
+    /// The head dimension calculation is important - if you have an embedding size of 512 and
+    /// 8 attention heads, each head will have a dimension of 64 (512 ÷ 8). This allows each
+    /// head to specialize in different aspects of the input sequence.
+    ///
+    /// This method throws an error if the embedding dimension isn't divisible by the head count
+    /// because the attention mechanism requires equal-sized heads.
+    /// </para>
+    /// </remarks>
+
+    /// <summary>
+    /// Computes the auxiliary loss for attention sparsity regularization.
+    /// </summary>
+    /// <returns>The computed attention sparsity auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes two types of regularization for self-attention:
+    /// 1. Entropy regularization: Prevents overly uniform attention distributions
+    /// 2. Sparsity penalty: Encourages focused attention on relevant positions
+    /// Formula: L = -H(attention) + λ * ||attention||_1 where H is entropy
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates penalties to improve attention quality.
+    ///
+    /// Attention sparsity works by:
+    /// 1. Measuring attention entropy (how spread out attention is)
+    /// 2. Computing L1 norm (sum of absolute attention weights)
+    /// 3. Combining these to encourage focused, interpretable attention
+    ///
+    /// This helps because:
+    /// - Prevents attention from being too diffuse (attending to everything)
+    /// - Encourages sharp, focused attention on relevant positions
+    /// - Improves model interpretability
+    /// - Reduces computational waste on irrelevant positions
+    ///
+    /// The auxiliary loss is minimized during training alongside the main task loss.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastAttentionScores == null)
+        {
+            _lastEntropyLoss = NumOps.Zero;
+            _lastSparsityLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        T totalLoss = NumOps.Zero;
+
+        // 1. Compute negative entropy (to encourage low entropy/focused attention)
+        // H = -Σ(p * log(p))
+        T totalNegativeEntropy = NumOps.Zero;
+        int numHeads = _headCount;
+        int seqLen = _sequenceLength;
+
+        // _lastAttentionScores has shape [batchSize, headCount, seqLen, seqLen]
+        int batchSize = _lastAttentionScores.Shape[0];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < numHeads; h++)
+            {
+                for (int i = 0; i < seqLen; i++)
+                {
+                    T entropy = NumOps.Zero;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        // Get attention weight for this batch, head, and position
+                        T attnWeight = _lastAttentionScores[new int[] { b, h, i, j }];
+
+                        // Skip zero or very small values to avoid log(0)
+                        if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
+                            continue;
+
+                        // H = -Σ(p * log(p))
+                        T logWeight = NumOps.Log(attnWeight);
+                        T term = NumOps.Multiply(attnWeight, logWeight);
+                        entropy = NumOps.Subtract(entropy, term);
+                    }
+                    // We want low entropy (focused attention), so we minimize -H
+                    totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+                }
+            }
+        }
+
+        // Average over batch size
+        totalNegativeEntropy = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(batchSize));
+
+        // Store unweighted loss for diagnostics
+        _lastEntropyLoss = totalNegativeEntropy;
+
+        // 2. Optional: L1 sparsity penalty (not implemented in basic version)
+        // Can be added if needed: _lastSparsityLoss = Σ|attention_weights|
+
+        // Apply auxiliary loss weight and return weighted loss
+        totalLoss = NumOps.Multiply(totalNegativeEntropy, AuxiliaryLossWeight);
+        return totalLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the attention sparsity auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about attention regularization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about attention sparsity regularization, including
+    /// entropy loss, sparsity penalty, and configuration parameters.
+    /// This information is useful for monitoring training progress and debugging attention patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how attention regularization is working.
+    ///
+    /// The diagnostics include:
+    /// - Total entropy loss (how focused attention patterns are)
+    /// - Total sparsity loss (L1 penalty on attention weights)
+    /// - Weight applied to the regularization
+    /// - Whether regularization is enabled
+    /// - Number of attention heads
+    ///
+    /// This helps you:
+    /// - Monitor if attention is becoming too diffuse or too sharp
+    /// - Debug issues with attention patterns
+    /// - Understand the impact of regularization on learning
+    ///
+    /// You can use this information to adjust regularization weights for better results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalEntropyLoss", _lastEntropyLoss?.ToString() ?? "0" },
+            { "TotalSparsityLoss", _lastSparsityLoss?.ToString() ?? "0" },
+            { "SparsityWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
+            { "UseAttentionSparsity", UseAuxiliaryLoss.ToString() },
+            { "NumberOfHeads", _headCount.ToString() },
+            { "SequenceLength", _sequenceLength.ToString() },
+            { "AttentionScoresCached", (_lastAttentionScores != null).ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    private void InitializeLayer(int sequenceLength, int embeddingDimension, int headCount)
+    {
+        _sequenceLength = sequenceLength;
+        _embeddingDimension = embeddingDimension;
+        _headCount = headCount;
+        _headDimension = embeddingDimension / headCount;
+
+        if (embeddingDimension % headCount != 0)
+        {
+            throw new ArgumentException("Embedding dimension must be divisible by the number of heads.");
+        }
+
+        InitializeParameters();
+    }
+
+    /// <summary>
+    /// Initializes the weight matrices and bias vector with proper scaling.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This private method initializes the query, key, and value weight matrices with small random values
+    /// scaled according to the dimensions of the matrices. This scaling helps prevent vanishing or exploding
+    /// gradients during training. The output bias vector is initialized to zeros. This method is called
+    /// during the initialization of the layer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets up the initial values for all the weights and biases.
+    /// 
+    /// During initialization:
+    /// - The query, key, and value weight matrices are filled with small random values
+    /// - These values are scaled using a special formula (Xavier/Glorot initialization)
+    /// - The output biases are set to zero
+    /// 
+    /// The scaling is important because:
+    /// - Too large initial weights can cause unstable training (exploding gradients)
+    /// - Too small initial weights can cause slow or stalled training (vanishing gradients)
+    /// - The Xavier/Glorot initialization helps find a good middle ground
+    /// 
+    /// Setting the biases to zero is a common practice that lets the weights do the initial learning,
+    /// with the biases adjusting later to fine-tune the output values.
+    /// </para>
+    /// </remarks>
+    private void InitializeParameters()
+    {
+        // Calculate scale using tensor shape
+        int rows = _queryWeights.Shape[0];
+        int cols = _queryWeights.Shape[1];
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
+
+        InitializeTensor(_queryWeights, scale);
+        InitializeTensor(_keyWeights, scale);
+        InitializeTensor(_valueWeights, scale);
+
+        // Initialize bias tensor to zeros
+        int biasLen = _outputBias.Shape[0];
+        for (int i = 0; i < biasLen; i++)
+        {
+            _outputBias[i] = NumOps.Zero;
+        }
+    }
+
+    /// <summary>
+    /// Ensures the Q/K/V/bias tensors are allocated and populated. Cheap no-op
+    /// after the first call. Takes <see cref="LayerBase{T}.InitializationLock"/>
+    /// so concurrent Forward / GetParameters calls from different threads see a
+    /// single initialization event. SelfAttentionLayer has no sub-layer fields
+    /// so it's safe to override EnsureInitialized directly (the
+    /// TrainableParameterGenerator only emits its own override when sub-layers
+    /// are present).
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+
+            _queryWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _keyWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _valueWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _outputBias = AllocateLazyWeight([_embeddingDimension]);
+
+            if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
+            {
+                InitializationStrategy.InitializeWeights(_queryWeights, _embeddingDimension, _embeddingDimension);
+                InitializationStrategy.InitializeWeights(_keyWeights, _embeddingDimension, _embeddingDimension);
+                InitializationStrategy.InitializeWeights(_valueWeights, _embeddingDimension, _embeddingDimension);
+                InitializationStrategy.InitializeBiases(_outputBias);
+            }
+            else
+            {
+                InitializeParameters();
+            }
+
+            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
+        }
+    }
+
+    /// <summary>
+    /// Initializes a 2D tensor with small random values scaled by the provided factor.
+    /// </summary>
+    /// <param name="tensor">The tensor to initialize.</param>
+    /// <param name="scale">The scaling factor for the random values.</param>
+    /// <remarks>
+    /// <para>
+    /// This private helper method fills the specified tensor with small random values between -0.5 and 0.5,
+    /// scaled by the provided factor. This approach, known as Xavier/Glorot initialization, helps ensure
+    /// that the activations and gradients have appropriate magnitudes, which improves training dynamics.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method fills a weight tensor with properly sized random values.
+    ///
+    /// During initialization:
+    /// - The method loops through every position in the tensor
+    /// - At each position, it generates a random number between -0.5 and 0.5
+    /// - It multiplies this number by a scaling factor to get the right magnitude
+    /// - The result becomes the initial weight value at that position
+    ///
+    /// This random initialization is crucial because:
+    /// - Starting with all zeros or the same value would make all neurons learn the same patterns
+    /// - Starting with values that are too large or small would cause training problems
+    /// - The slight randomness breaks symmetry and allows different neurons to specialize
+    ///
+    /// The scaling factor ensures that these random values are appropriately sized based on
+    /// the dimensions of the tensor, helping training to proceed smoothly.
+    /// </para>
+    /// </remarks>
+    private void InitializeTensor(Tensor<T> tensor, T scale)
+    {
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
+    }
+}

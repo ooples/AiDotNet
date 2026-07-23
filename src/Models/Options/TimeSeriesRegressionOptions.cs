@@ -1,0 +1,290 @@
+namespace AiDotNet.Models.Options;
+
+/// <summary>
+/// Configuration options for time series regression models, which analyze data collected over time
+/// to identify patterns and make predictions.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (typically double or float).</typeparam>
+/// <remarks>
+/// <para>
+/// Time series regression extends traditional regression analysis to account for the temporal nature of data,
+/// where observations are collected sequentially over time. These models can capture trends, seasonal patterns,
+/// and the effects of past values on current and future values.
+/// </para>
+/// <para><b>For Beginners:</b> Time series regression helps you analyze and predict data that changes over time,
+/// like stock prices, weather patterns, or monthly sales figures. Unlike regular regression that just looks for
+/// relationships between variables, time series regression also considers when things happened. It can detect
+/// patterns like "sales always increase in December" or "temperature today is related to temperature yesterday."
+/// This class lets you configure how the model analyzes these time-based patterns.</para>
+/// </remarks>
+public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
+{
+    /// <summary>
+    /// Gets or sets the lag order, which determines how many previous time steps are used as predictors.
+    /// </summary>
+    /// <value>The lag order, defaulting to 1.</value>
+    /// <remarks>
+    /// <para>
+    /// The lag order specifies how many previous observations are included as explanatory variables in the model.
+    /// For example, a lag order of 2 means that values from both t-1 and t-2 time steps are used to predict the value at time t.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how far back in time the model looks when making predictions.
+    /// With the default value of 1, the model considers only the previous time period (like yesterday's value when
+    /// predicting today's). If you set it to 3, the model would look at the three previous time periods
+    /// (like the last three days' values). Higher values help capture longer-term patterns but require more data
+    /// and can make the model more complex.</para>
+    /// </remarks>
+    public int LagOrder { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets whether to include a trend component in the model.
+    /// </summary>
+    /// <value>True to include a trend component, defaulting to true.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the model will include a linear trend term to capture consistent upward or downward movement in the data.
+    /// This helps the model account for long-term directional changes that aren't explained by other variables.
+    /// </para>
+    /// <para><b>For Beginners:</b> This determines whether the model should look for overall upward or downward
+    /// movement in your data over time. With the default value of true, the model will try to identify if your data
+    /// is generally increasing or decreasing (like a growing customer base or declining costs). If your data doesn't
+    /// have a clear direction over time, you might set this to false to simplify the model.</para>
+    /// </remarks>
+    public bool IncludeTrend { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the seasonal period of the time series data.
+    /// </summary>
+    /// <value>The seasonal period, defaulting to 0 (no seasonality).</value>
+    /// <remarks>
+    /// <para>
+    /// The seasonal period represents how many time steps make up one complete cycle of seasonal pattern.
+    /// For example, 12 for monthly data with yearly seasonality, 7 for daily data with weekly seasonality.
+    /// A value of 0 indicates that no seasonal component should be included in the model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells the model if your data has regular patterns that repeat at fixed intervals.
+    /// The default value of 0 means "don't look for seasonal patterns." If you're analyzing monthly data and expect
+    /// yearly patterns (like retail sales peaking every December), you would set this to 12. For daily data with
+    /// weekly patterns, you'd use 7. For quarterly data with yearly patterns, you'd use 4. This helps the model
+    /// recognize and predict these recurring cycles.</para>
+    /// </remarks>
+    public int SeasonalPeriod { get; set; } = 0; // 0 means no seasonality
+
+    /// <summary>
+    /// Gets or sets whether to apply autocorrelation correction to the model.
+    /// </summary>
+    /// <value>True to apply autocorrelation correction, defaulting to true.</value>
+    /// <remarks>
+    /// <para>
+    /// Autocorrelation occurs when error terms in a time series are correlated across observations, violating
+    /// standard regression assumptions. When this option is enabled, the model applies methods to correct for
+    /// this correlation, improving the accuracy of coefficient estimates and predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This determines whether the model should adjust for the fact that errors in
+    /// time series data tend to be related to each other. With the default value of true, the model will make
+    /// these adjustments, which usually improves accuracy. For example, if the model consistently underestimates
+    /// values for several days in a row, this correction helps it recognize and fix that pattern. You should
+    /// generally leave this enabled unless you have a specific reason to disable it.</para>
+    /// </remarks>
+    public bool AutocorrelationCorrection { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the specific type of time series model to use.
+    /// </summary>
+    /// <value>The time series model type, defaulting to ARIMA.</value>
+    /// <remarks>
+    /// <para>
+    /// Different time series model types have different capabilities and are suited to different types of data.
+    /// ARIMA (AutoRegressive Integrated Moving Average) is a flexible and widely-used approach that can handle
+    /// many common time series patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> This selects which specific algorithm the model uses to analyze your time series data.
+    /// The default is ARIMA, which is a popular and versatile method that works well for many types of time data.
+    /// Other options might include methods like exponential smoothing (good for data with clear trends and seasonality)
+    /// or VAR (Vector AutoRegression, good for analyzing relationships between multiple time series).
+    /// Unless you're familiar with the different methods, starting with ARIMA is usually a good choice.</para>
+    /// </remarks>
+    public TimeSeriesModelType ModelType { get; set; } = TimeSeriesModelType.ARIMA;
+
+    /// <summary>
+    /// Gets or sets the loss function used for gradient computation and model training.
+    /// </summary>
+    /// <value>The loss function, defaulting to null (which will use MeanSquaredErrorLoss).</value>
+    /// <remarks>
+    /// <para>
+    /// The loss function determines how the model measures prediction errors during training.
+    /// Different loss functions are appropriate for different types of problems and data characteristics.
+    /// If null, the model will use Mean Squared Error (MSE) as the default loss function.
+    /// </para>
+    /// <para><b>For Beginners:</b> This determines how the model measures its mistakes during training.
+    /// The default (null) uses Mean Squared Error, which works well for most time series forecasting tasks.
+    /// You can provide a custom loss function if you have specific requirements, such as:
+    /// - MeanAbsoluteErrorLoss for robustness to outliers
+    /// - HuberLoss for a balance between MSE and MAE
+    /// - Custom loss functions for domain-specific error metrics
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T>? LossFunction { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the maximum absolute value allowed for predictions.
+    /// </summary>
+    /// <value>
+    /// A positive value to clamp predictions, or <c>null</c> (default) to auto-scale
+    /// based on training data range (1000x the maximum observed absolute value).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This guards against numerical overflow in recursive/autoregressive forecasting loops
+    /// where unstable coefficients can cause predictions to diverge exponentially.
+    /// </para>
+    /// <para>
+    /// Priority chain:
+    /// <list type="number">
+    /// <item>User-specified value (this property) — for domain-specific bounds</item>
+    /// <item>Auto-scaled from training data (1000x max |y|) — adapts to dataset scale</item>
+    /// <item>Fallback to 1e15 — when no training data is available</item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this as null (the default) and the model will
+    /// automatically determine a reasonable limit based on your training data. Only set
+    /// this if you know your predictions should stay within specific bounds (e.g., set to
+    /// 100 for percentage data that should never exceed 100).</para>
+    /// </remarks>
+    public double? MaxPredictionAbsValue { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the maximum wall-clock training time in seconds.
+    /// </summary>
+    /// <value>Maximum training time in seconds, defaulting to 0 (no limit).</value>
+    /// <remarks>
+    /// <para>
+    /// When set to a positive value, this provides a safety net to prevent runaway training.
+    /// If training exceeds this time, a <see cref="OperationCanceledException"/> is thrown.
+    /// This composes with any <see cref="CancellationToken"/> passed by the caller — whichever fires first wins.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is an optional safety limit on how long training can take.
+    /// The default is 0, meaning no time limit. Set to a positive value (e.g., 300 for 5 minutes)
+    /// if you want to prevent training from running indefinitely. This is useful for large datasets
+    /// or complex models where training might hang.</para>
+    /// </remarks>
+    private int _maxTrainingTimeSeconds;
+
+    public int MaxTrainingTimeSeconds
+    {
+        get => _maxTrainingTimeSeconds;
+        set => _maxTrainingTimeSeconds = value < 0
+            ? throw new ArgumentOutOfRangeException(nameof(MaxTrainingTimeSeconds),
+                value, "MaxTrainingTimeSeconds cannot be negative. Use 0 for no limit.")
+            : value;
+    }
+
+    /// <summary>
+    /// Gets or sets whether training stops once the monitored loss stops improving.
+    /// </summary>
+    /// <value><c>true</c> to enable early stopping; defaults to <c>false</c>.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, a model's <c>Epochs</c> setting becomes an upper bound rather than an exact
+    /// iteration count: training ends as soon as the epoch loss fails to improve by at least
+    /// <see cref="EarlyStoppingMinDelta"/> for <see cref="EarlyStoppingPatience"/> consecutive
+    /// epochs. Pairs with the best-epoch-weights checkpointing the deep models already perform, so
+    /// stopping returns the best parameters seen rather than the last ones.
+    /// </para>
+    /// <para>
+    /// Defaults to <c>false</c> so existing configurations keep their exact-iteration-count
+    /// contract.
+    /// </para>
+    /// <para>
+    /// <b>Scope:</b> this monitors the <i>training</i> loss reported by the model, so it detects a
+    /// plateau — it cannot detect overfitting, for which held-out loss must be monitored instead
+    /// (training loss keeps falling while validation loss rises). Validation-based stopping needs a
+    /// held-out split evaluated mid-training, which the current contract prevents because
+    /// prediction requires a fully trained model; it is tracked separately rather than implied
+    /// here.
+    /// </para>
+    /// <para><b>For Beginners:</b> Early stopping ends training when the model stops getting
+    /// better, instead of always running a fixed number of passes, which saves time and avoids
+    /// wasted work.</para>
+    /// </remarks>
+    public bool UseEarlyStopping { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets how many consecutive non-improving epochs to tolerate before stopping.
+    /// </summary>
+    /// <value>The patience in epochs, defaulting to 10. Must be positive.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Training loss wobbles from epoch to epoch, so stopping at the
+    /// very first bad epoch would quit too soon. Patience is how many bad epochs in a row to sit
+    /// through before giving up.</para>
+    /// </remarks>
+    private int _earlyStoppingPatience = 10;
+
+    public int EarlyStoppingPatience
+    {
+        get => _earlyStoppingPatience;
+        set => _earlyStoppingPatience = value <= 0
+            ? throw new ArgumentOutOfRangeException(nameof(EarlyStoppingPatience),
+                value, "EarlyStoppingPatience must be positive.")
+            : value;
+    }
+
+    /// <summary>
+    /// Gets or sets the smallest loss decrease that counts as an improvement.
+    /// </summary>
+    /// <value>The minimum delta, defaulting to 1e-4. Must not be negative.</value>
+    /// <remarks>
+    /// <para>
+    /// Guards against a loss that keeps creeping down by negligible amounts registering as real
+    /// progress and so never triggering the patience counter.
+    /// </para>
+    /// <para><b>For Beginners:</b> Training loss almost always drops by a tiny amount every epoch,
+    /// even when the model has effectively stopped learning. This is the smallest drop that still
+    /// counts as "getting better" — anything smaller is treated as no improvement, so training can
+    /// actually stop. Bigger values stop sooner; smaller values keep training longer.</para>
+    /// </remarks>
+    private double _earlyStoppingMinDelta = 1e-4;
+
+    public double EarlyStoppingMinDelta
+    {
+        get => _earlyStoppingMinDelta;
+        set => _earlyStoppingMinDelta = value < 0 || double.IsNaN(value)
+            ? throw new ArgumentOutOfRangeException(nameof(EarlyStoppingMinDelta),
+                value, "EarlyStoppingMinDelta cannot be negative or NaN.")
+            : value;
+    }
+
+    /// <summary>Initializes a new instance with default settings.</summary>
+    public TimeSeriesRegressionOptions() { }
+
+    /// <summary>
+    /// Creates a deep copy of an existing <see cref="TimeSeriesRegressionOptions{T}"/>, including the
+    /// early-stopping settings that a shallow clone would otherwise reset to their defaults.
+    /// </summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public TimeSeriesRegressionOptions(TimeSeriesRegressionOptions<T> other)
+    {
+        if (other is null) { throw new System.ArgumentNullException(nameof(other)); }
+
+        // Inherited settings (RegressionOptions<T> / ModelOptions have no copy constructor).
+        MaxTrainingTimeSeconds = other.MaxTrainingTimeSeconds;
+        DecompositionMethod = other.DecompositionMethod;
+        UseIntercept = other.UseIntercept;
+        Seed = other.Seed;
+
+        // Time-series settings.
+        LagOrder = other.LagOrder;
+        IncludeTrend = other.IncludeTrend;
+        SeasonalPeriod = other.SeasonalPeriod;
+        AutocorrelationCorrection = other.AutocorrelationCorrection;
+        ModelType = other.ModelType;
+        LossFunction = other.LossFunction;
+        MaxPredictionAbsValue = other.MaxPredictionAbsValue;
+
+        // Early-stopping settings (the fields this copy constructor exists to preserve).
+        UseEarlyStopping = other.UseEarlyStopping;
+        EarlyStoppingPatience = other.EarlyStoppingPatience;
+        EarlyStoppingMinDelta = other.EarlyStoppingMinDelta;
+    }
+}

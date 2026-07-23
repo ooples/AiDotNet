@@ -1,0 +1,20 @@
+- name: Home
+  href: docs/index.md
+- name: Getting Started
+  href: docs/getting-started/
+  topicHref: docs/getting-started/index.md
+- name: Try It
+  href: playground/
+  topicHref: playground/index.html
+- name: Tutorials
+  href: docs/tutorials/
+  topicHref: docs/tutorials/index.md
+- name: Reference
+  href: docs/reference/
+  topicHref: docs/reference/index.md
+- name: API Reference
+  href: api/
+  topicHref: api/index.md
+- name: Community
+  href: docs/community/
+  topicHref: docs/community/index.md

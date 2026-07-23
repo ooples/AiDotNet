@@ -1,0 +1,511 @@
+using AiDotNet.Caching;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.IntegrationTests.Caching;
+
+/// <summary>
+/// Integration tests for DefaultModelCache to verify caching behavior,
+/// thread safety, and edge case handling.
+/// </summary>
+public class DefaultModelCacheIntegrationTests
+{
+    // Use supported types: Matrix<double> for input, Vector<double> for output
+    private static OptimizationStepData<double, Matrix<double>, Vector<double>> CreateStepData()
+    {
+        return new OptimizationStepData<double, Matrix<double>, Vector<double>>();
+    }
+
+    #region Capacity Bound (leak regression)
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_BeyondCapacity_EvictsOldestAndBoundsCount()
+    {
+        // Regression for the optimizer per-epoch memory leak: the parameter-content cache key
+        // changes every epoch as the model trains, so an unbounded cache would retain one
+        // deep-copied model + O(N) predictions per epoch forever. The cache must bound itself.
+        int cap = DefaultModelCache<double, Matrix<double>, Vector<double>>.DefaultCapacity;
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>(cap);
+
+        // Insert 5x the capacity of distinct keys (simulating 5*cap training epochs).
+        int inserted = cap * 5;
+        for (int i = 0; i < inserted; i++)
+        {
+            cache.CacheStepData($"epoch_{i}", CreateStepData());
+        }
+
+        // The most-recently inserted `cap` keys must still be present...
+        for (int i = inserted - cap; i < inserted; i++)
+        {
+            Assert.NotNull(cache.GetCachedStepData($"epoch_{i}"));
+        }
+
+        // ...and the earliest keys must have been evicted (memory does not grow without bound).
+        Assert.Null(cache.GetCachedStepData("epoch_0"));
+        Assert.Null(cache.GetCachedStepData($"epoch_{inserted - cap - 1}"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_RepeatedSameKey_DoesNotEvictOthers()
+    {
+        // Overwriting an existing key must not count as a new insertion (which would spuriously
+        // evict live entries). Fill to capacity, then hammer one key; the rest must survive.
+        int cap = DefaultModelCache<double, Matrix<double>, Vector<double>>.DefaultCapacity;
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>(cap);
+
+        for (int i = 0; i < cap; i++)
+        {
+            cache.CacheStepData($"k{i}", CreateStepData());
+        }
+        for (int r = 0; r < cap * 10; r++)
+        {
+            cache.CacheStepData("k0", CreateStepData());
+        }
+
+        for (int i = 0; i < cap; i++)
+        {
+            Assert.NotNull(cache.GetCachedStepData($"k{i}"));
+        }
+    }
+
+    #endregion
+
+    #region Basic CRUD Operations
+
+    [Fact(Timeout = 120000)]
+    public async Task GetCachedStepData_NonExistentKey_ReturnsNull()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+
+        // Act
+        var result = cache.GetCachedStepData("nonexistent_key");
+
+        // Assert - CRITICAL: Must return null, not new()
+        Assert.Null(result);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_ThenGet_ReturnsSameData()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        var stepData = CreateStepData();
+        const string key = "test_step";
+
+        // Act
+        cache.CacheStepData(key, stepData);
+        var retrieved = cache.GetCachedStepData(key);
+
+        // Assert
+        Assert.NotNull(retrieved);
+        Assert.Same(stepData, retrieved);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_OverwriteExistingKey_ReturnsNewData()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        var stepData1 = CreateStepData();
+        var stepData2 = CreateStepData();
+        const string key = "shared_key";
+
+        // Act
+        cache.CacheStepData(key, stepData1);
+        cache.CacheStepData(key, stepData2);
+        var retrieved = cache.GetCachedStepData(key);
+
+        // Assert
+        Assert.Same(stepData2, retrieved);
+        Assert.NotSame(stepData1, retrieved);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ClearCache_RemovesAllEntries()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        cache.CacheStepData("key1", CreateStepData());
+        cache.CacheStepData("key2", CreateStepData());
+        cache.CacheStepData("key3", CreateStepData());
+
+        // Act
+        cache.ClearCache();
+
+        // Assert - All entries should return null after clear
+        Assert.Null(cache.GetCachedStepData("key1"));
+        Assert.Null(cache.GetCachedStepData("key2"));
+        Assert.Null(cache.GetCachedStepData("key3"));
+    }
+
+    #endregion
+
+    #region Null Key Validation
+
+    [Fact(Timeout = 120000)]
+    public async Task GetCachedStepData_NullKey_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.GetCachedStepData(null!));
+        Assert.Equal("key", ex.ParamName);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_NullKey_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        var stepData = CreateStepData();
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData(null!, stepData));
+        Assert.Equal("key", ex.ParamName);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_NullStepData_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData("key", null!));
+        Assert.Equal("stepData", ex.ParamName);
+    }
+
+    #endregion
+
+    #region Multiple Keys Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task Cache_MultipleKeys_EachRetrievableIndependently()
+    {
+        // Arrange
+        // The cache is now bounded (FIFO eviction) to stop the optimizer per-epoch leak; size it
+        // large enough to hold every key so this test still verifies independent retrieval of many
+        // distinct entries rather than the (removed) unbounded-retention behavior.
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>(capacity: 128);
+        var stepDataDict = new Dictionary<string, OptimizationStepData<double, Matrix<double>, Vector<double>>>();
+
+        for (int i = 0; i < 100; i++)
+        {
+            var key = $"step_{i}";
+            var stepData = CreateStepData();
+            stepDataDict[key] = stepData;
+            cache.CacheStepData(key, stepData);
+        }
+
+        // Act & Assert
+        foreach (var kvp in stepDataDict)
+        {
+            var retrieved = cache.GetCachedStepData(kvp.Key);
+            Assert.NotNull(retrieved);
+            Assert.Same(kvp.Value, retrieved);
+        }
+    }
+
+    #endregion
+
+    #region Thread Safety Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ConcurrentCacheOperations_DoesNotThrow()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        var exceptions = new List<Exception>();
+        var tasks = new List<Task>();
+
+        // Act - Concurrent writes
+        for (int i = 0; i < 100; i++)
+        {
+            int index = i;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    cache.CacheStepData($"key_{index}", CreateStepData());
+                }
+                catch (Exception ex)
+                {
+                    lock (exceptions) exceptions.Add(ex);
+                }
+            }));
+        }
+
+        // Concurrent reads
+        for (int i = 0; i < 100; i++)
+        {
+            int index = i;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    cache.GetCachedStepData($"key_{index}");
+                }
+                catch (Exception ex)
+                {
+                    lock (exceptions) exceptions.Add(ex);
+                }
+            }));
+        }
+
+        Task.WaitAll(tasks.ToArray());
+
+        // Assert
+        Assert.Empty(exceptions);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConcurrentReadWrite_SameKey_ThreadSafe()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        const string sharedKey = "shared";
+        var exceptions = new List<Exception>();
+        var tasks = new List<Task>();
+        const int iterations = 1000;
+
+        // Act - Multiple threads reading and writing to same key
+        for (int i = 0; i < 10; i++)
+        {
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    for (int j = 0; j < iterations; j++)
+                    {
+                        cache.CacheStepData(sharedKey, CreateStepData());
+                        cache.GetCachedStepData(sharedKey);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    lock (exceptions) exceptions.Add(ex);
+                }
+            }));
+        }
+
+        Task.WaitAll(tasks.ToArray());
+
+        // Assert
+        Assert.Empty(exceptions);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConcurrentClearAndAccess_ThreadSafe()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        var exceptions = new List<Exception>();
+        var tasks = new List<Task>();
+
+        // Pre-populate
+        for (int i = 0; i < 50; i++)
+        {
+            cache.CacheStepData($"key_{i}", CreateStepData());
+        }
+
+        // Act - Concurrent clears and accesses
+        for (int i = 0; i < 10; i++)
+        {
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    for (int j = 0; j < 100; j++)
+                    {
+                        cache.ClearCache();
+                        cache.CacheStepData("temp", CreateStepData());
+                        cache.GetCachedStepData("temp");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    lock (exceptions) exceptions.Add(ex);
+                }
+            }));
+        }
+
+        Task.WaitAll(tasks.ToArray());
+
+        // Assert
+        Assert.Empty(exceptions);
+    }
+
+    #endregion
+
+    #region Edge Cases
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_EmptyKey_StoresSuccessfully()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        var stepData = CreateStepData();
+
+        // Act
+        cache.CacheStepData("", stepData);
+        var retrieved = cache.GetCachedStepData("");
+
+        // Assert
+        Assert.Same(stepData, retrieved);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_VeryLongKey_StoresSuccessfully()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        var stepData = CreateStepData();
+        var longKey = new string('x', 10000);
+
+        // Act
+        cache.CacheStepData(longKey, stepData);
+        var retrieved = cache.GetCachedStepData(longKey);
+
+        // Assert
+        Assert.Same(stepData, retrieved);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_SpecialCharactersInKey_StoresSuccessfully()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        var stepData = CreateStepData();
+        const string specialKey = "key!@#$%^&*()_+-=[]{}|;':\",./<>?";
+
+        // Act
+        cache.CacheStepData(specialKey, stepData);
+        var retrieved = cache.GetCachedStepData(specialKey);
+
+        // Assert
+        Assert.Same(stepData, retrieved);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ClearCache_OnEmptyCache_DoesNotThrow()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+
+        // Act & Assert - Should not throw
+        var exception = Record.Exception(() => cache.ClearCache());
+        Assert.Null(exception);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ClearCache_CalledMultipleTimes_DoesNotThrow()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        cache.CacheStepData("key", CreateStepData());
+
+        // Act & Assert
+        var exception = Record.Exception(() =>
+        {
+            cache.ClearCache();
+            cache.ClearCache();
+            cache.ClearCache();
+        });
+        Assert.Null(exception);
+    }
+
+    #endregion
+
+    #region Type Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ModelCache_FloatType_WorksCorrectly()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<float, Matrix<float>, Vector<float>>();
+        var stepData = new OptimizationStepData<float, Matrix<float>, Vector<float>>();
+
+        // Act
+        cache.CacheStepData("float_key", stepData);
+        var retrieved = cache.GetCachedStepData("float_key");
+
+        // Assert
+        Assert.Same(stepData, retrieved);
+    }
+
+    // Note: Tensor<T> type test removed because OptimizationStepData's parameterless constructor
+    // requires valid 3D dimensions for Tensor types, which is a limitation of the default model creation.
+    // The cache functionality is tested via Matrix/Vector which uses the same underlying ConcurrentDictionary.
+
+    #endregion
+
+    #region Return Null vs New Verification
+
+    [Fact(Timeout = 120000)]
+    public async Task GetCachedStepData_MultipleNonExistentKeys_AllReturnNull()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+
+        // Act & Assert - This verifies the fix for the bug where new() was returned
+        for (int i = 0; i < 100; i++)
+        {
+            var result = cache.GetCachedStepData($"nonexistent_{i}");
+            Assert.Null(result);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GetCachedStepData_AfterClear_ReturnsNull()
+    {
+        // Arrange
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        cache.CacheStepData("key", CreateStepData());
+        cache.ClearCache();
+
+        // Act
+        var result = cache.GetCachedStepData("key");
+
+        // Assert - Must return null, not new()
+        Assert.Null(result);
+    }
+
+    #endregion
+
+    #region Eviction Policy + Config Customization
+
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_PolicyAndEnabled_AreHonored()
+    {
+        await Task.Yield();
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>(
+            3, AiDotNet.Enums.CacheEvictionPolicy.LRU, enabled: false);
+
+        Assert.Equal(3, cache.Capacity);
+        Assert.Equal(AiDotNet.Enums.CacheEvictionPolicy.LRU, cache.EvictionPolicy);
+        Assert.False(cache.Enabled);
+
+        // Disabled → pass-through: stores are dropped, lookups always miss.
+        cache.CacheStepData("k", CreateStepData());
+        Assert.Null(cache.GetCachedStepData("k"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheConfig_OptimizerCacheDefaults_AreRecommended()
+    {
+        await Task.Yield();
+        var config = new AiDotNet.Deployment.Configuration.CacheConfig();
+
+        // The recommended training-cache defaults that fix the unbounded-growth training-loop leak.
+        Assert.Equal(8, config.GradientCacheCapacity);
+        Assert.Equal(8, config.ModelCacheCapacity);
+        Assert.Equal(AiDotNet.Enums.CacheEvictionPolicy.FIFO, config.OptimizerCacheEvictionPolicy);
+        Assert.True(config.Enabled);
+    }
+
+    #endregion
+}

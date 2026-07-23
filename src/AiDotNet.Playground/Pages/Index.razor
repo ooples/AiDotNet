@@ -1,0 +1,577 @@
+@page "/"
+@inject CodeExecutionService CodeService
+@inject ExampleService ExampleService
+@inject NavigationManager Navigation
+
+<PageTitle>AiDotNet Playground</PageTitle>
+
+<div class="playground-container">
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <select class="example-select" @onchange="OnExampleChanged">
+                <option value="">Select an example...</option>
+                @foreach (var category in ExampleService.GetCategories())
+                {
+                    <optgroup label="@category">
+                        @foreach (var example in ExampleService.GetExamples(category))
+                        {
+                            <option value="@example.Id">@example.Name</option>
+                        }
+                    </optgroup>
+                }
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <button class="btn btn-primary" @onclick="RunCode" disabled="@isRunning">
+                @if (isRunning)
+                {
+                    <span class="spinner"></span>
+                    <span>Running...</span>
+                }
+                else
+                {
+                    <span>▶ Run</span>
+                }
+            </button>
+            <button class="btn btn-secondary" @onclick="FormatCode">Format</button>
+            <button class="btn btn-secondary" @onclick="ClearOutput">Clear</button>
+            <button class="btn btn-secondary" @onclick="ShareCode">Share</button>
+        </div>
+    </div>
+
+    <div class="editor-container">
+        <div class="editor-panel">
+            <div class="panel-header">
+                <span>Code Editor</span>
+                <span class="file-name">Program.cs</span>
+            </div>
+            <div class="editor-wrapper">
+                <StandaloneCodeEditor @ref="editor"
+                                      ConstructionOptions="EditorConstructionOptions"
+                                      OnDidInit="OnEditorInit" />
+            </div>
+        </div>
+
+        <div class="output-panel">
+            <div class="panel-header">
+                <span>Output</span>
+                @if (executionTime > 0)
+                {
+                    <span class="execution-time">@executionTime ms</span>
+                }
+            </div>
+            <div class="output-content @(hasError ? "error" : "")">
+                @if (string.IsNullOrEmpty(output))
+                {
+                    <span class="placeholder">Output will appear here after running the code...</span>
+                }
+                else
+                {
+                    <pre>@output</pre>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .playground-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--bg-dark);
+    }
+
+    .toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .toolbar-left, .toolbar-right {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .example-select {
+        padding: 8px 12px;
+        background: var(--bg-dark);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        min-width: 250px;
+    }
+
+    .example-select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+    }
+
+    .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s;
+    }
+
+    .btn-primary {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        background: var(--primary-dark);
+    }
+
+    .btn-primary:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .btn-secondary {
+        background: var(--bg-dark);
+        color: var(--text-primary);
+        border: 1px solid var(--border-color);
+    }
+
+    .btn-secondary:hover {
+        background: var(--border-color);
+    }
+
+    .spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .editor-container {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+    }
+
+    .editor-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--border-color);
+        min-height: 0; /* Required for flex child to shrink */
+    }
+
+    .editor-wrapper {
+        flex: 1;
+        min-height: 400px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .editor-wrapper > * {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100% !important;
+    }
+
+    .output-panel {
+        width: 40%;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-darker);
+    }
+
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 16px;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border-color);
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .file-name {
+        color: var(--text-secondary);
+        font-family: monospace;
+    }
+
+    .execution-time {
+        color: var(--success-color);
+        font-family: monospace;
+    }
+
+    .output-content {
+        flex: 1;
+        padding: 16px;
+        overflow: auto;
+        font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+        font-size: 0.9rem;
+        line-height: 1.6;
+    }
+
+    .output-content.error {
+        color: var(--error-color);
+    }
+
+    .output-content pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    .placeholder {
+        color: var(--text-secondary);
+        font-style: italic;
+    }
+
+    :deep(.monaco-editor) {
+        height: 100% !important;
+    }
+
+    /* Mobile responsive styles */
+    @@media (max-width: 768px) {
+        .playground-container {
+            overflow: hidden;
+            width: 100%;
+            max-width: 100vw;
+        }
+
+        .toolbar {
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px 12px;
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+        }
+
+        .toolbar-left, .toolbar-right {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .toolbar-right {
+            flex-wrap: wrap;
+        }
+
+        .example-select {
+            min-width: 100%;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .btn {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            flex: 1;
+            justify-content: center;
+            min-width: 0;
+        }
+
+        .editor-container {
+            flex-direction: column;
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+        }
+
+        .editor-panel {
+            border-right: none;
+            border-bottom: 1px solid var(--border-color);
+            min-height: 250px;
+            max-height: 45vh;
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+        }
+
+        .editor-wrapper {
+            min-height: 200px;
+            width: 100% !important;
+            max-width: 100vw !important;
+            overflow: hidden !important;
+            position: relative !important;
+        }
+
+        .editor-wrapper > * {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        /* Force Monaco editor to respect container width */
+        :deep(.monaco-editor) {
+            width: 100% !important;
+            max-width: 100% !important;
+            left: 0 !important;
+            right: 0 !important;
+        }
+
+        :deep(.monaco-editor .overflow-guard) {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        :deep(.monaco-editor .monaco-scrollable-element) {
+            width: 100% !important;
+        }
+
+        :deep(.monaco-editor .lines-content) {
+            max-width: 100% !important;
+        }
+
+        :deep(.monaco-editor .view-lines) {
+            max-width: 100% !important;
+        }
+
+        .output-panel {
+            width: 100%;
+            max-width: 100%;
+            min-height: 150px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            width: 100% !important;
+            max-width: 100vw !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+        }
+
+        .file-name {
+            font-size: 0.7rem;
+        }
+
+        .output-content {
+            padding: 12px;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            word-break: break-word;
+        }
+
+        /* Fix Monaco editor container to not exceed viewport */
+        :deep(.monaco-editor),
+        :deep(.monaco-editor .overflow-guard),
+        :deep(.monaco-editor-background),
+        :deep(.monaco-editor .inputarea.ime-input) {
+            width: 100% !important;
+            max-width: 100vw !important;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .toolbar {
+            padding: 8px;
+        }
+
+        .btn {
+            padding: 6px 10px;
+            font-size: 0.8rem;
+        }
+
+        /* Hide less critical buttons on very small screens */
+        .btn-secondary:nth-child(3),
+        .btn-secondary:nth-child(4) {
+            display: none;
+        }
+
+        .editor-panel {
+            min-height: 200px;
+            max-height: 40vh;
+        }
+
+        .editor-wrapper {
+            min-height: 150px;
+        }
+    }
+</style>
+
+@code {
+    private StandaloneCodeEditor? editor;
+    private string output = "";
+    private bool isRunning = false;
+    private bool hasError = false;
+    private long executionTime = 0;
+
+    private string defaultCode = @"// AiDotNet Interactive Playground
+// Write and run AiDotNet code directly in your browser!
+
+using AiDotNet;
+using System;
+
+// Simple neural network example
+Console.WriteLine(""Welcome to AiDotNet Playground!"");
+Console.WriteLine();
+
+// Create a simple array of features
+var features = new double[,]
+{
+    { 5.1, 3.5, 1.4, 0.2 },
+    { 4.9, 3.0, 1.4, 0.2 },
+    { 6.2, 3.4, 5.4, 2.3 },
+    { 5.9, 3.0, 5.1, 1.8 }
+};
+
+// Labels for classification
+var labels = new int[] { 0, 0, 2, 2 };
+
+Console.WriteLine($""Training data: {features.GetLength(0)} samples, {features.GetLength(1)} features"");
+Console.WriteLine($""Classes: {labels.Distinct().Count()}"");
+Console.WriteLine();
+Console.WriteLine(""Ready to build your first model!"");
+Console.WriteLine(""Check out the examples dropdown for more complex scenarios."");
+";
+
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            AutomaticLayout = true,
+            Language = "csharp",
+            Theme = "vs-dark",
+            Value = defaultCode,
+            FontSize = 14,
+            FontFamily = "'Fira Code', 'Cascadia Code', Consolas, monospace",
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            ScrollBeyondLastLine = false,
+            RenderLineHighlight = "all",
+            Padding = new EditorPaddingOptions { Top = 10, Bottom = 10 },
+            WordWrap = "on",  // Enable word wrap for better mobile support
+            WrappingIndent = "indent"
+        };
+    }
+
+    private async Task OnEditorInit()
+    {
+        // Check for example query parameter
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var exampleId = query["example"];
+
+        if (!string.IsNullOrEmpty(exampleId) && editor != null)
+        {
+            var example = ExampleService.GetExample(exampleId);
+            if (example != null)
+            {
+                await editor.SetValue(example.Code);
+            }
+        }
+    }
+
+    private async Task RunCode()
+    {
+        if (editor == null) return;
+
+        isRunning = true;
+        hasError = false;
+        output = "";
+        StateHasChanged();
+
+        try
+        {
+            var code = await editor.GetValue();
+            var startTime = DateTime.UtcNow;
+
+            var result = await CodeService.ExecuteAsync(code);
+
+            executionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+            output = result.Output;
+            hasError = !result.Success;
+        }
+        catch (Exception ex)
+        {
+            output = $"Error: {ex.Message}";
+            hasError = true;
+        }
+        finally
+        {
+            isRunning = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task FormatCode()
+    {
+        if (editor != null)
+        {
+            await editor.Trigger("", "editor.action.formatDocument", null);
+        }
+    }
+
+    private void ClearOutput()
+    {
+        output = "";
+        hasError = false;
+        executionTime = 0;
+    }
+
+    private async Task ShareCode()
+    {
+        if (editor == null) return;
+
+        var code = await editor.GetValue();
+        // In a real implementation, this would create a shareable URL
+        output = "Share functionality coming soon! For now, copy your code manually.";
+    }
+
+    private async Task OnExampleChanged(ChangeEventArgs e)
+    {
+        var exampleId = e.Value?.ToString();
+
+        if (string.IsNullOrEmpty(exampleId))
+        {
+            return;
+        }
+
+        if (editor == null)
+        {
+            output = "Error: Editor not initialized";
+            hasError = true;
+            StateHasChanged();
+            return;
+        }
+
+        var example = ExampleService.GetExample(exampleId);
+
+        if (example != null)
+        {
+            await editor.SetValue(example.Code);
+            output = $"Loaded example: {example.Name}";
+            hasError = false;
+            StateHasChanged();
+        }
+        else
+        {
+            output = $"Example not found: {exampleId}";
+            hasError = true;
+            StateHasChanged();
+        }
+    }
+}

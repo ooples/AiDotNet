@@ -1,0 +1,387 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.AnomalyDetection.Probabilistic;
+
+/// <summary>
+/// Detects anomalies using Gaussian Mixture Models (GMM).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> GMM models data as a mixture of several Gaussian distributions.
+/// Points with low probability under this model are anomalies - they don't fit well
+/// into any of the learned Gaussian clusters.
+/// </para>
+/// <para>
+/// The algorithm works by:
+/// 1. Fit a mixture of k Gaussians using Expectation-Maximization
+/// 2. For each point, compute its probability under the mixture model
+/// 3. Points with low probability are anomalies
+/// </para>
+/// <para>
+/// <b>When to use:</b>
+/// - Data is a mixture of Gaussian clusters
+/// - Different clusters have different shapes/sizes
+/// - You need probabilistic anomaly scores
+/// </para>
+/// <para>
+/// <b>Industry Standard Defaults:</b>
+/// - Components: 3 (typical range 2-10)
+/// - Covariance type: diagonal (uses variance per feature for stability)
+/// - Contamination: 0.1 (10%)
+/// </para>
+/// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Clustering)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
+public class GMMDetector<T> : AnomalyDetectorBase<T>
+{
+    private readonly int _nComponents;
+    private readonly int _maxIterations;
+    private Vector<T>[] _means = Array.Empty<Vector<T>>();
+    private Matrix<T>[] _covariances = Array.Empty<Matrix<T>>();
+    private Vector<T> _weights = new Vector<T>(0);
+    private int _nFeatures;
+    private Vector<T> _globalVariance = new Vector<T>(0);
+
+    /// <summary>
+    /// Gets the number of Gaussian components.
+    /// </summary>
+    public int NComponents => _nComponents;
+
+    /// <summary>
+    /// Creates a new GMM anomaly detector.
+    /// </summary>
+    /// <param name="nComponents">Number of Gaussian components. Default is 3.</param>
+    /// <param name="maxIterations">Maximum EM iterations. Default is 100.</param>
+    /// <param name="contamination">Expected proportion of anomalies. Default is 0.1 (10%).</param>
+    /// <param name="randomSeed">Random seed for reproducibility. Default is 42.</param>
+    public GMMDetector(int nComponents = 3, int maxIterations = 100,
+        double contamination = 0.1, int randomSeed = 42)
+        : base(contamination, randomSeed)
+    {
+        if (nComponents < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(nComponents),
+                "NComponents must be at least 1. Recommended is 3.");
+        }
+
+        if (maxIterations < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxIterations),
+                "MaxIterations must be at least 1.");
+        }
+
+        _nComponents = nComponents;
+        _maxIterations = maxIterations;
+    }
+
+    /// <inheritdoc/>
+    public override void Fit(Matrix<T> X)
+    {
+        ValidateInput(X);
+
+        int n = X.Rows;
+        _nFeatures = X.Columns;
+
+        if (n < _nComponents)
+        {
+            throw new ArgumentException(
+                $"Number of samples ({n}) must be at least nComponents ({_nComponents}).",
+                nameof(X));
+        }
+
+        // Initialize GMM using k-means
+        InitializeParameters(X);
+
+        // Run EM algorithm
+        RunEM(X);
+
+        // Calculate scores for training data to set threshold
+        var trainingScores = ScoreAnomaliesInternal(X);
+        SetThresholdFromContamination(trainingScores);
+
+        _isFitted = true;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> ScoreAnomalies(Matrix<T> X)
+    {
+        EnsureFitted();
+        return ScoreAnomaliesInternal(X);
+    }
+
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    {
+        ValidateInput(X);
+
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
+
+        var scores = new Vector<T>(X.Rows);
+
+        for (int i = 0; i < X.Rows; i++)
+        {
+            var point = new Vector<T>(X.Columns);
+            for (int j = 0; j < X.Columns; j++)
+            {
+                point[j] = X[i, j];
+            }
+
+            // Compute log-likelihood under mixture model
+            T logLikelihood = ComputeLogLikelihood(point);
+
+            // Convert to anomaly score (negative log-likelihood)
+            scores[i] = NumOps.Negate(logLikelihood);
+        }
+
+        return scores;
+    }
+
+    private void InitializeParameters(Matrix<T> X)
+    {
+        int n = X.Rows;
+        int d = X.Columns;
+        var random = RandomHelper.CreateSeededRandom(_randomSeed);
+
+        // Compute global variance per feature for use as a covariance floor.
+        // This prevents components with very few points (e.g., a singleton outlier)
+        // from collapsing to a tiny covariance that produces astronomically high density.
+        _globalVariance = new Vector<T>(d);
+        var featureMeans = new Vector<T>(d);
+        T nT = NumOps.FromDouble(n);
+        T minVariance = NumOps.FromDouble(1e-6);
+        for (int j = 0; j < d; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                sum = NumOps.Add(sum, X[i, j]);
+            }
+            featureMeans[j] = NumOps.Divide(sum, nT);
+
+            T varSum = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                T diff = NumOps.Subtract(X[i, j], featureMeans[j]);
+                varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
+            }
+            T variance = NumOps.Divide(varSum, nT);
+            _globalVariance[j] = NumOps.GreaterThan(variance, minVariance) ? variance : minVariance;
+        }
+
+        // Initialize means using k-means++ style
+        _means = new Vector<T>[_nComponents];
+        _covariances = new Matrix<T>[_nComponents];
+        _weights = new Vector<T>(_nComponents);
+
+        // Select initial means randomly
+        var selectedIndices = new HashSet<int>();
+        for (int c = 0; c < _nComponents; c++)
+        {
+            int idx;
+            do
+            {
+                idx = random.Next(n);
+            } while (selectedIndices.Contains(idx));
+            selectedIndices.Add(idx);
+
+            _means[c] = new Vector<T>(d);
+            for (int j = 0; j < d; j++)
+            {
+                _means[c][j] = X[idx, j];
+            }
+
+            // Initialize covariance as identity
+            _covariances[c] = new Matrix<T>(d, d);
+            for (int j = 0; j < d; j++)
+            {
+                _covariances[c][j, j] = NumOps.FromDouble(1.0);
+            }
+
+            // Initialize equal weights
+            _weights[c] = NumOps.FromDouble(1.0 / _nComponents);
+        }
+    }
+
+    private void RunEM(Matrix<T> X)
+    {
+        int n = X.Rows;
+        int d = X.Columns;
+
+        // Responsibilities matrix (n x k)
+        var responsibilities = new Matrix<T>(n, _nComponents);
+        T uniformResp = NumOps.Divide(NumOps.One, NumOps.FromDouble(_nComponents));
+
+        for (int iter = 0; iter < _maxIterations; iter++)
+        {
+            // E-step: Compute responsibilities
+            for (int i = 0; i < n; i++)
+            {
+                var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
+
+                T totalProb = NumOps.Zero;
+                var probs = new Vector<T>(_nComponents);
+
+                for (int c = 0; c < _nComponents; c++)
+                {
+                    T density = GaussianDensity(point, _means[c], _covariances[c]);
+                    probs[c] = NumOps.Multiply(_weights[c], density);
+                    totalProb = NumOps.Add(totalProb, probs[c]);
+                }
+
+                for (int c = 0; c < _nComponents; c++)
+                {
+                    responsibilities[i, c] = NumOps.GreaterThan(totalProb, NumOps.Zero)
+                        ? NumOps.Divide(probs[c], totalProb)
+                        : uniformResp;
+                }
+            }
+
+            // M-step: Update parameters
+            for (int c = 0; c < _nComponents; c++)
+            {
+                T Nc = NumOps.Zero;
+                for (int i = 0; i < n; i++)
+                {
+                    Nc = NumOps.Add(Nc, responsibilities[i, c]);
+                }
+
+                // Update weight
+                _weights[c] = NumOps.Divide(Nc, NumOps.FromDouble(n));
+
+                // Update mean
+                var newMean = new Vector<T>(d);
+                for (int i = 0; i < n; i++)
+                {
+                    for (int j = 0; j < d; j++)
+                    {
+                        newMean[j] = NumOps.Add(newMean[j],
+                            NumOps.Multiply(responsibilities[i, c], X[i, j]));
+                    }
+                }
+                T ncEps = NumOps.FromDouble(1e-6);
+                for (int j = 0; j < d; j++)
+                {
+                    _means[c][j] = NumOps.GreaterThan(Nc, NumOps.Zero) ? NumOps.Divide(newMean[j], Nc) : _means[c][j];
+                }
+
+                // Update covariance
+                var newCov = new Matrix<T>(d, d);
+                for (int i = 0; i < n; i++)
+                {
+                    for (int j1 = 0; j1 < d; j1++)
+                    {
+                        T diff1 = NumOps.Subtract(X[i, j1], _means[c][j1]);
+                        for (int j2 = j1; j2 < d; j2++)
+                        {
+                            T diff2 = NumOps.Subtract(X[i, j2], _means[c][j2]);
+                            T contrib = NumOps.Multiply(responsibilities[i, c],
+                                NumOps.Multiply(diff1, diff2));
+                            newCov[j1, j2] = NumOps.Add(newCov[j1, j2], contrib);
+                            if (j1 != j2)
+                            {
+                                newCov[j2, j1] = newCov[j1, j2];
+                            }
+                        }
+                    }
+                }
+
+                // Normalize covariance first, then apply regularization
+                if (NumOps.GreaterThan(Nc, ncEps))
+                {
+                    for (int j1 = 0; j1 < d; j1++)
+                    {
+                        for (int j2 = 0; j2 < d; j2++)
+                        {
+                            _covariances[c][j1, j2] = NumOps.Divide(newCov[j1, j2], Nc);
+                        }
+                    }
+
+                    // Apply regularization: floor the diagonal at a fraction of the global variance.
+                    // This prevents components with very few points from having extremely small
+                    // variance, which would cause astronomically high density and break anomaly scoring.
+                    for (int j = 0; j < d; j++)
+                    {
+                        T currentVar = _covariances[c][j, j];
+                        T floorFraction = NumOps.FromDouble(0.01);
+                        T minFloor = NumOps.FromDouble(1e-6);
+                        T varFloor = NumOps.Multiply(_globalVariance[j], floorFraction);
+                        T minVar = NumOps.GreaterThan(varFloor, minFloor) ? varFloor : minFloor;
+                        if (NumOps.LessThan(currentVar, minVar))
+                        {
+                            _covariances[c][j, j] = minVar;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private T ComputeLogLikelihood(Vector<T> point)
+    {
+        if (point.Length != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Point has {point.Length} features, but model was fitted with {_nFeatures} features.",
+                nameof(point));
+        }
+
+        T likelihood = NumOps.Zero;
+
+        for (int c = 0; c < _nComponents; c++)
+        {
+            T density = GaussianDensity(point, _means[c], _covariances[c]);
+            likelihood = NumOps.Add(likelihood, NumOps.Multiply(_weights[c], density));
+        }
+
+        return NumOps.GreaterThan(likelihood, NumOps.Zero)
+            ? NumOps.Log(likelihood)
+            : NumOps.FromDouble(-1000);
+    }
+
+    private T GaussianDensity(Vector<T> point, Vector<T> mean, Matrix<T> covariance)
+    {
+        int d = point.Length;
+        T half = NumOps.FromDouble(0.5);
+        T log2Pi = NumOps.FromDouble(Math.Log(2 * Math.PI));
+        T floorFraction = NumOps.FromDouble(0.01);
+        T minFloor = NumOps.FromDouble(1e-6);
+
+        // Simplified: Use diagonal approximation for stability
+        T mahalanobis = NumOps.Zero;
+        T logDet = NumOps.Zero;
+
+        for (int i = 0; i < d; i++)
+        {
+            T diffI = NumOps.Subtract(point[i], mean[i]);
+            T variance = covariance[i, i];
+            // Use global variance floor to prevent density explosion for singleton components
+            T globalVar = _globalVariance.Length > i ? _globalVariance[i] : NumOps.Zero;
+            T varFloor = NumOps.Multiply(globalVar, floorFraction);
+            T minVar = NumOps.GreaterThan(varFloor, minFloor) ? varFloor : minFloor;
+            if (NumOps.LessThan(variance, minVar)) variance = minVar;
+
+            mahalanobis = NumOps.Add(mahalanobis, NumOps.Divide(NumOps.Multiply(diffI, diffI), variance));
+            logDet = NumOps.Add(logDet, NumOps.Log(variance));
+        }
+
+        T logDensity = NumOps.Negate(NumOps.Multiply(half,
+            NumOps.Add(NumOps.Add(NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet), mahalanobis)));
+
+        return NumOps.Exp(logDensity);
+    }
+}

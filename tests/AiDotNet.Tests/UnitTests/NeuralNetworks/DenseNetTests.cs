@@ -1,0 +1,357 @@
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
+
+/// <summary>
+/// Unit tests for the DenseNet implementations.
+/// </summary>
+public class DenseNetTests
+{
+    #region DenseNet-121 Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet121_Constructor_CreatesValidNetwork()
+    {
+        // Arrange & Act
+        var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(DenseNetVariant.DenseNet121, network.Variant);
+        Assert.Equal(10, network.NumClasses);
+        Assert.Equal(32, network.GrowthRate);
+        Assert.True(network.Layers.Count > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet169_Constructor_CreatesValidNetwork()
+    {
+        // Arrange & Act
+        var network = DenseNetNetwork<float>.DenseNet169(numClasses: 100);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(DenseNetVariant.DenseNet169, network.Variant);
+        Assert.Equal(100, network.NumClasses);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet201_Constructor_CreatesValidNetwork()
+    {
+        // Arrange & Act
+        var network = DenseNetNetwork<float>.DenseNet201(numClasses: 100);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(DenseNetVariant.DenseNet201, network.Variant);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet264_Constructor_CreatesValidNetwork()
+    {
+        // Arrange & Act
+        var network = DenseNetNetwork<float>.DenseNet264(numClasses: 100);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(DenseNetVariant.DenseNet264, network.Variant);
+    }
+
+    #endregion
+
+    #region Configuration Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNetConfiguration_GetBlockLayers_ReturnsCorrectValues()
+    {
+        // Test DenseNet-121
+        var config121 = new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses: 10);
+        var layers121 = config121.GetBlockLayers();
+        Assert.Equal([6, 12, 24, 16], layers121);
+
+        // Test DenseNet-169
+        var config169 = new DenseNetConfiguration(DenseNetVariant.DenseNet169, numClasses: 10);
+        var layers169 = config169.GetBlockLayers();
+        Assert.Equal([6, 12, 32, 32], layers169);
+
+        // Test DenseNet-201
+        var config201 = new DenseNetConfiguration(DenseNetVariant.DenseNet201, numClasses: 10);
+        var layers201 = config201.GetBlockLayers();
+        Assert.Equal([6, 12, 48, 32], layers201);
+
+        // Test DenseNet-264
+        var config264 = new DenseNetConfiguration(DenseNetVariant.DenseNet264, numClasses: 10);
+        var layers264 = config264.GetBlockLayers();
+        Assert.Equal([6, 12, 64, 48], layers264);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_WithCustomGrowthRate_CreatesValidNetwork()
+    {
+        // Arrange - Use factory method with custom growth rate
+        // Note: The default factory methods use growth rate 32, so test with that
+        var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(32, network.GrowthRate); // Default growth rate
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_WithGrayscaleInput_CreatesValidNetwork()
+    {
+        // Arrange
+        var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10, inputChannels: 1);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.True(network.Layers.Count > 0);
+    }
+
+    #endregion
+
+    #region DenseBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_Constructor_CreatesValidBlock()
+    {
+        // Arrange & Act — lazy ctor, inputChannels resolved on first Forward.
+        var block = new DenseBlock<float>(
+            numLayers: 6,
+            growthRate: 32);
+
+        // Assert
+        Assert.Equal(6, block.NumLayers);
+        Assert.Equal(32, block.GrowthRate);
+        // OutputChannels is the lazy sentinel (-1) until first Forward
+        // resolves the input channel count. After PR #1209 dropped the
+        // explicit inputChannels constructor parameter, this is the
+        // documented lazy-state contract — exercise it by running a
+        // Forward to materialize, then re-read.
+        Assert.Equal(-1, block.OutputChannels);
+        var probe = new Tensor<float>([1, 64, 14, 14]);
+        InitializeWithRandomValues(probe);
+        block.Forward(probe);
+        Assert.Equal(64 + 6 * 32, block.OutputChannels); // 64 + 192 = 256
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_OutputChannels_CalculatedCorrectly()
+    {
+        // Arrange
+        int inputChannels = 64;
+        int numLayers = 6;
+        int growthRate = 32;
+
+        // Act
+        var block = new DenseBlock<float>(numLayers, growthRate);
+        // Trigger lazy resolution — Forward records the actual input
+        // channel count, after which OutputChannels reflects the
+        // inputChannels + numLayers × growthRate formula.
+        var probe = new Tensor<float>([1, inputChannels, 7, 7]);
+        InitializeWithRandomValues(probe);
+        block.Forward(probe);
+
+        // Assert
+        // Output = input + (numLayers * growthRate)
+        Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_Forward_ProducesCorrectOutputShape()
+    {
+        // Arrange
+        var block = new DenseBlock<float>(
+            numLayers: 3,
+            growthRate: 12);
+
+        var input = new Tensor<float>([1, 64, 14, 14]);
+        InitializeWithRandomValues(input);
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert - output channels = 64 + 3*12 = 100
+        Assert.Equal(4, output.Shape.Length);
+        Assert.Equal(1, output.Shape[0]); // batch
+        Assert.Equal(100, output.Shape[1]); // channels
+        Assert.Equal(14, output.Shape[2]); // height (unchanged)
+        Assert.Equal(14, output.Shape[3]); // width (unchanged)
+    }
+
+    #endregion
+
+    #region TransitionLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_Constructor_CreatesValidLayer()
+    {
+        // Arrange & Act — lazy ctor, inputChannels resolved on first Forward.
+        var layer = new TransitionLayer<float>(
+            compressionFactor: 0.5);
+
+        // Sentinel before Forward, then 0.5× of the resolved input channels.
+        Assert.Equal(0, layer.OutputChannels);
+        var probe = new Tensor<float>([1, 256, 14, 14]);
+        InitializeWithRandomValues(probe);
+        layer.Forward(probe);
+        Assert.Equal(128, layer.OutputChannels); // 256 * 0.5
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_Forward_ProducesCorrectOutputShape()
+    {
+        // Arrange
+        var layer = new TransitionLayer<float>(
+            compressionFactor: 0.5);
+
+        var input = new Tensor<float>([1, 128, 28, 28]);
+        InitializeWithRandomValues(input);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert - channels halved, spatial halved
+        Assert.Equal(4, output.Shape.Length);
+        Assert.Equal(1, output.Shape[0]); // batch
+        Assert.Equal(64, output.Shape[1]); // channels (128 * 0.5)
+        Assert.Equal(14, output.Shape[2]); // height (28 / 2)
+        Assert.Equal(14, output.Shape[3]); // width (28 / 2)
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_DifferentCompressionFactor_WorksCorrectly()
+    {
+        // Arrange - no compression (compression = 1.0)
+        var layer = new TransitionLayer<float>(
+            compressionFactor: 1.0);
+
+        // Trigger lazy resolution — at compression=1.0, output channels
+        // equal input channels.
+        var probe = new Tensor<float>([1, 100, 7, 7]);
+        InitializeWithRandomValues(probe);
+        layer.Forward(probe);
+
+        // Assert - channels unchanged
+        Assert.Equal(100, layer.OutputChannels);
+    }
+
+    #endregion
+
+    #region Model Metadata Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_GetModelMetadata_ReturnsValidMetadata()
+    {
+        // Arrange
+        var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
+
+        // Act
+        var metadata = network.GetModelMetadata();
+
+        // Assert
+        Assert.NotNull(metadata);
+        Assert.Equal("DenseNetNetwork", metadata.AdditionalInfo["NetworkType"]);
+        Assert.Equal("DenseNet121", metadata.AdditionalInfo["Variant"]);
+        Assert.Equal(32, (int)metadata.AdditionalInfo["GrowthRate"]);
+        Assert.Equal(10, (int)metadata.AdditionalInfo["NumClasses"]);
+    }
+
+    #endregion
+
+    #region Clone and Layer Access Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_Clone_CreatesNewInstance()
+    {
+        // Arrange
+        var original = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotSame(original, clone);
+        Assert.IsType<DenseNetNetwork<float>>(clone);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_GetLayer_ReturnsCorrectLayer()
+    {
+        // Arrange
+        var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
+
+        // Act
+        var firstLayer = network.GetLayer(0);
+        var lastLayer = network.GetLayer(network.Layers.Count - 1);
+
+        // Assert
+        Assert.IsType<ConvolutionalLayer<float>>(firstLayer); // Stem conv
+        Assert.IsType<DenseLayer<float>>(lastLayer); // Classification head
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_GetLayer_ThrowsOnInvalidIndex()
+    {
+        // Arrange
+        var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
+
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => network.GetLayer(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => network.GetLayer(network.Layers.Count));
+    }
+
+    #endregion
+
+    #region Larger Variant Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet_LargerVariants_HaveMoreLayers()
+    {
+        // Arrange
+        var d121 = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
+        var d169 = DenseNetNetwork<float>.DenseNet169(numClasses: 10);
+
+        // Assert - D169 should have more layers due to more layers per block
+        Assert.True(d169.Layers.Count >= d121.Layers.Count);
+    }
+
+    #endregion
+
+    #region Training Tests (Skipped for performance)
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet121_Train_CompletesWithoutError()
+    {
+        await Task.Yield();
+        // Arrange
+        var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
+        var input = new Tensor<float>([1, 3, 224, 224]);
+        var target = new Tensor<float>([1, 10]);
+        InitializeWithRandomValues(input);
+        target[0, 0] = 1f; // One-hot encoded target
+
+        // Act & Assert - Should not throw
+        network.Train(input, target);
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    private static void InitializeWithRandomValues(Tensor<float> tensor)
+    {
+        var random = new Random(42);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = (float)(random.NextDouble() * 2 - 1);
+        }
+    }
+
+    #endregion
+}

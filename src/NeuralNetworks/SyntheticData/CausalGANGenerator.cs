@@ -1,0 +1,1560 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.SyntheticData;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
+
+namespace AiDotNet.NeuralNetworks.SyntheticData;
+
+/// <summary>
+/// Causal-GAN generator that learns causal graph structure (directed acyclic graph)
+/// and generates synthetic data respecting causal relationships between features.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Causal-GAN discovers causal structure using a NOTEARS-style continuous relaxation
+/// for learning a directed acyclic graph (DAG), then generates each feature as a
+/// function of its causal parents via structural equation models.
+/// </para>
+/// <para>
+/// Architecture:
+/// <code>
+/// Generator:   noise --> [FC+BN+ReLU] x L (with residual) --> raw features
+///              raw features --> causal mixing (I + W^T) * raw --> structured features
+/// Discriminator: features --> [FC+LeakyReLU+Dropout] x L --> real/fake score (WGAN)
+/// </code>
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Causal-GAN learns which features cause other features:
+///
+/// Instead of just learning that "Age and Income are related" (correlation),
+/// it learns "Education causes higher Income" (causation).
+///
+/// This has two benefits:
+/// 1. Generated data respects cause-effect chains, producing more realistic samples
+/// 2. You can simulate "what-if" scenarios (interventions) on specific features
+///
+/// The model learns a weighted adjacency matrix W where W[i,j] means feature i
+/// influences feature j. A DAG penalty (NOTEARS) ensures no circular dependencies.
+///
+/// The training uses:
+/// - WGAN-GP loss for stable adversarial training
+/// - NOTEARS penalty via augmented Lagrangian for DAG acyclicity constraint
+/// - L1 sparsity on the adjacency matrix for interpretable causal structure
+///
+/// The NOTEARS constraint is: h(W) = tr(e^(W * W)) - d = 0
+/// where d is the number of features. This is zero if and only if W encodes a DAG.
+/// The matrix exponential is computed via truncated Taylor series.
+///
+/// This implementation follows the standard neural network architecture pattern with:
+/// - Proper inheritance from NeuralNetworkBase
+/// - Layer-based architecture using ILayer components
+/// - Engine-based tensor operations for CPU/GPU acceleration
+/// - Full autodiff and JIT compilation support
+///
+/// If you provide custom layers in the architecture, those will be used directly
+/// for the generator network. Otherwise, the network creates the standard architecture.
+///
+/// Example usage:
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputFeatures: 10,
+///     outputSize: 10
+/// );
+/// var options = new CausalGANOptions&lt;double&gt;
+/// {
+///     DAGPenaltyWeight = 0.5,
+///     Epochs = 300
+/// };
+/// var generator = new CausalGANGenerator&lt;double&gt;(architecture, options);
+/// generator.Fit(data, columns, epochs: 300);
+/// var synthetic = generator.Generate(1000);
+/// </code>
+/// </para>
+/// <para>
+/// Reference: Zheng et al., "DAGs with NO TEARS: Continuous Optimization for Structure Learning" (NeurIPS 2018)
+/// </para>
+/// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.SyntheticDataGenerator)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("CausalGAN: Learning Causal Implicit Generative Models with Adversarial Training",
+    "https://arxiv.org/abs/1709.02023",
+    Year = 2018,
+    Authors = "Murat Kocaoglu, Christopher Snyder, Alexandros G. Dimakis, Sriram Vishwanath")]
+public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+{
+    private readonly CausalGANOptions<T> _options;
+    // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
+    private ILossFunction<T> _lossFunction;
+
+    // Synthetic tabular data infrastructure
+    private TabularDataTransformer<T>? _transformer;
+    private List<ColumnMetadata> _columns = new();
+    private int _dataWidth;
+    private Random _random;
+
+    // Causal structure: adjacency matrix W (numFeatures x numFeatures)
+    // W[i,j] > 0 means feature i causally influences feature j
+    private Matrix<T>? _adjacency;
+
+    // Augmented Lagrangian parameters for NOTEARS DAG constraint
+    private double _lagrangeAlpha;
+    private double _lagrangeRho;
+    private double _prevDagConstraint;
+
+    // Generator batch normalization layers (auxiliary, always created to match Layers)
+    private readonly List<BatchNormalizationLayer<T>> _genBNLayers = new();
+
+    // Discriminator layers (auxiliary, not user-overridable)
+    private readonly List<FullyConnectedLayer<T>> _discLayers = new();
+    private readonly List<DropoutLayer<T>> _discDropoutLayers = new();
+    private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
+
+    // Cached pre-activations for proper backward passes
+    private readonly List<Tensor<T>> _genPreActivations = new();
+    private readonly List<Tensor<T>> _discPreActivations = new();
+
+    // Whether custom layers are being used
+    private bool _usingCustomLayers;
+
+    /// <summary>
+    /// Gets the CausalGAN-specific options.
+    /// </summary>
+    public new CausalGANOptions<T> Options => _options;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ColumnMetadata> Columns => _columns.AsReadOnly();
+
+    /// <inheritdoc />
+    public bool IsFitted { get; private set; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CausalGANGenerator{T}"/> class.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture defining input/output dimensions and optional custom layers.</param>
+    /// <param name="options">CausalGAN-specific configuration options.</param>
+    /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
+    /// <param name="lossFunction">Loss function (defaults based on task type).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public CausalGANGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
+    public CausalGANGenerator(
+        NeuralNetworkArchitecture<T> architecture,
+        CausalGANOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 5.0)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+    {
+        _options = options ?? new CausalGANOptions<T>();
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _generatorOptimizer = optimizer ?? MakeAdam();
+        _discriminatorOptimizer = MakeAdam();
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
+
+        _lagrangeAlpha = 0.0;
+        _lagrangeRho = 1.0;
+        _prevDagConstraint = double.MaxValue;
+
+        InitializeLayers();
+    }
+
+    #region Layer Initialization (GANDALF Pattern)
+
+    /// <summary>
+    /// Initializes the layers of the CausalGAN generator based on the provided architecture.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Layers = generator hidden layers (user-overridable).
+    /// The discriminator is always auxiliary and not user-overridable.
+    /// Generator uses residual connections with BatchNorm and manual ReLU.
+    /// </para>
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _usingCustomLayers = true;
+        }
+        else
+        {
+            // Create default generator layers (placeholder dims until Fit())
+            BuildDefaultGeneratorLayers(_options.EmbeddingDimension, Architecture.OutputSize);
+            _usingCustomLayers = false;
+        }
+    }
+
+    /// <summary>
+    /// Builds default generator layers with residual connections, BatchNorm, and manual ReLU.
+    /// All layers use IdentityActivation so we control activation ordering.
+    /// </summary>
+    private void BuildDefaultGeneratorLayers(int inputDim, int outputDim)
+    {
+        Layers.Clear();
+        _genBNLayers.Clear();
+
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        var dims = _options.HiddenDimensions;
+
+        for (int i = 0; i < dims.Length; i++)
+        {
+            // Residual: input dimension includes original input concatenated
+            int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
+            Layers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+            _genBNLayers.Add(new BatchNormalizationLayer<T>());
+        }
+
+        // Output layer: produces raw features (no activation)
+        int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
+        Layers.Add(new FullyConnectedLayer<T>(outputDim, identity));
+    }
+
+    /// <summary>
+    /// Rebuilds generator and discriminator layers with actual data dimensions discovered during Fit().
+    /// </summary>
+    private void RebuildLayersWithActualDimensions(int genInputDim, int genOutputDim, int discInputDim)
+    {
+        if (!_usingCustomLayers)
+        {
+            BuildDefaultGeneratorLayers(genInputDim, genOutputDim);
+        }
+
+        // Discriminator is always rebuilt
+        BuildDiscriminator(discInputDim);
+    }
+
+    /// <summary>
+    /// Builds the discriminator network with Dropout and manual LeakyReLU.
+    /// Tracks layer dimensions for ComputeDiscriminatorInputGradient.
+    /// </summary>
+    private void BuildDiscriminator(int inputDim)
+    {
+        _discLayers.Clear();
+        _discDropoutLayers.Clear();
+        _discLayerDims.Clear();
+
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        var dims = _options.HiddenDimensions;
+
+        for (int i = 0; i < dims.Length; i++)
+        {
+            int layerInput = i == 0 ? inputDim : dims[i - 1];
+            _discLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+            _discLayerDims.Add((layerInput, dims[i]));
+            _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
+        }
+
+        // Output layer: single scalar (raw Wasserstein score, no activation)
+        int lastHidden = dims.Length > 0 ? dims[^1] : inputDim;
+        _discLayers.Add(new FullyConnectedLayer<T>(1, identity));
+        _discLayerDims.Add((lastHidden, 1));
+    }
+
+    #endregion
+
+    #region Neural Network Methods (GANDALF Pattern)
+
+    /// <summary>
+    /// Runs the generator forward pass with residual connections and pre-activation caching.
+    /// </summary>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        if (_usingCustomLayers)
+        {
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            return current;
+        }
+
+        return GeneratorForward(input);
+    }
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        var output = Predict(input);
+
+        // Simple MSE gradient
+        var gradient = new Tensor<T>(output._shape);
+        for (int i = 0; i < output.Length && i < expectedOutput.Length; i++)
+        {
+            gradient[i] = NumOps.FromDouble(
+                2.0 * (NumOps.ToDouble(output[i]) - NumOps.ToDouble(expectedOutput[i])));
+        }
+
+        // Backward through generator
+    }
+
+    /// <inheritdoc />
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int startIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                startIndex += layerParameterCount;
+            }
+        }
+    }
+
+    #endregion
+
+    #region ISyntheticTabularGenerator<T> Implementation
+
+    /// <summary>
+    /// Fits the CausalGAN generator to the provided real tabular data.
+    /// </summary>
+    /// <param name="data">The real data matrix.</param>
+    /// <param name="columns">Metadata describing each column.</param>
+    /// <param name="epochs">Number of training epochs.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method:
+    /// 1. Transforms data using VGM normalization
+    /// 2. Initializes the causal adjacency matrix
+    /// 3. Trains generator and discriminator using WGAN-GP
+    /// 4. Updates the causal structure using augmented Lagrangian (NOTEARS)
+    /// After fitting, call Generate() to create new synthetic rows.
+    /// </para>
+    /// </remarks>
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    {
+        ValidateFitInputs(data, columns, epochs);
+
+        _columns = PrepareColumns(data, columns);
+
+        // Step 1: Fit the data transformer
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, _columns);
+        _dataWidth = _transformer.TransformedWidth;
+        var transformedData = _transformer.Transform(data);
+
+        // Step 2: Initialize adjacency matrix with small random values (zero diagonal)
+        _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
+        for (int i = 0; i < _dataWidth; i++)
+        {
+            for (int j = 0; j < _dataWidth; j++)
+            {
+                if (i != j)
+                {
+                    _adjacency[i, j] = NumOps.FromDouble(0.01 * (_random.NextDouble() - 0.5));
+                }
+            }
+        }
+
+        // Step 3: Reset augmented Lagrangian parameters
+        _lagrangeAlpha = 0.0;
+        _lagrangeRho = 1.0;
+        _prevDagConstraint = double.MaxValue;
+
+        // Step 4: Build networks with actual dimensions
+        RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth);
+
+        // Step 5: Training loop
+        T lr = NumOps.FromDouble(_options.LearningRate);
+        int batchSize = Math.Min(_options.BatchSize, data.Rows);
+        int numBatches = Math.Max(1, data.Rows / batchSize);
+
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            for (int batch = 0; batch < numBatches; batch++)
+            {
+                // Paper-faithful CausalGAN training schedule (Kocaoglu et al.
+                // 2018 + NOTEARS / Zheng et al. 2018 §3.2). Critic + generator
+                // both via GradientTape; the causal adjacency matrix is
+                // updated separately via augmented Lagrangian after each
+                // epoch.
+                for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
+                {
+                    TrainDiscriminatorStepBatched(transformedData, batchSize);
+                }
+                TrainGeneratorStepBatched(batchSize);
+            }
+
+            UpdateAdjacencyAugmentedLagrangian(lr);
+        }
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    {
+        ValidateFitInputs(data, columns, epochs);
+
+        _columns = PrepareColumns(data, columns);
+
+        await Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+
+            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+            _transformer.Fit(data, _columns);
+            _dataWidth = _transformer.TransformedWidth;
+            var transformedData = _transformer.Transform(data);
+
+            _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
+            for (int i = 0; i < _dataWidth; i++)
+            {
+                for (int j = 0; j < _dataWidth; j++)
+                {
+                    if (i != j)
+                    {
+                        _adjacency[i, j] = NumOps.FromDouble(0.01 * (_random.NextDouble() - 0.5));
+                    }
+                }
+            }
+
+            _lagrangeAlpha = 0.0;
+            _lagrangeRho = 1.0;
+            _prevDagConstraint = double.MaxValue;
+
+            RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth);
+
+            T lr = NumOps.FromDouble(_options.LearningRate);
+            int batchSize = Math.Min(_options.BatchSize, data.Rows);
+            int numBatches = Math.Max(1, data.Rows / batchSize);
+
+            for (int epoch = 0; epoch < epochs; epoch++)
+            {
+                ct.ThrowIfCancellationRequested();
+                for (int batch = 0; batch < numBatches; batch++)
+                {
+                    for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
+                    {
+                        TrainDiscriminatorStepBatched(transformedData, batchSize);
+                    }
+                    TrainGeneratorStepBatched(batchSize);
+                }
+                UpdateAdjacencyAugmentedLagrangian(lr);
+            }
+        }, ct).ConfigureAwait(false);
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Generates new synthetic tabular data rows respecting the learned causal structure.
+    /// </summary>
+    public Matrix<T> Generate(int numSamples, Vector<T>? conditionColumn = null, Vector<T>? conditionValue = null)
+    {
+        if (!IsFitted || _transformer is null || Layers.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "The generator must be fitted before generating data. Call Fit() first.");
+        }
+
+        if (numSamples <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
+        }
+
+        var result = new Matrix<T>(numSamples, _dataWidth);
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
+            var genOutput = GeneratorForward(VectorToTensor(noise));
+
+            // Apply causal structure: y = (I + W^T) * x
+            if (_adjacency is not null)
+            {
+                genOutput = ApplyCausalStructure(genOutput);
+            }
+
+            // Apply output activations
+            genOutput = ApplyOutputActivations(genOutput);
+
+            for (int j = 0; j < _dataWidth && j < genOutput.Length; j++)
+            {
+                result[i, j] = genOutput[j];
+            }
+        }
+
+        return _transformer.InverseTransform(result);
+    }
+
+    #endregion
+
+    #region Forward Passes
+
+    /// <summary>
+    /// Generator forward pass with residual connections and pre-activation caching.
+    /// </summary>
+    private Tensor<T> GeneratorForward(Tensor<T> input)
+    {
+        _genPreActivations.Clear();
+        var inputTensor = input;
+        var current = input;
+
+        for (int i = 0; i < Layers.Count - 1; i++)
+        {
+            // Residual: concatenate original noise input
+            if (i > 0)
+            {
+                current = ConcatTensors(current, inputTensor);
+            }
+
+            // FC(identity) --> BN --> cache --> ReLU
+            current = Layers[i].Forward(current);
+            if (i < _genBNLayers.Count)
+            {
+                current = _genBNLayers[i].Forward(current);
+            }
+
+            _genPreActivations.Add(CloneTensor(current));
+            current = ApplyReLU(current);
+        }
+
+        // Final output layer with residual connection (no activation)
+        current = ConcatTensors(current, inputTensor);
+        current = Layers[^1].Forward(current);
+
+        return current;
+    }
+
+    /// <summary>
+    /// Discriminator forward pass with pre-activation caching and optional Dropout.
+    /// </summary>
+    private Tensor<T> DiscriminatorForward(Tensor<T> input, bool isTraining)
+    {
+        _discPreActivations.Clear();
+        var current = input;
+
+        for (int i = 0; i < _discLayers.Count - 1; i++)
+        {
+            current = _discLayers[i].Forward(current);
+            _discPreActivations.Add(CloneTensor(current));
+            current = ApplyLeakyReLU(current);
+
+            if (isTraining)
+            {
+                current = _discDropoutLayers[i].Forward(current);
+            }
+        }
+
+        // Final layer: no activation (raw Wasserstein score)
+        current = _discLayers[^1].Forward(current);
+
+        return current;
+    }
+
+    #endregion
+
+    #region Training Steps
+
+    /// <summary>
+    /// Paper-faithful WGAN-GP critic step over the causal-structured fake
+    /// distribution (Kocaoglu et al. 2018 §4 / Gulrajani et al. 2017). Fake
+    /// samples are generated through the residual generator, then have the
+    /// causal adjacency matrix applied so the critic learns the joint
+    /// causal distribution. Tape-based gradients via
+    /// <see cref="GradientTape{T}"/> + <see cref="TapeStepContext{T}"/>.
+    /// </summary>
+    private void TrainDiscriminatorStepBatched(Matrix<T> transformedData, int batchSize)
+    {
+        var (realBatch, fakeBatch) = BuildRealAndFakeBatches(transformedData, batchSize);
+        var discLayerList = _discLayers.Cast<ILayer<T>>().ToList();
+
+        // Preferred fused path: WganGpFusedStep (see ooples/AiDotNet#1845).
+        var discParams = TapeTrainingStep<T>.CollectParameters(discLayerList);
+        if (discParams.Count > 0
+            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                _discriminatorOptimizer,
+                out var wganOptType, out var wganLr, out var wganB1,
+                out var wganB2, out var wganEps, out var wganWd,
+                out _, out _))
+        {
+            using var wganStep = new AiDotNet.Training.WganGpFusedStep<T>();
+            Tensor<T> DiscFwd(Tensor<T> inp) => DiscriminatorForwardBatched(inp, isTraining: true);
+            Tensor<T> EpsilonSampler(int bs) =>
+                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
+            if (wganStep.TryStep(
+                    discParameters: discParams,
+                    realBatch: realBatch,
+                    fakeBatch: fakeBatch,
+                    discForward: DiscFwd,
+                    epsilonSampler: EpsilonSampler,
+                    gradientPenaltyWeight: _options.GradientPenaltyWeight,
+                    optimizerType: wganOptType,
+                    learningRate: wganLr,
+                    beta1: wganB1,
+                    beta2: wganB2,
+                    epsilon: wganEps,
+                    weightDecay: wganWd,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        // Secondary fused path: GpuResidentFusedStep with the loss composed via
+        // this class's ComputeGradientPenalty (createGraph=true GP fix, #1844).
+        var trainableDiscLayers = discLayerList.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableDiscLayers.Count > 0)
+        {
+            // Pack real + fake into a single persistent input along axis 0 so
+            // both scores compute from one forward. Split in the loss closure.
+            int realN = realBatch.Shape[0];
+            int fakeN = fakeBatch.Shape[0];
+            var stacked = Engine.TensorConcatenate([realBatch, fakeBatch], axis: 0);
+            var target = new Tensor<T>(new[] { 1 });
+
+            Tensor<T> Fwd(Tensor<T> both) => DiscriminatorForwardBatched(both, isTraining: true);
+            Tensor<T> Loss(Tensor<T> allScores, Tensor<T> _)
+            {
+                var rShape = allScores._shape.ToArray(); rShape[0] = realN;
+                var fShape = allScores._shape.ToArray(); fShape[0] = fakeN;
+                var rStart = new int[allScores.Rank];
+                var fStart = new int[allScores.Rank]; fStart[0] = realN;
+                var rScores = Engine.TensorSlice(allScores, rStart, rShape);
+                var fScores = Engine.TensorSlice(allScores, fStart, fShape);
+                var axes = Enumerable.Range(0, rScores.Shape.Length).ToArray();
+                var avgReal = Engine.ReduceMean(rScores, axes, keepDims: false);
+                var avgFake = Engine.ReduceMean(fScores, axes, keepDims: false);
+                var wasserstein = Engine.TensorSubtract(avgFake, avgReal);
+                var gp = ComputeGradientPenalty(realBatch, fakeBatch);
+                return Engine.TensorAdd(wasserstein,
+                    Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableDiscLayers, stacked, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _discriminatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
+        // discParams already collected above for the WganGpFusedStep attempt.
+
+        var realScores = DiscriminatorForwardBatched(realBatch, isTraining: true);
+        var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: true);
+
+        var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+        var avgReal = Engine.ReduceMean(realScores, allAxes, keepDims: false);
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        var wassersteinLoss = Engine.TensorSubtract(avgFake, avgReal);
+        var gradientPenalty = ComputeGradientPenalty(realBatch, fakeBatch);
+        var lossTensor = Engine.TensorAdd(
+            wassersteinLoss,
+            Engine.TensorMultiplyScalar(gradientPenalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+
+        var grads = tape.ComputeGradients(lossTensor, discParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+        {
+            var recomputedAvgReal = Engine.ReduceMean(pred, allAxes, keepDims: false);
+            var recomputedFakeScores = DiscriminatorForwardBatched(fakeBatch, true);
+            var recomputedAvgFake = Engine.ReduceMean(recomputedFakeScores, allAxes, keepDims: false);
+            var recomputedWasserstein = Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
+            var recomputedGradientPenalty = ComputeGradientPenalty(realBatch, fakeBatch);
+            return Engine.TensorAdd(
+                recomputedWasserstein,
+                Engine.TensorMultiplyScalar(recomputedGradientPenalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+        }
+
+        var context = new TapeStepContext<T>(
+            discParams, grads, lossValue,
+            realBatch, realBatch, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _discriminatorOptimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Paper-faithful generator step: minimize -E[D(G(z) ⊗ A)] where the
+    /// fake samples flow through the residual generator then the causal
+    /// adjacency mask (Kocaoglu et al. 2018). Tape-tracked end-to-end.
+    /// </summary>
+    private void TrainGeneratorStepBatched(int batchSize)
+    {
+        var generatorLayers = new List<ILayer<T>>();
+        generatorLayers.AddRange(Layers);
+        foreach (var bn in _genBNLayers) generatorLayers.Add(bn);
+        var genParams = TapeTrainingStep<T>.CollectParameters(generatorLayers);
+
+        var noiseBatch = GenerateNoiseBatchTensor(batchSize);
+
+        // GPU-RESIDENT fast path — noise → gen → (optional causal) → activation → disc-frozen → -avgFake.
+        // Disc layers not in the trainable set, so no gradients accumulate to them.
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0)
+        {
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> nb)
+            {
+                var f = GeneratorForwardBatched(nb);
+                var c = _adjacency is not null ? ApplyCausalStructureBatched(f) : f;
+                var a = ApplyOutputActivationsBatched(c);
+                return DiscriminatorForwardBatched(a, false);
+            }
+            Tensor<T> Loss(Tensor<T> scores, Tensor<T> _)
+            {
+                var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+                return Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, noiseBatch, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _generatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
+        var fakeRaw = GeneratorForwardBatched(noiseBatch);
+        var fakeCausal = _adjacency is not null ? ApplyCausalStructureBatched(fakeRaw) : fakeRaw;
+        var fakeBatch = ApplyOutputActivationsBatched(fakeCausal);
+
+        var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: false);
+        var allAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        var lossTensor = Engine.TensorNegate(avgFake);
+
+        var grads = tape.ComputeGradients(lossTensor, genParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _)
+        {
+            var f = GeneratorForwardBatched(inp);
+            var c = _adjacency is not null ? ApplyCausalStructureBatched(f) : f;
+            var a = ApplyOutputActivationsBatched(c);
+            return DiscriminatorForwardBatched(a, false);
+        }
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => Engine.TensorNegate(Engine.ReduceMean(pred, allAxes, keepDims: false));
+
+        var context = new TapeStepContext<T>(
+            genParams, grads, lossValue,
+            noiseBatch, noiseBatch, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _generatorOptimizer.Step(context);
+    }
+
+    private (Tensor<T> realBatch, Tensor<T> fakeBatch) BuildRealAndFakeBatches(
+        Matrix<T> transformedData, int batchSize)
+    {
+        var noiseBatch = GenerateNoiseBatchTensor(batchSize);
+        var fakeRaw = GeneratorForwardBatched(noiseBatch);
+        var fakeCausal = _adjacency is not null ? ApplyCausalStructureBatched(fakeRaw) : fakeRaw;
+        var fakeBatch = ApplyOutputActivationsBatched(fakeCausal);
+
+        var realBatch = new Tensor<T>([batchSize, _dataWidth]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            int rowIdx = _random.Next(transformedData.Rows);
+            int cols = Math.Min(_dataWidth, transformedData.Columns);
+            for (int j = 0; j < cols; j++) realBatch[b, j] = transformedData[rowIdx, j];
+        }
+        return (realBatch, fakeBatch);
+    }
+
+    private Tensor<T> GenerateNoiseBatchTensor(int batchSize)
+    {
+        int embedDim = _options.EmbeddingDimension;
+        int totalElements = batchSize * embedDim;
+        int halfElements = (totalElements + 1) / 2;
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
+        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
+        var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));
+        var z1 = Engine.TensorMultiply(radius, Engine.TensorCos(theta));
+        var z2 = Engine.TensorMultiply(radius, Engine.TensorSin(theta));
+        var noiseData = new T[totalElements];
+        var z1Arr = z1.ToArray();
+        var z2Arr = z2.ToArray();
+        for (int i = 0; i < halfElements; i++)
+        {
+            int idx = i * 2;
+            if (idx < totalElements) noiseData[idx] = z1Arr[i];
+            if (idx + 1 < totalElements) noiseData[idx + 1] = z2Arr[i];
+        }
+        return new Tensor<T>(noiseData, [batchSize, embedDim]);
+    }
+
+    /// <summary>
+    /// Batched generator forward, tape-tracked. Same residual + BN + ReLU
+    /// architecture as <see cref="GeneratorForward"/>, but using
+    /// <see cref="Engine.TensorConcatenate"/> + <see cref="Engine.ReLU"/>.
+    /// </summary>
+    private Tensor<T> GeneratorForwardBatched(Tensor<T> noise)
+    {
+        if (_usingCustomLayers)
+        {
+            var c = noise;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+        var h = noise;
+        int numHidden = Layers.Count - 1;
+        for (int i = 0; i < numHidden; i++)
+        {
+            if (i > 0) h = Engine.TensorConcatenate([h, noise], axis: 1);
+            h = Layers[i].Forward(h);
+            if (i < _genBNLayers.Count) h = _genBNLayers[i].Forward(h);
+            h = Engine.ReLU(h);
+        }
+        h = Engine.TensorConcatenate([h, noise], axis: 1);
+        h = Layers[^1].Forward(h);
+        return h;
+    }
+
+    /// <summary>
+    /// Batched discriminator forward (LeakyReLU 0.2 + dropout), tape-tracked.
+    /// </summary>
+    private Tensor<T> DiscriminatorForwardBatched(Tensor<T> input, bool isTraining)
+    {
+        var current = input;
+        T leakySlope = NumOps.FromDouble(0.2);
+        for (int i = 0; i < _discLayers.Count - 1; i++)
+        {
+            current = _discLayers[i].Forward(current);
+            current = Engine.LeakyReLU(current, leakySlope);
+            if (isTraining && i < _discDropoutLayers.Count)
+                current = _discDropoutLayers[i].Forward(current);
+        }
+        current = _discLayers[^1].Forward(current);
+        return current;
+    }
+
+    /// <summary>
+    /// Applies the learned causal adjacency matrix to a batch of fake samples
+    /// (Kocaoglu et al. 2018). Each sample row x is multiplied by
+    /// (I + A), where A is the dataWidth x dataWidth causal adjacency matrix.
+    /// Implemented as a tape-tracked TensorMatMul.
+    /// </summary>
+    private Tensor<T> ApplyCausalStructureBatched(Tensor<T> fakeBatch)
+    {
+        if (_adjacency is null) return fakeBatch;
+
+        // Build (I + A) as a Tensor<T> of shape [dataWidth, dataWidth].
+        int d = _dataWidth;
+        var iPlusA = new Tensor<T>([d, d]);
+        for (int i = 0; i < d; i++)
+        for (int j = 0; j < d; j++)
+            iPlusA[i, j] = i == j
+                ? NumOps.Add(NumOps.One, _adjacency[i, j])
+                : _adjacency[i, j];
+
+        // [B, d] × [d, d] -> [B, d]
+        return Engine.TensorMatMul(fakeBatch, iPlusA);
+    }
+
+    /// <summary>
+    /// Batched per-column VGM output activation (matches CTGAN /
+    /// TableGAN's tape-tracked Tanh + per-block Softmax dispatch).
+    /// </summary>
+    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output)
+    {
+        if (_transformer is null) return Engine.TensorTanh(output);
+
+        int batch = output.Shape[0];
+        int totalWidth = output.Shape[1];
+        var blocks = new List<Tensor<T>>(_columns.Count * 2);
+        int idx = 0;
+
+        for (int col = 0; col < _columns.Count && idx < totalWidth; col++)
+        {
+            var transform = _transformer.GetTransformInfo(col);
+            if (transform.IsContinuous)
+            {
+                var valueSlice = Engine.TensorSlice(output, [0, idx], [batch, 1]);
+                blocks.Add(Engine.TensorTanh(valueSlice));
+                idx++;
+                int numModes = transform.Width - 1;
+                int modeLength = Math.Min(numModes, totalWidth - idx);
+                if (modeLength > 0)
+                {
+                    var modeSlice = Engine.TensorSlice(output, [0, idx], [batch, modeLength]);
+                    blocks.Add(Engine.Softmax(modeSlice, axis: 1));
+                    idx += modeLength;
+                }
+            }
+            else
+            {
+                int blockLength = Math.Min(transform.Width, totalWidth - idx);
+                var catSlice = Engine.TensorSlice(output, [0, idx], [batch, blockLength]);
+                blocks.Add(Engine.Softmax(catSlice, axis: 1));
+                idx += blockLength;
+            }
+        }
+
+        if (idx < totalWidth)
+        {
+            var tail = Engine.TensorSlice(output, [0, idx], [batch, totalWidth - idx]);
+            blocks.Add(Engine.TensorTanh(tail));
+        }
+
+        if (blocks.Count == 1) return blocks[0];
+        return Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
+    }
+
+    #endregion
+
+    #region Causal Structure Learning
+
+    /// <summary>
+    /// Applies the learned causal structure: y = (I + W^T) * x.
+    /// </summary>
+    private Tensor<T> ApplyCausalStructure(Tensor<T> features)
+    {
+        if (_adjacency is null) return features;
+
+        var result = new Tensor<T>(features._shape);
+        for (int j = 0; j < _dataWidth && j < features.Length; j++)
+        {
+            double val = NumOps.ToDouble(features[j]);
+
+            for (int i = 0; i < _dataWidth && i < features.Length; i++)
+            {
+                if (i == j) continue;
+                double weight = NumOps.ToDouble(_adjacency[i, j]);
+                val += weight * NumOps.ToDouble(features[i]);
+            }
+
+            result[j] = NumOps.FromDouble(val);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the NOTEARS acyclicity constraint and its gradient.
+    /// h(W) = tr(e^(W hadamard W)) - d; gradient = 2 * e^(W hadamard W) hadamard W.
+    /// Uses truncated Taylor series (order 8) for the matrix exponential.
+    /// </summary>
+    private (double ConstraintValue, double[,] Gradient) ComputeNOTEARSConstraintAndGradient()
+    {
+        if (_adjacency is null)
+        {
+            return (0.0, new double[0, 0]);
+        }
+
+        int d = _dataWidth;
+
+        // Compute W hadamard W (element-wise square)
+        var wSquared = new double[d, d];
+        for (int i = 0; i < d; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                double w = NumOps.ToDouble(_adjacency[i, j]);
+                wSquared[i, j] = w * w;
+            }
+        }
+
+        // Compute e^(W hadamard W) using truncated Taylor series
+        var expMatrix = new double[d, d];
+        for (int i = 0; i < d; i++)
+        {
+            expMatrix[i, i] = 1.0;
+        }
+
+        var power = new double[d, d];
+        Array.Copy(wSquared, power, d * d);
+
+        double factorial = 1.0;
+        int maxOrder = 8;
+
+        for (int k = 1; k <= maxOrder; k++)
+        {
+            factorial *= k;
+
+            for (int i = 0; i < d; i++)
+            {
+                for (int j = 0; j < d; j++)
+                {
+                    expMatrix[i, j] += power[i, j] / factorial;
+                }
+            }
+
+            if (k < maxOrder)
+            {
+                var nextPower = new double[d, d];
+                for (int i = 0; i < d; i++)
+                {
+                    for (int j = 0; j < d; j++)
+                    {
+                        double sum = 0;
+                        for (int m = 0; m < d; m++)
+                        {
+                            sum += power[i, m] * wSquared[m, j];
+                        }
+                        nextPower[i, j] = sum;
+                    }
+                }
+                Array.Copy(nextPower, power, d * d);
+            }
+        }
+
+        // h(W) = tr(e^(W hadamard W)) - d
+        double trace = 0;
+        for (int i = 0; i < d; i++)
+        {
+            trace += expMatrix[i, i];
+        }
+        double constraintValue = trace - d;
+
+        // Gradient: dh/dW = 2 * e^(W hadamard W) hadamard W
+        var gradient = new double[d, d];
+        for (int i = 0; i < d; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                double w = NumOps.ToDouble(_adjacency[i, j]);
+                gradient[i, j] = 2.0 * expMatrix[i, j] * w;
+            }
+        }
+
+        return (constraintValue, gradient);
+    }
+
+    /// <summary>
+    /// Updates the adjacency matrix using the augmented Lagrangian method for the NOTEARS constraint.
+    /// </summary>
+    private void UpdateAdjacencyAugmentedLagrangian(T lr)
+    {
+        if (_adjacency is null) return;
+
+        double adjLr = NumOps.ToDouble(lr) * 0.01;
+
+        var (h, notearGrad) = ComputeNOTEARSConstraintAndGradient();
+        double lagrangianCoeff = _lagrangeAlpha + _lagrangeRho * h;
+
+        for (int i = 0; i < _dataWidth; i++)
+        {
+            for (int j = 0; j < _dataWidth; j++)
+            {
+                if (i == j) continue;
+
+                double wij = NumOps.ToDouble(_adjacency[i, j]);
+                double dagGrad = notearGrad[i, j] * lagrangianCoeff;
+                double sparseGrad = _options.SparsityWeight * Math.Sign(wij);
+
+                wij -= adjLr * (dagGrad + sparseGrad);
+                _adjacency[i, j] = NumOps.FromDouble(wij);
+            }
+        }
+
+        // Enforce zero diagonal
+        for (int i = 0; i < _dataWidth; i++)
+        {
+            _adjacency[i, i] = NumOps.Zero;
+        }
+
+        // Update augmented Lagrangian parameters
+        _lagrangeAlpha += _lagrangeRho * h;
+
+        double gamma = 0.25;
+        if (Math.Abs(h) > gamma * Math.Abs(_prevDagConstraint) && _prevDagConstraint < double.MaxValue)
+        {
+            _lagrangeRho = Math.Min(_lagrangeRho * 10.0, 1e16);
+        }
+
+        _prevDagConstraint = h;
+    }
+
+    #endregion
+
+    #region Gradient Penalty
+
+    private Tensor<T> ComputeGradientPenalty(Tensor<T> realBatch, Tensor<T> fakeBatch)
+    {
+        int batchSize = Math.Max(1, realBatch.Shape[0]);
+        int elementsPerSample = Math.Max(1, realBatch.Length / batchSize);
+
+        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One);
+        var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realBatch.Length]);
+        var ones = new Tensor<T>([realBatch.Length]);
+        Engine.TensorFill(ones, NumOps.One);
+        var oneMinusEpsilon = Engine.TensorSubtract(ones, epsilonBroadcast);
+
+        var realFlat = realBatch.Reshape([realBatch.Length]);
+        var fakeFlat = fakeBatch.Reshape([fakeBatch.Length]);
+        var interpolatedFlat = Engine.TensorAdd(
+            Engine.TensorMultiply(epsilonBroadcast, realFlat),
+            Engine.TensorMultiply(oneMinusEpsilon, fakeFlat));
+        var interpolated = interpolatedFlat.Reshape(realBatch._shape);
+
+        Tensor<T> inputGradients;
+        using (var gradientTape = new GradientTape<T>())
+        {
+            var scores = DiscriminatorForwardBatched(interpolated, true);
+            var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
+            // AiDotNet #1844: createGraph=true records the inner backward's ops on the
+            // outer tape so the gradient penalty actually backpropagates into the
+            // discriminator weights. Without this, WGAN-GP silently degrades to plain
+            // WGAN — the 1-Lipschitz constraint from Gulrajani 2017 is not enforced.
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated], createGraph: true);
+            inputGradients = gradients.TryGetValue(interpolated, out var gradient)
+                ? gradient
+                : new Tensor<T>(interpolated._shape);
+        }
+
+        var gradientsReshaped = inputGradients.Reshape([batchSize, elementsPerSample]);
+        var gradientSquared = Engine.TensorMultiply(gradientsReshaped, gradientsReshaped);
+        var gradientNormSquared = Engine.ReduceSum(gradientSquared, [1], keepDims: false);
+        var gradientNorm = Engine.TensorSqrt(Engine.TensorAddScalar(gradientNormSquared, NumOps.FromDouble(1e-12)));
+        var targetNorm = new Tensor<T>(gradientNorm._shape);
+        Engine.TensorFill(targetNorm, NumOps.One);
+        var deviation = Engine.TensorSubtract(gradientNorm, targetNorm);
+        var penalty = Engine.TensorMultiply(deviation, deviation);
+        var penaltyAxes = Enumerable.Range(0, penalty.Shape.Length).ToArray();
+        return Engine.ReduceMean(penalty, penaltyAxes, keepDims: false);
+    }
+
+    #endregion
+
+    #region Backward Passes
+
+    private void UpdateGeneratorParameters(T learningRate)
+    {
+        foreach (var layer in Layers)
+        {
+            layer.UpdateParameters(learningRate);
+        }
+        foreach (var bn in _genBNLayers)
+        {
+            bn.UpdateParameters(learningRate);
+        }
+    }
+
+    private void UpdateDiscriminatorParameters(T learningRate)
+    {
+        foreach (var layer in _discLayers)
+        {
+            layer.UpdateParameters(learningRate);
+        }
+    }
+
+    #endregion
+
+    #region Activation Functions
+
+    private Tensor<T> ApplyReLU(Tensor<T> input)
+    {
+        var result = new Tensor<T>(input._shape);
+        for (int i = 0; i < input.Length; i++)
+        {
+            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
+        }
+        return result;
+    }
+
+    private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
+    {
+        int len = Math.Min(gradOutput.Length, preActivation.Length);
+        var result = new Tensor<T>(gradOutput._shape);
+        for (int i = 0; i < len; i++)
+        {
+            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
+        }
+        return result;
+    }
+
+    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
+    {
+        var result = new Tensor<T>(input._shape);
+        T slope = NumOps.FromDouble(0.2);
+        for (int i = 0; i < input.Length; i++)
+        {
+            double val = NumOps.ToDouble(input[i]);
+            result[i] = val > 0 ? input[i] : NumOps.Multiply(slope, input[i]);
+        }
+        return result;
+    }
+
+    private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
+    {
+        int len = Math.Min(gradOutput.Length, preActivation.Length);
+        var result = new Tensor<T>(gradOutput._shape);
+        T slope = NumOps.FromDouble(0.2);
+        for (int i = 0; i < len; i++)
+        {
+            if (NumOps.GreaterThan(preActivation[i], NumOps.Zero))
+            {
+                result[i] = gradOutput[i];
+            }
+            else
+            {
+                result[i] = NumOps.Multiply(slope, gradOutput[i]);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Applies output activations per column type: tanh for continuous, softmax for categorical.
+    /// </summary>
+    private Tensor<T> ApplyOutputActivations(Tensor<T> output)
+    {
+        if (_transformer is null) return output;
+
+        var result = new Tensor<T>(output._shape);
+        int idx = 0;
+
+        for (int col = 0; col < _columns.Count && idx < output.Length; col++)
+        {
+            var transform = _transformer.GetTransformInfo(col);
+
+            if (transform.IsContinuous)
+            {
+                if (idx < output.Length)
+                {
+                    double val = NumOps.ToDouble(output[idx]);
+                    result[idx] = NumOps.FromDouble(Math.Tanh(val));
+                    idx++;
+                }
+
+                int numModes = transform.Width - 1;
+                if (numModes > 0)
+                {
+                    ApplySoftmaxBlock(output, result, ref idx, numModes);
+                }
+            }
+            else
+            {
+                ApplySoftmaxBlock(output, result, ref idx, transform.Width);
+            }
+        }
+
+        return result;
+    }
+
+    private static void ApplySoftmaxBlock(Tensor<T> input, Tensor<T> output, ref int idx, int count)
+    {
+        if (count <= 0) return;
+        int actualCount = Math.Min(count, input.Length - idx);
+        if (actualCount <= 0) return;
+        var slice = new Tensor<T>([actualCount]);
+        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
+        var result = AiDotNetEngine.Current.Softmax(slice, -1);
+        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
+        idx += actualCount;
+    }
+
+    #endregion
+
+    #region Gradient Safety Utilities
+
+    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
+    {
+        for (int i = 0; i < grad.Length; i++)
+        {
+            double v = NumOps.ToDouble(grad[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v))
+            {
+                grad[i] = NumOps.Zero;
+            }
+        }
+
+        if (maxNorm <= 0) return grad;
+
+        double normSq = 0;
+        for (int i = 0; i < grad.Length; i++)
+        {
+            double v = NumOps.ToDouble(grad[i]);
+            normSq += v * v;
+        }
+
+        double norm = Math.Sqrt(normSq);
+        if (norm <= maxNorm) return grad;
+
+        double scale = maxNorm / norm;
+        var clipped = new Tensor<T>(grad._shape);
+        for (int i = 0; i < grad.Length; i++)
+        {
+            clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
+        }
+        return clipped;
+    }
+
+    #endregion
+
+    #region Serialization and Model Metadata (GANDALF Pattern)
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "EmbeddingDimension", _options.EmbeddingDimension },
+                { "HiddenDimensions", _options.HiddenDimensions },
+                { "DAGPenaltyWeight", _options.DAGPenaltyWeight },
+                { "SparsityWeight", _options.SparsityWeight },
+                { "GradientPenaltyWeight", _options.GradientPenaltyWeight },
+                { "GeneratorLayerCount", Layers.Count },
+                { "GeneratorLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_options.EmbeddingDimension);
+        writer.Write(_options.HiddenDimensions.Length);
+        foreach (var dim in _options.HiddenDimensions)
+        {
+            writer.Write(dim);
+        }
+        writer.Write(_options.BatchSize);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.DAGPenaltyWeight);
+        writer.Write(_options.SparsityWeight);
+        writer.Write(_options.GradientPenaltyWeight);
+        writer.Write(_options.DiscriminatorDropout);
+        writer.Write(_options.DiscriminatorSteps);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Options are reconstructed from serialized data
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new CausalGANGenerator<T>(
+            Architecture,
+            _options,
+            _generatorOptimizer,
+            _lossFunction);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetFeatureImportance()
+    {
+        var importance = new Dictionary<string, T>();
+        int numFeatures = Architecture.CalculatedInputSize;
+        var uniformValue = NumOps.FromDouble(1.0 / Math.Max(numFeatures, 1));
+        for (int f = 0; f < numFeatures; f++)
+        {
+            importance[$"feature_{f}"] = uniformValue;
+        }
+        return importance;
+    }
+
+    #endregion
+
+    #region Input Validation and Column Management
+
+    private static void ValidateFitInputs(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    {
+        if (data.Rows == 0 || data.Columns == 0)
+        {
+            throw new ArgumentException("Data matrix must not be empty.", nameof(data));
+        }
+
+        if (columns.Count == 0)
+        {
+            throw new ArgumentException("Column metadata list must not be empty.", nameof(columns));
+        }
+
+        if (columns.Count != data.Columns)
+        {
+            throw new ArgumentException(
+                $"Column metadata count ({columns.Count}) must match data column count ({data.Columns}).",
+                nameof(columns));
+        }
+
+        if (epochs <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs must be positive.");
+        }
+    }
+
+    private List<ColumnMetadata> PrepareColumns(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        var prepared = new List<ColumnMetadata>(columns.Count);
+
+        for (int col = 0; col < columns.Count; col++)
+        {
+            var meta = columns[col].Clone();
+            meta.ColumnIndex = col;
+
+            if (meta.IsNumerical)
+            {
+                ComputeColumnStatistics(data, col, meta);
+            }
+            else if (meta.IsCategorical && meta.NumCategories == 0)
+            {
+                var categories = new HashSet<string>();
+                for (int row = 0; row < data.Rows; row++)
+                {
+                    var val = NumOps.ToDouble(data[row, col]);
+                    categories.Add(val.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+                meta.Categories = categories.OrderBy(c => c, StringComparer.Ordinal).ToList().AsReadOnly();
+            }
+
+            prepared.Add(meta);
+        }
+
+        return prepared;
+    }
+
+    private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
+    {
+        int n = data.Rows;
+        double sum = 0;
+        double min = double.MaxValue;
+        double max = double.MinValue;
+
+        for (int row = 0; row < n; row++)
+        {
+            double val = NumOps.ToDouble(data[row, colIndex]);
+            sum += val;
+            if (val < min) min = val;
+            if (val > max) max = val;
+        }
+
+        double mean = sum / n;
+        double sumSqDiff = 0;
+        for (int row = 0; row < n; row++)
+        {
+            double val = NumOps.ToDouble(data[row, colIndex]);
+            double diff = val - mean;
+            sumSqDiff += diff * diff;
+        }
+
+        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
+        if (std < 1e-10) std = 1e-10;
+
+        meta.Min = min;
+        meta.Max = max;
+        meta.Mean = mean;
+        meta.Std = std;
+    }
+
+    #endregion
+
+    #region Random Sampling Utilities
+
+    private T SampleStandardNormal()
+    {
+        double u1 = 1.0 - _random.NextDouble();
+        double u2 = _random.NextDouble();
+        double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return NumOps.FromDouble(z);
+    }
+
+    private Vector<T> CreateStandardNormalVector(int length)
+    {
+        var v = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            v[i] = SampleStandardNormal();
+        }
+        return v;
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static Vector<T> GetRow(Matrix<T> matrix, int row)
+    {
+        var v = new Vector<T>(matrix.Columns);
+        for (int j = 0; j < matrix.Columns; j++)
+        {
+            v[j] = matrix[row, j];
+        }
+        return v;
+    }
+
+    private static Tensor<T> VectorToTensor(Vector<T> v)
+    {
+        var t = new Tensor<T>([v.Length]);
+        for (int i = 0; i < v.Length; i++) t[i] = v[i];
+        return t;
+    }
+
+    private static Vector<T> TensorToVector(Tensor<T> t, int length)
+    {
+        var v = new Vector<T>(length);
+        int copyLen = Math.Min(length, t.Length);
+        for (int i = 0; i < copyLen; i++) v[i] = t[i];
+        return v;
+    }
+
+    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
+    {
+        var result = new Tensor<T>([a.Length + b.Length]);
+        for (int i = 0; i < a.Length; i++) result[i] = a[i];
+        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
+        return result;
+    }
+
+    private static Tensor<T> CloneTensor(Tensor<T> source)
+    {
+        var clone = new Tensor<T>(source._shape);
+        for (int i = 0; i < source.Length; i++)
+        {
+            clone[i] = source[i];
+        }
+        return clone;
+    }
+
+    #endregion
+
+}

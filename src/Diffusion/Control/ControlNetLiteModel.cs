@@ -1,0 +1,185 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+
+namespace AiDotNet.Diffusion.Control;
+
+/// <summary>
+/// Lightweight ControlNet model with reduced parameter count for faster inference.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// ControlNet Lite reduces the encoder to approximately 25% of the full ControlNet's
+/// parameters while maintaining acceptable control quality. Suitable for real-time
+/// or resource-constrained applications.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This is a smaller, faster version of ControlNet. It uses
+/// fewer parameters so it runs quicker and uses less memory, at the cost of slightly
+/// less precise control signal adherence.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a lightweight ControlNet for fast inference
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 15
+/// };
+/// var model = new ControlNetLiteModel&lt;float&gt;(options, ControlType.Depth);
+///
+/// // Generate with lightweight depth-guided control
+/// var depthMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 512, 512 });
+/// var result = model.Predict(depthMap);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
+public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 4;
+
+    private UNetNoisePredictor<T> _baseUNet;
+    private StandardVAE<T> _vae;
+    private ControlNetEncoder<T> _controlEncoder;
+    private readonly IConditioningModule<T>? _conditioner;
+    private readonly ControlType _controlType;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _baseUNet;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
+
+    /// <summary>
+    /// Initializes a new ControlNet Lite model.
+    /// </summary>
+    public ControlNetLiteModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? baseUNet = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        ControlType controlType = ControlType.Canny,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _controlType = controlType;
+        _conditioner = conditioner;
+        InitializeLayers(baseUNet, vae, seed);
+    }
+
+    [MemberNotNull(nameof(_baseUNet), nameof(_vae), nameof(_controlEncoder))]
+    private void InitializeLayers(UNetNoisePredictor<T>? baseUNet, StandardVAE<T>? vae, int? seed)
+    {
+        _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture, inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
+            baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocks: 2,
+            attentionResolutions: new[] { 4, 2, 1 }, contextDim: 768, seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS, baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
+
+        // Lite: smaller base channels (160 instead of 320) and fewer multipliers
+        _controlEncoder = new ControlNetEncoder<T>(
+            inputChannels: 3, baseChannels: 160, channelMultipliers: new[] { 1, 2, 4 }, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        var baseParams = _baseUNet.GetParameters();
+        for (int i = 0; i < baseParams.Length; i++) allParams.Add(baseParams[i]);
+        var ctrlParams = _controlEncoder.GetParameters();
+        for (int i = 0; i < ctrlParams.Length; i++) allParams.Add(ctrlParams[i]);
+        return new Vector<T>(allParams.ToArray());
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        int baseCount = checked((int)_baseUNet.ParameterCount);
+        var baseParams = new T[baseCount];
+        for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
+        _baseUNet.SetParameters(new Vector<T>(baseParams));
+        offset += baseCount;
+        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
+        var ctrlParams = new T[ctrlCount];
+        for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
+        _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Clone the ACTUAL baseUNet/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
+        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
+        // shapes no longer lined up 1:1 and Clone diverged. Cloning the resolved baseUNet/VAE (+ same
+        // architecture/options/scheduler) makes the clone structurally identical.
+        var clone = new ControlNetLiteModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            controlType: _controlType,
+            conditioner: _conditioner,
+            seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "ControlNet-Lite", Version = "1.0",
+            Description = "Lightweight ControlNet with ~25% parameters for faster inference",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        metadata.SetProperty("architecture", "unet-controlnet-lite");
+        metadata.SetProperty("base_model", "Stable Diffusion 1.5");
+        metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
+        metadata.SetProperty("context_dim", 768);
+        metadata.SetProperty("control_type", _controlType.ToString());
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("guidance_scale", 7.5);
+        return metadata;
+    }
+}

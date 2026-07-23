@@ -1,0 +1,241 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+
+namespace AiDotNet.Video.Denoising;
+
+/// <summary>
+/// ShiftNet channel-shifting video denoiser using zero-cost temporal feature exchange.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "An Efficient Recurrent Architecture for Video Denoising via Temporal Shift" (Maggioni et al., 2021)</item>
+/// </list></para>
+/// <para><b>For Beginners:</b> ShiftNet uses efficient shift operations instead of expensive 3D convolutions for video denoising. By shifting feature maps along the temporal dimension, it captures motion at minimal computational cost.</para>
+/// <para>
+/// ShiftNet shifts feature channels along the temporal dimension without explicit alignment,
+/// using a U-Net backbone where each conv block incorporates channel shifting for temporal
+/// awareness, avoiding expensive optical flow or attention.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a ShiftNet model for efficient temporal-shift video denoising
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new ShiftNetOptions();
+/// var shiftNet = new ShiftNet&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var shiftNetOnnx = new ShiftNet&lt;double&gt;(architecture, "shiftnet_model.onnx");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("An Efficient Recurrent Architecture for Video Denoising via Temporal Shift",
+    "https://arxiv.org/abs/2106.10948",
+    Year = 2021,
+    Authors = "Marco Maggioni, Yibin Huang, Cheng Li, Yongming Rao, Jiwen Lu, Jie Zhou")]
+public class ShiftNet<T> : VideoDenoisingBase<T>
+{
+    private readonly ShiftNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    /// <summary>
+    /// Creates a ShiftNet model for ONNX inference.
+    /// </summary>
+    public ShiftNet(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        ShiftNetOptions? options = null)
+        : base(architecture)
+    {
+        _options = options ?? new ShiftNetOptions();
+        _useNativeMode = false;
+        TemporalRadius = _options.ShiftRadius;
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates a ShiftNet model for native training and inference.
+    /// </summary>
+    public ShiftNet(
+        NeuralNetworkArchitecture<T> architecture,
+        ShiftNetOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
+    {
+        _options = options ?? new ShiftNetOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        TemporalRadius = _options.ShiftRadius;
+        InitializeLayers();
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> Denoise(Tensor<T> noisyFrames)
+    {
+        ThrowIfDisposed();
+        var preprocessed = PreprocessFrames(noisyFrames);
+        var output = IsOnnxMode ? RunOnnxInference(preprocessed) : Forward(preprocessed);
+        return PostprocessOutput(output);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Mirror Denoise() so training optimises the SAME function inference evaluates. The base
+        // ForwardForTraining walked the RAW (unnormalised) input, whereas Denoise normalises the
+        // input (÷255) before the conv stack and denormalises after. Running the layers on a
+        // completely different input scale in training than at inference made the trained weights
+        // explode under Predict (loss 0.25 → ~198). Normalise → tape-aware layer walk →
+        // denormalise, all via Engine ops so gradients flow to the layer weights. (A residual
+        // input+correction connection isn't applicable here: the encoder/decoder conv stack does
+        // not preserve spatial size — e.g. 32×32 in → 29×29 out — so the output can't be added
+        // back to the input.)
+        var norm = PreprocessFrames(input);
+        var output = base.ForwardForTraining(norm);
+        return PostprocessOutput(output);
+    }
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
+            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+            int temporalFrames = 2 * _options.ShiftRadius + 1;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoDenoisingLayers(
+                inputChannels: ch, inputHeight: h, inputWidth: w,
+                numFeatures: _options.NumFeatures,
+                temporalFrames: temporalFrames));
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var p = layer.GetParameters();
+            if (offset + p.Length > parameters.Length) break;
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            layer.SetParameters(sub);
+            offset += p.Length;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ModelName", "ShiftNet" },
+                { "Variant", _options.Variant.ToString() },
+                { "NumFeatures", _options.NumFeatures },
+                { "NumBlocks", _options.NumBlocks },
+                { "NumShifts", _options.NumShifts },
+                { "ShiftRadius", _options.ShiftRadius }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write((int)_options.Variant);
+        writer.Write(_options.NumFeatures);
+        writer.Write(_options.NumBlocks);
+        writer.Write(_options.NumShifts);
+        writer.Write(_options.ShiftRadius);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.DropoutRate);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _options.Variant = (VideoModelVariant)reader.ReadInt32();
+        _options.NumFeatures = reader.ReadInt32();
+        _options.NumBlocks = reader.ReadInt32();
+        _options.NumShifts = reader.ReadInt32();
+        _options.ShiftRadius = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.DropoutRate = reader.ReadDouble();
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new ShiftNet<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ShiftNet<T>));
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
+        base.Dispose(disposing);
+    }
+}

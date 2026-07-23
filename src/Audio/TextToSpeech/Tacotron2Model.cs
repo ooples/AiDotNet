@@ -1,0 +1,1339 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.Audio.TextToSpeech;
+
+/// <summary>
+/// Tacotron2 attention-based text-to-speech model.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Tacotron2 is a classic neural TTS model that generates mel spectrograms from text.
+/// It uses an encoder-attention-decoder architecture with:
+/// <list type="bullet">
+/// <item>Character/phoneme encoder with convolutional layers</item>
+/// <item>Location-sensitive attention for alignment</item>
+/// <item>Autoregressive LSTM decoder</item>
+/// <item>Post-net for mel spectrogram refinement</item>
+/// </list>
+/// </para>
+/// <para><b>For Beginners:</b> Tacotron2 is a two-stage TTS system:
+///
+/// Stage 1 (Tacotron2): Text -> Mel Spectrogram
+/// Stage 2 (Vocoder): Mel Spectrogram -> Audio Waveform
+///
+/// Key characteristics:
+/// - Autoregressive: Generates one mel frame at a time
+/// - Attention-based: Learns to align text with audio
+/// - High quality but slower than parallel models like VITS
+///
+/// Two ways to use this class:
+/// 1. ONNX Mode: Load pretrained Tacotron2 models for inference
+/// 2. Native Mode: Train your own TTS model from scratch
+///
+/// ONNX Mode Example:
+/// <code>
+/// var tacotron = new Tacotron2Model&lt;float&gt;(
+///     architecture,
+///     acousticModelPath: "tacotron2.onnx",
+///     vocoderPath: "hifigan.onnx");
+/// var audio = tacotron.Synthesize("Hello, world!");
+/// </code>
+///
+/// Training Mode Example:
+/// <code>
+/// var tacotron = new Tacotron2Model&lt;float&gt;(architecture);
+/// tacotron.Train(phonemeInput, expectedMelSpectrogram);
+/// </code>
+/// </para>
+/// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.TextToSpeech)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions", "https://arxiv.org/abs/1712.05884", Year = 2018, Authors = "Jonathan Shen, Ruoming Pang, Ron J. Weiss, Mike Schuster, Navdeep Jaitly, Zongheng Yang, Zhifeng Chen, Yu Zhang, Yuxuan Wang, RJ Skerry-Ryan, Rif A. Saurous, Yannis Agiomyrgiannakis, Yonghui Wu")]
+public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
+{
+    private readonly Tacotron2ModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    #region Execution Mode
+
+    /// <summary>
+    /// Indicates whether this network uses native layers (true) or ONNX models (false).
+    /// </summary>
+    private readonly bool _useNativeMode;
+
+    #endregion
+
+    #region ONNX Mode Fields
+
+    /// <summary>
+    /// Path to the acoustic model ONNX file.
+    /// </summary>
+    private readonly string? _acousticModelPath;
+
+    /// <summary>
+    /// Path to the vocoder ONNX file.
+    /// </summary>
+    private readonly string? _vocoderPath;
+
+    /// <summary>
+    /// ONNX acoustic model (Tacotron2).
+    /// </summary>
+    private readonly OnnxModel<T>? _acousticModel;
+
+    /// <summary>
+    /// ONNX vocoder model (HiFi-GAN or WaveGlow).
+    /// </summary>
+    private readonly OnnxModel<T>? _vocoder;
+
+    #endregion
+
+    #region Native Mode Fields
+
+    /// <summary>
+    /// Character/phoneme embedding layer.
+    /// </summary>
+    private ILayer<T>? _embedding;
+
+    /// <summary>
+    /// Encoder convolutional layers.
+    /// </summary>
+    private readonly List<ILayer<T>> _encoderConvLayers = [];
+
+    /// <summary>
+    /// Encoder LSTM layer.
+    /// </summary>
+    private ILayer<T>? _encoderLstm;
+
+    /// <summary>
+    /// Attention layers.
+    /// </summary>
+    private readonly List<ILayer<T>> _attentionLayers = [];
+
+    /// <summary>
+    /// Decoder LSTM layers.
+    /// </summary>
+    private readonly List<ILayer<T>> _decoderLstmLayers = [];
+
+    /// <summary>
+    /// Post-net layers for mel refinement.
+    /// </summary>
+    private readonly List<ILayer<T>> _postNetLayers = [];
+
+    /// <summary>
+    /// Stop token prediction layer.
+    /// </summary>
+    private ILayer<T>? _stopTokenLayer;
+
+    /// <summary>
+    /// Griffin-Lim vocoder fallback.
+    /// </summary>
+    private readonly GriffinLim<T>? _griffinLim;
+
+    #endregion
+
+    #region Shared Fields
+
+    /// <summary>
+    /// Text preprocessor for phoneme conversion.
+    /// </summary>
+    private readonly TtsPreprocessor _preprocessor;
+
+    /// <summary>
+    /// Optimizer for training.
+    /// </summary>
+    private IOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    /// <summary>
+    /// Loss function for training.
+    /// </summary>
+    private ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// Whether the model has been disposed.
+    /// </summary>
+    private bool _disposed;
+
+    #endregion
+
+    #region Model Architecture Parameters
+
+    /// <summary>
+    /// Character/phoneme vocabulary size.
+    /// </summary>
+    private int _vocabSize;
+
+    /// <summary>
+    /// Embedding dimension.
+    /// </summary>
+    private int _embeddingDim;
+
+    /// <summary>
+    /// Encoder hidden dimension.
+    /// </summary>
+    private int _encoderDim;
+
+    /// <summary>
+    /// Decoder hidden dimension.
+    /// </summary>
+    private int _decoderDim;
+
+    /// <summary>
+    /// Attention dimension.
+    /// </summary>
+    private int _attentionDim;
+
+    /// <summary>
+    /// Attention location filters.
+    /// </summary>
+    private int _attentionFilters;
+
+    /// <summary>
+    /// Pre-net dimension.
+    /// </summary>
+    private int _prenetDim;
+
+    /// <summary>
+    /// Post-net embedding dimension.
+    /// </summary>
+    private int _postnetEmbeddingDim;
+
+    /// <summary>
+    /// Number of encoder convolutional layers.
+    /// </summary>
+    private int _numEncoderConvLayers;
+
+    /// <summary>
+    /// Number of post-net convolutional layers.
+    /// </summary>
+    private int _numPostnetConvLayers;
+
+    /// <summary>
+    /// Number of mel frames to output per decoder step.
+    /// </summary>
+    private int _numMelsPerFrame;
+
+    /// <summary>
+    /// Maximum decoder steps.
+    /// </summary>
+    private int _maxDecoderSteps;
+
+    /// <summary>
+    /// Decoder stop threshold.
+    /// </summary>
+    private double _stopThreshold;
+
+    /// <summary>
+    /// FFT size for Griffin-Lim.
+    /// </summary>
+    private int _fftSize;
+
+    /// <summary>
+    /// Hop length for audio synthesis.
+    /// </summary>
+    private int _hopLength;
+
+    /// <summary>
+    /// Griffin-Lim iterations.
+    /// </summary>
+    private int _griffinLimIterations;
+
+    /// <summary>
+    /// Speaking rate multiplier.
+    /// </summary>
+    private double _speakingRate;
+
+    #endregion
+
+    #region ITextToSpeech Properties
+
+    /// <summary>
+    /// Gets the list of available built-in voices.
+    /// </summary>
+    public IReadOnlyList<VoiceInfo<T>> AvailableVoices { get; }
+
+    /// <summary>
+    /// Gets whether this model supports voice cloning from reference audio.
+    /// </summary>
+    public bool SupportsVoiceCloning => false;
+
+    /// <summary>
+    /// Gets whether this model supports emotional expression control.
+    /// </summary>
+    public bool SupportsEmotionControl => false;
+
+    /// <summary>
+    /// Gets whether this model supports streaming audio generation.
+    /// </summary>
+    public bool SupportsStreaming => false;
+
+    #endregion
+
+    #region Public Properties
+
+    /// <summary>
+    /// Gets whether the model is ready for synthesis.
+    /// </summary>
+    public bool IsReady => _useNativeMode ||
+        (_acousticModel?.IsLoaded == true && (_vocoder?.IsLoaded == true || _griffinLim is not null));
+
+    /// <summary>
+    /// Gets the maximum decoder steps.
+    /// </summary>
+    public int MaxDecoderSteps => _maxDecoderSteps;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates a Tacotron2 model for ONNX inference with pretrained models.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="acousticModelPath">Path to the Tacotron2 ONNX model.</param>
+    /// <param name="vocoderPath">Optional path to vocoder ONNX (HiFi-GAN/WaveGlow). Uses Griffin-Lim if null.</param>
+    /// <param name="sampleRate">Output sample rate in Hz. Default is 22050.</param>
+    /// <param name="numMels">Number of mel spectrogram channels. Default is 80.</param>
+    /// <param name="speakingRate">Speaking rate multiplier. Default is 1.0.</param>
+    /// <param name="maxDecoderSteps">Maximum decoder steps. Default is 1000.</param>
+    /// <param name="stopThreshold">Stop token threshold. Default is 0.5.</param>
+    /// <param name="fftSize">FFT size for Griffin-Lim. Default is 1024.</param>
+    /// <param name="hopLength">Hop length. Default is 256.</param>
+    /// <param name="griffinLimIterations">Griffin-Lim iterations. Default is 60.</param>
+    /// <param name="onnxOptions">ONNX runtime options.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this constructor with pretrained Tacotron2 models.
+    ///
+    /// You need at least an acoustic model (Tacotron2).
+    /// The vocoder is optional - Griffin-Lim can be used as fallback.
+    ///
+    /// Example:
+    /// <code>
+    /// var tacotron = new Tacotron2Model&lt;float&gt;(
+    ///     architecture,
+    ///     acousticModelPath: "tacotron2.onnx",
+    ///     vocoderPath: "hifigan.onnx");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public Tacotron2Model(
+        NeuralNetworkArchitecture<T> architecture,
+        string acousticModelPath,
+        string? vocoderPath = null,
+        int sampleRate = 22050,
+        int numMels = 80,
+        double speakingRate = 1.0,
+        int maxDecoderSteps = 1000,
+        double stopThreshold = 0.5,
+        int fftSize = 1024,
+        int hopLength = 256,
+        int griffinLimIterations = 60,
+        OnnxModelOptions? onnxOptions = null,
+        Tacotron2ModelOptions? options = null)
+        : base(architecture)
+    {
+        _options = options ?? new Tacotron2ModelOptions();
+        Options = _options;
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+        if (acousticModelPath is null)
+            throw new ArgumentNullException(nameof(acousticModelPath));
+
+        _useNativeMode = false;
+        _acousticModelPath = acousticModelPath;
+        _vocoderPath = vocoderPath;
+
+        // Store parameters
+        SampleRate = sampleRate;
+        NumMels = numMels;
+        _speakingRate = speakingRate;
+        _maxDecoderSteps = maxDecoderSteps;
+        _stopThreshold = stopThreshold;
+        _fftSize = fftSize;
+        _hopLength = hopLength;
+        _griffinLimIterations = griffinLimIterations;
+
+        // Default architecture parameters (standard Tacotron2)
+        _vocabSize = 148; // Standard phoneme vocabulary
+        _embeddingDim = 512;
+        _encoderDim = 512;
+        _decoderDim = 1024;
+        _attentionDim = 128;
+        _attentionFilters = 32;
+        _prenetDim = 256;
+        _postnetEmbeddingDim = 512;
+        _numEncoderConvLayers = 3;
+        _numPostnetConvLayers = 5;
+        _numMelsPerFrame = 2;
+
+        // Initialize preprocessor
+        _preprocessor = new TtsPreprocessor();
+
+        // Load ONNX models
+        var onnxOpts = onnxOptions ?? new OnnxModelOptions();
+        _acousticModel = new OnnxModel<T>(acousticModelPath, onnxOpts);
+
+        if (vocoderPath is not null && vocoderPath.Length > 0)
+        {
+            _vocoder = new OnnxModel<T>(vocoderPath, onnxOpts);
+        }
+        else
+        {
+            // Use Griffin-Lim as fallback vocoder
+            _griffinLim = new GriffinLim<T>(
+                nFft: fftSize,
+                hopLength: hopLength,
+                iterations: griffinLimIterations);
+        }
+
+        // Initialize available voices
+        AvailableVoices = GetDefaultVoices();
+
+        // Default loss function (MSE is standard for TTS mel-spectrogram prediction)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
+
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates a Tacotron2 model for native training mode.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sampleRate">Output sample rate in Hz. Default is 22050.</param>
+    /// <param name="numMels">Number of mel spectrogram channels. Default is 80.</param>
+    /// <param name="speakingRate">Speaking rate multiplier. Default is 1.0.</param>
+    /// <param name="vocabSize">Character/phoneme vocabulary size. Default is 148.</param>
+    /// <param name="embeddingDim">Embedding dimension. Default is 512.</param>
+    /// <param name="encoderDim">Encoder hidden dimension. Default is 512.</param>
+    /// <param name="decoderDim">Decoder hidden dimension. Default is 1024.</param>
+    /// <param name="attentionDim">Attention dimension. Default is 128.</param>
+    /// <param name="attentionFilters">Number of attention location filters. Default is 32.</param>
+    /// <param name="prenetDim">Pre-net dimension. Default is 256.</param>
+    /// <param name="postnetEmbeddingDim">Post-net embedding dimension. Default is 512.</param>
+    /// <param name="numEncoderConvLayers">Number of encoder conv layers. Default is 3.</param>
+    /// <param name="numPostnetConvLayers">Number of post-net conv layers. Default is 5.</param>
+    /// <param name="numMelsPerFrame">Mel frames per decoder step. Default is 2.</param>
+    /// <param name="maxDecoderSteps">Maximum decoder steps. Default is 1000.</param>
+    /// <param name="stopThreshold">Stop token threshold. Default is 0.5.</param>
+    /// <param name="fftSize">FFT size for Griffin-Lim. Default is 1024.</param>
+    /// <param name="hopLength">Hop length. Default is 256.</param>
+    /// <param name="griffinLimIterations">Griffin-Lim iterations. Default is 60.</param>
+    /// <param name="optimizer">Optimizer for training. If null, uses Adam.</param>
+    /// <param name="lossFunction">Loss function for training. If null, uses MSE.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this constructor to train your own Tacotron2 model.
+    ///
+    /// Training Tacotron2 requires:
+    /// 1. Paired text-audio data with aligned phoneme sequences
+    /// 2. GPU training is recommended (many hours of training)
+    /// 3. Teacher forcing is used during training
+    ///
+    /// Example:
+    /// <code>
+    /// var tacotron = new Tacotron2Model&lt;float&gt;(
+    ///     architecture,
+    ///     embeddingDim: 512,
+    ///     encoderDim: 512,
+    ///     decoderDim: 1024);
+    ///
+    /// // Training loop
+    /// tacotron.Train(phonemeInput, expectedMelSpectrogram);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public Tacotron2Model(
+        NeuralNetworkArchitecture<T> architecture,
+        int sampleRate = 22050,
+        int numMels = 80,
+        double speakingRate = 1.0,
+        int vocabSize = 148,
+        int embeddingDim = 512,
+        int encoderDim = 512,
+        int decoderDim = 1024,
+        int attentionDim = 128,
+        int attentionFilters = 32,
+        int prenetDim = 256,
+        int postnetEmbeddingDim = 512,
+        int numEncoderConvLayers = 3,
+        int numPostnetConvLayers = 5,
+        int numMelsPerFrame = 2,
+        int maxDecoderSteps = 1000,
+        double stopThreshold = 0.5,
+        int fftSize = 1024,
+        int hopLength = 256,
+        int griffinLimIterations = 60,
+        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        Tacotron2ModelOptions? options = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+    {
+        _options = options ?? new Tacotron2ModelOptions();
+        Options = _options;
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+
+        _useNativeMode = true;
+
+        // Store parameters
+        SampleRate = sampleRate;
+        NumMels = numMels;
+        _speakingRate = speakingRate;
+        _vocabSize = vocabSize;
+        _embeddingDim = embeddingDim;
+        _encoderDim = encoderDim;
+        _decoderDim = decoderDim;
+        _attentionDim = attentionDim;
+        _attentionFilters = attentionFilters;
+        _prenetDim = prenetDim;
+        _postnetEmbeddingDim = postnetEmbeddingDim;
+        _numEncoderConvLayers = numEncoderConvLayers;
+        _numPostnetConvLayers = numPostnetConvLayers;
+        _numMelsPerFrame = numMelsPerFrame;
+        _maxDecoderSteps = maxDecoderSteps;
+        _stopThreshold = stopThreshold;
+        _fftSize = fftSize;
+        _hopLength = hopLength;
+        _griffinLimIterations = griffinLimIterations;
+
+        // Initialize preprocessor
+        _preprocessor = new TtsPreprocessor();
+
+        // Create Griffin-Lim vocoder
+        _griffinLim = new GriffinLim<T>(
+            nFft: fftSize,
+            hopLength: hopLength,
+            iterations: griffinLimIterations);
+
+        // Initialize available voices
+        AvailableVoices = GetDefaultVoices();
+
+        // Initialize training components
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        InitializeNativeLayers();
+    }
+
+    #endregion
+
+    #region Layer Initialization
+
+    /// <summary>
+    /// Initializes layers for ONNX inference mode.
+    /// </summary>
+    protected override void InitializeLayers()
+    {
+        // ONNX mode - no native layers needed
+    }
+
+    /// <summary>
+    /// Initializes layers for native training mode.
+    /// </summary>
+    private void InitializeNativeLayers()
+    {
+        List<ILayer<T>> layers;
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            layers = Architecture.Layers.ToList();
+            // First layer should be embedding if present
+            if (layers.Count > 0 && layers[0] is EmbeddingLayer<T> emb)
+            {
+                _embedding = emb;
+                layers.RemoveAt(0);
+                Layers.Add(_embedding);
+            }
+        }
+        else
+        {
+            _embedding = new EmbeddingLayer<T>(_vocabSize, _embeddingDim);
+            Layers.Add(_embedding);
+
+            layers = LayerHelper<T>.CreateTacotron2Layers(
+                vocabSize: _vocabSize, embeddingDim: _embeddingDim, encoderDim: _encoderDim,
+                decoderDim: _decoderDim, attentionDim: _attentionDim,
+                attentionFilters: _attentionFilters, prenetDim: _prenetDim,
+                numMels: NumMels, numMelsPerFrame: _numMelsPerFrame,
+                numEncoderConvLayers: _numEncoderConvLayers,
+                numPostnetConvLayers: _numPostnetConvLayers,
+                postnetEmbeddingDim: _postnetEmbeddingDim).ToList();
+        }
+
+        _encoderConvLayers.Clear();
+        _attentionLayers.Clear();
+        _decoderLstmLayers.Clear();
+        _postNetLayers.Clear();
+        Layers.AddRange(layers);
+
+        // Distribute to internal sub-lists for forward pass
+        int idx = 0;
+        for (int i = 0; i < _numEncoderConvLayers && idx < layers.Count; i++)
+            _encoderConvLayers.Add(layers[idx++]);
+        if (idx < layers.Count)
+            _encoderLstm = layers[idx++];
+        for (int i = 0; i < 4 && idx < layers.Count; i++)
+            _attentionLayers.Add(layers[idx++]);
+        for (int i = 0; i < 5 && idx < layers.Count; i++) // prenet(2) + lstm(2) + mel(1)
+            _decoderLstmLayers.Add(layers[idx++]);
+        if (idx < layers.Count)
+            _stopTokenLayer = layers[idx++];
+        while (idx < layers.Count)
+            _postNetLayers.Add(layers[idx++]);
+    }
+
+    private static IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
+    {
+        return new[]
+        {
+            new VoiceInfo<T>
+            {
+                Id = "default",
+                Name = "Default Voice",
+                Language = "en",
+                Gender = VoiceGender.Neutral,
+                Style = "neutral"
+            }
+        };
+    }
+
+    #endregion
+
+    #region ITextToSpeech Implementation
+
+    /// <summary>
+    /// Synthesizes speech from text.
+    /// </summary>
+    public Tensor<T> Synthesize(
+        string text,
+        string? voiceId = null,
+        double speakingRate = 1.0,
+        double pitch = 0.0)
+    {
+        ThrowIfDisposed();
+
+        // Preprocess text to phonemes
+        var phonemes = _preprocessor.TextToPhonemes(text);
+
+        // Create phoneme tensor
+        var phonemeTensor = CreatePhonemeTensor(phonemes);
+
+        // Apply speaking rate
+        double effectiveRate = Math.Abs(speakingRate - 1.0) > 0.01 ? speakingRate : _speakingRate;
+
+        // Generate mel spectrogram
+        Tensor<T> melSpectrogram;
+        if (_useNativeMode)
+        {
+            melSpectrogram = ForwardNative(phonemeTensor);
+        }
+        else
+        {
+            melSpectrogram = ForwardOnnx(phonemeTensor);
+        }
+
+        // Apply rate modification
+        if (Math.Abs(effectiveRate - 1.0) > 0.01)
+        {
+            melSpectrogram = ModifyDuration(melSpectrogram, 1.0 / effectiveRate);
+        }
+
+        // Convert mel spectrogram to audio waveform
+        Tensor<T> audio;
+        if (_vocoder is not null)
+        {
+            audio = _vocoder.Run(melSpectrogram);
+        }
+        else if (_griffinLim is not null)
+        {
+            audio = GriffinLimSynthesize(melSpectrogram);
+        }
+        else
+        {
+            throw new InvalidOperationException("No vocoder available.");
+        }
+
+        return audio;
+    }
+
+    /// <summary>
+    /// Synthesizes speech from text asynchronously.
+    /// </summary>
+    public Task<Tensor<T>> SynthesizeAsync(
+        string text,
+        string? voiceId = null,
+        double speakingRate = 1.0,
+        double pitch = 0.0,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => Synthesize(text, voiceId, speakingRate, pitch), cancellationToken);
+    }
+
+    /// <summary>
+    /// Synthesizes speech using a cloned voice from reference audio.
+    /// </summary>
+    public Tensor<T> SynthesizeWithVoiceCloning(
+        string text,
+        Tensor<T> referenceAudio,
+        double speakingRate = 1.0,
+        double pitch = 0.0)
+    {
+        throw new NotSupportedException("Voice cloning is not supported by Tacotron2. Use VITSModel for voice cloning.");
+    }
+
+    /// <summary>
+    /// Synthesizes speech with emotional expression.
+    /// </summary>
+    public Tensor<T> SynthesizeWithEmotion(
+        string text,
+        string emotion,
+        double emotionIntensity = 0.5,
+        string? voiceId = null,
+        double speakingRate = 1.0)
+    {
+        throw new NotSupportedException("Emotion control is not supported by Tacotron2 model.");
+    }
+
+    /// <summary>
+    /// Extracts speaker embedding from reference audio.
+    /// </summary>
+    public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
+    {
+        throw new NotSupportedException("Speaker embedding extraction is not supported by Tacotron2.");
+    }
+
+    /// <summary>
+    /// Starts a streaming synthesis session.
+    /// </summary>
+    public IStreamingSynthesisSession<T> StartStreamingSession(string? voiceId = null, double speakingRate = 1.0)
+    {
+        throw new NotSupportedException("Streaming synthesis is not supported by Tacotron2.");
+    }
+
+    #endregion
+
+    #region AudioNeuralNetworkBase Implementation
+
+    /// <summary>
+    /// Preprocesses raw audio for model input.
+    /// </summary>
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        // Tacotron2 takes text input, not audio
+        return rawAudio;
+    }
+
+    /// <summary>
+    /// Postprocesses model output.
+    /// </summary>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return modelOutput;
+    }
+
+    /// <summary>
+    /// Makes a prediction using the model.
+    /// </summary>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+        {
+            return ForwardOnnx(input);
+        }
+        else
+        {
+            return ForwardNative(input);
+        }
+    }
+
+    /// <summary>
+    /// Updates model parameters using the configured optimizer.
+    /// </summary>
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        if (!_useNativeMode)
+        {
+            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
+        }
+
+        // Use the configured optimizer for parameter updates
+        var currentParams = GetParameters();
+
+        // Cast to gradient-based optimizer to access UpdateParameters
+        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
+        {
+            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
+            SetParameters(updatedParams);
+        }
+        else
+        {
+            // Fallback: manual SGD if optimizer doesn't support gradient-based updates
+            T learningRate = NumOps.FromDouble(0.001);
+            currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
+            SetParameters(currentParams);
+        }
+    }
+
+    /// <summary>
+    /// Trains the model on input data.
+    /// </summary>
+    // Stored target for teacher forcing during ForwardForTraining
+    private Tensor<T>? _teacherForcingTarget;
+
+    /// <summary>
+    /// Overrides ForwardForTraining to use teacher forcing when target is available.
+    /// Teacher forcing feeds ground-truth previous outputs to the decoder instead of
+    /// the model's own predictions — industry standard for autoregressive training.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (_teacherForcingTarget is not null)
+            return ForwardNativeWithTeacherForcing(input, _teacherForcingTarget);
+        return base.ForwardForTraining(input);
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!_useNativeMode)
+        {
+            throw new NotSupportedException("Cannot train in ONNX inference mode.");
+        }
+
+        if (expectedOutput is null)
+            throw new ArgumentException("expectedOutput cannot be null for teacher-forced training.", nameof(expectedOutput));
+        if (expectedOutput.Shape.Length < 2)
+            throw new ArgumentException($"expectedOutput must have at least rank 2 [batch, time*mels], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
+        if (expectedOutput.Shape[^1] % NumMels != 0)
+            throw new ArgumentException($"expectedOutput last dimension ({expectedOutput.Shape[^1]}) must be divisible by NumMels ({NumMels}).", nameof(expectedOutput));
+        int melFrameCount = expectedOutput.Shape[1] / _numMelsPerFrame;
+        if (melFrameCount == 0)
+            throw new ArgumentException($"expectedOutput has {expectedOutput.Shape[1]} mel values but _numMelsPerFrame is {_numMelsPerFrame}, resulting in zero frames.", nameof(expectedOutput));
+
+        _teacherForcingTarget = expectedOutput;
+        try
+        {
+            SetTrainingMode(true);
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+            _teacherForcingTarget = null;
+        }
+    }
+
+    /// <summary>
+    /// Gets metadata about the model.
+    /// </summary>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "Tacotron2",
+            Description = "Attention-based sequence-to-sequence TTS model",
+            FeatureCount = _vocabSize,
+            Complexity = 2
+        };
+        metadata.AdditionalInfo["InputFormat"] = "Text/Phonemes";
+        metadata.AdditionalInfo["OutputFormat"] = $"Audio ({SampleRate}Hz)";
+        metadata.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
+        metadata.AdditionalInfo["MaxDecoderSteps"] = _maxDecoderSteps.ToString();
+        metadata.AdditionalInfo["HasVocoder"] = (_vocoder is not null).ToString();
+        return metadata;
+    }
+
+    /// <summary>
+    /// Serializes network-specific data.
+    /// </summary>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(SampleRate);
+        writer.Write(NumMels);
+        writer.Write(_speakingRate);
+        writer.Write(_vocabSize);
+        writer.Write(_embeddingDim);
+        writer.Write(_encoderDim);
+        writer.Write(_decoderDim);
+        writer.Write(_attentionDim);
+        writer.Write(_prenetDim);
+        writer.Write(_postnetEmbeddingDim);
+        writer.Write(_numEncoderConvLayers);
+        writer.Write(_numPostnetConvLayers);
+        writer.Write(_numMelsPerFrame);
+        writer.Write(_maxDecoderSteps);
+        writer.Write(_stopThreshold);
+        writer.Write(_fftSize);
+        writer.Write(_hopLength);
+        writer.Write(_griffinLimIterations);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data.
+    /// </summary>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Note: _useNativeMode is readonly and set at construction
+        // Deserialized models operate in native mode
+        _ = reader.ReadBoolean(); // useNativeMode (read but not assigned)
+
+        // Restore audio configuration
+        SampleRate = reader.ReadInt32();
+        NumMels = reader.ReadInt32();
+        _speakingRate = reader.ReadDouble();
+
+        // Restore architecture parameters
+        _vocabSize = reader.ReadInt32();
+        _embeddingDim = reader.ReadInt32();
+        _encoderDim = reader.ReadInt32();
+        _decoderDim = reader.ReadInt32();
+        _attentionDim = reader.ReadInt32();
+        _prenetDim = reader.ReadInt32();
+        _postnetEmbeddingDim = reader.ReadInt32();
+        _numEncoderConvLayers = reader.ReadInt32();
+        _numPostnetConvLayers = reader.ReadInt32();
+        _numMelsPerFrame = reader.ReadInt32();
+        _maxDecoderSteps = reader.ReadInt32();
+        _stopThreshold = reader.ReadDouble();
+        _fftSize = reader.ReadInt32();
+        _hopLength = reader.ReadInt32();
+        _griffinLimIterations = reader.ReadInt32();
+
+        // Reinitialize layers with restored parameters if needed
+        if (_useNativeMode && _encoderConvLayers.Count == 0)
+        {
+            InitializeLayers();
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of this model for cloning.
+    /// </summary>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _acousticModelPath is not null)
+        {
+            return new Tacotron2Model<T>(
+                Architecture,
+                _acousticModelPath,
+                _vocoderPath,
+                SampleRate,
+                NumMels,
+                _speakingRate,
+                _maxDecoderSteps,
+                _stopThreshold,
+                _fftSize,
+                _hopLength,
+                _griffinLimIterations);
+        }
+        else
+        {
+            return new Tacotron2Model<T>(
+                Architecture,
+                SampleRate,
+                NumMels,
+                _speakingRate,
+                _vocabSize,
+                _embeddingDim,
+                _encoderDim,
+                _decoderDim,
+                _attentionDim,
+                _attentionFilters,
+                _prenetDim,
+                _postnetEmbeddingDim,
+                _numEncoderConvLayers,
+                _numPostnetConvLayers,
+                _numMelsPerFrame,
+                _maxDecoderSteps,
+                _stopThreshold,
+                _fftSize,
+                _hopLength,
+                _griffinLimIterations,
+                lossFunction: _lossFunction);
+        }
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    private Tensor<T> CreatePhonemeTensor(int[] phonemes)
+    {
+        var tensor = new Tensor<T>([1, phonemes.Length]);
+        for (int i = 0; i < phonemes.Length; i++)
+        {
+            tensor[0, i] = NumOps.FromDouble(phonemes[i]);
+        }
+        return tensor;
+    }
+
+    private Tensor<T> ForwardNative(Tensor<T> phonemes)
+    {
+        // Embed phonemes
+        var embedded = _embedding?.Forward(phonemes) ?? phonemes;
+
+        // Encoder conv layers
+        var encoderInput = embedded;
+        foreach (var conv in _encoderConvLayers)
+        {
+            encoderInput = conv.Forward(encoderInput);
+        }
+
+        // Encoder LSTM
+        var encoderOutput = _encoderLstm?.Forward(encoderInput) ?? encoderInput;
+
+        // Autoregressive decoding
+        var melFrames = new List<Tensor<T>>();
+        var prevMel = new Tensor<T>([1, NumMels]);
+        var attentionWeights = new Tensor<T>([1, phonemes.Shape[^1]]);
+        var decoderState = new Tensor<T>([1, _decoderDim]);
+
+        for (int step = 0; step < _maxDecoderSteps; step++)
+        {
+            // Pre-net
+            var prenetOut = prevMel;
+            for (int i = 0; i < 2 && i < _decoderLstmLayers.Count; i++)
+            {
+                prenetOut = _decoderLstmLayers[i].Forward(prenetOut);
+            }
+
+            // Attention (location-sensitive: feeds back updated weights each step)
+            var (context, updatedWeights) = ComputeAttention(decoderState, encoderOutput, attentionWeights);
+            attentionWeights = updatedWeights;
+
+            // Decoder LSTM
+            var lstmInput = ConcatenateTensors(prenetOut, context);
+            for (int i = 2; i < _decoderLstmLayers.Count - 1; i++)
+            {
+                lstmInput = _decoderLstmLayers[i].Forward(lstmInput);
+            }
+            decoderState = lstmInput;
+
+            // Mel output
+            var decoderContext = ConcatenateTensors(decoderState, context);
+            var melOutput = _decoderLstmLayers[^1].Forward(decoderContext);
+            melFrames.Add(melOutput);
+
+            // Stop token
+            var stopToken = _stopTokenLayer?.Forward(decoderContext);
+            if (stopToken is not null && NumOps.ToDouble(stopToken[0, 0]) > _stopThreshold)
+            {
+                break;
+            }
+
+            // Update previous mel for next step
+            prevMel = ExtractLastMelFrame(melOutput);
+        }
+
+        // Combine mel frames
+        var melSpectrogram = CombineMelFrames(melFrames);
+
+        // Post-net refinement
+        var residual = melSpectrogram;
+        foreach (var postConv in _postNetLayers)
+        {
+            residual = postConv.Forward(residual);
+        }
+
+        // Add residual via engine op (tape-tracked)
+        return Engine.TensorAdd(melSpectrogram, residual);
+    }
+
+    private Tensor<T> ForwardNativeWithTeacherForcing(Tensor<T> phonemes, Tensor<T> targetMel)
+    {
+        // Similar to ForwardNative but uses target mel frames as input
+        var embedded = _embedding?.Forward(phonemes) ?? phonemes;
+
+        var encoderInput = embedded;
+        foreach (var conv in _encoderConvLayers)
+        {
+            encoderInput = conv.Forward(encoderInput);
+        }
+
+        var encoderOutput = _encoderLstm?.Forward(encoderInput) ?? encoderInput;
+
+        int numFrames = targetMel.Shape[1];
+        var melFrames = new List<Tensor<T>>();
+        var attentionWeights = new Tensor<T>([1, phonemes.Shape[^1]]);
+        var decoderState = new Tensor<T>([1, _decoderDim]);
+
+        for (int step = 0; step < numFrames / _numMelsPerFrame; step++)
+        {
+            // Teacher forcing: step 0 gets GO frame (zeros), step>0 gets previous ground-truth
+            Tensor<T> prevMel;
+            if (step == 0)
+            {
+                prevMel = new Tensor<T>(new[] { 1, _numMelsPerFrame });
+            }
+            else
+            {
+                prevMel = ExtractMelFrame(targetMel, (step - 1) * _numMelsPerFrame);
+            }
+
+            var prenetOut = prevMel;
+            for (int i = 0; i < 2 && i < _decoderLstmLayers.Count; i++)
+            {
+                prenetOut = _decoderLstmLayers[i].Forward(prenetOut);
+            }
+
+            var (context, updatedWeights) = ComputeAttention(decoderState, encoderOutput, attentionWeights);
+            attentionWeights = updatedWeights;
+            var lstmInput = ConcatenateTensors(prenetOut, context);
+
+            for (int i = 2; i < _decoderLstmLayers.Count - 1; i++)
+            {
+                lstmInput = _decoderLstmLayers[i].Forward(lstmInput);
+            }
+            decoderState = lstmInput;
+
+            var decoderContext = ConcatenateTensors(decoderState, context);
+            var melOutput = _decoderLstmLayers[^1].Forward(decoderContext);
+            melFrames.Add(melOutput);
+        }
+
+        var melSpectrogram = CombineMelFrames(melFrames);
+
+        var residual = melSpectrogram;
+        foreach (var postConv in _postNetLayers)
+        {
+            residual = postConv.Forward(residual);
+        }
+
+        var refined = new Tensor<T>(melSpectrogram._shape);
+        for (int i = 0; i < melSpectrogram.Length; i++)
+        {
+            refined[i] = NumOps.Add(melSpectrogram[i], residual[i]);
+        }
+
+        return refined;
+    }
+
+    private Tensor<T> ForwardOnnx(Tensor<T> phonemes)
+    {
+        if (_acousticModel is null)
+            throw new InvalidOperationException("Acoustic model not loaded.");
+
+        return _acousticModel.Run(phonemes);
+    }
+
+    private (Tensor<T> context, Tensor<T> updatedWeights) ComputeAttention(
+        Tensor<T> query, Tensor<T> keys, Tensor<T> attentionWeights)
+    {
+        if (_attentionLayers.Count < 4)
+        {
+            // Fallback: mean-pool over sequence dimension to get [1, hiddenDim] context
+            var fallbackContext = Engine.ReduceMean(keys, new[] { 1 }, keepDims: false);
+            return (fallbackContext, attentionWeights);
+        }
+
+        // Location-sensitive attention (Chorowski et al.):
+        // e_i = v^T * tanh(W_s * s + V_h * h_j + U_f * f_j + b)
+        // where f = F * α_{i-1} (location features from previous alignment)
+
+        // [0] Query projection: W_s * s → [1, attDim]
+        var projQuery = _attentionLayers[0].Forward(query);
+
+        // [1] Key projection: V_h * h → [1, seqLen, attDim]
+        var projKeys = _attentionLayers[1].Forward(keys);
+
+        // [2] Location feature projection: U_f * f → [1, attDim]
+        // In full Tacotron2 this would be Conv1D(attWeights) → DenseLayer.
+        // Our architecture uses DenseLayer(attentionFilters, attentionDim) as a simplified
+        // location projection. We create a fixed-size location feature from the attention weights
+        // by truncating/padding to attentionFilters dimensions.
+        int locDim = _attentionFilters;
+        int seqLen = attentionWeights.Shape[^1];
+        var locFeatures = new Tensor<T>([1, locDim]);
+        int copyLen = Math.Min(seqLen, locDim);
+        for (int j = 0; j < copyLen; j++)
+        {
+            locFeatures[0, j] = attentionWeights.Rank >= 2 ? attentionWeights[0, j] : attentionWeights[j];
+        }
+        var projLocation = _attentionLayers[2].Forward(locFeatures); // [1, attDim]
+
+        // Combine: tanh(projQuery + projKeys + projLocation)
+        // Broadcast query and location across sequence dimension
+        var queryBroadcast = Engine.TensorBroadcastAdd(projKeys, projQuery); // [1, seqLen, attDim]
+        var combined = Engine.TensorBroadcastAdd(queryBroadcast, projLocation); // [1, seqLen, attDim]
+        var tanhScores = Engine.Tanh(combined); // [1, seqLen, attDim]
+
+        // [3] Energy projection: v^T * tanh(...) → scalar per position
+        // _attentionLayers[3] is DenseLayer(attentionDim, 1) applied per position
+        // Reshape to [seqLen, attDim], project to [seqLen, 1], reshape back to [1, seqLen]
+        var tanhFlat = Engine.Reshape(tanhScores, new[] { tanhScores.Shape[1], tanhScores.Shape[2] });
+        var energyFlat = _attentionLayers[3].Forward(tanhFlat); // [seqLen, 1]
+        var scores = Engine.Reshape(energyFlat, new[] { 1, tanhScores.Shape[1] }); // [1, seqLen]
+
+        // Softmax over sequence dimension for attention weights
+        var attWeights = Engine.TensorSoftmax(scores, axis: 1); // [1, seqLen]
+
+        // Weighted sum: context = sum_t(attWeights[t] * keys[0, t, :])
+        var weightsExpanded = Engine.TensorExpandDims(attWeights, 2); // [1, seqLen, 1]
+        var weighted = Engine.TensorMultiply(keys, weightsExpanded); // [1, seqLen, hiddenDim]
+        var context = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: false); // [1, hiddenDim]
+
+        return (context, attWeights);
+    }
+
+    private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
+    {
+        // Ensure both tensors are 2D [1, dim] for concatenation along last axis
+        var a2d = a.Rank == 1 ? Engine.Reshape(a, new[] { 1, a.Shape[0] }) : a;
+        var b2d = b.Rank == 1 ? Engine.Reshape(b, new[] { 1, b.Shape[0] }) : b;
+        return Engine.TensorConcatenate(new[] { a2d, b2d }, axis: 1);
+    }
+
+    private Tensor<T> ExtractLastMelFrame(Tensor<T> melOutput)
+    {
+        int lastMelStart = melOutput.Shape[^1] - NumMels;
+        var frame = new Tensor<T>([1, NumMels]);
+
+        for (int m = 0; m < NumMels; m++)
+        {
+            frame[0, m] = melOutput.Rank >= 2
+                ? melOutput[0, lastMelStart + m]
+                : melOutput[lastMelStart + m];
+        }
+
+        return frame;
+    }
+
+    private Tensor<T> ExtractMelFrame(Tensor<T> mel, int frameIdx)
+    {
+        var frame = new Tensor<T>([1, NumMels]);
+
+        for (int m = 0; m < NumMels; m++)
+        {
+            frame[0, m] = mel.Rank >= 3
+                ? mel[0, frameIdx, m]
+                : (mel.Rank >= 2 ? mel[frameIdx, m] : NumOps.Zero);
+        }
+
+        return frame;
+    }
+
+    private Tensor<T> CombineMelFrames(List<Tensor<T>> frames)
+    {
+        int totalFrames = frames.Count * _numMelsPerFrame;
+        var result = new Tensor<T>([1, totalFrames, NumMels]);
+
+        int frameIdx = 0;
+        foreach (var frame in frames)
+        {
+            for (int f = 0; f < _numMelsPerFrame; f++)
+            {
+                for (int m = 0; m < NumMels; m++)
+                {
+                    int srcIdx = f * NumMels + m;
+                    if (srcIdx < frame.Shape[^1])
+                    {
+                        result[0, frameIdx, m] = frame.Rank >= 2
+                            ? frame[0, srcIdx]
+                            : frame[srcIdx];
+                    }
+                }
+                frameIdx++;
+            }
+        }
+
+        return result;
+    }
+
+    private Tensor<T> ModifyDuration(Tensor<T> melSpectrogram, double factor)
+    {
+        int originalFrames = melSpectrogram.Shape[1];
+        int newFrames = (int)(originalFrames * factor);
+
+        var modified = new Tensor<T>([1, newFrames, NumMels]);
+
+        for (int f = 0; f < newFrames; f++)
+        {
+            double srcFrame = f / factor;
+            int srcIdx = Math.Min((int)srcFrame, originalFrames - 1);
+
+            for (int m = 0; m < NumMels; m++)
+            {
+                modified[0, f, m] = melSpectrogram.Rank >= 3
+                    ? melSpectrogram[0, srcIdx, m]
+                    : melSpectrogram[srcIdx, m];
+            }
+        }
+
+        return modified;
+    }
+
+    private Tensor<T> GriffinLimSynthesize(Tensor<T> melSpectrogram)
+    {
+        if (_griffinLim is null)
+            throw new InvalidOperationException("Griffin-Lim not available.");
+
+        Tensor<T> mel2D;
+        if (melSpectrogram.Rank == 3)
+        {
+            int frames = melSpectrogram.Shape[1];
+            int mels = melSpectrogram.Shape[2];
+            mel2D = new Tensor<T>([frames, mels]);
+
+            for (int f = 0; f < frames; f++)
+            {
+                for (int m = 0; m < mels; m++)
+                {
+                    mel2D[f, m] = melSpectrogram[0, f, m];
+                }
+            }
+        }
+        else
+        {
+            mel2D = melSpectrogram;
+        }
+
+        return _griffinLim.Reconstruct(mel2D);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Disposes the model and releases resources.
+    /// </summary>
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+
+        if (disposing)
+        {
+            _acousticModel?.Dispose();
+            _vocoder?.Dispose();
+        }
+
+        _disposed = true;
+        base.Dispose(disposing);
+    }
+
+    #endregion
+}

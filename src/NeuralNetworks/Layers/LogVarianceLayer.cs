@@ -1,0 +1,478 @@
+﻿using System;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a layer that computes the logarithm of variance along a specified axis in the input tensor.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The LogVarianceLayer calculates the statistical variance of values along a specified axis of the input tensor,
+/// and then computes the natural logarithm of that variance. This is often used in neural networks for calculating
+/// statistical measures, normalizing data, or as part of variational autoencoders (VAEs).
+/// </para>
+/// <para><b>For Beginners:</b> This layer measures how much the values in your data spread out from their average (variance),
+/// and then takes the logarithm of that spread.
+/// 
+/// Think of it like measuring how consistent or varied your data is:
+/// - Low values mean the data points are very similar to each other
+/// - High values mean the data points vary widely
+/// 
+/// For example, if you have a set of images:
+/// - Images that are very similar would produce low log-variance
+/// - Images that are very different would produce high log-variance
+/// 
+/// This is often used in AI models that need to understand the variation in the data,
+/// such as in models that generate new data similar to what they've been trained on.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(NormalizesInput = true, IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "0")]
+public class LogVarianceLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// Gets the axis along which the variance is calculated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property indicates the dimension of the input tensor along which the variance will be calculated.
+    /// For example, if Axis is 1 and the input tensor has shape [batch, features], the variance will be calculated
+    /// across the features dimension, resulting in one variance value per batch item.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells the layer which direction to look when calculating variance.
+    /// 
+    /// For example, with a 2D data array (like a table):
+    /// - Axis 0 means calculate variance down each column
+    /// - Axis 1 means calculate variance across each row
+    /// 
+    /// The value depends on how your data is organized and what kind of variance you want to measure.
+    /// </para>
+    /// </remarks>
+    public int Axis { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training through backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property returns false because the LogVarianceLayer does not have any trainable parameters,
+    /// though it does support backward pass for gradient propagation through the network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if the layer can learn from training data.
+    /// 
+    /// A value of false means:
+    /// - This layer doesn't have any values that get updated during training
+    /// - It performs a fixed mathematical calculation (log of variance)
+    /// - However, during training, it still helps gradients flow backward through the network
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => false;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// The input tensor from the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the input tensor from the most recent forward pass. It is needed during the backward pass
+    /// to compute gradients correctly. This field is reset when ResetState is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the most recent data that was fed into the layer.
+    /// 
+    /// The layer needs to remember the input:
+    /// - To calculate how each input value affected the output
+    /// - To determine how to propagate gradients during training
+    /// - To ensure the backward pass works correctly
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// The output tensor from the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output tensor from the most recent forward pass. It is needed during the backward pass
+    /// because the derivative of the logarithm function depends on the output value. This field is reset when ResetState is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the most recent result that came out of the layer.
+    /// 
+    /// The layer needs to remember its output:
+    /// - Because the derivative of log(x) is 1/x, so we need x (our output) during backpropagation
+    /// - To avoid recalculating values during the backward pass
+    /// - To make the training process more efficient
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// The mean values calculated during the last forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the mean values calculated during the most recent forward pass. These values are needed
+    /// during both the variance calculation and the backward pass. This field is reset when ResetState is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the average values calculated during the first step.
+    /// 
+    /// The layer needs to remember these mean values:
+    /// - They're used when calculating the variance (which measures deviation from the mean)
+    /// - They're needed again during the backward pass
+    /// - Storing them avoids having to recalculate them multiple times
+    /// 
+    /// Think of it as saving an intermediate result that will be reused later.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _meanValues;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LogVarianceLayer{T}"/> class.
+    /// </summary>
+    /// <param name="inputShape">The shape of the input tensor.</param>
+    /// <param name="axis">The axis along which to calculate variance.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a LogVarianceLayer that will calculate the variance along the specified axis
+    /// of the input tensor. The output shape is determined by removing the specified axis from the input shape.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new log-variance layer with your desired settings.
+    /// 
+    /// When setting up this layer:
+    /// - inputShape defines the expected size and dimensions of your data
+    /// - axis specifies which dimension to calculate variance along
+    /// 
+    /// The layer will reduce the data along the specified axis, meaning the output
+    /// will have one fewer dimension than the input.
+    /// </para>
+    /// </remarks>
+    public LogVarianceLayer(int axis)
+        : base(new[] { -1 }, new[] { -1 })
+    {
+        Axis = axis;
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward by collapsing the axis dim from input.Shape.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        var output = CalculateOutputShape(shape, Axis);
+        ResolveShapes(shape, output);
+    }
+
+    /// <summary>
+    /// Calculates the output shape of the log-variance layer based on the input shape and the axis along which variance is calculated.
+    /// </summary>
+    /// <param name="inputShape">The shape of the input tensor.</param>
+    /// <param name="axis">The axis along which to calculate variance.</param>
+    /// <returns>The calculated output shape for the log-variance layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method calculates the output shape by removing the dimension specified by the axis parameter
+    /// from the input shape. This is because the variance calculation reduces the data along that axis.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method figures out the shape of the data that will come out of this layer.
+    /// 
+    /// When calculating variance along an axis:
+    /// - That dimension gets "collapsed" into a single value
+    /// - The output shape has one fewer dimension than the input
+    /// 
+    /// For example, if your input has shape [10, 20, 30] (a 3D array) and you calculate 
+    /// variance along axis 1, the output shape would be [10, 30].
+    /// </para>
+    /// </remarks>
+    private static int[] CalculateOutputShape(int[] inputShape, int axis)
+    {
+        if (inputShape.Length <= 1)
+        {
+            // Reducing a 1D tensor produces a scalar — represent as [1]
+            return [1];
+        }
+
+        var outputShape = new int[inputShape.Length - 1];
+        int outputIndex = 0;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (i != axis)
+            {
+                outputShape[outputIndex++] = inputShape[i];
+            }
+        }
+
+        return outputShape;
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the log-variance layer.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>A tensor containing the log-variance values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the log-variance calculation. It first computes the mean along
+    /// the specified axis, then calculates the variance by summing squared differences from the mean, and finally
+    /// takes the natural logarithm of the variance (with a small epsilon added for numerical stability).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method processes your data through the layer, calculating the log-variance.
+    /// 
+    /// The calculation happens in these steps:
+    /// 1. Calculate the average (mean) of values along the specified axis
+    /// 2. For each value, find how far it is from the average
+    /// 3. Square these differences and add them up
+    /// 4. Divide by the number of values to get the variance
+    /// 5. Take the natural logarithm of the variance
+    /// 
+    /// A small value (epsilon) is added to prevent errors when taking the logarithm of zero or very small numbers.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        EnsureInitializedFromInput(input);
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+
+        // Use Engine operations for GPU/CPU acceleration
+        _meanValues = Engine.ReduceMean(input, [Axis], keepDims: true);
+        _lastOutput = Engine.ReduceLogVariance(input, [Axis], keepDims: false, epsilon: 1e-8);
+
+        return _lastOutput;
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass for log-variance reduction.
+    /// </summary>
+    /// <param name="inputs">Input GPU tensors (uses first input).</param>
+    /// <returns>GPU-resident output tensor with log-variance values.</returns>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+        int[] shape = input._shape;
+        int inputRank = shape.Length;
+
+        // Validate Axis is within bounds
+        if (Axis < 0 || Axis >= inputRank)
+            throw new ArgumentOutOfRangeException(nameof(Axis), $"Axis {Axis} is out of range for input with rank {inputRank}.");
+
+        // Calculate output shape by removing the axis dimension
+        int[] outputShape = CalculateOutputShape(shape, Axis);
+        int axisSize = shape[Axis];
+
+        // Note: GPU backend operates on float internally regardless of generic type T.
+        // The conversion to/from T occurs at the boundaries (input upload, output download).
+        float scale = 1.0f / axisSize;
+        const float epsilon = 1e-8f;
+
+        // GPU-resident variance calculation using computational formula:
+        // variance = E[X^2] - E[X]^2 = mean(x*x) - mean(x)^2
+        // This avoids the need for broadcast subtraction
+
+        // Track all allocated resources for exception safety
+        Tensor<T>? permutedInput = null;
+        IGpuBuffer? sumBuffer = null;
+        IGpuBuffer? meanBuffer = null;
+        IGpuBuffer? xSquaredBuffer = null;
+        IGpuBuffer? sumXSquaredBuffer = null;
+        IGpuBuffer? meanXSquaredBuffer = null;
+        IGpuBuffer? meanSquaredBuffer = null;
+        IGpuBuffer? varianceBuffer = null;
+        IGpuBuffer? epsilonBuffer = null;
+        IGpuBuffer? variancePlusEpsilonBuffer = null;
+        IGpuBuffer? outputBuffer = null;
+
+        try
+        {
+            // If axis is not last, permute to move it to the last position
+            Tensor<T> processedInput = input;
+            bool needsPermute = Axis != inputRank - 1;
+
+            if (needsPermute)
+            {
+                var perm = new int[inputRank];
+                int j = 0;
+                for (int i = 0; i < inputRank; i++)
+                    if (i != Axis) perm[j++] = i;
+                perm[inputRank - 1] = Axis;
+                permutedInput = gpuEngine.PermuteGpu(input, perm);
+                processedInput = permutedInput;
+            }
+
+            int outerSize = processedInput.Length / axisSize;
+
+            // Step 1: Compute mean = sum(x) / n
+            sumBuffer = backend.AllocateBuffer(outerSize);
+            backend.SumAxis(processedInput.Buffer, sumBuffer, outerSize, axisSize);
+
+            meanBuffer = backend.AllocateBuffer(outerSize);
+            backend.Scale(sumBuffer, meanBuffer, scale, outerSize);
+
+            // Step 2: Compute x^2 element-wise
+            int totalSize = processedInput.Length;
+            xSquaredBuffer = backend.AllocateBuffer(totalSize);
+            backend.Multiply(processedInput.Buffer, processedInput.Buffer, xSquaredBuffer, totalSize);
+
+            // Step 3: Compute mean(x^2) = sum(x^2) / n
+            sumXSquaredBuffer = backend.AllocateBuffer(outerSize);
+            backend.SumAxis(xSquaredBuffer, sumXSquaredBuffer, outerSize, axisSize);
+
+            meanXSquaredBuffer = backend.AllocateBuffer(outerSize);
+            backend.Scale(sumXSquaredBuffer, meanXSquaredBuffer, scale, outerSize);
+
+            // Step 4: Compute mean^2
+            meanSquaredBuffer = backend.AllocateBuffer(outerSize);
+            backend.Multiply(meanBuffer, meanBuffer, meanSquaredBuffer, outerSize);
+
+            // Step 5: Compute variance = mean(x^2) - mean^2
+            varianceBuffer = backend.AllocateBuffer(outerSize);
+            backend.Subtract(meanXSquaredBuffer, meanSquaredBuffer, varianceBuffer, outerSize);
+
+            // Step 6: Add epsilon to variance for numerical stability
+            // Create buffer filled with epsilon value on GPU
+            epsilonBuffer = backend.AllocateBuffer(outerSize);
+            backend.Fill(epsilonBuffer, epsilon, outerSize);
+
+            variancePlusEpsilonBuffer = backend.AllocateBuffer(outerSize);
+            backend.Add(varianceBuffer, epsilonBuffer, variancePlusEpsilonBuffer, outerSize);
+
+            // Step 7: Compute log(variance + epsilon)
+            outputBuffer = backend.AllocateBuffer(outerSize);
+            backend.Log(variancePlusEpsilonBuffer, outputBuffer, outerSize);
+
+            // Cache for backward pass (only download if training)
+            if (IsTrainingMode)
+            {
+                var inputData = backend.DownloadBuffer(input.Buffer);
+                _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
+
+                int[] meanShape = (int[])shape.Clone();
+                meanShape[Axis] = 1;
+                var meanData = backend.DownloadBuffer(meanBuffer);
+                _meanValues = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), meanShape);
+
+                var outputData = backend.DownloadBuffer(outputBuffer);
+                _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
+            }
+
+            // Create result before cleanup (outputBuffer ownership transfers)
+            var result = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            outputBuffer = null; // Prevent disposal in finally block since ownership transferred
+
+            return result;
+        }
+        finally
+        {
+            // Dispose all intermediate buffers (not the output which was transferred)
+            permutedInput?.Dispose();
+            sumBuffer?.Dispose();
+            meanBuffer?.Dispose();
+            xSquaredBuffer?.Dispose();
+            sumXSquaredBuffer?.Dispose();
+            meanXSquaredBuffer?.Dispose();
+            meanSquaredBuffer?.Dispose();
+            varianceBuffer?.Dispose();
+            epsilonBuffer?.Dispose();
+            variancePlusEpsilonBuffer?.Dispose();
+            outputBuffer?.Dispose(); // Only disposed on exception (null on success)
+        }
+    }
+
+    /// <summary>
+    /// Updates the parameters of the layer based on the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is empty because the LogVarianceLayer has no trainable parameters to update.
+    /// However, it must be implemented to satisfy the base class contract.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method would normally update the layer's internal values during training.
+    /// 
+    /// However, since this layer doesn't have any trainable parameters:
+    /// - There's nothing to update
+    /// - The method exists but doesn't do anything
+    /// - This is normal for layers that perform fixed mathematical operations
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // LogVarianceLayer has no learnable parameters, so this method is empty
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>An empty vector since this layer has no trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns an empty vector because the LogVarianceLayer has no trainable parameters.
+    /// However, it must be implemented to satisfy the base class contract.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method would normally return all the values that can be learned during training.
+    /// 
+    /// Since this layer has no learnable values:
+    /// - It returns an empty list (vector with length 0)
+    /// - This is expected for mathematical operation layers
+    /// - Other layers, like those with weights, would return those weights
+    /// </para>
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Axis"] = Axis.ToString();
+        return metadata;
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        // LogVarianceLayer has no trainable parameters
+        return new Vector<T>(0);
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears any cached data from previous forward passes, essentially resetting the layer
+    /// to its initial state. This is useful when starting to process a new batch of data or when
+    /// implementing recurrent neural networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - Stored inputs and calculated values are cleared
+    /// - The layer forgets any information from previous data
+    /// - This is important when processing a new, unrelated batch of data
+    /// 
+    /// Think of it like wiping a calculator's memory before starting a new calculation.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear cached values from forward pass
+        _lastInput = null;
+        _lastOutput = null;
+        _meanValues = null;
+    }
+}

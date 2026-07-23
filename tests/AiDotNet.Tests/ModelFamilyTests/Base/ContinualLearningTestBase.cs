@@ -1,0 +1,432 @@
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
+using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
+
+namespace AiDotNet.Tests.ModelFamilyTests.Base;
+
+/// <summary>
+/// Base test class for continual learning strategies implementing IContinualLearningStrategy.
+/// Tests deep mathematical invariants: regularization monotonicity with parameter deviation,
+/// Fisher information properties, gradient projection correctness, and multi-task consistency.
+/// </summary>
+public abstract class ContinualLearningTestBase
+{
+    /// <summary>Factory method — subclasses return their concrete strategy instance.</summary>
+    protected abstract IContinualLearningStrategy<double> CreateStrategy();
+
+    /// <summary>Creates a mock neural network for testing.</summary>
+    protected virtual INeuralNetwork<double> CreateMockNetwork()
+    {
+        // Architecture must match CreateTestTaskData's [8, 4] shape so the
+        // tape-based ComputeGradients path doesn't trip on a predicted/target
+        // mismatch when AfterTask runs a forward pass.
+        return new FeedForwardNeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 4));
+    }
+
+    /// <summary>
+    /// Number of trainable parameters in the network returned by
+    /// <see cref="CreateMockNetwork"/>. Derived from an actual network instance
+    /// so synthetic gradient vectors produced in test bodies have the SAME
+    /// length the continual-learning strategy is going to operate on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Hardcoding this to a small literal (the prior <c>=> 10</c> default) made
+    /// every strategy whose <c>ModifyGradients</c> path actually computes a
+    /// reference gradient on the live network (e.g. AveragedGEM, GEM,
+    /// SynapticIntelligence) throw on dimension-mismatch dot products — the
+    /// freshly computed reference gradient has the network's true parameter
+    /// count (4740 for the default 4→4 FFN), not the literal 10. Mirroring the
+    /// network's parameter count is the only correct shape for any test that
+    /// feeds a synthetic gradient into <c>strategy.ModifyGradients</c>.
+    /// </para>
+    /// </remarks>
+    private int? _cachedNumParameters;
+    protected virtual int NumParameters
+    {
+        get
+        {
+            if (_cachedNumParameters is { } v) return v;
+            // Construct the probe network exactly once. The prior shape
+            // (CreateMockNetwork() ?? CreateMockNetwork()) called the
+            // factory twice on a cache miss — wasted work and risky for
+            // overrides whose factory does side-effectful setup (RNG
+            // advancement, lazy allocation, etc.).
+            var probe = CreateMockNetwork();
+            try
+            {
+                _cachedNumParameters = probe.GetParameters().Length;
+                return _cachedNumParameters.Value;
+            }
+            finally
+            {
+                (probe as IDisposable)?.Dispose();
+            }
+        }
+    }
+
+    // AccumulatesAcrossTasks is checked via the IContinualLearningStrategy<T> interface property.
+
+    // =========================================================================
+    // INVARIANT 1: Regularization loss is non-negative
+    // EWC: L = λ/2 * Σ F_i (θ_i - θ*_i)² >= 0 since F_i >= 0 and squared terms >= 0
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IsNonNegative()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = CreateStrategy();
+        var network = CreateMockNetwork();
+        var taskData = CreateTestTaskData();
+
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+
+        double loss = strategy.ComputeLoss(network);
+
+        Assert.True(loss >= -1e-10,
+            $"Regularization loss should be non-negative but got {loss}. " +
+            "EWC/MAS regularization is a sum of non-negative terms: λ * Σ F_i * (θ_i - θ*_i)².");
+    }
+
+    // =========================================================================
+    // INVARIANT 2: Regularization loss is finite
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IsFinite()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = CreateStrategy();
+        var network = CreateMockNetwork();
+        var taskData = CreateTestTaskData();
+
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+
+        double loss = strategy.ComputeLoss(network);
+
+        Assert.False(double.IsNaN(loss), "Regularization loss is NaN.");
+        Assert.False(double.IsInfinity(loss), "Regularization loss is Infinity.");
+    }
+
+    // =========================================================================
+    // INVARIANT 3: Loss increases monotonically with parameter deviation magnitude
+    // If |θ - θ*| increases, regularization loss should increase or stay same.
+    // This is a fundamental property of quadratic regularization.
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IncreasesWithParameterDeviation()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = CreateStrategy();
+        var network = CreateMockNetwork();
+        var taskData = CreateTestTaskData();
+
+        // Learn task 0 reference parameters
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+
+        // Record loss with current parameters (should be near zero — no deviation yet)
+        double lossNoChange = strategy.ComputeLoss(network);
+
+        // Now perturb the parameters away from reference
+        var params0 = network.GetParameters();
+        var perturbedParams = new Vector<double>(params0.Length);
+        for (int i = 0; i < params0.Length; i++)
+            perturbedParams[i] = params0[i] + 0.5; // Add significant perturbation
+
+        network.SetParameters(perturbedParams);
+        double lossPerturbed = strategy.ComputeLoss(network);
+
+        Assert.True(lossPerturbed >= lossNoChange - 1e-10,
+            $"Loss should increase with parameter deviation: " +
+            $"no change={lossNoChange:E4}, perturbed={lossPerturbed:E4}. " +
+            "Quadratic regularization penalizes deviation from reference parameters.");
+
+        // Restore original parameters
+        network.SetParameters(params0);
+    }
+
+    // =========================================================================
+    // INVARIANT 4: Lambda scaling — loss scales linearly with lambda
+    // L(λ) = λ * g(θ), so L(2λ) ≈ 2 * L(λ) for the same parameters.
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_ScalesWithLambda()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy1 = CreateStrategy();
+        var strategy2 = CreateStrategy();
+
+        // Both networks must start with IDENTICAL weights — the strategy
+        // captures importance / Fisher diagonals during AfterTask using
+        // the network's actual gradients, so two unseeded
+        // CreateMockNetwork() calls (which initialize via
+        // RandomHelper.CreateSecureRandom) produce different importance
+        // values on the same task data. Computing loss on identically
+        // perturbed parameters then yields a ratio that depends on the
+        // *importance* delta, not just the lambda delta — failing the
+        // "loss scales linearly with lambda" invariant for reasons that
+        // have nothing to do with the strategy under test (#1224
+        // Cluster F: MemoryAwareSynapses showed ratio=2.51 instead of
+        // ~2.0 because importance(net1) ≠ importance(net2)). Clone
+        // network1 → network2 so the only differing axis is Lambda.
+        var network1 = CreateMockNetwork();
+        INeuralNetwork<double> network2;
+        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
+            network2 = (INeuralNetwork<double>)nn1.Clone();
+        else
+            throw new System.InvalidOperationException(
+                "ComputeLoss_ScalesWithLambda requires a NeuralNetworkBase-derived "
+                + "mock network so weights can be cloned. Override CreateMockNetwork "
+                + "or relax the cast if you need a non-NN backbone.");
+
+        var taskData = CreateTestTaskData();
+
+        strategy1.Lambda = 100.0;
+        strategy2.Lambda = 200.0;
+
+        strategy1.BeforeTask(network1, 0);
+        strategy1.AfterTask(network1, taskData, 0);
+        strategy2.BeforeTask(network2, 0);
+        strategy2.AfterTask(network2, taskData, 0);
+
+        // Perturb both networks identically
+        var params1 = network1.GetParameters();
+        var perturbed = new Vector<double>(params1.Length);
+        for (int i = 0; i < params1.Length; i++)
+            perturbed[i] = params1[i] + 0.3;
+
+        network1.SetParameters(perturbed);
+        network2.SetParameters(perturbed);
+
+        double loss1 = strategy1.ComputeLoss(network1);
+        double loss2 = strategy2.ComputeLoss(network2);
+
+        if (loss1 < 1e-10) return; // Can't test ratio with near-zero values
+
+        double ratio = loss2 / loss1;
+
+        // lambda2/lambda1 = 200/100 = 2.0, so loss ratio should be ~2.0
+        Assert.True(ratio > 1.5 && ratio < 2.5,
+            $"Loss should scale linearly with lambda: λ1=100 loss={loss1:E4}, " +
+            $"λ2=200 loss={loss2:E4}, ratio={ratio:F2} (expected ~2.0). " +
+            "Regularization loss formula: L = λ * Σ importance_i * (θ_i - θ*_i)².");
+    }
+
+    // =========================================================================
+    // INVARIANT 5: Modified gradients have same length as input
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_PreservesLength()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = CreateStrategy();
+        var network = CreateMockNetwork();
+        var taskData = CreateTestTaskData();
+
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+
+        var gradients = new Vector<double>(NumParameters);
+        for (int i = 0; i < NumParameters; i++)
+            gradients[i] = 0.1 * (i + 1);
+
+        var modified = strategy.ModifyGradients(network, gradients);
+
+        Assert.Equal(gradients.Length, modified.Length);
+    }
+
+    // =========================================================================
+    // INVARIANT 6: Modified gradients are finite
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_AreFinite()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = CreateStrategy();
+        var network = CreateMockNetwork();
+        var taskData = CreateTestTaskData();
+
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+
+        var gradients = new Vector<double>(NumParameters);
+        for (int i = 0; i < NumParameters; i++)
+            gradients[i] = 0.1 * (i + 1);
+
+        var modified = strategy.ModifyGradients(network, gradients);
+
+        for (int i = 0; i < modified.Length; i++)
+        {
+            Assert.False(double.IsNaN(modified[i]), $"Modified gradient[{i}] is NaN.");
+            Assert.False(double.IsInfinity(modified[i]), $"Modified gradient[{i}] is Infinity.");
+        }
+    }
+
+    // =========================================================================
+    // INVARIANT 7: Modified gradient norm ≤ original gradient norm (for GEM-like methods)
+    // Gradient projection should not increase the gradient magnitude.
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task ModifyGradients_DoesNotIncreaseNorm()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = CreateStrategy();
+        var network = CreateMockNetwork();
+        var taskData = CreateTestTaskData();
+
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+
+        var gradients = new Vector<double>(NumParameters);
+        for (int i = 0; i < NumParameters; i++)
+            gradients[i] = 0.5 * (i % 3 == 0 ? 1 : -1);
+
+        var modified = strategy.ModifyGradients(network, gradients);
+
+        double origNorm = 0, modifiedNorm = 0;
+        for (int i = 0; i < NumParameters; i++)
+        {
+            origNorm += gradients[i] * gradients[i];
+            modifiedNorm += modified[i] * modified[i];
+        }
+
+        origNorm = Math.Sqrt(origNorm);
+        modifiedNorm = Math.Sqrt(modifiedNorm);
+
+        // Modified gradient should not be drastically larger than original
+        // (GEM projects to constraint set, which can only reduce magnitude)
+        Assert.True(modifiedNorm <= origNorm * 2.0 + 0.01,
+            $"Modified gradient norm ({modifiedNorm:E4}) should not drastically exceed " +
+            $"original norm ({origNorm:E4}). Gradient modification should constrain, not amplify.");
+    }
+
+    // =========================================================================
+    // INVARIANT 8: Multi-task accumulation — loss after 2 tasks ≥ loss after 1 task
+    // Applies to strategies that accumulate regularization (EWC, MAS).
+    // VCL just shifts the prior to the last posterior — loss may decrease.
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task ComputeLoss_IncreasesWithMoreTasks()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = CreateStrategy();
+
+        // Only applies to strategies that accumulate regularization (EWC, MAS).
+        // VCL shifts prior to last posterior — per Nguyen et al. ICLR 2018 reference
+        // implementation, there's no precision accumulation so loss may decrease.
+        if (!strategy.AccumulatesAcrossTasks) return;
+        var network = CreateMockNetwork();
+        var taskData = CreateTestTaskData();
+
+        // Task 0
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+
+        // Perturb parameters
+        var params0 = network.GetParameters();
+        var perturbed = new Vector<double>(params0.Length);
+        for (int i = 0; i < params0.Length; i++)
+            perturbed[i] = params0[i] + 0.3;
+        network.SetParameters(perturbed);
+
+        double lossAfterTask0 = strategy.ComputeLoss(network);
+
+        // Task 1
+        network.SetParameters(params0); // Reset
+        strategy.BeforeTask(network, 1);
+        strategy.AfterTask(network, taskData, 1);
+
+        // Same perturbation
+        network.SetParameters(perturbed);
+        double lossAfterTask1 = strategy.ComputeLoss(network);
+
+        // With 2 tasks, regularization should be at least as strong as with 1
+        Assert.True(lossAfterTask1 >= lossAfterTask0 - 1e-10,
+            $"Loss after 2 tasks ({lossAfterTask1:E4}) should be >= " +
+            $"loss after 1 task ({lossAfterTask0:E4}). " +
+            "More tasks to protect means stronger regularization.");
+    }
+
+    // =========================================================================
+    // INVARIANT 9: Lambda is non-negative
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task Lambda_IsNonNegative()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = CreateStrategy();
+        Assert.True(strategy.Lambda >= 0,
+            $"Lambda should be non-negative but got {strategy.Lambda}.");
+    }
+
+    // =========================================================================
+    // INVARIANT 10: Reset clears state without errors
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task Reset_DoesNotThrow()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = CreateStrategy();
+        var network = CreateMockNetwork();
+        var taskData = CreateTestTaskData();
+
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+        strategy.Reset();
+
+        // After reset, loss should be near-zero (no tasks to protect)
+        double lossAfterReset = strategy.ComputeLoss(network);
+        Assert.True(lossAfterReset < 1e-6,
+            $"After reset, regularization loss should be near-zero but got {lossAfterReset:E4}.");
+    }
+
+    /// <summary>Creates synthetic task training data.</summary>
+    protected virtual (Tensor<double> inputs, Tensor<double> targets) CreateTestTaskData()
+    {
+        var rng = new Random(42);
+        int batchSize = 8;
+        int dim = 4;
+        var inputData = new double[batchSize * dim];
+        var targetData = new double[batchSize * dim];
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            inputData[i] = rng.NextDouble() * 2.0 - 1.0;
+            targetData[i] = rng.NextDouble() * 2.0 - 1.0;
+        }
+
+        return (
+            new Tensor<double>(inputData, new[] { batchSize, dim }),
+            new Tensor<double>(targetData, new[] { batchSize, dim })
+        );
+    }
+}

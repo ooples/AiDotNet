@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Opt-in Neo4j / property-graph backend for AiDotNet's GraphRAG pipeline.
+      Carries the Neo4j.Driver dependency so the core package stays free of it.
+      Provides Neo4jGraphStore (IGraphStore) so a knowledge graph can run on a
+      production graph database instead of only the in-memory / file stores.
+      net10.0 only: the Neo4j.Driver TFM set does not include a net471-compatible
+      target, so this package intentionally supports a subset of the core
+      package's TFMs (same rationale as AiDotNet.Storage.Postgres / .Redis).
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Version>0.204.0</Version>
+    <Title>AiDotNet.Storage.Neo4j</Title>
+    <Description>Neo4j property-graph backend for AiDotNet's GraphRAG / knowledge-graph pipeline. Implements IGraphStore over the Neo4j C# driver (nodes as labeled nodes, edges as relationships, MERGE upserts, Cypher MATCH traversal). Opt-in: reference this package to keep Neo4j.Driver out of the core package. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
+    <Company>Ooples Finance</Company>
+    <Authors>ooples</Authors>
+    <Copyright>Ooples Finance LLC 2023</Copyright>
+    <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
+    <PackageTags>ai; aidotnet; neo4j; graph; graphrag; knowledge-graph; property-graph; cypher; storage</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AiDotNet.RetrievalAugmentedGeneration.Graph</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Neo4j.Driver" />
+    <PackageReference Include="Newtonsoft.Json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiDotNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="True" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,175 @@
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace AiDotNet.Generators;
+
+/// <summary>
+/// Shared helper methods and lookup tables used by multiple source generators.
+/// Centralizes enum-to-name mappings, typeof expression building, and generic suffix stripping
+/// to eliminate duplication across generators.
+/// </summary>
+internal static class GeneratorHelpers
+{
+    // NOTE: These dictionaries must be kept in sync with the corresponding enums in AiDotNet.Enums.
+    // Source generators cannot reference the runtime assembly, so we duplicate the mappings here.
+    // If you add/rename an enum member, update the corresponding dictionary below.
+
+    /// <summary>Maps ModelDomain enum integer values to their string names.</summary>
+    public static readonly Dictionary<int, string> DomainNames = new()
+    {
+        {0, "MachineLearning"}, {1, "ComputerVision"}, {2, "NaturalLanguageProcessing"},
+        {3, "Audio"}, {4, "TimeSeries"}, {5, "Generative"}, {6, "Robotics"},
+        {7, "Healthcare"}, {8, "Finance"}, {9, "ReinforcementLearning"},
+        {10, "GraphAnalytics"}, {11, "Recommendation"}, {12, "AnomalyDetection"},
+        {13, "Optimization"}, {14, "Scientific"}, {15, "Causal"},
+        {16, "Tabular"}, {17, "ThreeD"}, {18, "Multimodal"}
+    };
+
+    /// <summary>Maps ModelTask enum integer values to their string names.</summary>
+    public static readonly Dictionary<int, string> TaskNames = new()
+    {
+        {0, "Classification"}, {1, "Regression"}, {2, "Clustering"},
+        {3, "Segmentation"}, {4, "ObjectDetection"}, {5, "Generation"},
+        {6, "Translation"}, {7, "Summarization"}, {8, "QuestionAnswering"},
+        {9, "SpeechRecognition"}, {10, "TextToSpeech"}, {11, "RecommendationFiltering"},
+        {12, "AnomalyDetection"}, {13, "DimensionalityReduction"}, {14, "FeatureExtraction"},
+        {15, "SentimentAnalysis"}, {16, "NamedEntityRecognition"}, {17, "ImageGeneration"},
+        {18, "SuperResolution"}, {19, "Denoising"}, {20, "StyleTransfer"},
+        {21, "Inpainting"}, {22, "DepthEstimation"}, {23, "PoseEstimation"},
+        {24, "ActionRecognition"}, {25, "SemanticSearch"}, {26, "TextGeneration"},
+        {27, "CodeGeneration"}, {28, "Forecasting"}, {29, "Imputation"},
+        {30, "CausalInference"}, {31, "Survival"}, {32, "Ranking"},
+        {33, "ImageEditing"}, {34, "VideoGeneration"}, {35, "AudioGeneration"},
+        {36, "MusicGeneration"}, {37, "TabularPrediction"}, {38, "GraphClassification"},
+        {39, "NodeClassification"}, {40, "LinkPrediction"}, {41, "MolecularGeneration"},
+        {42, "ProteinFolding"}, {43, "DrugDiscovery"}, {44, "WeatherPrediction"},
+        {45, "EnergyForecasting"}
+    };
+
+    /// <summary>Maps ModelComplexity enum integer values to their string names.</summary>
+    public static readonly Dictionary<int, string> ComplexityNames = new()
+    {
+        {0, "Low"}, {1, "Medium"}, {2, "High"}, {3, "VeryHigh"}, {4, "Extreme"}
+    };
+
+    /// <summary>Maps ModelCategory enum integer values to their string names.</summary>
+    public static readonly Dictionary<int, string> CategoryNames = new()
+    {
+        {0, "NeuralNetwork"}, {1, "Regression"}, {2, "Classifier"}, {3, "Clustering"},
+        {4, "GAN"}, {5, "Diffusion"}, {6, "Transformer"}, {7, "ReinforcementLearningAgent"},
+        {8, "GaussianProcess"}, {9, "Ensemble"}, {10, "Bayesian"}, {11, "SurvivalModel"},
+        {12, "CausalModel"}, {13, "TimeSeriesModel"}, {14, "Autoencoder"},
+        {15, "RecurrentNetwork"}, {16, "ConvolutionalNetwork"}, {17, "GraphNetwork"},
+        {18, "EmbeddingModel"}, {19, "FoundationModel"}, {20, "MetaLearning"},
+        {21, "TabularModel"}, {22, "SyntheticDataGenerator"}, {23, "PhysicsInformed"},
+        {24, "NeuralOperator"}, {25, "Agent"}, {26, "SignalProcessing"},
+        {27, "SVM"}, {28, "Kernel"}, {29, "InstanceBased"}, {30, "Linear"},
+        {31, "DecisionTree"}, {32, "Statistical"}, {33, "Regularization"},
+        {34, "Interpretable"}, {35, "Optimization"}, {36, "AnomalyDetection"}
+    };
+
+    /// <summary>
+    /// Builds a <c>typeof(Namespace.TypeName&lt;,&gt;)</c> expression string for generated code.
+    /// </summary>
+    public static string BuildTypeOfExpression(string fullyQualifiedName, int typeParameterCount)
+    {
+        var typeName = StripGenericSuffix(fullyQualifiedName);
+
+        if (typeParameterCount > 0)
+        {
+            var commas = new string(',', typeParameterCount - 1);
+            return $"typeof({typeName}<{commas}>)";
+        }
+        return $"typeof({typeName})";
+    }
+
+    /// <summary>
+    /// Strips <c>global::</c> prefix and generic type parameters from a fully qualified name.
+    /// For example, <c>global::AiDotNet.Foo&lt;T&gt;</c> becomes <c>AiDotNet.Foo</c>.
+    /// </summary>
+    public static string StripGenericSuffix(string fullyQualifiedName)
+    {
+        var name = fullyQualifiedName;
+        if (name.StartsWith("global::", System.StringComparison.Ordinal))
+            name = name.Substring("global::".Length);
+        var angleBracketIdx = name.IndexOf('<');
+        if (angleBracketIdx >= 0)
+            name = name.Substring(0, angleBracketIdx);
+        return name;
+    }
+
+    /// <summary>
+    /// Looks up an enum name by integer value from the provided mapping dictionary.
+    /// Falls back to "Unknown({value})" if the value isn't mapped.
+    /// </summary>
+    public static string GetEnumName(int value, Dictionary<int, string> mapping, INamedTypeSymbol? enumType = null)
+    {
+        if (mapping.TryGetValue(value, out var name))
+            return name;
+
+        // Try the compilation's enum type as fallback
+        if (enumType is not null)
+        {
+            foreach (var member in enumType.GetMembers())
+            {
+                if (member is IFieldSymbol field && field.HasConstantValue && field.ConstantValue is int v && v == value)
+                    return field.Name;
+            }
+        }
+
+        return $"Unknown({value})";
+    }
+
+    /// <summary>
+    /// Formats a list of string values into a comma-separated, double-quoted C# array initializer fragment.
+    /// </summary>
+    public static string FormatStringArray(IEnumerable<string> values)
+    {
+        var items = values.ToList();
+        if (items.Count == 0)
+            return string.Empty;
+
+        return string.Join(", ", items.Select(v => $"\"{EscapeString(v)}\""));
+    }
+
+    /// <summary>
+    /// Escapes a string for use in generated C# string literals.
+    /// </summary>
+    public static string EscapeString(string value)
+    {
+        return value
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r")
+            .Replace("\t", "\\t")
+            .Replace("\0", "\\0");
+    }
+
+    /// <summary>
+    /// Extracts XML documentation from syntax tree trivia as a fallback when
+    /// GetDocumentationCommentXml() returns empty (common on CI/net471).
+    /// </summary>
+    internal static string? ExtractXmlDocFromSyntax(INamedTypeSymbol modelClass)
+    {
+        foreach (var syntaxRef in modelClass.DeclaringSyntaxReferences)
+        {
+            var syntaxNode = syntaxRef.GetSyntax();
+            if (syntaxNode is not ClassDeclarationSyntax classDecl)
+                continue;
+
+            foreach (var trivia in classDecl.GetLeadingTrivia())
+            {
+                if (trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineDocumentationCommentTrivia) ||
+                    trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineDocumentationCommentTrivia))
+                {
+                    return trivia.ToFullString();
+                }
+            }
+        }
+
+        return null;
+    }
+}

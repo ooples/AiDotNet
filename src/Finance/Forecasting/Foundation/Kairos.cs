@@ -1,0 +1,539 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Finance.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+using AiDotNet.Finance.Base;
+namespace AiDotNet.Finance.Forecasting.Foundation;
+
+/// <summary>
+/// Kairos — Adaptive and Generalizable Time Series Foundation Model with Mixture-of-Size Encoder.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Kairos uses a Mixture-of-Size Encoder that adaptively tokenizes input at multiple
+/// granularities based on local information density. A learned router decides which patch
+/// size is optimal for each segment, making the model parameter-efficient and adaptive.
+/// </para>
+/// <para><b>For Beginners:</b> Kairos is a time series forecasting model that automatically
+/// adjusts how it reads data based on complexity. In simple, steady periods it takes big
+/// chunks at a time (like skimming a boring chapter), but in volatile periods it zooms in
+/// and reads fine details (like carefully studying a plot twist). This adaptive approach
+/// makes it both efficient and accurate across different types of data.</para>
+/// <para>
+/// <b>Reference:</b> "Kairos: Towards Adaptive and Generalizable Time Series Foundation Models", 2025.
+/// https://arxiv.org/abs/2509.25826
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kairos model with Mixture-of-Size Encoder for adaptive tokenization
+/// // Automatically adjusts patch size based on local information density
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with adaptive multi-granularity patching
+/// var model = new Kairos&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Kairos&lt;double&gt;(architecture, "kairos.onnx");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ResearchPaper("Kairos: Towards Adaptive and Generalizable Time Series Foundation Models", "https://arxiv.org/abs/2509.25826")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+public class Kairos<T> : TimeSeriesFoundationModelBase<T>
+{
+    #region Fields
+
+    private readonly bool _useNativeMode;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly KairosOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int[] _patchSizes = [8, 16, 32, 64];
+    private int _hiddenDimension;
+    private int _numLayers;
+    private int _numHeads;
+    private int _intermediateSize;
+    private double _dropout;
+    private FoundationModelSize _modelSize;
+
+    #endregion
+
+    #region Properties
+
+    /// <inheritdoc/>
+    public override int SequenceLength => _contextLength;
+    /// <inheritdoc/>
+    public override int PredictionHorizon => _forecastHorizon;
+    /// <inheritdoc/>
+    public override int NumFeatures => 1;
+    /// <inheritdoc/>
+    public override int PatchSize => _patchSizes.Length > 0 ? _patchSizes[0] : 16;
+    /// <inheritdoc/>
+    public override int Stride => PatchSize;
+    /// <inheritdoc/>
+    public override bool IsChannelIndependent => true;
+    /// <inheritdoc/>
+    public override bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc/>
+    public override FoundationModelSize ModelSize => _modelSize;
+    /// <inheritdoc/>
+    public override int MaxContextLength => _contextLength;
+    /// <inheritdoc/>
+    public override int MaxPredictionHorizon => _forecastHorizon;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates a Kairos model using a pretrained ONNX model.
+    /// </summary>
+    public Kairos(
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
+        KairosOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
+
+        options ??= new KairosOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = false;
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        CopyOptionsToFields(options);
+    }
+
+    /// <summary>
+    /// Creates a Kairos model in native mode.
+    /// </summary>
+    public Kairos(
+        NeuralNetworkArchitecture<T> architecture,
+        KairosOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        options ??= new KairosOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = true;
+        OnnxSession = null;
+        OnnxModelPath = null;
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        CopyOptionsToFields(options);
+        InitializeLayers();
+    }
+
+    private void CopyOptionsToFields(KairosOptions<T> options)
+    {
+        Guard.Positive(options.ContextLength, nameof(options.ContextLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
+        Guard.Positive(options.NumLayers, nameof(options.NumLayers));
+        Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        Guard.Positive(options.IntermediateSize, nameof(options.IntermediateSize));
+
+        if (options.PatchSizes == null || options.PatchSizes.Length == 0)
+            throw new ArgumentException("PatchSizes must contain at least one positive patch size.", nameof(options));
+        for (int i = 0; i < options.PatchSizes.Length; i++)
+        {
+            if (options.PatchSizes[i] <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), $"PatchSizes[{i}] must be positive but was {options.PatchSizes[i]}.");
+        }
+
+        _contextLength = options.ContextLength;
+        _forecastHorizon = options.ForecastHorizon;
+        _patchSizes = (int[])options.PatchSizes.Clone();
+        _hiddenDimension = options.HiddenDimension;
+        _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads;
+        _intermediateSize = options.IntermediateSize;
+        _dropout = options.DropoutRate;
+        _modelSize = options.ModelSize;
+    }
+
+    #endregion
+
+    #region Initialization
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else if (_useNativeMode)
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultKairosLayers(
+                Architecture, _contextLength, _forecastHorizon, _patchSizes,
+                _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
+        }
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Overrides
+
+    /// <inheritdoc/>
+    public override bool SupportsTraining => _useNativeMode;
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var prepared = PrepareNativeInput(input, out _);
+        return base.GetNamedLayerActivations(prepared);
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in Train()
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NetworkType", "Kairos" },
+                { "ContextLength", _contextLength },
+                { "ForecastHorizon", _forecastHorizon },
+                { "PatchSizes", string.Join(",", _patchSizes) },
+                { "HiddenDimension", _hiddenDimension },
+                { "NumLayers", _numLayers },
+                { "ModelSize", _modelSize.ToString() },
+                { "UseNativeMode", _useNativeMode },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var opts = new KairosOptions<T>
+        {
+            ContextLength = _contextLength,
+            ForecastHorizon = _forecastHorizon,
+            PatchSizes = (int[])_patchSizes.Clone(),
+            HiddenDimension = _hiddenDimension,
+            NumLayers = _numLayers,
+            NumHeads = _numHeads,
+            IntermediateSize = _intermediateSize,
+            DropoutRate = _dropout,
+            ModelSize = _modelSize
+        };
+
+        if (!_useNativeMode && OnnxModelPath is not null)
+            return new Kairos<T>(Architecture, OnnxModelPath, opts);
+
+        return new Kairos<T>(Architecture, opts);
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_contextLength);
+        writer.Write(_forecastHorizon);
+        writer.Write(_patchSizes.Length);
+        foreach (var ps in _patchSizes)
+            writer.Write(ps);
+        writer.Write(_hiddenDimension);
+        writer.Write(_numLayers);
+        writer.Write(_numHeads);
+        writer.Write(_intermediateSize);
+        writer.Write(_dropout);
+        writer.Write((int)_modelSize);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        int numPatchSizes = reader.ReadInt32();
+        if (numPatchSizes < 0 || numPatchSizes > 1000)
+            throw new InvalidOperationException($"Invalid numPatchSizes ({numPatchSizes}) in deserialization.");
+        _patchSizes = new int[numPatchSizes];
+        for (int i = 0; i < numPatchSizes; i++)
+            _patchSizes[i] = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _intermediateSize = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _modelSize = (FoundationModelSize)reader.ReadInt32();
+    }
+
+    #endregion
+
+    #region IForecastingModel Implementation
+
+    /// <inheritdoc/>
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("Kairos does not support quantile forecasting. Pass null for point forecasts.");
+
+        return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    {
+        var predictions = new List<Tensor<T>>();
+        var currentInput = input;
+        int stepsRemaining = steps;
+
+        while (stepsRemaining > 0)
+        {
+            var prediction = Forecast(currentInput, null);
+            predictions.Add(prediction);
+            int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining);
+            stepsRemaining -= stepsUsed;
+            if (stepsRemaining > 0)
+                currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed);
+        }
+
+        return ConcatenatePredictions(predictions, steps);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    {
+        var metrics = new Dictionary<string, T>();
+        T mse = NumOps.Zero, mae = NumOps.Zero;
+        int count = 0;
+        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
+        {
+            var diff = NumOps.Subtract(predictions[i], actuals[i]);
+            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
+            mae = NumOps.Add(mae, NumOps.Abs(diff));
+            count++;
+        }
+        if (count > 0)
+        {
+            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
+            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
+        }
+        metrics["MSE"] = mse;
+        metrics["MAE"] = mae;
+        metrics["RMSE"] = NumOps.Sqrt(mse);
+        return metrics;
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    {
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        var result = new Tensor<T>(input._shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            T mean = NumOps.Zero;
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length) mean = NumOps.Add(mean, input[idx]);
+            }
+            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
+            T variance = NumOps.Zero;
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length)
+                {
+                    var diff = NumOps.Subtract(input[idx], mean);
+                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+                }
+            }
+            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length && idx < result.Length)
+                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
+            }
+        }
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetFinancialMetrics()
+    {
+        T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
+        return new Dictionary<string, T>
+        {
+            ["ContextLength"] = NumOps.FromDouble(_contextLength),
+            ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon),
+            ["HiddenDimension"] = NumOps.FromDouble(_hiddenDimension),
+            ["NumPatchSizes"] = NumOps.FromDouble(_patchSizes.Length),
+            ["LastLoss"] = lastLoss
+        };
+    }
+
+    #endregion
+
+    #region Forward/Backward
+
+    private Tensor<T> ForwardNative(Tensor<T> input)
+    {
+        // Kairos (Mixture-of-Size Encoder). The helper emits a
+        // KairosMultiSizePatchLayer that runs every patch-size path in
+        // parallel, mean-pools each to [B, hiddenDim], and combines them via
+        // a softmax router — producing a single [B, hiddenDim] summary. That
+        // feeds a Reshape → N × TransformerEncoderLayer → Flatten → Dense
+        // forecast-head stack. ForwardNative is a straight sequential dispatch;
+        // the router and per-path Dense embeddings are all trainable and
+        // gradient-connected via Engine-ops in
+        // KairosMultiSizePatchLayer.Forward.
+        var current = PrepareNativeInput(input, out bool addedBatchDim);
+
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
+        return current;
+    }
+
+    private Tensor<T> PrepareNativeInput(Tensor<T> input, out bool addedBatchDim)
+    {
+        var current = ApplyInstanceNormalization(input);
+        addedBatchDim = current.Rank == 1;
+        if (addedBatchDim)
+            current = Engine.Reshape(current, new[] { 1, current.Length });
+        return current;
+    }
+
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
+    {
+        if (OnnxSession == null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
+        var inputData = new float[batchSize * seqLen * features];
+        for (int i = 0; i < input.Length && i < inputData.Length; i++)
+            inputData[i] = (float)NumOps.ToDouble(input[i]);
+        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features });
+        string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input";
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) };
+        using var results = OnnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var output = new Tensor<T>(outputShape);
+        int totalElements = 1;
+        foreach (var dim in outputShape) totalElements *= dim;
+        for (int i = 0; i < totalElements && i < output.Length; i++)
+            output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        return output;
+    }
+
+    #endregion
+
+    #region Parameter Estimation
+
+    private new int GetParameterCount()
+    {
+        // Sum patch embeddings for each size
+        long total = 0;
+        foreach (var ps in _patchSizes)
+            total += (long)ps * _hiddenDimension + _hiddenDimension;
+
+        // Router
+        total += (long)_hiddenDimension * _patchSizes.Length;
+
+        // Transformer layers
+        long perLayer = 4L * _hiddenDimension * _hiddenDimension + 4 * _hiddenDimension;
+        perLayer += 2L * _hiddenDimension * _intermediateSize + _hiddenDimension + _intermediateSize;
+        perLayer += 4L * _hiddenDimension;
+        total += perLayer * _numLayers;
+
+        total += 2L * _hiddenDimension;
+        int minPatch = _patchSizes.Length > 0 ? _patchSizes[0] : 16;
+        int numPatches = _contextLength / minPatch;
+        total += (long)numPatches * _hiddenDimension * _forecastHorizon;
+
+        return (int)Math.Min(total, int.MaxValue);
+    }
+
+    #endregion
+}

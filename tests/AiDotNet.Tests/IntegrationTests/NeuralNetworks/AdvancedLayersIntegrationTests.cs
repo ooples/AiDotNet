@@ -1,0 +1,4810 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.RadialBasisFunctions;
+using AiDotNet.Tensors;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
+
+/// <summary>
+/// Integration tests for advanced neural network layers that were previously untested.
+/// These include transformer layers, utility layers, and specialized architectural components.
+/// </summary>
+public class AdvancedLayersIntegrationTests
+{
+    #region TransformerEncoderLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int embeddingSize = 64;
+        int numHeads = 4;
+        int feedForwardDim = 256;
+        var layer = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
+
+        int batchSize = 2;
+        var input = Tensor<float>.CreateRandom([batchSize, embeddingSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape.Length);
+        Assert.Equal(batchSize, output.Shape[0]);
+        Assert.Equal(embeddingSize, output.Shape[1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int embeddingSize = 64;
+        int numHeads = 8;
+        int feedForwardDim = 256;
+        var layer = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
+
+        int batchSize = 2;
+        int seqLen = 10;
+        var input = Tensor<float>.CreateRandom([batchSize, seqLen, embeddingSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(3, output.Shape.Length);
+        Assert.Equal(batchSize, output.Shape[0]);
+        Assert.Equal(seqLen, output.Shape[1]);
+        Assert.Equal(embeddingSize, output.Shape[2]);
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int embeddingSize = 64;
+        int numHeads = 4;
+        int feedForwardDim = 256;
+        var original = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<TransformerEncoderLayer<float>>(clone);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_ParameterCount_ReturnsPositiveValue()
+    {
+        await Task.Yield();
+        // Arrange — use the eager-dimension ctor (AiDotNet#1370 made it the
+        // shape-oracle-friendly path: passing embeddingSize constructs sublayers
+        // at ctor time so ParameterCount reflects allocated weights without a
+        // warmup forward).
+        int embeddingSize = 64;
+        int numHeads = 4;
+        int feedForwardDim = 256;
+        var layer = new TransformerEncoderLayer<float>(numHeads, feedForwardDim, embeddingSize);
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+    }
+
+    #endregion
+
+    #region TransformerDecoderLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task TransformerDecoderLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int embeddingSize = 64;
+        int numHeads = 4;
+        int feedForwardDim = 256;
+        int sequenceLength = 10;
+        var layer = new TransformerDecoderLayer<float>( numHeads, feedForwardDim, sequenceLength, (IActivationFunction<float>?)null);
+
+        // Decoder input and encoder output (both needed for cross-attention)
+        var input = Tensor<float>.CreateRandom([2, embeddingSize]);
+        var encoderOutput = Tensor<float>.CreateRandom([2, embeddingSize]);
+
+        // Act
+        var output = layer.Forward(input, encoderOutput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(embeddingSize, output.Shape[^1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TransformerDecoderLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int embeddingSize = 64;
+        int numHeads = 8;
+        int feedForwardDim = 256;
+        int sequenceLength = 10;
+        var layer = new TransformerDecoderLayer<float>( numHeads, feedForwardDim, sequenceLength, (IActivationFunction<float>?)null);
+
+        int batchSize = 2;
+        var input = Tensor<float>.CreateRandom([batchSize, sequenceLength, embeddingSize]);
+        var encoderOutput = Tensor<float>.CreateRandom([batchSize, sequenceLength, embeddingSize]);
+
+        // Act
+        var output = layer.Forward(input, encoderOutput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(3, output.Shape.Length);
+        Assert.Equal(batchSize, output.Shape[0]);
+        Assert.Equal(embeddingSize, output.Shape[^1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TransformerDecoderLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int embeddingSize = 64;
+        int numHeads = 4;
+        int feedForwardDim = 256;
+        int sequenceLength = 10;
+        var original = new TransformerDecoderLayer<float>( numHeads, feedForwardDim, sequenceLength, (IActivationFunction<float>?)null);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<TransformerDecoderLayer<float>>(clone);
+    }
+
+    #endregion
+
+    #region FeedForwardLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 64;
+        int outputSize = 32;
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
+
+        int batchSize = 4;
+        var input = Tensor<float>.CreateRandom([batchSize, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape.Length);
+        Assert.Equal(batchSize, output.Shape[0]);
+        Assert.Equal(outputSize, output.Shape[1]);
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 32;
+        int outputSize = 16;
+        var original = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<FeedForwardLayer<float>>(clone);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_ParameterCount_ReturnsCorrectValue()
+    {
+        // Arrange — lazy ctor takes only outputSize; inputSize comes from
+        // first Forward (or ResolveFromShape). ParameterCount is naturally
+        // 0 before shape resolution, so we eagerly resolve from a known
+        // input shape before asserting the count.
+        int inputSize = 64;
+        int outputSize = 32;
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
+        layer.ResolveFromShape(new[] { inputSize });
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert
+        // weights (64 * 32) + biases (32) = 2080
+        int expectedParams = inputSize * outputSize + outputSize;
+        Assert.Equal(expectedParams, paramCount);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_WithReLU_ProducesNonNegativeOutput()
+    {
+        // Arrange
+        int inputSize = 32;
+        int outputSize = 16;
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Use negative inputs to verify ReLU
+        var input = Tensor<float>.CreateDefault([2, inputSize], -1.0f);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.True(output[i] >= 0, $"Output at index {i} should be non-negative but was {output[i]}");
+        }
+    }
+
+    #endregion
+
+    #region ResidualLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ResidualLayer_ForwardPass_WithoutInnerLayer_PreservesInput()
+    {
+        // Arrange
+        int[] inputShape = [32];
+        var layer = new ResidualLayer<float>(null, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ResidualLayer_ForwardPass_WithInnerLayer_ProducesValidOutput()
+    {
+        // Arrange
+        int size = 32;
+        int[] inputShape = [size];
+        var innerLayer = new DenseLayer<float>(size);
+        var layer = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, size]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task ResidualLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int size = 32;
+        int[] inputShape = [size];
+        var innerLayer = new DenseLayer<float>(size);
+        var original = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<ResidualLayer<float>>(clone);
+    }
+
+    #endregion
+
+    #region DeconvolutionalLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DeconvolutionalLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int[] inputShape = [1, 4, 8, 8]; // batch, channels, height, width
+        int outputDepth = 2;
+        int kernelSize = 3;
+        int stride = 2;
+        int padding = 1;
+        var layer = new DeconvolutionalLayer<float>(outputDepth, kernelSize, stride, padding, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape.Length);
+        Assert.Equal(1, output.Shape[0]); // batch size
+        Assert.Equal(outputDepth, output.Shape[1]); // output channels
+        Assert.True(output.Shape[2] > inputShape[2], "Output height should be larger than input height");
+        Assert.True(output.Shape[3] > inputShape[3], "Output width should be larger than input width");
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task DeconvolutionalLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [1, 4, 8, 8];
+        var original = new DeconvolutionalLayer<float>(2, 3, 2, 1, (IActivationFunction<float>?)null);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<DeconvolutionalLayer<float>>(clone);
+    }
+
+    #endregion
+
+    #region UpsamplingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task UpsamplingLayer_ForwardPass_IncreasesSize()
+    {
+        // Arrange
+        int[] inputShape = [4, 8, 8]; // channels, height, width
+        int scaleFactor = 2;
+        var layer = new UpsamplingLayer<float>(scaleFactor);
+
+        var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape.Length);
+        Assert.Equal(1, output.Shape[0]); // batch size preserved
+        Assert.Equal(4, output.Shape[1]); // channels preserved
+        Assert.Equal(16, output.Shape[2]); // height doubled
+        Assert.Equal(16, output.Shape[3]); // width doubled
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task UpsamplingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [4, 8, 8];
+        var original = new UpsamplingLayer<float>(2);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<UpsamplingLayer<float>>(clone);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task UpsamplingLayer_ScaleFactor4_ProducesCorrectSize()
+    {
+        // Arrange
+        int[] inputShape = [2, 4, 4];
+        int scaleFactor = 4;
+        var layer = new UpsamplingLayer<float>(scaleFactor);
+
+        var input = Tensor<float>.CreateRandom([1, 2, 4, 4]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(16, output.Shape[2]); // height * 4
+        Assert.Equal(16, output.Shape[3]); // width * 4
+    }
+
+    #endregion
+
+    #region AddLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task AddLayer_ForwardPass_AddsTwoInputs()
+    {
+        // Arrange
+        int[] shape = [4, 8];
+        int[][] inputShapes = [shape, shape];
+        var layer = new AddLayer<float>(inputShapes, (IActivationFunction<float>?)null);
+
+        var input1 = Tensor<float>.CreateDefault([2, 4, 8], 1.0f);
+        var input2 = Tensor<float>.CreateDefault([2, 4, 8], 2.0f);
+
+        // Act - AddLayer requires multiple inputs via params overload
+        var output = layer.Forward(input1, input2);
+
+        // Assert
+        Assert.NotNull(output);
+        // Output should have same shape as single input
+        Assert.Equal(input1.Shape.ToArray(), output.Shape.ToArray());
+        // Values should be sum of inputs (1.0 + 2.0 = 3.0)
+        Assert.Equal(3.0f, output[0, 0, 0], 1e-5f);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AddLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] shape = [4, 8];
+        int[][] inputShapes = [shape, shape];
+        var original = new AddLayer<float>(inputShapes, (IActivationFunction<float>?)null);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<AddLayer<float>>(clone);
+    }
+
+    #endregion
+
+    #region ConcatenateLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ConcatenateLayer_ForwardPass_ConcatenatesAlongAxis()
+    {
+        // Arrange
+        int[] shape1 = [4, 8];
+        int[] shape2 = [4, 8];
+        int[][] inputShapes = [shape1, shape2];
+        int axis = 1; // Concatenate along axis 1 (second dimension)
+        var layer = new ConcatenateLayer<float>(inputShapes, axis, (IActivationFunction<float>?)null);
+
+        var input1 = Tensor<float>.CreateRandom([2, 4, 8]);
+        var input2 = Tensor<float>.CreateRandom([2, 4, 8]);
+
+        // Act - ConcatenateLayer requires multiple inputs via params overload
+        var output = layer.Forward(input1, input2);
+
+        // Assert
+        Assert.NotNull(output);
+        // Concatenated along axis 1: [2, 4, 8] + [2, 4, 8] -> [2, 8, 8]
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(8, output.Shape[1]); // axis 1 doubled (4 + 4)
+        Assert.Equal(8, output.Shape[2]); // features preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConcatenateLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] shape = [4, 8];
+        int[][] inputShapes = [shape, shape];
+        var original = new ConcatenateLayer<float>(inputShapes, 0, (IActivationFunction<float>?)null);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<ConcatenateLayer<float>>(clone);
+    }
+
+    #endregion
+
+    #region SqueezeAndExcitationLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SqueezeAndExcitationLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int channels = 64;
+        int reductionRatio = 4;
+        var layer = new SqueezeAndExcitationLayer<float>(channels, reductionRatio, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
+
+        // SE layer expects BHWC format: [batch, height, width, channels]
+        var input = Tensor<float>.CreateRandom([2, 8, 8, channels]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.Length, output.Shape.Length);
+        Assert.Equal(input.Shape[0], output.Shape[0]); // batch preserved
+        Assert.Equal(input.Shape[1], output.Shape[1]); // height preserved
+        Assert.Equal(input.Shape[2], output.Shape[2]); // width preserved
+        Assert.Equal(channels, output.Shape[3]); // channels preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SqueezeAndExcitationLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int channels = 64;
+        int reductionRatio = 4;
+        var original = new SqueezeAndExcitationLayer<float>(channels, reductionRatio, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<SqueezeAndExcitationLayer<float>>(clone);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SqueezeAndExcitationLayer_ParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        int channels = 64;
+        int reductionRatio = 4;
+        var layer = new SqueezeAndExcitationLayer<float>(channels, reductionRatio, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+    }
+
+    #endregion
+
+    #region Cross-Layer Integration Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderDecoderStack_ForwardPass_Works()
+    {
+        // Arrange
+        int embeddingSize = 64;
+        int numHeads = 4;
+        int feedForwardDim = 256;
+        int seqLen = 10;
+
+        var encoder = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
+        var decoder = new TransformerDecoderLayer<float>( numHeads, feedForwardDim, seqLen, (IActivationFunction<float>?)null);
+
+        var sourceInput = Tensor<float>.CreateRandom([2, seqLen, embeddingSize]);
+        var targetInput = Tensor<float>.CreateRandom([2, seqLen, embeddingSize]);
+
+        // Act
+        var encoderOutput = encoder.Forward(sourceInput);
+        var decoderOutput = decoder.Forward(targetInput, encoderOutput);
+
+        // Assert
+        Assert.NotNull(decoderOutput);
+        Assert.Equal(embeddingSize, decoderOutput.Shape[^1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ResidualWithFeedForward_ForwardPass_Works()
+    {
+        // Arrange
+        int size = 64;
+        int[] inputShape = [size];
+        var innerLayer = new FeedForwardLayer<float>(size, (IActivationFunction<float>?)null);
+        var residualLayer = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, size]);
+
+        // Act
+        var output = residualLayer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConvDeconvPipeline_ForwardPass_Works()
+    {
+        // Arrange
+        int[] convInputShape = [1, 4, 16, 16]; // batch, channels, height, width
+        var conv = new ConvolutionalLayer<float>(8, 3, 2, 1); // Downsample
+
+        var convOutput = conv.Forward(Tensor<float>.CreateRandom(convInputShape));
+        int[] deconvInputShape = [convOutput.Shape[0], convOutput.Shape[1], convOutput.Shape[2], convOutput.Shape[3]];
+
+        var deconv = new DeconvolutionalLayer<float>(4, 3, 2, 1, (IActivationFunction<float>?)null); // Upsample
+
+        var input = Tensor<float>.CreateRandom(convInputShape);
+
+        // Act
+        var downsampled = conv.Forward(input);
+        var upsampled = deconv.Forward(downsampled);
+
+        // Assert
+        Assert.NotNull(upsampled);
+        Assert.True(upsampled.Shape[2] > downsampled.Shape[2], "Deconv should increase spatial size");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ResidualChain_MultipleBlocks_Works()
+    {
+        // Arrange
+        int size = 32;
+        int[] inputShape = [size];
+
+        var block1 = new ResidualLayer<float>(new DenseLayer<float>(size), (IActivationFunction<float>?)null);
+        var block2 = new ResidualLayer<float>(new DenseLayer<float>(size), (IActivationFunction<float>?)null);
+        var block3 = new ResidualLayer<float>(new DenseLayer<float>(size), (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, size]);
+
+        // Act
+        var out1 = block1.Forward(input);
+        var out2 = block2.Forward(out1);
+        var output = block3.Forward(out2);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region Edge Cases
+
+    [Fact(Timeout = 120000)]
+    public async Task TransformerEncoderLayer_SmallEmbedding_Works()
+    {
+        // Arrange - minimum valid configuration
+        int embeddingSize = 8;
+        int numHeads = 2;
+        int feedForwardDim = 16;
+        var layer = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
+
+        var input = Tensor<float>.CreateRandom([1, embeddingSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(embeddingSize, output.Shape[^1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FeedForwardLayer_LargeInputOutput_Works()
+    {
+        // Arrange
+        int inputSize = 1024;
+        int outputSize = 2048;
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([1, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(outputSize, output.Shape[1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task UpsamplingLayer_SmallInput_Works()
+    {
+        // Arrange
+        int[] inputShape = [2, 2, 2]; // Very small spatial dimensions
+        var layer = new UpsamplingLayer<float>(2);
+
+        var input = Tensor<float>.CreateRandom([1, 2, 2, 2]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[2]);
+        Assert.Equal(4, output.Shape[3]);
+    }
+
+    #endregion
+
+    #region ConvLSTMLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ConvLSTMLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - ConvLSTM for spatiotemporal data
+        int[] inputShape = [4, 8, 8, 3]; // [timeSteps, height, width, channels]
+        int kernelSize = 3;
+        int filters = 16;
+        var layer = new ConvLSTMLayer<float>(inputShape, kernelSize, filters, 1, 1, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, 4, 8, 8, 3]); // [batch, time, H, W, C]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(5, output.Shape.Length);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConvLSTMLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [2, 4, 4, 1];
+        var original = new ConvLSTMLayer<float>(inputShape, 3, 8, 1, 1, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([1, 2, 4, 4, 1]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region GatedLinearUnitLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task GatedLinearUnitLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputDim = 64;
+        int outputDim = 32;
+        var layer = new GatedLinearUnitLayer<float>(outputDim, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([4, inputDim]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape.Length);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+        Assert.Equal(outputDim, output.Shape[1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GatedLinearUnitLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var original = new GatedLinearUnitLayer<float>(16, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GatedLinearUnitLayer_ParameterCount_IsPositive()
+    {
+        await Task.Yield(); // activate [Fact(Timeout=...)] enforcement for this async test
+
+        // Arrange
+        var layer = new GatedLinearUnitLayer<float>(32, (IActivationFunction<float>?)null);
+
+        // GLU sizes its [output x input] linear + gate weight matrices lazily from the
+        // input dimension on the first forward — the constructor only fixes the output
+        // dimension (32). Run one forward over a 64-feature input so the weights are
+        // allocated before we count them (otherwise only the two biases exist → 64).
+        _ = layer.Forward(Tensor<float>.CreateRandom([2, 64]));
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert - GLU has linearWeights (64*32) + gateWeights (64*32) + linearBias (32) + gateBias (32)
+        // = 2048 + 2048 + 32 + 32 = 4160 parameters
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+        Assert.Equal(4160, paramCount);
+    }
+
+    #endregion
+
+    #region HighwayLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task HighwayLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - Highway layers preserve dimensions
+        int inputDim = 64;
+        var layer = new HighwayLayer<float>(inputDim, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([4, inputDim]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HighwayLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var original = new HighwayLayer<float>(32, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HighwayLayer_ParameterCount_IsPositive()
+    {
+        // Arrange
+        var layer = new HighwayLayer<float>(64, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert - Highway has transformWeights (64*64) + transformBias (64) + gateWeights (64*64) + gateBias (64)
+        // = 4096 + 64 + 4096 + 64 = 8320 parameters
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+        Assert.Equal(8320, paramCount);
+    }
+
+    #endregion
+
+    #region MaxPool3DLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MaxPool3DLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - 3D pooling for volumetric data [channels, depth, height, width]
+        int[] inputShape = [3, 8, 8, 8]; // C, D, H, W
+        int poolSize = 2;
+        var layer = new MaxPool3DLayer<float>(poolSize);
+
+        var input = Tensor<float>.CreateRandom([2, 3, 8, 8, 8]); // [batch, C, D, H, W]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(5, output.Shape.Length);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(3, output.Shape[1]); // channels preserved
+        Assert.Equal(4, output.Shape[2]); // D halved
+        Assert.Equal(4, output.Shape[3]); // H halved
+        Assert.Equal(4, output.Shape[4]); // W halved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MaxPool3DLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange - input shape must be [channels, depth, height, width]
+        int[] inputShape = [2, 4, 4, 4];
+        var original = new MaxPool3DLayer<float>(2);
+        var input = Tensor<float>.CreateRandom([1, 2, 4, 4, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region MultiplyLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MultiplyLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - Element-wise multiplication of multiple inputs
+        int[] shape = [8, 16];
+        int[][] inputShapes = [shape, shape];
+        var layer = new MultiplyLayer<float>(inputShapes, (IActivationFunction<float>?)null);
+
+        var input1 = Tensor<float>.CreateRandom([2, 8, 16]);
+        var input2 = Tensor<float>.CreateRandom([2, 8, 16]);
+
+        // Act
+        var output = layer.Forward(input1, input2);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input1.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MultiplyLayer_ElementWiseMultiplication_IsCorrect()
+    {
+        // Arrange
+        int[] shape = [2, 2];
+        int[][] inputShapes = [shape, shape];
+        var layer = new MultiplyLayer<float>(inputShapes, (IActivationFunction<float>?)null);
+
+        var input1 = new Tensor<float>([1, 2, 2]);
+        var input2 = new Tensor<float>([1, 2, 2]);
+        input1[0] = 2; input1[1] = 3; input1[2] = 4; input1[3] = 5;
+        input2[0] = 1; input2[1] = 2; input2[2] = 3; input2[3] = 4;
+
+        // Act
+        var output = layer.Forward(input1, input2);
+
+        // Assert - element-wise multiplication
+        Assert.Equal(2f, output[0]); // 2 * 1
+        Assert.Equal(6f, output[1]); // 3 * 2
+        Assert.Equal(12f, output[2]); // 4 * 3
+        Assert.Equal(20f, output[3]); // 5 * 4
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MultiplyLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] shape = [4, 8];
+        int[][] inputShapes = [shape, shape];
+        var original = new MultiplyLayer<float>(inputShapes, (IActivationFunction<float>?)null);
+        var input1 = Tensor<float>.CreateRandom([1, 4, 8]);
+        var input2 = Tensor<float>.CreateRandom([1, 4, 8]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input1, input2);
+        var cloneOutput = clone.Forward(input1, input2);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region MaskingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MaskingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int[] inputShape = [10, 32]; // sequence, features
+        var layer = new MaskingLayer<float>(maskValue: 0);
+
+        var input = Tensor<float>.CreateRandom([2, 10, 32]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MaskingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [5, 16];
+        var original = new MaskingLayer<float>();
+        var input = Tensor<float>.CreateRandom([1, 5, 16]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region SplitLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SplitLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - Split tensor along last dimension
+        int[] inputShape = [32];
+        int numSplits = 4;
+        var layer = new SplitLayer<float>(numSplits);
+
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(new[] { 2, numSplits, 8 }, output.Shape.ToArray());
+
+        var reconstructed = output.Reshape([2, 32]);
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.Equal(input[i], reconstructed[i]);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SplitLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [16];
+        var original = new SplitLayer<float>(2);
+        var input = Tensor<float>.CreateRandom([1, 16]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region ReshapeLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ReshapeLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - Reshape from [8, 4] to [32]
+        int[] inputShape = [8, 4];
+        int[] outputShape = [32];
+        var layer = new ReshapeLayer<float>(outputShape);
+
+        var input = Tensor<float>.CreateRandom([2, 8, 4]); // batch + inputShape
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(32, output.Shape[1]); // reshaped
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ReshapeLayer_FlattenToExpand_Works()
+    {
+        // Arrange - Reshape from [16] to [4, 4]
+        int[] inputShape = [16];
+        int[] outputShape = [4, 4];
+        var layer = new ReshapeLayer<float>(outputShape);
+
+        var input = Tensor<float>.CreateRandom([2, 16]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(3, output.Shape.Length); // batch + 2D output
+        Assert.Equal(2, output.Shape[0]);
+        Assert.Equal(4, output.Shape[1]);
+        Assert.Equal(4, output.Shape[2]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ReshapeLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [8, 4];
+        int[] outputShape = [32];
+        var original = new ReshapeLayer<float>(outputShape);
+        var input = Tensor<float>.CreateRandom([1, 8, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region Conv3DLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task Conv3DLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - 3D convolution for volumetric data
+        int inputChannels = 1;
+        int outputChannels = 8;
+        int kernelSize = 3;
+        int inputDepth = 8, inputHeight = 8, inputWidth = 8;
+        var layer = new Conv3DLayer<float>(outputChannels, kernelSize, 1, 1, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, inputChannels, inputDepth, inputHeight, inputWidth]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(5, output.Shape.Length);
+        Assert.Equal(2, output.Shape[0]); // batch
+        Assert.Equal(outputChannels, output.Shape[1]); // channels
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Conv3DLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputChannels = 1;
+        int outputChannels = 4;
+        int kernelSize = 3;
+        var original = new Conv3DLayer<float>(outputChannels, kernelSize,
+            1, 1, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([1, inputChannels, 4, 4, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region GRULayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - GRU for sequence data
+        int inputSize = 16;
+        int hiddenSize = 32;
+        bool returnSequences = false;
+        var layer = new GRULayer<float>( hiddenSize, returnSequences, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, 5, inputSize]); // [batch, sequence, features]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        // When returnSequences=false, output is [batch, hiddenSize]
+        Assert.Equal(2, output.Shape[0]); // batch
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_ReturnSequences_ProducesSequenceOutput()
+    {
+        // Arrange - GRU returning full sequence
+        int inputSize = 16;
+        int hiddenSize = 32;
+        bool returnSequences = true;
+        var layer = new GRULayer<float>( hiddenSize, returnSequences, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, 5, inputSize]); // [batch, sequence, features]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        // When returnSequences=true, output is [batch, sequence, hiddenSize]
+        Assert.Equal(2, output.Shape[0]); // batch
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GRULayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 8;
+        int hiddenSize = 16;
+        var original = new GRULayer<float>( hiddenSize, false, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([1, 3, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region SelfAttentionLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int sequenceLength = 10;
+        int embeddingSize = 64;
+        int numHeads = 4;
+        var layer = new SelfAttentionLayer<float>(sequenceLength, embeddingSize, numHeads, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, sequenceLength, embeddingSize]); // [batch, sequence, embedding]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int sequenceLength = 4;
+        int embeddingSize = 32;
+        int numHeads = 4;
+        var layer = new SelfAttentionLayer<float>(sequenceLength, embeddingSize, numHeads, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([4, embeddingSize]); // [batch, embedding]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape.Length);
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int sequenceLength = 4;
+        int embeddingSize = 32;
+        int numHeads = 2;
+        var original = new SelfAttentionLayer<float>(sequenceLength, embeddingSize, numHeads, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([1, sequenceLength, embeddingSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_ParameterCount_IsPositive()
+    {
+        // Arrange
+        int sequenceLength = 10;
+        int embeddingSize = 64;
+        int numHeads = 4;
+        var layer = new SelfAttentionLayer<float>(sequenceLength, embeddingSize, numHeads, (IActivationFunction<float>?)null);
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+    }
+
+    #endregion
+
+    #region MultiHeadAttentionLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int sequenceLength = 10;
+        int embeddingSize = 64;
+        int numHeads = 8;
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
+
+        var input = Tensor<float>.CreateRandom([2, sequenceLength, embeddingSize]); // [batch, sequence, embedding]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int sequenceLength = 4;
+        int embeddingSize = 48;
+        int numHeads = 6;
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
+
+        var input = Tensor<float>.CreateRandom([4, embeddingSize]); // [batch, embedding]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int sequenceLength = 4;
+        int embeddingSize = 32;
+        int numHeads = 4;
+        var original = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
+        var input = Tensor<float>.CreateRandom([1, sequenceLength, embeddingSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MultiHeadAttentionLayer_ParameterCount_IsPositive()
+    {
+        // Arrange
+        int sequenceLength = 10;
+        int embeddingSize = 64;
+        int numHeads = 8;
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+    }
+
+    #endregion
+
+    #region DenseLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 64;
+        int outputSize = 32;
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([4, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape.Length);
+        Assert.Equal(4, output.Shape[0]);
+        Assert.Equal(outputSize, output.Shape[1]);
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 16;
+        int outputSize = 8;
+        var original = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_ParameterCount_IsCorrect()
+    {
+        // Arrange — lazy ctor takes only outputSize; inputSize comes from
+        // first Forward (or ResolveFromShape). ParameterCount is naturally
+        // 0 before shape resolution, so we eagerly resolve from a known
+        // input shape before asserting the count.
+        int inputSize = 64;
+        int outputSize = 32;
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
+        layer.ResolveFromShape(new[] { inputSize });
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert - weights (64*32) + biases (32) = 2080
+        int expected = inputSize * outputSize + outputSize;
+        Assert.Equal(expected, paramCount);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseLayer_WithReLU_ProducesNonNegativeOutput()
+    {
+        // Arrange
+        int inputSize = 32;
+        int outputSize = 16;
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+
+        var input = Tensor<float>.CreateDefault([2, inputSize], -1.0f);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.True(output[i] >= 0, $"Output at index {i} should be non-negative");
+        }
+    }
+
+    #endregion
+
+    #region LSTMLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 16;
+        int hiddenSize = 32;
+        int sequenceLength = 5;
+        int[] inputShape = [sequenceLength, inputSize];
+        var layer = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, sequenceLength, inputSize]); // [batch, sequence, features]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_ForwardPass_DifferentSequenceLengths_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 16;
+        int hiddenSize = 32;
+        int sequenceLength = 10;
+        int[] inputShape = [sequenceLength, inputSize];
+        var layer = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, sequenceLength, inputSize]); // [batch, sequence, features]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 8;
+        int hiddenSize = 16;
+        int sequenceLength = 3;
+        int[] inputShape = [sequenceLength, inputSize];
+        var original = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([1, sequenceLength, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_ParameterCount_IsPositive()
+    {
+        await Task.Yield(); // activate [Fact(Timeout=...)] enforcement for this async test
+
+        // Arrange
+        int inputSize = 16;
+        int hiddenSize = 32;
+        int sequenceLength = 5;
+        int[] inputShape = [sequenceLength, inputSize];
+        var layer = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
+
+        // LSTM sizes its input-to-hidden gate weights lazily from the input dimension on
+        // the first forward — the constructor only fixes the hidden size. Resolve via one
+        // forward over a [batch, seqLen, inputSize] sequence before counting parameters.
+        _ = layer.Forward(Tensor<float>.CreateRandom([2, sequenceLength, inputSize]));
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert - LSTM has 4 gates, each with weights and biases
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+    }
+
+    #endregion
+
+    #region DropoutLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_ForwardPass_Training_AppliesDropout()
+    {
+        // Arrange
+        double dropoutRate = 0.5;
+        var layer = new DropoutLayer<float>(dropoutRate);
+        layer.SetTrainingMode(true);
+
+        var input = Tensor<float>.CreateDefault([4, 64], 1.0f);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+
+        // Some values should be zeroed out in training mode
+        int zeroCount = output.ToArray().Count(v => v == 0f);
+        // With 50% dropout, we expect roughly half to be zero
+        Assert.True(zeroCount > 0, "Dropout should zero some values during training");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_ForwardPass_Inference_PreservesInput()
+    {
+        // Arrange
+        double dropoutRate = 0.5;
+        var layer = new DropoutLayer<float>(dropoutRate);
+        layer.SetTrainingMode(false);
+
+        var input = Tensor<float>.CreateDefault([4, 64], 1.0f);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+
+        // In inference mode, output should match input (no dropout applied)
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.Equal(1.0f, output[i]);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var original = new DropoutLayer<float>(0.3);
+        original.SetTrainingMode(false);
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region FlattenLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task FlattenLayer_ForwardPass_3DInput_FlattensCorrectly()
+    {
+        // Arrange
+        int[] inputShape = [8, 8, 3]; // H, W, C
+        var layer = new FlattenLayer<float>();
+
+        var input = Tensor<float>.CreateRandom([2, 8, 8, 3]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape.Length);
+        Assert.Equal(2, output.Shape[0]); // batch
+        Assert.Equal(8 * 8 * 3, output.Shape[1]); // flattened
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FlattenLayer_ForwardPass_4DInput_FlattensCorrectly()
+    {
+        // Arrange
+        int[] inputShape = [4, 4, 4, 8]; // D, H, W, C
+        var layer = new FlattenLayer<float>();
+
+        var input = Tensor<float>.CreateRandom([2, 4, 4, 4, 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape.Length);
+        Assert.Equal(2, output.Shape[0]); // batch
+        Assert.Equal(4 * 4 * 4 * 8, output.Shape[1]); // flattened
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task FlattenLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [4, 4, 2];
+        var original = new FlattenLayer<float>();
+        var input = Tensor<float>.CreateRandom([1, 4, 4, 2]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region ActivationLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_ReLU_ProducesNonNegativeOutput()
+    {
+        // Arrange
+        int[] inputShape = [64];
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
+
+        var input = Tensor<float>.CreateRandom([4, 64]);
+        // Make some values negative
+        for (int i = 0; i < input.Length / 2; i++)
+        {
+            input[i] = -Math.Abs(input[i]);
+        }
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.True(output[i] >= 0, $"ReLU output at {i} should be non-negative");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_Sigmoid_ProducesOutputInRange()
+    {
+        // Arrange
+        int[] inputShape = [32];
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new SigmoidActivation<float>());
+
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.True(output[i] >= 0 && output[i] <= 1,
+                $"Sigmoid output at {i} should be in [0, 1], got {output[i]}");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_Tanh_ProducesOutputInRange()
+    {
+        // Arrange
+        int[] inputShape = [32];
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new TanhActivation<float>());
+
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.True(output[i] >= -1 && output[i] <= 1,
+                $"Tanh output at {i} should be in [-1, 1], got {output[i]}");
+        }
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task ActivationLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [16];
+        var original = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([2, 16]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region InputLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InputLayer_ForwardPass_PreservesInput()
+    {
+        // Arrange
+        int inputSize = 64;
+        var layer = new InputLayer<float>(inputSize);
+
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+        // InputLayer should pass through without modification
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.Equal(input[i], output[i]);
+        }
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task InputLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 784;
+        var original = new InputLayer<float>(inputSize);
+        var input = Tensor<float>.CreateRandom([1, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region PaddingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task PaddingLayer_ForwardPass_AddsPadding()
+    {
+        // Arrange
+        // Input shape includes batch dimension; padding must match full input dimensions
+        int[] inputShape = [2, 8, 8, 3];
+        int[] padding = [0, 2, 2, 0]; // No batch pad, pad H and W by 2, no channel pad
+        var layer = new PaddingLayer<float>(padding, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, 8, 8, 3]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task PaddingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [1, 4, 4, 2];
+        int[] padding = [0, 1, 1, 0];
+        var original = new PaddingLayer<float>(padding, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([1, 4, 4, 2]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region GaussianNoiseLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNoiseLayer_ForwardPass_Training_AddsNoise()
+    {
+        // Arrange
+        int[] inputShape = [64];
+        float stddev = 0.1f;
+        var layer = new GaussianNoiseLayer<float>(stddev);
+        layer.SetTrainingMode(true);
+
+        var input = Tensor<float>.CreateDefault([4, 64], 1.0f);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+
+        // In training mode, output should differ from input due to noise
+        bool hasDifference = false;
+        for (int i = 0; i < output.Length; i++)
+        {
+            if (Math.Abs(output[i] - 1.0f) > 0.001f)
+            {
+                hasDifference = true;
+                break;
+            }
+        }
+        Assert.True(hasDifference, "Gaussian noise should modify values during training");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNoiseLayer_ForwardPass_Inference_PreservesInput()
+    {
+        // Arrange
+        int[] inputShape = [64];
+        float stddev = 0.1f;
+        var layer = new GaussianNoiseLayer<float>(stddev);
+        layer.SetTrainingMode(false);
+
+        var input = Tensor<float>.CreateDefault([4, 64], 1.0f);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+
+        // In inference mode, no noise should be added
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.Equal(1.0f, output[i]);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNoiseLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [32];
+        var original = new GaussianNoiseLayer<float>(0.1f);
+        original.SetTrainingMode(false);
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region CrossAttentionLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttentionLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int queryDim = 64;
+        int contextDim = 64;
+        int numHeads = 4;
+        int sequenceLength = 10;
+        var layer = new CrossAttentionLayer<float>(queryDim, contextDim, numHeads, sequenceLength);
+
+        var query = Tensor<float>.CreateRandom([2, sequenceLength, queryDim]);
+        var context = Tensor<float>.CreateRandom([2, 15, contextDim]);
+
+        // Act
+        var output = layer.Forward(query, context);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(query.Shape.ToArray(), output.Shape.ToArray()); // output shape matches query shape
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttentionLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int queryDim = 32;
+        int contextDim = 32;
+        int numHeads = 2;
+        int sequenceLength = 4;
+        var original = new CrossAttentionLayer<float>(queryDim, contextDim, numHeads, sequenceLength);
+        var query = Tensor<float>.CreateRandom([1, sequenceLength, queryDim]);
+        var context = Tensor<float>.CreateRandom([1, 6, contextDim]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(query, context);
+        var cloneOutput = clone.Forward(query, context);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttentionLayer_ParameterCount_IsPositive()
+    {
+        // Arrange
+        int queryDim = 64;
+        int contextDim = 64;
+        int numHeads = 4;
+        var layer = new CrossAttentionLayer<float>(queryDim, contextDim, numHeads);
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+    }
+
+    #endregion
+
+    #region ConvolutionalLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputDepth = 3;  // e.g., RGB image
+        int inputHeight = 28;
+        int inputWidth = 28;
+        int outputDepth = 16;
+        int kernelSize = 3;
+        var layer = new ConvolutionalLayer<float>(outputDepth, kernelSize);
+
+        var input = Tensor<float>.CreateRandom([2, inputDepth, inputHeight, inputWidth]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(outputDepth, output.Shape[1]); // output channels
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputDepth = 1;
+        int inputHeight = 8;
+        int inputWidth = 8;
+        int outputDepth = 4;
+        int kernelSize = 3;
+        var original = new ConvolutionalLayer<float>(outputDepth, kernelSize);
+        var input = Tensor<float>.CreateRandom([1, inputDepth, inputHeight, inputWidth]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConvolutionalLayer_ParameterCount_IsPositive()
+    {
+        // Arrange — lazy ctor takes only outputDepth + kernelSize; the
+        // input channel/height/width come from the first Forward (or
+        // ResolveFromShape). ParameterCount is naturally 0 before shape
+        // resolution, so we eagerly resolve from a known input shape.
+        int inputDepth = 3;
+        int inputHeight = 16;
+        int inputWidth = 16;
+        int outputDepth = 8;
+        int kernelSize = 3;
+        var layer = new ConvolutionalLayer<float>(outputDepth, kernelSize);
+        layer.ResolveFromShape(new[] { inputDepth, inputHeight, inputWidth });
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert - Conv layer has kernels and biases
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+    }
+
+    #endregion
+
+    #region BatchNormalizationLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task BatchNormalizationLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int numFeatures = 64;
+        var layer = new BatchNormalizationLayer<float>();
+
+        var input = Tensor<float>.CreateRandom([4, numFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task BatchNormalizationLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int numFeatures = 16;
+        var original = new BatchNormalizationLayer<float>();
+        var input = Tensor<float>.CreateRandom([2, numFeatures]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BatchNormalizationLayer_ParameterCount_IsPositive()
+    {
+        await Task.Yield();
+        // Arrange — AiDotNet#1370 eager ctor allocates gamma/beta immediately so
+        // ParameterCount reflects the materialised state without needing a forward.
+        int numFeatures = 64;
+        var layer = new BatchNormalizationLayer<float>(numFeatures);
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert - BatchNorm has gamma, beta, running mean, running var
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+    }
+
+    #endregion
+
+    #region MaxPoolingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MaxPoolingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        // inputShape = [C, H, W] format (channels, height, width)
+        int[] inputShape = [3, 28, 28];
+        int poolSize = 2;
+        int stride = 2;
+        var layer = new MaxPoolingLayer<float>(poolSize, stride);
+
+        // Input tensor = [B, C, H, W] format
+        var input = Tensor<float>.CreateRandom([4, 3, 28, 28]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+        Assert.Equal(3, output.Shape[1]); // channels preserved
+        Assert.Equal(14, output.Shape[2]); // 28/2 = 14 (height)
+        Assert.Equal(14, output.Shape[3]); // 28/2 = 14 (width)
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task MaxPoolingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        // inputShape = [C, H, W] format
+        int[] inputShape = [1, 8, 8];
+        int poolSize = 2;
+        int stride = 2;
+        var original = new MaxPoolingLayer<float>(poolSize, stride);
+        // Input tensor = [B, C, H, W] format
+        var input = Tensor<float>.CreateRandom([1, 1, 8, 8]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region AveragePoolingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task AveragePoolingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        // inputShape = [C, H, W] format
+        int[] inputShape = [3, 16, 16];
+        int poolSize = 2;
+        int stride = 2;
+        var layer = new AveragePoolingLayer<float>(poolSize, stride);
+
+        // Input tensor = [B, C, H, W] format
+        var input = Tensor<float>.CreateRandom([4, 3, 16, 16]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+        Assert.Equal(3, output.Shape[1]); // channels preserved
+        Assert.Equal(8, output.Shape[2]); // 16/2 = 8 (height)
+        Assert.Equal(8, output.Shape[3]); // 16/2 = 8 (width)
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task AveragePoolingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        // inputShape = [C, H, W] format
+        int[] inputShape = [1, 4, 4];
+        int poolSize = 2;
+        int stride = 2;
+        var original = new AveragePoolingLayer<float>(poolSize, stride);
+        // Input tensor = [B, C, H, W] format
+        var input = Tensor<float>.CreateRandom([1, 1, 4, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region EmbeddingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int vocabSize = 1000;
+        int embeddingDim = 64;
+        var layer = new EmbeddingLayer<float>(vocabSize, embeddingDim);
+
+        // Create input with token indices (values 0 to vocabSize-1)
+        var input = new Tensor<float>([4, 10]); // batch=4, sequence_length=10
+        var rand = RandomHelper.CreateSeededRandom(42);
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = rand.Next(0, vocabSize);
+        }
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[0]); // batch
+        Assert.Equal(10, output.Shape[1]); // sequence length
+        Assert.Equal(embeddingDim, output.Shape[2]); // embedding dimension
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int vocabSize = 500;
+        int embeddingDim = 32;
+        var original = new EmbeddingLayer<float>(vocabSize, embeddingDim);
+        var input = new Tensor<float>([2, 5]);
+        var rand = RandomHelper.CreateSeededRandom(123);
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = rand.Next(0, vocabSize);
+        }
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_ParameterCount_IsPositive()
+    {
+        // Arrange
+        int vocabSize = 1000;
+        int embeddingDim = 64;
+        var layer = new EmbeddingLayer<float>(vocabSize, embeddingDim);
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert - Embedding has vocabSize * embeddingDim parameters
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+        Assert.Equal(vocabSize * embeddingDim, paramCount);
+    }
+
+    #endregion
+
+    #region LayerNormalizationLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task LayerNormalizationLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int featureSize = 64;
+        var layer = new LayerNormalizationLayer<float>();
+
+        var input = Tensor<float>.CreateRandom([4, featureSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task LayerNormalizationLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int featureSize = 16;
+        var original = new LayerNormalizationLayer<float>();
+        var input = Tensor<float>.CreateRandom([2, featureSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LayerNormalizationLayer_ParameterCount_IsPositive()
+    {
+        await Task.Yield();
+        // Arrange — AiDotNet#1370 eager ctor allocates gamma/beta immediately so
+        // ParameterCount reflects the materialised state without needing a forward.
+        int featureSize = 64;
+        var layer = new LayerNormalizationLayer<float>(featureSize);
+
+        // Act
+        int paramCount = (int)layer.ParameterCount;
+
+        // Assert - LayerNorm has gamma and beta (2 * featureSize)
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+    }
+
+    #endregion
+
+    #region GlobalPoolingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task GlobalPoolingLayer_MaxPooling_ProducesValidOutput()
+    {
+        // Arrange
+        // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
+        int[] inputShape = [4, 16, 16, 3];
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Max);
+
+        // Input tensor = [batch, height, width, channels]
+        var input = Tensor<float>.CreateRandom([4, 16, 16, 3]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+        // Output is [batch, 1, 1, channels] -> spatial dimensions are pooled
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GlobalPoolingLayer_AveragePooling_ProducesValidOutput()
+    {
+        // Arrange
+        // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
+        int[] inputShape = [2, 16, 16, 3];
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Average);
+        var input = Tensor<float>.CreateRandom([2, 16, 16, 3]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GlobalPoolingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
+        int[] inputShape = [1, 8, 8, 2];
+        var original = new GlobalPoolingLayer<float>(PoolingType.Max);
+        var input = Tensor<float>.CreateRandom([1, 8, 8, 2]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region GroupNormalizationLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task GroupNormalizationLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int numGroups = 4;
+        int numChannels = 16;
+        var layer = new GroupNormalizationLayer<float>(numGroups, numChannels);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, 16, 8, 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task GroupNormalizationLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int numGroups = 2;
+        int numChannels = 8;
+        var original = new GroupNormalizationLayer<float>(numGroups, numChannels);
+        var input = Tensor<float>.CreateRandom([2, 8, 4, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region InstanceNormalizationLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InstanceNormalizationLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int numChannels = 16;
+        var layer = new InstanceNormalizationLayer<float>(numChannels);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, 16, 8, 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task InstanceNormalizationLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int numChannels = 8;
+        var original = new InstanceNormalizationLayer<float>(numChannels);
+        var input = Tensor<float>.CreateRandom([2, 8, 4, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region PositionalEncodingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int maxSequenceLength = 32;
+        int embeddingSize = 64;
+        var layer = new PositionalEncodingLayer<float>(maxSequenceLength, embeddingSize);
+
+        // Input: [batch, sequence, embedding]
+        var input = Tensor<float>.CreateRandom([2, maxSequenceLength, embeddingSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task PositionalEncodingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int maxSequenceLength = 16;
+        int embeddingSize = 32;
+        var original = new PositionalEncodingLayer<float>(maxSequenceLength, embeddingSize);
+        var input = Tensor<float>.CreateRandom([2, maxSequenceLength, embeddingSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region DepthwiseSeparableConvolutionalLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DepthwiseSeparableConvLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputChannels = 3;
+        int outputChannels = 16;
+        int height = 32;
+        int width = 32;
+        int kernelSize = 3;
+        // Constructor (lazy): (outputDepth, kernelSize, stride, padding, activation)
+        var layer = new DepthwiseSeparableConvolutionalLayer<float>(
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputChannels, height, width]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(outputChannels, output.Shape[1]); // output channels
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DepthwiseSeparableConvLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputChannels = 3;
+        int outputChannels = 8;
+        int height = 16;
+        int width = 16;
+        int kernelSize = 3;
+        // Constructor (lazy): (outputDepth, kernelSize, stride, padding, activation)
+        var original = new DepthwiseSeparableConvolutionalLayer<float>(
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, inputChannels, height, width]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region DilatedConvolutionalLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DilatedConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputChannels = 3;
+        int outputChannels = 16;
+        int height = 32;
+        int width = 32;
+        int kernelSize = 3;
+        int dilation = 2;
+        // Constructor (lazy): (outputDepth, kernelSize, dilation, stride, padding, activation)
+        var layer = new DilatedConvolutionalLayer<float>(
+            outputChannels, kernelSize, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputChannels, height, width]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(outputChannels, output.Shape[1]); // output channels
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DilatedConvolutionalLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputChannels = 3;
+        int outputChannels = 8;
+        int height = 16;
+        int width = 16;
+        int kernelSize = 3;
+        int dilation = 2;
+        // Constructor (lazy): (outputDepth, kernelSize, dilation, stride, padding, activation)
+        var original = new DilatedConvolutionalLayer<float>(
+            outputChannels, kernelSize, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, inputChannels, height, width]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region SeparableConvolutionalLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SeparableConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int batchSize = 2;
+        int inputChannels = 3;
+        int outputChannels = 16;
+        int height = 32;
+        int width = 32;
+        int kernelSize = 3;
+        // SeparableConvolutionalLayer uses NHWC format: inputShape = [batch, height, width, channels]
+        int[] inputShape = [batchSize, height, width, inputChannels];
+        var layer = new SeparableConvolutionalLayer<float>(
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
+
+        // Input tensor matches inputShape: [batch, height, width, channels]
+        var input = Tensor<float>.CreateRandom(inputShape);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(batchSize, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SeparableConvolutionalLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int batchSize = 1;
+        int inputChannels = 3;
+        int outputChannels = 8;
+        int height = 16;
+        int width = 16;
+        int kernelSize = 3;
+        // SeparableConvolutionalLayer uses NHWC format: inputShape = [batch, height, width, channels]
+        int[] inputShape = [batchSize, height, width, inputChannels];
+        var original = new SeparableConvolutionalLayer<float>(
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
+        var input = Tensor<float>.CreateRandom(inputShape);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region AdaptiveAveragePoolingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveAveragePoolingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputChannels = 3;
+        int inputHeight = 32;
+        int inputWidth = 32;
+        int outputHeight = 4;
+        int outputWidth = 4;
+        var layer = new AdaptiveAveragePoolingLayer<float>(
+            outputHeight, outputWidth);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputChannels, inputHeight, inputWidth]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(inputChannels, output.Shape[1]); // channels preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveAveragePoolingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputChannels = 3;
+        int inputHeight = 16;
+        int inputWidth = 16;
+        var original = new AdaptiveAveragePoolingLayer<float>(2, 2);
+        var input = Tensor<float>.CreateRandom([1, inputChannels, inputHeight, inputWidth]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region TimeEmbeddingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task TimeEmbeddingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int embeddingDim = 64;
+        int outputDim = 128;
+        var layer = new TimeEmbeddingLayer<float>(embeddingDim, outputDim);
+
+        // Input: timestep values
+        var input = Tensor<float>.CreateRandom([4, 1]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TimeEmbeddingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int embeddingDim = 32;
+        int outputDim = 64;
+        var original = new TimeEmbeddingLayer<float>(embeddingDim, outputDim);
+        var input = Tensor<float>.CreateRandom([2, 1]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region MeanLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MeanLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int[] inputShape = [4, 8, 16];
+        int axis = 1; // Mean over axis 1
+        var layer = new MeanLayer<float>(axis);
+
+        var input = Tensor<float>.CreateRandom([2, 4, 8, 16]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MeanLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [4, 8];
+        int axis = 0;
+        var original = new MeanLayer<float>(axis);
+        var input = Tensor<float>.CreateRandom([2, 4, 8]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region LambdaLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task LambdaLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int[] inputShape = [10];
+        int[] outputShape = [10];
+        // Simple identity-like function for testing
+        Func<Tensor<float>, Tensor<float>> forwardFunction = input => input;
+        var layer = new LambdaLayer<float>(inputShape, outputShape, forwardFunction, null,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+
+        var input = Tensor<float>.CreateRandom([4, 10]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LambdaLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [8];
+        int[] outputShape = [8];
+        Func<Tensor<float>, Tensor<float>> forwardFunction = input => input;
+        var original = new LambdaLayer<float>(inputShape, outputShape, forwardFunction, null,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+        var input = Tensor<float>.CreateRandom([2, 8]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region LocallyConnectedLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task LocallyConnectedLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputHeight = 16;
+        int inputWidth = 16;
+        int inputChannels = 3;
+        int outputChannels = 8;
+        int kernelSize = 3;
+        int stride = 1;
+        var layer = new LocallyConnectedLayer<float>(
+            outputChannels, kernelSize, stride,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // LocallyConnectedLayer expects NHWC format: [batch, height, width, channels]
+        var input = Tensor<float>.CreateRandom([2, inputHeight, inputWidth, inputChannels]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LocallyConnectedLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputHeight = 8;
+        int inputWidth = 8;
+        int inputChannels = 2;
+        int outputChannels = 4;
+        int kernelSize = 3;
+        int stride = 1;
+        var original = new LocallyConnectedLayer<float>(
+            outputChannels, kernelSize, stride,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+        // LocallyConnectedLayer expects NHWC format: [batch, height, width, channels]
+        var input = Tensor<float>.CreateRandom([1, inputHeight, inputWidth, inputChannels]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region SpectralNormalizationLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SpectralNormalizationLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        var innerLayer = new DenseLayer<float>(32);
+        var layer = new SpectralNormalizationLayer<float>(innerLayer, powerIterations: 1);
+
+        var input = Tensor<float>.CreateRandom([4, 64]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+        Assert.Equal(32, output.Shape[1]); // output features
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpectralNormalizationLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var innerLayer = new DenseLayer<float>(16);
+        var original = new SpectralNormalizationLayer<float>(innerLayer, powerIterations: 2);
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region CroppingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CroppingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        // CroppingLayer constructor: (inputShape, cropTop[], cropBottom[], cropLeft[], cropRight[], activation)
+        // Each crop array must have the same length as inputShape
+        int[] inputShape = [32, 32, 3]; // height, width, channels
+        int[] cropTop = [2, 2, 0];      // crop 2 from top of height, 2 from left of width, 0 from channels
+        int[] cropBottom = [2, 2, 0];   // crop 2 from bottom of height, 2 from right of width, 0 from channels
+        int[] cropLeft = [0, 0, 0];     // additional left cropping per dimension
+        int[] cropRight = [0, 0, 0];    // additional right cropping per dimension
+        var layer = new CroppingLayer<float>(cropTop, cropBottom, cropLeft, cropRight,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+
+        // Input: matches inputShape
+        var input = Tensor<float>.CreateRandom([2, 32, 32, 3]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CroppingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        // Each crop array must have the same length as inputShape
+        int[] inputShape = [16, 16, 3];
+        int[] cropTop = [1, 1, 0];
+        int[] cropBottom = [1, 1, 0];
+        int[] cropLeft = [0, 0, 0];
+        int[] cropRight = [0, 0, 0];
+        var original = new CroppingLayer<float>(cropTop, cropBottom, cropLeft, cropRight,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, 16, 16, 3]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region SubpixelConvolutionalLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SubpixelConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        // Constructor: (inputDepth, outputDepth, upscaleFactor, kernelSize, inputHeight, inputWidth, activation)
+        int inputDepth = 12;
+        int outputDepth = 3;
+        int upscaleFactor = 2;
+        int kernelSize = 3;
+        int height = 8;
+        int width = 8;
+        var layer = new SubpixelConvolutionalLayer<float>(
+            outputDepth, upscaleFactor, kernelSize,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputDepth, height, width]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SubpixelConvolutionalLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputDepth = 4;
+        int outputDepth = 1;
+        int upscaleFactor = 2;
+        int kernelSize = 3;
+        var original = new SubpixelConvolutionalLayer<float>(
+            outputDepth, upscaleFactor, kernelSize,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, inputDepth, 8, 8]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region PoolingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task PoolingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputDepth = 3;
+        int inputHeight = 16;
+        int inputWidth = 16;
+        int poolSize = 2;
+        int stride = 2;
+        var layer = new PoolingLayer<float>(poolSize, stride, PoolingType.Max);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputDepth, inputHeight, inputWidth]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(inputDepth, output.Shape[1]); // channels preserved
+        Assert.Equal(8, output.Shape[2]); // height halved
+        Assert.Equal(8, output.Shape[3]); // width halved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PoolingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputDepth = 3;
+        int inputHeight = 8;
+        int inputWidth = 8;
+        int poolSize = 2;
+        int stride = 2;
+        var original = new PoolingLayer<float>(poolSize, stride, PoolingType.Average);
+        var input = Tensor<float>.CreateRandom([1, inputDepth, inputHeight, inputWidth]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region RecurrentLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 10;
+        int hiddenSize = 20;
+        var layer = new RecurrentLayer<float>( hiddenSize,
+            (IActivationFunction<float>)new TanhActivation<float>());
+
+        // Input: [batch, sequenceLength, inputSize]
+        var input = Tensor<float>.CreateRandom([2, 5, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 8;
+        int hiddenSize = 16;
+        var original = new RecurrentLayer<float>( hiddenSize,
+            (IActivationFunction<float>)new TanhActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region FullyConnectedLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task FullyConnectedLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 64;
+        int outputSize = 32;
+        var layer = new FullyConnectedLayer<float>(outputSize,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Input: [batch, inputSize]
+        var input = Tensor<float>.CreateRandom([4, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FullyConnectedLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 32;
+        int outputSize = 16;
+        var original = new FullyConnectedLayer<float>(outputSize,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region BidirectionalLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 10;
+        int hiddenSize = 20;
+        int sequenceLength = 5;
+        int[] inputShape = [sequenceLength, inputSize];
+        var innerLayer = new LSTMLayer<float>( hiddenSize,
+            (IActivationFunction<float>)new TanhActivation<float>());
+        var layer = new BidirectionalLayer<float>(innerLayer, mergeMode: true,
+            activationFunction: (IActivationFunction<float>)new IdentityActivation<float>());
+
+        // Input: [batch, sequenceLength, inputSize]
+        var input = Tensor<float>.CreateRandom([2, sequenceLength, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BidirectionalLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 8;
+        int hiddenSize = 16;
+        int sequenceLength = 4;
+        var innerLayer = new GRULayer<float>( hiddenSize, returnSequences: false,
+            activation: (IActivationFunction<float>)new TanhActivation<float>());
+        var original = new BidirectionalLayer<float>(innerLayer, mergeMode: false,
+            activationFunction: (IActivationFunction<float>)new IdentityActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, sequenceLength, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region TimeDistributedLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task TimeDistributedLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 32;
+        int outputSize = 16;
+        var innerLayer = new DenseLayer<float>(outputSize);
+        var layer = new TimeDistributedLayer<float>(innerLayer,
+            activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Input: [batch, sequenceLength, inputSize]
+        var input = Tensor<float>.CreateRandom([2, 5, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TimeDistributedLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 16;
+        int outputSize = 8;
+        var innerLayer = new DenseLayer<float>(outputSize);
+        var original = new TimeDistributedLayer<float>(innerLayer,
+            activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region SequenceLastLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SequenceLastLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int featureSize = 32;
+        var layer = new SequenceLastLayer<float>(featureSize);
+
+        // Input: [batch, sequenceLength, featureSize]
+        var input = Tensor<float>.CreateRandom([2, 5, featureSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SequenceLastLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int featureSize = 16;
+        var original = new SequenceLastLayer<float>(featureSize);
+        var input = Tensor<float>.CreateRandom([1, 4, featureSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region Upsample3DLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task Upsample3DLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        // inputShape: [channels, depth, height, width]
+        int[] inputShape = [3, 4, 8, 8];
+        int scaleFactor = 2;
+        var layer = new Upsample3DLayer<float>(scaleFactor);
+
+        // Input: [batch, channels, depth, height, width]
+        var input = Tensor<float>.CreateRandom([2, 3, 4, 8, 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Upsample3DLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [2, 2, 4, 4];
+        int scaleFactor = 2;
+        var original = new Upsample3DLayer<float>(scaleFactor);
+        var input = Tensor<float>.CreateRandom([1, 2, 2, 4, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region GraphConvolutionalLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task GraphConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int numNodes = 10;
+        int inputFeatures = 16;
+        int outputFeatures = 8;
+        var layer = new GraphConvolutionalLayer<float>(inputFeatures, outputFeatures,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Create adjacency matrix (all ones for full connectivity)
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        layer.SetAdjacencyMatrix(adjacencyMatrix);
+
+        // Node features: [numNodes, inputFeatures]
+        var nodeFeatures = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(nodeFeatures);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GraphConvolutionalLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int numNodes = 5;
+        int inputFeatures = 8;
+        int outputFeatures = 4;
+        var original = new GraphConvolutionalLayer<float>(inputFeatures, outputFeatures,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+
+        // Create adjacency matrix and set it
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        original.SetAdjacencyMatrix(adjacencyMatrix);
+
+        var input = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var clone = original.Clone();
+        // Clone needs adjacency matrix set too
+        if (clone is GraphConvolutionalLayer<float> cloneGcn)
+        {
+            cloneGcn.SetAdjacencyMatrix(adjacencyMatrix);
+        }
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region GraphAttentionLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int numNodes = 10;
+        int inputFeatures = 16;
+        int outputFeatures = 8;
+        int numHeads = 2;
+        var layer = new GraphAttentionLayer<float>(inputFeatures, outputFeatures, numHeads,
+            activationFunction: (IActivationFunction<float>)new LeakyReLUActivation<float>());
+
+        // Create adjacency matrix (all ones for full connectivity)
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        layer.SetAdjacencyMatrix(adjacencyMatrix);
+
+        // Node features: [numNodes, inputFeatures]
+        var nodeFeatures = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(nodeFeatures);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GraphAttentionLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int numNodes = 5;
+        int inputFeatures = 8;
+        int outputFeatures = 4;
+        int numHeads = 1;
+        var original = new GraphAttentionLayer<float>(inputFeatures, outputFeatures, numHeads);
+
+        // Create adjacency matrix and set it
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        original.SetAdjacencyMatrix(adjacencyMatrix);
+
+        var input = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var clone = original.Clone();
+        // Clone needs adjacency matrix set too
+        if (clone is GraphAttentionLayer<float> cloneGat)
+        {
+            cloneGat.SetAdjacencyMatrix(adjacencyMatrix);
+        }
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region AttentionLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 32;
+        int attentionSize = 16;
+        var layer = new AttentionLayer<float>(attentionSize,
+            (IActivationFunction<float>)new SoftmaxActivation<float>());
+
+        // Input: [batch, sequenceLength, inputSize]
+        var input = Tensor<float>.CreateRandom([2, 8, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AttentionLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 16;
+        int attentionSize = 8;
+        var original = new AttentionLayer<float>(attentionSize,
+            (IActivationFunction<float>)new SoftmaxActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region DecoderLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DecoderLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 32;
+        int attentionSize = 16;
+        int feedForwardSize = 64;
+        var layer = new DecoderLayer<float>(attentionSize, feedForwardSize,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Input: [batch, sequenceLength, inputSize]
+        var input = Tensor<float>.CreateRandom([2, 8, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DecoderLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 16;
+        int attentionSize = 8;
+        int feedForwardSize = 32;
+        var original = new DecoderLayer<float>(attentionSize, feedForwardSize,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region RBMLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task RBMLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int visibleUnits = 64;
+        int hiddenUnits = 32;
+        var layer = new RBMLayer<float>(visibleUnits, hiddenUnits,
+            (IActivationFunction<float>)new SigmoidActivation<float>());
+
+        // Input: [batch, visibleUnits]
+        var input = Tensor<float>.CreateRandom([4, visibleUnits]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RBMLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int visibleUnits = 32;
+        int hiddenUnits = 16;
+        var original = new RBMLayer<float>(visibleUnits, hiddenUnits,
+            (IActivationFunction<float>)new SigmoidActivation<float>());
+        var input = Tensor<float>.CreateRandom([2, visibleUnits]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region ReservoirLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ReservoirLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 16;
+        int reservoirSize = 64;
+        var layer = new ReservoirLayer<float>(inputSize, reservoirSize);
+
+        // Input: [batch, inputSize]
+        var input = Tensor<float>.CreateRandom([4, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ReservoirLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 8;
+        int reservoirSize = 32;
+        var original = new ReservoirLayer<float>(inputSize, reservoirSize);
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region SparseLinearLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SparseLinearLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputFeatures = 64;
+        int outputFeatures = 32;
+        var layer = new SparseLinearLayer<float>(inputFeatures, outputFeatures, sparsity: 0.5);
+
+        // Input: [batch, inputFeatures]
+        var input = Tensor<float>.CreateRandom([4, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SparseLinearLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputFeatures = 32;
+        int outputFeatures = 16;
+        var original = new SparseLinearLayer<float>(inputFeatures, outputFeatures, sparsity: 0.5);
+        var input = Tensor<float>.CreateRandom([2, inputFeatures]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region SpatialTransformerLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SpatialTransformerLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputHeight = 28;
+        int inputWidth = 28;
+        int outputHeight = 28;
+        int outputWidth = 28;
+        var layer = new SpatialTransformerLayer<float>(outputHeight, outputWidth,
+            (IActivationFunction<float>)new TanhActivation<float>());
+
+        // Input: [batch, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputHeight, inputWidth]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpatialTransformerLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputHeight = 16;
+        int inputWidth = 16;
+        int outputHeight = 16;
+        int outputWidth = 16;
+        var original = new SpatialTransformerLayer<float>(outputHeight, outputWidth,
+            (IActivationFunction<float>)new TanhActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, inputHeight, inputWidth]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region PatchEmbeddingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task PatchEmbeddingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int imageHeight = 28;
+        int imageWidth = 28;
+        int channels = 3;
+        int patchSize = 7;
+        int embeddingDim = 64;
+        var layer = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, channels, imageHeight, imageWidth]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PatchEmbeddingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int imageHeight = 16;
+        int imageWidth = 16;
+        int channels = 1;
+        int patchSize = 4;
+        int embeddingDim = 32;
+        var original = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
+        var input = Tensor<float>.CreateRandom([1, channels, imageHeight, imageWidth]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region TransitionLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputChannels = 64;
+        int inputHeight = 16;
+        int inputWidth = 16;
+        double compressionFactor = 0.5;
+        var layer = new TransitionLayer<float>(compressionFactor);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputChannels, inputHeight, inputWidth]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TransitionLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputChannels = 32;
+        int inputHeight = 8;
+        int inputWidth = 8;
+        double compressionFactor = 0.5;
+        var original = new TransitionLayer<float>(compressionFactor);
+        var input = Tensor<float>.CreateRandom([1, inputChannels, inputHeight, inputWidth]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region BasicBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inChannels = 64;
+        int outChannels = 64;
+        int height = 56;
+        int width = 56;
+        var layer = new BasicBlock<float>(outChannels, stride: 1);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inChannels, height, width]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BasicBlock_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inChannels = 32;
+        int outChannels = 32;
+        int height = 28;
+        int width = 28;
+        var original = new BasicBlock<float>(outChannels, stride: 1);
+        var input = Tensor<float>.CreateRandom([1, inChannels, height, width]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region BottleneckBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inChannels = 64;
+        int baseChannels = 64;
+        int height = 56;
+        int width = 56;
+        var layer = new BottleneckBlock<float>(baseChannels, stride: 1);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inChannels, height, width]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BottleneckBlock_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inChannels = 32;
+        int baseChannels = 32;
+        int height = 28;
+        int width = 28;
+        var original = new BottleneckBlock<float>(baseChannels, stride: 1);
+        var input = Tensor<float>.CreateRandom([1, inChannels, height, width]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region CapsuleLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CapsuleLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputCapsules = 32;
+        int inputDimension = 8;
+        int numCapsules = 10;
+        int capsuleDimension = 16;
+        int numRoutingIterations = 3;
+        var layer = new CapsuleLayer<float>(numCapsules, capsuleDimension, numRoutingIterations);
+
+        // Input: [batch, inputCapsules, inputDimension]
+        var input = Tensor<float>.CreateRandom([2, inputCapsules, inputDimension]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CapsuleLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputCapsules = 16;
+        int inputDimension = 4;
+        int numCapsules = 5;
+        int capsuleDimension = 8;
+        int numRoutingIterations = 2;
+        var original = new CapsuleLayer<float>(numCapsules, capsuleDimension, numRoutingIterations);
+        var input = Tensor<float>.CreateRandom([1, inputCapsules, inputDimension]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region DenseBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputChannels = 64;
+        int numLayers = 4;
+        int growthRate = 32;
+        int height = 28;
+        int width = 28;
+        var layer = new DenseBlock<float>(numLayers, growthRate);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputChannels, height, width]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DenseBlock_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputChannels = 32;
+        int numLayers = 2;
+        int growthRate = 16;
+        int height = 14;
+        int width = 14;
+        var original = new DenseBlock<float>(numLayers, growthRate);
+        var input = Tensor<float>.CreateRandom([1, inputChannels, height, width]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region GraphIsomorphismLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task GraphIsomorphismLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int numNodes = 10;
+        int inputFeatures = 16;
+        int outputFeatures = 32;
+        var layer = new GraphIsomorphismLayer<float>(inputFeatures, outputFeatures,
+            activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Set adjacency matrix before forward pass
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        layer.SetAdjacencyMatrix(adjacencyMatrix);
+
+        // Input: [numNodes, inputFeatures]
+        var input = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GraphIsomorphismLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int numNodes = 5;
+        int inputFeatures = 8;
+        int outputFeatures = 16;
+        var original = new GraphIsomorphismLayer<float>(inputFeatures, outputFeatures,
+            activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        original.SetAdjacencyMatrix(adjacencyMatrix);
+        var input = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var clone = (GraphIsomorphismLayer<float>)original.Clone();
+        clone.SetAdjacencyMatrix(adjacencyMatrix);
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region GraphSAGELayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task GraphSAGELayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int numNodes = 10;
+        int inputFeatures = 16;
+        int outputFeatures = 32;
+        var layer = new GraphSAGELayer<float>(inputFeatures, outputFeatures,
+            aggregatorType: SAGEAggregatorType.Mean,
+            activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Set adjacency matrix before forward pass
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        layer.SetAdjacencyMatrix(adjacencyMatrix);
+
+        // Input: [numNodes, inputFeatures]
+        var input = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GraphSAGELayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int numNodes = 5;
+        int inputFeatures = 8;
+        int outputFeatures = 16;
+        var original = new GraphSAGELayer<float>(inputFeatures, outputFeatures,
+            aggregatorType: SAGEAggregatorType.Mean,
+            activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        original.SetAdjacencyMatrix(adjacencyMatrix);
+        var input = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var clone = (GraphSAGELayer<float>)original.Clone();
+        clone.SetAdjacencyMatrix(adjacencyMatrix);
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region InvertedResidualBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inChannels = 32;
+        int outChannels = 64;
+        int height = 28;
+        int width = 28;
+        var layer = new InvertedResidualBlock<float>(outChannels,
+            expansionRatio: 6, stride: 1);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inChannels, height, width]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inChannels = 16;
+        int outChannels = 32;
+        int height = 14;
+        int width = 14;
+        var original = new InvertedResidualBlock<float>(outChannels,
+            expansionRatio: 4, stride: 1);
+        var input = Tensor<float>.CreateRandom([1, inChannels, height, width]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region MessagePassingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MessagePassingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int numNodes = 10;
+        int inputFeatures = 16;
+        int outputFeatures = 32;
+        var layer = new MessagePassingLayer<float>(inputFeatures, outputFeatures,
+            activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Set adjacency matrix before forward pass
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        layer.SetAdjacencyMatrix(adjacencyMatrix);
+
+        // Input: [numNodes, inputFeatures]
+        var input = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MessagePassingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int numNodes = 5;
+        int inputFeatures = 8;
+        int outputFeatures = 16;
+        var original = new MessagePassingLayer<float>(inputFeatures, outputFeatures,
+            activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
+        var adjacencyMatrix = Tensor<float>.CreateDefault([numNodes, numNodes], 1.0f);
+        original.SetAdjacencyMatrix(adjacencyMatrix);
+        var input = Tensor<float>.CreateRandom([numNodes, inputFeatures]);
+
+        // Act
+        var clone = (MessagePassingLayer<float>)original.Clone();
+        clone.SetAdjacencyMatrix(adjacencyMatrix);
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region SpikingLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SpikingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 32;
+        int outputSize = 16;
+        var layer = new SpikingLayer<float>(inputSize, outputSize,
+            neuronType: SpikingNeuronType.LeakyIntegrateAndFire);
+
+        // Input: [batch, inputSize]
+        var input = Tensor<float>.CreateRandom([4, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpikingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 16;
+        int outputSize = 8;
+        var original = new SpikingLayer<float>(inputSize, outputSize,
+            neuronType: SpikingNeuronType.LeakyIntegrateAndFire);
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region QuantumLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 4;
+        int outputSize = 4;
+        int numQubits = 2;
+        var layer = new QuantumLayer<float>(inputSize, outputSize, numQubits);
+
+        // Input: [batch, inputSize]
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task QuantumLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 4;
+        int outputSize = 4;
+        int numQubits = 2;
+        var original = new QuantumLayer<float>(inputSize, outputSize, numQubits);
+        var input = Tensor<float>.CreateRandom([1, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region AnomalyDetectorLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyDetectorLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 16;
+        double threshold = 2.0;
+        var layer = new AnomalyDetectorLayer<float>(inputSize, threshold);
+
+        // Input: [batch, inputSize]
+        var input = Tensor<float>.CreateRandom([4, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AnomalyDetectorLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 8;
+        double threshold = 1.5;
+        var original = new AnomalyDetectorLayer<float>(inputSize, threshold);
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region RBFLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task RBFLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 16;
+        int outputSize = 8;
+        var rbf = new GaussianRBF<float>(1.0f);
+        var layer = new RBFLayer<float>(inputSize, outputSize, rbf);
+
+        // Input: [batch, inputSize]
+        var input = Tensor<float>.CreateRandom([4, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RBFLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 8;
+        int outputSize = 4;
+        var rbf = new GaussianRBF<float>(1.0f);
+        var original = new RBFLayer<float>(inputSize, outputSize, rbf);
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region ExpertLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ExpertLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 16;
+        int hiddenSize = 32;
+        int outputSize = 8;
+        var layers = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(hiddenSize, (IActivationFunction<float>)new ReLUActivation<float>()),
+            new DenseLayer<float>(outputSize, (IActivationFunction<float>)new IdentityActivation<float>())
+        };
+        var layer = new ExpertLayer<float>(layers, [inputSize], [outputSize]);
+
+        // Input: [batch, inputSize]
+        var input = Tensor<float>.CreateRandom([4, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ExpertLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 8;
+        int outputSize = 4;
+        var layers = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>())
+        };
+        var original = new ExpertLayer<float>(layers, [inputSize], [outputSize]);
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    #endregion
+
+    #region HyperbolicLinearLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicLinearLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputFeatures = 6;
+        int outputFeatures = 4;
+        var layer = new HyperbolicLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([3, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal([3, outputFeatures], output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HyperbolicLinearLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputFeatures = 5;
+        int outputFeatures = 3;
+        var layer = new HyperbolicLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([2, 4, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([2, 4, outputFeatures], output.Shape.ToArray());
+    }
+
+
+    #endregion
+
+    #region OctonionLinearLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task OctonionLinearLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputFeatures = 3;
+        int outputFeatures = 2;
+        var layer = new OctonionLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([4, inputFeatures * 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([4, outputFeatures * 8], output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task OctonionLinearLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputFeatures = 2;
+        int outputFeatures = 3;
+        var layer = new OctonionLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([2, 3, inputFeatures * 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([2, 3, outputFeatures * 8], output.Shape.ToArray());
+    }
+
+
+    #endregion
+
+    #region ReadoutLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ReadoutLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 8;
+        int outputSize = 5;
+        var layer = new ReadoutLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([3, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([3, outputSize], output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ReadoutLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 6;
+        int outputSize = 4;
+        var layer = new ReadoutLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([2, 3, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([2, 3, outputSize], output.Shape.ToArray());
+    }
+
+
+    #endregion
+
+    #region MeasurementLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MeasurementLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int size = 8;
+        var layer = new MeasurementLayer<float>(size);
+        var input = Tensor<float>.CreateRandom([3, size]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MeasurementLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int size = 6;
+        var layer = new MeasurementLayer<float>(size);
+        var input = Tensor<float>.CreateRandom([2, 4, size]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+    }
+
+
+    #endregion
+
+    #region MixtureOfExpertsLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MixtureOfExpertsLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 6;
+        int outputSize = 4;
+        int numExperts = 2;
+        var experts = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize)
+        };
+        var router = new DenseLayer<float>(numExperts);
+        var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize]);
+        var input = Tensor<float>.CreateRandom([2, 3, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([2, 3, outputSize], output.Shape.ToArray());
+    }
+
+
+    [Fact(Timeout = 120000)]
+    public async Task MixtureOfExpertsLayer_TopKRouting_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 5;
+        int outputSize = 2;
+        int numExperts = 3;
+        var experts = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize)
+        };
+        var router = new DenseLayer<float>(numExperts);
+        var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize], topK: 1);
+        var input = Tensor<float>.CreateRandom([3, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([3, outputSize], output.Shape.ToArray());
+    }
+
+    #endregion
+}

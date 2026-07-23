@@ -1,0 +1,122 @@
+name: CI Shard Closure Policy
+
+# Enforces the "shard stays open until shard goes green" rule established in
+# audit comment https://github.com/ooples/AiDotNet/issues/1315#issuecomment-4501244896.
+# When an issue tagged `ci-failure` is closed, this action checks the latest
+# Build & SonarCloud run on master and warns / auto-reopens if the shard the
+# issue claims to fix is still red.
+#
+# Why this exists: historically issues were closed when their originally-listed
+# tests passed, but the shard those tests belong to was still failing due to
+# OTHER tests in the same shard. Result: dashboard said "fixed" while CI was
+# perpetually red. The audit pulled 4 prematurely-closed issues that were
+# still tracking red shards (#1304, #1305, #1307, #1313). This action stops
+# that pattern at the source.
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+  actions: read
+
+jobs:
+  check-shard-still-red:
+    runs-on: ubuntu-latest
+    # Only run on ci-failure-labeled issues. Other issue closures are out of
+    # scope — this isn't a generic "did you fix it" guardrail, just a CI-shard
+    # accountability check.
+    if: contains(github.event.issue.labels.*.name, 'ci-failure')
+    steps:
+      - name: Extract shard name from issue title
+        id: extract
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          # Issue titles follow conventions like:
+          #   "[PR #1290 CI] Tests (net10.0) - ModelFamily - NeuralNetworks: 5 failing tests"
+          #   "[PR #1290 CI Cluster 6] Long-training timeouts ..."
+          #   "[CI] Tests (net10.0) - Unit - 08d NN-Adapters/Other: MoE MoreData failing"
+          # Try to extract the shard short name (the bit after "Tests (net10.0) - ").
+          shard=$(echo "$ISSUE_TITLE" | grep -oP 'Tests \(net10\.0\) - \K[^:]+' | head -1 | sed 's/[[:space:]]*$//')
+          if [ -z "$shard" ]; then
+            echo "No shard name found in title — issue not bound to a named shard, skipping check."
+            echo "shard=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Extracted shard: '$shard'"
+            echo "shard=$shard" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check latest master CI run for this shard
+        id: check
+        if: steps.extract.outputs.shard != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHARD_NAME: ${{ steps.extract.outputs.shard }}
+        run: |
+          # Find the most recent COMPLETED Build & SonarCloud run on master,
+          # success or failure — whichever is newer. Picking "newest success
+          # first, fall back to failure" would let a newer red run be ignored
+          # whenever any older green run exists, so the tracking issue stays
+          # closed while the shard is currently red. We deliberately skip
+          # cancelled runs (those don't tell us anything about shard health —
+          # they were superseded by a newer commit).
+          run_id=$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow "Build & SonarCloud" \
+            --branch master \
+            --limit 20 \
+            --json databaseId,status,conclusion,createdAt \
+            -q '[.[] | select(.status == "completed" and .conclusion != "cancelled")] | sort_by(.createdAt) | last | .databaseId')
+
+          if [ -z "$run_id" ]; then
+            echo "No recent completed master runs found — cannot verify shard state."
+            echo "shard_status=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Checking run $run_id for shard '$SHARD_NAME'"
+          # Job names look like "Tests (net10.0) - ModelFamily - NeuralNetworks".
+          # Match by suffix so the extracted shard name maps cleanly.
+          # Pass SHARD_NAME via jq --arg rather than string-interpolating into
+          # the filter — SHARD_NAME comes from issue titles (user-controlled),
+          # and a quote / backslash inside would break the jq program syntax,
+          # producing empty status and bypassing the audit.
+          status=$(gh run view "$run_id" \
+            --repo "${{ github.repository }}" \
+            --json jobs \
+            | jq -r --arg shard "$SHARD_NAME" \
+                '.jobs[] | select(.name | endswith($shard)) | .conclusion' \
+            | head -1)
+
+          if [ -z "$status" ]; then
+            echo "Could not find matching job for shard '$SHARD_NAME' in run $run_id."
+            echo "shard_status=unknown" >> "$GITHUB_OUTPUT"
+          else
+            echo "Shard '$SHARD_NAME' last status: $status"
+            echo "shard_status=$status" >> "$GITHUB_OUTPUT"
+            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reopen issue if shard still red
+        if: steps.check.outputs.shard_status == 'failure' || steps.check.outputs.shard_status == 'cancelled'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          SHARD_NAME: ${{ steps.extract.outputs.shard }}
+          SHARD_STATUS: ${{ steps.check.outputs.shard_status }}
+          RUN_ID: ${{ steps.check.outputs.run_id }}
+        run: |
+          gh issue reopen "$ISSUE_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --comment "⚠️ Auto-reopened by **CI Shard Closure Policy**.
+
+          This issue was closed, but the shard \`$SHARD_NAME\` is still **$SHARD_STATUS** in the latest master CI run ([run $RUN_ID](${{ github.server_url }}/${{ github.repository }}/actions/runs/$RUN_ID)).
+
+          Per the closure policy established in #1315: **a shard's tracking issue stays open until the shard goes green in CI**, not until the originally-listed tests pass. The shard may still be failing because (a) other tests in the same shard are red, (b) a new failure appeared after the original list was filed, or (c) the runner was cancelled and we don't yet know what's failing.
+
+          To close cleanly:
+          1. Verify the latest CI run on master shows this shard as ✅ success
+          2. If new failures appeared, file a fresh issue or expand this one's scope first
+          3. Then close — at which point this guard won't fire."

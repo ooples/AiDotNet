@@ -1,0 +1,62 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
+
+namespace AiDotNet.KnowledgeDistillation.Teachers;
+
+/// <summary>
+/// Adaptive teacher model that wraps a base teacher and provides its logits.
+/// </summary>
+/// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
+/// <remarks>
+/// <para><b>Architecture Note:</b> This class has been simplified to match the current architecture
+/// where temperature scaling is handled by distillation strategies, not teachers. The adaptive
+/// features (dynamic temperature adjustment based on student performance) have been removed as they
+/// belong in the strategy layer.</para>
+///
+/// <para>For adaptive temperature scaling, implement a custom IDistillationStrategy that monitors
+/// student performance and adjusts temperature accordingly.</para>
+/// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Distilling the Knowledge in a Neural Network",
+    "https://arxiv.org/abs/1503.02531",
+    Year = 2015,
+    Authors = "Geoffrey Hinton, Oriol Vinyals, Jeff Dean")]
+[ComponentType(ComponentType.DistillationStrategy)]
+[PipelineStage(PipelineStage.Training)]
+public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
+{
+    private readonly ITeacherModel<Vector<T>, Vector<T>> _baseTeacher;
+
+    /// <summary>
+    /// Gets the output dimension.
+    /// </summary>
+    public override int OutputDimension => _baseTeacher.OutputDimension;
+
+    /// <summary>
+    /// Initializes a new instance of the AdaptiveTeacherModel class.
+    /// </summary>
+    /// <param name="baseTeacher">The underlying teacher model.</param>
+    public AdaptiveTeacherModel(ITeacherModel<Vector<T>, Vector<T>> baseTeacher)
+    {
+        Guard.NotNull(baseTeacher);
+        _baseTeacher = baseTeacher;
+    }
+
+    /// <summary>
+    /// Gets logits from the base teacher.
+    /// </summary>
+    public override Vector<T> GetLogits(Vector<T> input)
+    {
+        return _baseTeacher.GetLogits(input);
+    }
+}

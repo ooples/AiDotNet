@@ -1,0 +1,176 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.AnomalyDetection.Ensemble;
+
+/// <summary>
+/// Combines multiple anomaly detectors using maximum score strategy.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> This ensemble method takes the maximum anomaly score across all base
+/// detectors. If ANY detector thinks a point is anomalous, it gets a high score. This is
+/// useful when you want to catch anomalies that only specific detectors can find.
+/// </para>
+/// <para>
+/// The algorithm works by:
+/// 1. Train each base detector on the data
+/// 2. Normalize scores from each detector to [0,1]
+/// 3. Take the maximum normalized score for each point
+/// 4. Points with high max score are anomalies
+/// </para>
+/// <para>
+/// <b>When to use:</b>
+/// - When different anomaly types need different detectors
+/// - When you want high recall (catch most anomalies)
+/// - When false negatives are costly
+/// </para>
+/// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ResearchPaper("Outlier Ensembles: An Introduction", "https://doi.org/10.1007/978-3-319-54765-7")]
+public class MaximumDetector<T> : AnomalyDetectorBase<T>
+{
+    private List<IAnomalyDetector<T>>? _baseDetectors;
+
+    /// <summary>
+    /// Creates a new Maximum ensemble anomaly detector.
+    /// </summary>
+    /// <param name="contamination">Expected proportion of anomalies. Default is 0.1 (10%).</param>
+    /// <param name="randomSeed">Random seed for reproducibility. Default is 42.</param>
+    public MaximumDetector(double contamination = 0.1, int randomSeed = 42)
+        : base(contamination, randomSeed)
+    {
+    }
+
+    /// <inheritdoc/>
+    public override void Fit(Matrix<T> X)
+    {
+        ValidateInput(X);
+
+        int n = X.Rows;
+
+        // Guard against tiny datasets - need at least 2 samples for neighbor-based methods
+        if (n < 2)
+        {
+            throw new ArgumentException(
+                $"MaximumDetector requires at least 2 samples, but got {n}.",
+                nameof(X));
+        }
+
+        int k = Math.Max(1, Math.Min(10, n - 1));
+
+        // Create default base detectors
+        _baseDetectors = new List<IAnomalyDetector<T>>
+        {
+            new DistanceBased.LocalOutlierFactor<T>(
+                numNeighbors: k,
+                contamination: _contamination,
+                randomSeed: _randomSeed),
+
+            new TreeBased.IsolationForest<T>(
+                numTrees: 100,
+                maxSamples: Math.Min(256, n),
+                contamination: _contamination,
+                randomSeed: _randomSeed + 1),
+
+            new DistanceBased.KNNDetector<T>(
+                k: k,
+                contamination: _contamination,
+                randomSeed: _randomSeed + 2)
+        };
+
+        // Fit all base detectors
+        foreach (var detector in _baseDetectors)
+        {
+            detector.Fit(X);
+        }
+
+        // Calculate scores for training data to set threshold
+        var trainingScores = ScoreAnomaliesInternal(X);
+        SetThresholdFromContamination(trainingScores);
+
+        _isFitted = true;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> ScoreAnomalies(Matrix<T> X)
+    {
+        EnsureFitted();
+        return ScoreAnomaliesInternal(X);
+    }
+
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    {
+        ValidateInput(X);
+
+        var baseDetectors = _baseDetectors;
+        if (baseDetectors == null)
+        {
+            throw new InvalidOperationException("Model not properly fitted.");
+        }
+
+        // Collect and normalize scores from all detectors
+        var allScores = new List<Vector<T>>();
+
+        foreach (var detector in baseDetectors)
+        {
+            var scores = detector.ScoreAnomalies(X);
+            var normalizedScores = NormalizeScores(scores);
+            allScores.Add(normalizedScores);
+        }
+
+        // Take maximum of normalized scores
+        var maxScores = new Vector<T>(X.Rows);
+
+        for (int i = 0; i < X.Rows; i++)
+        {
+            T maxVal = NumOps.MinValue;
+            foreach (var scores in allScores)
+            {
+                if (NumOps.GreaterThan(scores[i], maxVal))
+                {
+                    maxVal = scores[i];
+                }
+            }
+            maxScores[i] = maxVal;
+        }
+
+        return maxScores;
+    }
+
+    private Vector<T> NormalizeScores(Vector<T> scores)
+    {
+        int n = scores.Length;
+        var result = new Vector<T>(n);
+
+        T min = NumOps.MaxValue;
+        T max = NumOps.MinValue;
+
+        for (int i = 0; i < n; i++)
+        {
+            if (NumOps.LessThan(scores[i], min)) min = scores[i];
+            if (NumOps.GreaterThan(scores[i], max)) max = scores[i];
+        }
+
+        T range = NumOps.Subtract(max, min);
+        T eps = NumOps.FromDouble(1e-10);
+
+        if (NumOps.GreaterThan(range, eps))
+        {
+            for (int i = 0; i < n; i++)
+            {
+                result[i] = NumOps.Divide(NumOps.Subtract(scores[i], min), range);
+            }
+        }
+
+        return result;
+    }
+}

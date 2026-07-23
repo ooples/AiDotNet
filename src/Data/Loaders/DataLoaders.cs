@@ -1,0 +1,2172 @@
+using AiDotNet.Data.Audio;
+using AiDotNet.Data.Audio.Benchmarks;
+using AiDotNet.Data.Formats;
+using AiDotNet.Data.Geometry;
+using AiDotNet.Data.Graph;
+using AiDotNet.Data.Multimodal;
+using AiDotNet.Data.Text;
+using AiDotNet.Data.Text.Benchmarks;
+using AiDotNet.Data.Transforms;
+using AiDotNet.Data.Video;
+using AiDotNet.Data.Video.Benchmarks;
+using AiDotNet.Data.Vision;
+using AiDotNet.Data.Vision.Benchmarks;
+using AiDotNet.FederatedLearning.Benchmarks.Leaf;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+
+namespace AiDotNet.Data.Loaders;
+
+/// <summary>
+/// Static factory class for creating data loaders with beginner-friendly methods.
+/// </summary>
+/// <remarks>
+/// <para>
+/// DataLoaders provides the easiest way to create data loaders for common scenarios.
+/// It follows a factory pattern with static methods that handle type inference and
+/// common configurations automatically.
+/// </para>
+/// <para><b>For Beginners:</b> This is your starting point for loading data into AiDotNet!
+/// Choose the method that matches your data format:
+///
+/// **Common Patterns:**
+/// ```csharp
+/// // From arrays (simplest for small datasets)
+/// var loader = DataLoaders.FromArrays(features, labels);
+///
+/// // From Matrix and Vector (most common for ML)
+/// var loader = DataLoaders.FromMatrixVector(featureMatrix, labelVector);
+///
+/// // From Tensors (for deep learning)
+/// var loader = DataLoaders.FromTensors(inputTensor, outputTensor);
+/// ```
+///
+/// All loaders support:
+/// - Batching: `loader.BatchSize = 32;`
+/// - Shuffling: `loader.Shuffle();`
+/// - Splitting: `var (train, val, test) = loader.Split();`
+/// </para>
+/// </remarks>
+public static class DataLoaders
+{
+    #region Array-based Factory Methods
+
+    /// <summary>
+    /// Creates a data loader from 2D feature array and 1D label array.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">2D array where rows are samples and columns are features.</param>
+    /// <param name="labels">1D array of labels, one per sample.</param>
+    /// <returns>A configured InMemoryDataLoader ready for training.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when features or labels is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when dimensions don't match.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the simplest way to load tabular data.
+    ///
+    /// **Example - Predicting House Prices:**
+    /// ```csharp
+    /// // Features: [sqft, bedrooms, bathrooms]
+    /// double[,] features = new double[,] {
+    ///     { 1500, 3, 2 },
+    ///     { 2000, 4, 3 },
+    ///     { 1200, 2, 1 }
+    /// };
+    ///
+    /// // Labels: price
+    /// double[] labels = { 300000, 450000, 250000 };
+    ///
+    /// var loader = DataLoaders.FromArrays(features, labels);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromArrays<T>(
+        T[,] features,
+        T[] labels)
+    {
+        if (features is null)
+        {
+            throw new ArgumentNullException(nameof(features), "Features array cannot be null.");
+        }
+
+        if (labels is null)
+        {
+            throw new ArgumentNullException(nameof(labels), "Labels array cannot be null.");
+        }
+
+        int rows = features.GetLength(0);
+        int cols = features.GetLength(1);
+
+        if (rows != labels.Length)
+        {
+            throw new ArgumentException(
+                $"Feature rows ({rows}) must match label count ({labels.Length}).",
+                nameof(labels));
+        }
+
+        // Convert arrays to Matrix and Vector
+        var matrix = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                matrix[i, j] = features[i, j];
+            }
+        }
+
+        var vector = new Vector<T>(labels);
+
+        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(matrix, vector);
+    }
+
+    /// <summary>
+    /// Creates a data loader from jagged feature array and 1D label array.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">Jagged array where each inner array is a sample's features.</param>
+    /// <param name="labels">1D array of labels, one per sample.</param>
+    /// <returns>A configured InMemoryDataLoader ready for training.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when features or labels is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when dimensions don't match or arrays are inconsistent.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this when your data is in jagged array format.
+    ///
+    /// **Example:**
+    /// ```csharp
+    /// double[][] features = {
+    ///     new[] { 1.0, 2.0, 3.0 },
+    ///     new[] { 4.0, 5.0, 6.0 },
+    ///     new[] { 7.0, 8.0, 9.0 }
+    /// };
+    /// double[] labels = { 0, 1, 0 };
+    ///
+    /// var loader = DataLoaders.FromArrays(features, labels);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromArrays<T>(
+        T[][] features,
+        T[] labels)
+    {
+        if (features is null)
+        {
+            throw new ArgumentNullException(nameof(features), "Features array cannot be null.");
+        }
+
+        if (labels is null)
+        {
+            throw new ArgumentNullException(nameof(labels), "Labels array cannot be null.");
+        }
+
+        if (features.Length == 0)
+        {
+            throw new ArgumentException("Features array cannot be empty.", nameof(features));
+        }
+
+        int rows = features.Length;
+        int cols = features[0]?.Length ?? 0;
+
+        if (rows != labels.Length)
+        {
+            throw new ArgumentException(
+                $"Feature rows ({rows}) must match label count ({labels.Length}).",
+                nameof(labels));
+        }
+
+        // Validate all rows have same length
+        for (int i = 0; i < rows; i++)
+        {
+            if (features[i] is null)
+            {
+                throw new ArgumentException($"Feature row {i} cannot be null.", nameof(features));
+            }
+
+            if (features[i].Length != cols)
+            {
+                throw new ArgumentException(
+                    $"All feature rows must have the same length. Row 0 has {cols} columns, row {i} has {features[i].Length}.",
+                    nameof(features));
+            }
+        }
+
+        // Convert to Matrix
+        var matrix = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                matrix[i, j] = features[i][j];
+            }
+        }
+
+        var vector = new Vector<T>(labels);
+
+        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(matrix, vector);
+    }
+
+    /// <summary>
+    /// Creates a data loader from 1D feature array (single feature) and 1D label array.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">1D array of single feature values.</param>
+    /// <param name="labels">1D array of labels, one per sample.</param>
+    /// <returns>A configured InMemoryDataLoader ready for training.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when features or labels is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when lengths don't match.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for simple regression with one input variable.
+    ///
+    /// **Example - Simple Linear Regression:**
+    /// ```csharp
+    /// // X: study hours
+    /// double[] features = { 1, 2, 3, 4, 5 };
+    /// // Y: test scores
+    /// double[] labels = { 50, 60, 70, 80, 90 };
+    ///
+    /// var loader = DataLoaders.FromArrays(features, labels);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromArrays<T>(
+        T[] features,
+        T[] labels)
+    {
+        if (features is null)
+        {
+            throw new ArgumentNullException(nameof(features), "Features array cannot be null.");
+        }
+
+        if (labels is null)
+        {
+            throw new ArgumentNullException(nameof(labels), "Labels array cannot be null.");
+        }
+
+        if (features.Length != labels.Length)
+        {
+            throw new ArgumentException(
+                $"Feature count ({features.Length}) must match label count ({labels.Length}).",
+                nameof(labels));
+        }
+
+        // Convert single feature to matrix with one column
+        var matrix = new Matrix<T>(features.Length, 1);
+        for (int i = 0; i < features.Length; i++)
+        {
+            matrix[i, 0] = features[i];
+        }
+
+        var vector = new Vector<T>(labels);
+
+        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(matrix, vector);
+    }
+
+    #endregion
+
+    #region Matrix/Vector Factory Methods
+
+    /// <summary>
+    /// Creates a data loader from a feature Matrix and label Vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">Matrix where rows are samples and columns are features.</param>
+    /// <param name="labels">Vector of labels, one per sample.</param>
+    /// <returns>A configured InMemoryDataLoader ready for training.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when features or labels is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when row count doesn't match label count.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the most common format for machine learning.
+    /// Use this when you already have Matrix and Vector objects.
+    ///
+    /// **Example:**
+    /// ```csharp
+    /// var features = new Matrix&lt;double&gt;(100, 5);  // 100 samples, 5 features
+    /// var labels = new Vector&lt;double&gt;(100);       // 100 labels
+    ///
+    /// // Fill your data...
+    ///
+    /// var loader = DataLoaders.FromMatrixVector(features, labels);
+    ///
+    /// // Use with AiModelBuilder
+    /// var result = await builder
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(model)
+    ///     .BuildAsync();
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromMatrixVector<T>(
+        Matrix<T> features,
+        Vector<T> labels)
+    {
+        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(features, labels);
+    }
+
+    /// <summary>
+    /// Creates a data loader from a feature Matrix only (for unsupervised learning like clustering).
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">Matrix where rows are samples and columns are features.</param>
+    /// <returns>A configured InMemoryDataLoader ready for unsupervised training.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when features is null.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for unsupervised learning algorithms like clustering
+    /// where you don't have labels - the algorithm discovers patterns on its own.
+    ///
+    /// **Example - Clustering Customer Data:**
+    /// ```csharp
+    /// // Features: [age, income, spending_score]
+    /// var features = new Matrix&lt;double&gt;(100, 3);
+    /// // Fill with customer data...
+    ///
+    /// var loader = DataLoaders.FromMatrix(features);
+    ///
+    /// // Use with AiModelBuilder for clustering
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(new KMeans&lt;double&gt;(new KMeansOptions&lt;double&gt; { NumClusters = 3 }))
+    ///     .BuildAsync();
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromMatrix<T>(Matrix<T> features)
+    {
+        if (features is null)
+        {
+            throw new ArgumentNullException(nameof(features), "Features matrix cannot be null.");
+        }
+
+        // For unsupervised learning, create a dummy label vector (not used by clustering algorithms)
+        var dummyLabels = new Vector<T>(features.Rows);
+        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(features, dummyLabels);
+    }
+
+    /// <summary>
+    /// Creates a data loader from a feature Matrix and label Matrix (for multi-output regression).
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">Matrix where rows are samples and columns are features.</param>
+    /// <param name="labels">Matrix where rows are samples and columns are output dimensions.</param>
+    /// <returns>A configured InMemoryDataLoader ready for training.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when features or labels is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when row counts don't match.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this when predicting multiple outputs simultaneously.
+    ///
+    /// **Example - Predicting Multiple Properties:**
+    /// ```csharp
+    /// // Input: molecule features
+    /// var features = new Matrix&lt;double&gt;(100, 10);
+    ///
+    /// // Output: multiple properties (e.g., toxicity, solubility, binding affinity)
+    /// var labels = new Matrix&lt;double&gt;(100, 3);
+    ///
+    /// var loader = DataLoaders.FromMatrices(features, labels);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Matrix<T>> FromMatrices<T>(
+        Matrix<T> features,
+        Matrix<T> labels)
+    {
+        return new InMemoryDataLoader<T, Matrix<T>, Matrix<T>>(features, labels);
+    }
+
+    #endregion
+
+    #region Tensor Factory Methods
+
+    /// <summary>
+    /// Creates a data loader from input and output Tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">Input tensor where first dimension is batch/samples.</param>
+    /// <param name="labels">Output tensor where first dimension is batch/samples.</param>
+    /// <returns>A configured InMemoryDataLoader ready for training.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when features or labels is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when sample counts don't match.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use tensors for deep learning with multi-dimensional data.
+    ///
+    /// **Example - Image Classification:**
+    /// ```csharp
+    /// // Input: 1000 images, 28x28 pixels, 1 channel (grayscale)
+    /// var features = new Tensor&lt;float&gt;([1000, 28, 28, 1]);
+    ///
+    /// // Output: 1000 labels, 10 classes (one-hot encoded)
+    /// var labels = new Tensor&lt;float&gt;([1000, 10]);
+    ///
+    /// var loader = DataLoaders.FromTensors(features, labels);
+    /// ```
+    ///
+    /// **Example - Sequence Data:**
+    /// ```csharp
+    /// // Input: 500 sequences, 100 time steps, 32 features per step
+    /// var features = new Tensor&lt;double&gt;([500, 100, 32]);
+    ///
+    /// // Output: 500 predictions
+    /// var labels = new Tensor&lt;double&gt;([500, 1]);
+    ///
+    /// var loader = DataLoaders.FromTensors(features, labels);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Tensor<T>, Tensor<T>> FromTensors<T>(
+        Tensor<T> features,
+        Tensor<T> labels)
+    {
+        return new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(features, labels);
+    }
+
+    /// <summary>
+    /// Creates a data loader from a Tensor of features and a Vector of labels.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">Input tensor where first dimension is batch/samples.</param>
+    /// <param name="labels">Vector of labels, one per sample.</param>
+    /// <returns>A configured InMemoryDataLoader ready for training.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when features or labels is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when sample counts don't match.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Common pattern for classification with complex inputs.
+    ///
+    /// **Example - Image Classification with Class Labels:**
+    /// ```csharp
+    /// // Input: images as tensor
+    /// var features = new Tensor&lt;float&gt;([1000, 28, 28, 1]);
+    ///
+    /// // Output: class indices (0-9)
+    /// var labels = new Vector&lt;float&gt;(1000);  // Contains values 0-9
+    ///
+    /// var loader = DataLoaders.FromTensorVector(features, labels);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Tensor<T>, Vector<T>> FromTensorVector<T>(
+        Tensor<T> features,
+        Vector<T> labels)
+    {
+        return new InMemoryDataLoader<T, Tensor<T>, Vector<T>>(features, labels);
+    }
+
+    #endregion
+
+    #region Federated Benchmark Methods
+
+    /// <summary>
+    /// Creates a LEAF federated data loader from LEAF benchmark JSON files.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="trainFilePath">Path to the LEAF train split JSON file.</param>
+    /// <param name="testFilePath">Optional path to the LEAF test split JSON file.</param>
+    /// <param name="options">Optional LEAF load options (subset, validation).</param>
+    /// <returns>A configured LEAF data loader ready for federated learning.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> LEAF is a standard federated learning benchmark suite where each "user" is treated as one client.
+    /// This loader keeps that per-client split intact so federated learning simulations match the benchmark.
+    /// </para>
+    /// </remarks>
+    public static LeafFederatedDataLoader<T> FromLeafFederatedJsonFiles<T>(
+        string trainFilePath,
+        string? testFilePath = null,
+        LeafFederatedDatasetLoadOptions? options = null)
+    {
+        return new LeafFederatedDataLoader<T>(trainFilePath, testFilePath, options);
+    }
+
+    #endregion
+
+    #region Convenience Methods
+
+    /// <summary>
+    /// Creates an empty data loader placeholder (useful for meta-learning or custom scenarios).
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <returns>A data loader with empty data.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> You typically won't need this method.
+    /// It's used for advanced scenarios where data is loaded dynamically or for meta-learning tasks
+    /// that don't use traditional supervised learning data.
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> Empty<T>()
+    {
+        var emptyFeatures = new Matrix<T>(0, 0);
+        var emptyLabels = new Vector<T>(0);
+        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(emptyFeatures, emptyLabels);
+    }
+
+    /// <summary>
+    /// Creates a data loader with pre-configured batch size.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">Matrix where rows are samples and columns are features.</param>
+    /// <param name="labels">Vector of labels, one per sample.</param>
+    /// <param name="batchSize">The batch size for iteration.</param>
+    /// <returns>A configured InMemoryDataLoader with the specified batch size.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Batch size determines how many samples are processed together.
+    /// Common values:
+    /// - 32: Good default for most cases
+    /// - 16-64: Standard range for GPU training
+    /// - 1: Stochastic gradient descent (slowest but most updates)
+    /// - Full dataset: Batch gradient descent (fewer updates but more stable)
+    ///
+    /// **Example:**
+    /// ```csharp
+    /// var loader = DataLoaders.WithBatchSize(features, labels, batchSize: 64);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> WithBatchSize<T>(
+        Matrix<T> features,
+        Vector<T> labels,
+        int batchSize)
+    {
+        var loader = new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(features, labels)
+        {
+            BatchSize = batchSize
+        };
+        return loader;
+    }
+
+    #region Geometry Dataset Methods
+
+    /// <summary>
+    /// Creates a ModelNet40 classification data loader.
+    /// </summary>
+    public static ModelNet40ClassificationDataLoader<T> ModelNet40Classification<T>(
+        ModelNet40ClassificationDataLoaderOptions? options = null)
+    {
+        return new ModelNet40ClassificationDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a ShapeNetCore part segmentation data loader.
+    /// </summary>
+    public static ShapeNetCorePartSegmentationDataLoader<T> ShapeNetCorePartSegmentation<T>(
+        ShapeNetCorePartSegmentationDataLoaderOptions? options = null)
+    {
+        return new ShapeNetCorePartSegmentationDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a ScanNet semantic segmentation data loader.
+    /// </summary>
+    public static ScanNetSemanticSegmentationDataLoader<T> ScanNetSemanticSegmentation<T>(
+        ScanNetSemanticSegmentationDataLoaderOptions? options = null)
+    {
+        return new ScanNetSemanticSegmentationDataLoader<T>(options);
+    }
+
+    #endregion
+    #endregion
+
+    #region Text Document Factory Methods
+
+    /// <summary>
+    /// Creates a data loader from text documents using any text vectorizer.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Vector of labels, one per document.</param>
+    /// <param name="vectorizer">Any text vectorizer implementing <see cref="ITextVectorizer{T}"/>.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when documents, labels, or vectorizer is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when document count doesn't match label count.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the easiest way to use text data with AiModelBuilder.
+    /// The vectorizer converts your text documents into numeric features automatically.
+    ///
+    /// **Available Vectorizers:**
+    /// - <see cref="Preprocessing.TextVectorizers.TfidfVectorizer{T}"/>: TF-IDF weighted features (recommended for most cases)
+    /// - <see cref="Preprocessing.TextVectorizers.CountVectorizer{T}"/>: Simple word count features
+    /// - <see cref="Preprocessing.TextVectorizers.HashingVectorizer{T}"/>: Memory-efficient hashing (for very large vocabularies)
+    ///
+    /// **Example - Sentiment Classification:**
+    /// ```csharp
+    /// var documents = new[] { "Great product!", "Terrible service", "Love it!" };
+    /// var labels = new Vector&lt;double&gt;(new[] { 1.0, 0.0, 1.0 });
+    ///
+    /// // Use TF-IDF (recommended for most text classification tasks)
+    /// var loader = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new TfidfVectorizer&lt;double&gt;(maxFeatures: 50));
+    ///
+    /// // Or use CountVectorizer for simple bag-of-words
+    /// var loader2 = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new CountVectorizer&lt;double&gt;(maxFeatures: 50));
+    ///
+    /// // Or use HashingVectorizer for memory efficiency with large vocabularies
+    /// var loader3 = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new HashingVectorizer&lt;double&gt;(nFeatures: 1024));
+    ///
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
+    ///     .BuildAsync();
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        Vector<T> labels,
+        ITextVectorizer<T> vectorizer)
+    {
+        if (documents is null)
+            throw new ArgumentNullException(nameof(documents), "Documents array cannot be null.");
+        if (labels is null)
+            throw new ArgumentNullException(nameof(labels), "Labels vector cannot be null.");
+        if (vectorizer is null)
+            throw new ArgumentNullException(nameof(vectorizer), "Vectorizer cannot be null.");
+        if (documents.Length != labels.Length)
+            throw new ArgumentException(
+                $"Document count ({documents.Length}) must match label count ({labels.Length}).",
+                nameof(labels));
+
+        // Fit and transform documents to features
+        var features = vectorizer.FitTransform(documents);
+        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(features, labels);
+    }
+
+    /// <summary>
+    /// Creates a data loader from text documents using any text vectorizer with array labels.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Array of labels, one per document.</param>
+    /// <param name="vectorizer">Any text vectorizer implementing <see cref="ITextVectorizer{T}"/>.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when documents, labels, or vectorizer is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when document count doesn't match label count.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Convenience overload that accepts a simple array for labels.
+    ///
+    /// **Example:**
+    /// ```csharp
+    /// var documents = new[] { "Great!", "Bad!", "Amazing!" };
+    /// var labels = new double[] { 1, 0, 1 };
+    ///
+    /// var loader = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new TfidfVectorizer&lt;double&gt;(maxFeatures: 50));
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        T[] labels,
+        ITextVectorizer<T> vectorizer)
+    {
+        if (labels is null)
+            throw new ArgumentNullException(nameof(labels), "Labels array cannot be null.");
+
+        return FromTextDocuments(documents, new Vector<T>(labels), vectorizer);
+    }
+
+    /// <summary>
+    /// Creates a data loader from text documents using a TF-IDF vectorizer.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Vector of labels, one per document.</param>
+    /// <param name="vectorizer">The TF-IDF vectorizer to use for text transformation.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when documents, labels, or vectorizer is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when document count doesn't match label count.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the easiest way to use text data with AiModelBuilder.
+    /// The vectorizer converts your text documents into numeric features automatically.
+    ///
+    /// **Example - Sentiment Classification:**
+    /// ```csharp
+    /// var documents = new[] { "Great product!", "Terrible service", "Love it!" };
+    /// var labels = new Vector&lt;double&gt;(new[] { 1.0, 0.0, 1.0 });
+    ///
+    /// var loader = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new TfidfVectorizer&lt;double&gt;(maxFeatures: 50));
+    ///
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
+    ///     .BuildAsync();
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        Vector<T> labels,
+        Preprocessing.TextVectorizers.TfidfVectorizer<T> vectorizer)
+    {
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
+    }
+
+    /// <summary>
+    /// Creates a data loader from text documents using a TF-IDF vectorizer with array labels.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Array of labels, one per document.</param>
+    /// <param name="vectorizer">The TF-IDF vectorizer to use for text transformation.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when documents, labels, or vectorizer is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when document count doesn't match label count.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Convenience overload that accepts a simple array for labels.
+    ///
+    /// **Example:**
+    /// ```csharp
+    /// var documents = new[] { "Great!", "Bad!", "Amazing!" };
+    /// var labels = new double[] { 1, 0, 1 };
+    ///
+    /// var loader = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new TfidfVectorizer&lt;double&gt;(maxFeatures: 50));
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        T[] labels,
+        Preprocessing.TextVectorizers.TfidfVectorizer<T> vectorizer)
+    {
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
+    }
+
+    /// <summary>
+    /// Creates a data loader from text documents using a Count vectorizer.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Vector of labels, one per document.</param>
+    /// <param name="vectorizer">The Count vectorizer to use for text transformation.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when documents, labels, or vectorizer is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when document count doesn't match label count.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Count vectorizer creates bag-of-words features (word counts).
+    /// Use this when you want simple word frequency features instead of TF-IDF weighted features.
+    ///
+    /// **Example:**
+    /// ```csharp
+    /// var loader = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new CountVectorizer&lt;double&gt;(maxFeatures: 100));
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        Vector<T> labels,
+        Preprocessing.TextVectorizers.CountVectorizer<T> vectorizer)
+    {
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
+    }
+
+    /// <summary>
+    /// Creates a data loader from text documents using a Count vectorizer with array labels.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Array of labels, one per document.</param>
+    /// <param name="vectorizer">The Count vectorizer to use for text transformation.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        T[] labels,
+        Preprocessing.TextVectorizers.CountVectorizer<T> vectorizer)
+    {
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
+    }
+
+    /// <summary>
+    /// Creates a data loader from text documents using a Hashing vectorizer.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Vector of labels, one per document.</param>
+    /// <param name="vectorizer">The Hashing vectorizer to use for text transformation.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when documents, labels, or vectorizer is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when document count doesn't match label count.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Hashing vectorizer uses hashing to create fixed-size feature vectors.
+    /// This is memory-efficient for large vocabularies and doesn't require fitting.
+    ///
+    /// **Example:**
+    /// ```csharp
+    /// var loader = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new HashingVectorizer&lt;double&gt;(nFeatures: 1024));
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        Vector<T> labels,
+        Preprocessing.TextVectorizers.HashingVectorizer<T> vectorizer)
+    {
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
+    }
+
+    /// <summary>
+    /// Creates a data loader from text documents using a Hashing vectorizer with array labels.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Array of labels, one per document.</param>
+    /// <param name="vectorizer">The Hashing vectorizer to use for text transformation.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        T[] labels,
+        Preprocessing.TextVectorizers.HashingVectorizer<T> vectorizer)
+    {
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
+    }
+
+    #endregion
+
+    #region Streaming Factory Methods
+
+    /// <summary>
+    /// Creates a streaming data loader that reads samples on-demand.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <typeparam name="TInput">The input data type for each sample.</typeparam>
+    /// <typeparam name="TOutput">The output/label data type for each sample.</typeparam>
+    /// <param name="sampleCount">Total number of samples in the dataset.</param>
+    /// <param name="sampleReader">Async function that reads a single sample by index.</param>
+    /// <param name="batchSize">Number of samples per batch.</param>
+    /// <param name="prefetchCount">Number of batches to prefetch. Default is 2.</param>
+    /// <param name="numWorkers">Number of parallel workers. Default is 4.</param>
+    /// <returns>A streaming data loader.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this when your dataset is too large to fit in memory.
+    /// The sampleReader function is called on-demand to load individual samples.
+    ///
+    /// **Example - Loading Images:**
+    /// ```csharp
+    /// var loader = DataLoaders.Streaming&lt;float, float[], int&gt;(
+    ///     sampleCount: 1000000,
+    ///     sampleReader: async (index, ct) =&gt;
+    ///     {
+    ///         var image = await LoadImageAsync($"images/{index}.png", ct);
+    ///         var label = GetLabel(index);
+    ///         return (image, label);
+    ///     },
+    ///     batchSize: 32
+    /// );
+    ///
+    /// await foreach (var batch in loader.GetBatchesAsync())
+    /// {
+    ///     await model.TrainOnBatchAsync(batch.Inputs, batch.Outputs);
+    /// }
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static StreamingDataLoader<T, TInput, TOutput> Streaming<T, TInput, TOutput>(
+        int sampleCount,
+        Func<int, CancellationToken, Task<(TInput, TOutput)>> sampleReader,
+        int batchSize,
+        int prefetchCount = 2,
+        int numWorkers = 4)
+    {
+        if (sampleReader is null)
+        {
+            throw new ArgumentNullException(nameof(sampleReader), "Sample reader function cannot be null.");
+        }
+
+        if (sampleCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sampleCount), "Sample count must be greater than 0.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (prefetchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be greater than 0.");
+        }
+
+        if (numWorkers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numWorkers), "Number of workers must be greater than 0.");
+        }
+
+        return new StreamingDataLoader<T, TInput, TOutput>(
+            sampleCount, sampleReader, batchSize, null, prefetchCount, numWorkers);
+    }
+
+    /// <summary>
+    /// Creates a streaming data loader from a directory of files.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <typeparam name="TInput">The input data type for each sample.</typeparam>
+    /// <typeparam name="TOutput">The output/label data type for each sample.</typeparam>
+    /// <param name="directory">The directory containing data files.</param>
+    /// <param name="filePattern">The file pattern to match (e.g., "*.png", "*.csv").</param>
+    /// <param name="fileProcessor">Function that processes a file and returns (input, output).</param>
+    /// <param name="batchSize">Number of samples per batch.</param>
+    /// <param name="searchOption">Whether to search subdirectories. Default is TopDirectoryOnly.</param>
+    /// <param name="prefetchCount">Number of batches to prefetch. Default is 2.</param>
+    /// <param name="numWorkers">Number of parallel workers. Default is 4.</param>
+    /// <returns>A file streaming data loader.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this when you have a folder of data files (images, audio, etc.)
+    /// that you want to stream during training.
+    ///
+    /// **Example - Image Dataset:**
+    /// ```csharp
+    /// var loader = DataLoaders.FromDirectory&lt;float, float[], int&gt;(
+    ///     directory: "data/images",
+    ///     filePattern: "*.png",
+    ///     fileProcessor: async (filePath, ct) =&gt;
+    ///     {
+    ///         var pixels = await LoadImagePixelsAsync(filePath, ct);
+    ///         var label = ParseLabelFromFilename(filePath);
+    ///         return (pixels, label);
+    ///     },
+    ///     batchSize: 64
+    /// );
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static FileStreamingDataLoader<T, TInput, TOutput> FromDirectory<T, TInput, TOutput>(
+        string directory,
+        string filePattern,
+        Func<string, CancellationToken, Task<(TInput, TOutput)>> fileProcessor,
+        int batchSize,
+        SearchOption searchOption = SearchOption.TopDirectoryOnly,
+        int prefetchCount = 2,
+        int numWorkers = 4)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            throw new ArgumentNullException(nameof(directory), "Directory path cannot be null or empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(filePattern))
+        {
+            throw new ArgumentNullException(nameof(filePattern), "File pattern cannot be null or empty.");
+        }
+
+        if (fileProcessor is null)
+        {
+            throw new ArgumentNullException(nameof(fileProcessor), "File processor function cannot be null.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (prefetchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be greater than 0.");
+        }
+
+        if (numWorkers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numWorkers), "Number of workers must be greater than 0.");
+        }
+
+        return new FileStreamingDataLoader<T, TInput, TOutput>(
+            directory, filePattern, fileProcessor, batchSize, searchOption, prefetchCount, numWorkers);
+    }
+
+    /// <summary>
+    /// Creates a streaming data loader from a CSV file.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <typeparam name="TInput">The input data type for each row.</typeparam>
+    /// <typeparam name="TOutput">The output/label data type for each row.</typeparam>
+    /// <param name="filePath">Path to the CSV file.</param>
+    /// <param name="lineParser">Function that parses a CSV line into (input, output).</param>
+    /// <param name="batchSize">Number of samples per batch.</param>
+    /// <param name="hasHeader">Whether the CSV has a header row to skip. Default is true.</param>
+    /// <param name="prefetchCount">Number of batches to prefetch. Default is 2.</param>
+    /// <returns>A CSV streaming data loader.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for large CSV files that don't fit in memory.
+    /// The file is read line by line during training.
+    ///
+    /// **Example - Large Tabular Dataset:**
+    /// ```csharp
+    /// var loader = DataLoaders.FromCsv&lt;double, double[], double&gt;(
+    ///     filePath: "data/huge_dataset.csv",
+    ///     lineParser: (line, lineNumber) =&gt;
+    ///     {
+    ///         var parts = line.Split(',');
+    ///         var features = parts.Take(10).Select(double.Parse).ToArray();
+    ///         var label = double.Parse(parts[10]);
+    ///         return (features, label);
+    ///     },
+    ///     batchSize: 256,
+    ///     hasHeader: true
+    /// );
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static CsvStreamingDataLoader<T, TInput, TOutput> FromCsv<T, TInput, TOutput>(
+        string filePath,
+        Func<string, int, (TInput, TOutput)> lineParser,
+        int batchSize,
+        bool hasHeader = true,
+        int prefetchCount = 2)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentNullException(nameof(filePath), "File path cannot be null or empty.");
+        }
+
+        if (lineParser is null)
+        {
+            throw new ArgumentNullException(nameof(lineParser), "Line parser function cannot be null.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (prefetchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefetchCount), "Prefetch count must be greater than 0.");
+        }
+
+        return new CsvStreamingDataLoader<T, TInput, TOutput>(
+            filePath, lineParser, batchSize, hasHeader, prefetchCount);
+    }
+
+    #endregion
+
+    #region Domain-Specific Loaders
+
+    /// <summary>
+    /// Creates an image folder dataset loader that reads images from a directory structure
+    /// where each subdirectory name is a class label.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you have images organized like:
+    /// <code>
+    /// root/
+    ///   cats/
+    ///     cat001.bmp
+    ///     cat002.bmp
+    ///   dogs/
+    ///     dog001.bmp
+    ///     dog002.bmp
+    /// </code>
+    /// Use this method:
+    /// <code>
+    /// var loader = DataLoaders.ImageFolder&lt;float&gt;(new ImageFolderDatasetOptions
+    /// {
+    ///     RootDirectory = "root/",
+    ///     ImageWidth = 64,
+    ///     ImageHeight = 64
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Options specifying the root directory, image dimensions, and file extensions.</param>
+    /// <returns>An image folder dataset loader.</returns>
+    public static ImageFolderDataset<T> ImageFolder<T>(ImageFolderDatasetOptions options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ImageFolderDataset<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an audio file dataset loader that reads WAV/PCM audio files from directories.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Organize audio files into class directories, then:
+    /// <code>
+    /// var loader = DataLoaders.AudioFiles&lt;float&gt;(new AudioFileDatasetOptions
+    /// {
+    ///     RootDirectory = "audio/",
+    ///     SampleRate = 16000,
+    ///     DurationSeconds = 3.0
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Options specifying the root directory, sample rate, and duration.</param>
+    /// <returns>An audio file dataset loader.</returns>
+    public static AudioFileDataset<T> AudioFiles<T>(AudioFileDatasetOptions options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new AudioFileDataset<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a video frame dataset loader that extracts frames from video directories.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Point this at directories containing frame images extracted from videos:
+    /// <code>
+    /// var loader = DataLoaders.VideoFrames&lt;float&gt;(new VideoFrameDatasetOptions
+    /// {
+    ///     RootDirectory = "videos/",
+    ///     FramesPerVideo = 16,
+    ///     FrameWidth = 112,
+    ///     FrameHeight = 112
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Options specifying the root directory, frame count, and dimensions.</param>
+    /// <returns>A video frame dataset loader.</returns>
+    public static VideoFrameDataset<T> VideoFrames<T>(VideoFrameDatasetOptions options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new VideoFrameDataset<T>(options);
+    }
+
+    #endregion
+
+    #region Benchmark Dataset Loaders
+
+    /// <summary>
+    /// Creates a MNIST handwritten digit dataset loader (60k train / 10k test, 28x28 grayscale).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> MNIST is the "Hello World" of machine learning datasets.
+    /// <code>
+    /// var loader = DataLoaders.Mnist&lt;float&gt;(); // Downloads to ~/.aidotnet/datasets/mnist/
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, normalization, flatten).</param>
+    /// <returns>A MNIST data loader.</returns>
+    public static MnistDataLoader<T> Mnist<T>(MnistDataLoaderOptions? options = null)
+    {
+        return new MnistDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Fashion-MNIST dataset loader (60k train / 10k test, 28x28 grayscale clothing images).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Fashion-MNIST is a drop-in replacement for MNIST with clothing images.
+    /// <code>
+    /// var loader = DataLoaders.FashionMnist&lt;float&gt;();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, normalization, flatten).</param>
+    /// <returns>A Fashion-MNIST data loader.</returns>
+    public static FashionMnistDataLoader<T> FashionMnist<T>(FashionMnistDataLoaderOptions? options = null)
+    {
+        return new FashionMnistDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a CIFAR-10 dataset loader (50k train / 10k test, 32x32 RGB, 10 classes).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> CIFAR-10 has 10 classes of natural images (airplane, car, bird, etc.).
+    /// <code>
+    /// var loader = DataLoaders.Cifar10&lt;float&gt;();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, normalization).</param>
+    /// <returns>A CIFAR-10 data loader.</returns>
+    public static Cifar10DataLoader<T> Cifar10<T>(Cifar10DataLoaderOptions? options = null)
+    {
+        return new Cifar10DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a CIFAR-100 dataset loader (50k train / 10k test, 32x32 RGB, 100 classes).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> CIFAR-100 is similar to CIFAR-10 but with 100 fine-grained classes.
+    /// <code>
+    /// var loader = DataLoaders.Cifar100&lt;float&gt;();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, use fine labels).</param>
+    /// <returns>A CIFAR-100 data loader.</returns>
+    public static Cifar100DataLoader<T> Cifar100<T>(Cifar100DataLoaderOptions? options = null)
+    {
+        return new Cifar100DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an IMDB 50k movie review sentiment dataset loader (25k train / 25k test).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This dataset contains movie reviews labeled as positive or negative.
+    /// <code>
+    /// var loader = DataLoaders.Imdb50k&lt;float&gt;();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, vocabulary size, max sequence length).</param>
+    /// <returns>An IMDB 50k data loader.</returns>
+    public static Imdb50kDataLoader<T> Imdb50k<T>(Imdb50kDataLoaderOptions? options = null)
+    {
+        return new Imdb50kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an ImageNet-1K (ILSVRC 2012) dataset loader (~1.28M train / 50K val, 1000 classes).
+    /// Requires manual download from https://image-net.org/.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size, max samples).</param>
+    /// <returns>An ImageNet-1K data loader.</returns>
+    public static ImageNet1kDataLoader<T> ImageNet1k<T>(ImageNet1kDataLoaderOptions? options = null)
+    {
+        return new ImageNet1kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an ImageNet-21K dataset loader (~14.2M images, 21,841 categories).
+    /// Requires manual download from https://image-net.org/.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, max classes, max samples).</param>
+    /// <returns>An ImageNet-21K data loader.</returns>
+    public static ImageNet21kDataLoader<T> ImageNet21k<T>(ImageNet21kDataLoaderOptions? options = null)
+    {
+        return new ImageNet21kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Places365 scene recognition dataset loader (1.8M train / 36.5K val, 365 scene categories).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size).</param>
+    /// <returns>A Places365 data loader.</returns>
+    public static Places365DataLoader<T> Places365<T>(Places365DataLoaderOptions? options = null)
+    {
+        return new Places365DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an iNaturalist species classification dataset loader (~2.7M images, 10,000 species).
+    /// Requires manual download from https://github.com/visipedia/inat_comp.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, version year, max samples).</param>
+    /// <returns>An iNaturalist data loader.</returns>
+    public static INaturalistDataLoader<T> INaturalist<T>(INaturalistDataLoaderOptions? options = null)
+    {
+        return new INaturalistDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a COCO 2017 object detection dataset loader (118K train / 5K val, 80 categories).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, max detections, image size).</param>
+    /// <returns>A COCO Detection data loader.</returns>
+    public static CocoDetectionDataLoader<T> CocoDetection<T>(CocoDetectionDataLoaderOptions? options = null)
+    {
+        return new CocoDetectionDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Pascal VOC object detection dataset loader (20 categories, XML annotations).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, year, max detections).</param>
+    /// <returns>A Pascal VOC data loader.</returns>
+    public static PascalVocDataLoader<T> PascalVoc<T>(PascalVocDataLoaderOptions? options = null)
+    {
+        return new PascalVocDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an Open Images V7 object detection dataset loader (~9M images, 600 categories).
+    /// Requires manual download from https://storage.googleapis.com/openimages/web/index.html.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, max detections).</param>
+    /// <returns>An Open Images data loader.</returns>
+    public static OpenImagesDataLoader<T> OpenImages<T>(OpenImagesDataLoaderOptions? options = null)
+    {
+        return new OpenImagesDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a NIH Chest X-ray 14 multi-label classification dataset loader (112K images, 14 diseases).
+    /// Requires manual download from https://nihcc.app.box.com/v/ChestXray-NIHCC.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size).</param>
+    /// <returns>A Chest X-ray 14 data loader.</returns>
+    public static ChestXray14DataLoader<T> ChestXray14<T>(ChestXray14DataLoaderOptions? options = null)
+    {
+        return new ChestXray14DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a CheXpert chest radiograph dataset loader (224K images, 14 observations with uncertainty).
+    /// Requires manual download from Stanford AIMI.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, uncertainty policy).</param>
+    /// <returns>A CheXpert data loader.</returns>
+    public static CheXpertDataLoader<T> CheXpert<T>(CheXpertDataLoaderOptions? options = null)
+    {
+        return new CheXpertDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an ISIC Skin Lesion classification dataset loader (~25K images, 8 diagnostic categories).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size).</param>
+    /// <returns>A Skin Lesion data loader.</returns>
+    public static SkinLesionDataLoader<T> SkinLesion<T>(SkinLesionDataLoaderOptions? options = null)
+    {
+        return new SkinLesionDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Retinal Fundus diabetic retinopathy grading dataset loader (5 severity levels).
+    /// Requires manual download from Kaggle.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size).</param>
+    /// <returns>A Retinal Fundus data loader.</returns>
+    public static RetinalFundusDataLoader<T> RetinalFundus<T>(RetinalFundusDataLoaderOptions? options = null)
+    {
+        return new RetinalFundusDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a BigEarthNet multi-label remote sensing dataset loader (590K Sentinel-2 patches, 19 or 43 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, num bands, class scheme).</param>
+    /// <returns>A BigEarthNet data loader.</returns>
+    public static BigEarthNetDataLoader<T> BigEarthNet<T>(BigEarthNetDataLoaderOptions? options = null)
+    {
+        return new BigEarthNetDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an EuroSAT land use/land cover classification dataset loader (27K patches, 64x64, 10 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, normalization).</param>
+    /// <returns>An EuroSAT data loader.</returns>
+    public static EuroSatDataLoader<T> EuroSat<T>(EuroSatDataLoaderOptions? options = null)
+    {
+        return new EuroSatDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an fMoW (Functional Map of the World) satellite imagery dataset loader (1M+ images, 62 categories).
+    /// Requires manual download from https://github.com/fMoW/dataset.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size, max samples).</param>
+    /// <returns>An fMoW data loader.</returns>
+    public static FMoWDataLoader<T> FMoW<T>(FMoWDataLoaderOptions? options = null)
+    {
+        return new FMoWDataLoader<T>(options);
+    }
+
+    // --- Audio Benchmark Loaders ---
+
+    /// <summary>
+    /// Creates a LibriSpeech ASR dataset loader (~1000 hours of 16kHz English speech).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (subset, sample rate, max duration).</param>
+    /// <returns>A LibriSpeech data loader.</returns>
+    public static LibriSpeechDataLoader<T> LibriSpeech<T>(LibriSpeechDataLoaderOptions? options = null)
+    {
+        return new LibriSpeechDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Mozilla Common Voice multilingual speech dataset loader (19K+ hours, 100+ languages).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (language, version, sample rate).</param>
+    /// <returns>A Common Voice data loader.</returns>
+    public static CommonVoiceDataLoader<T> CommonVoice<T>(CommonVoiceDataLoaderOptions? options = null)
+    {
+        return new CommonVoiceDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a GigaSpeech multi-domain English ASR dataset loader (up to 10K hours).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (subset, sample rate, max duration).</param>
+    /// <returns>A GigaSpeech data loader.</returns>
+    public static GigaSpeechDataLoader<T> GigaSpeech<T>(GigaSpeechDataLoaderOptions? options = null)
+    {
+        return new GigaSpeechDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a VoxPopuli multilingual speech dataset loader (400K+ hours, 23 languages).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (language, sample rate, max duration).</param>
+    /// <returns>A VoxPopuli data loader.</returns>
+    public static VoxPopuliDataLoader<T> VoxPopuli<T>(VoxPopuliDataLoaderOptions? options = null)
+    {
+        return new VoxPopuliDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a FLEURS multilingual speech benchmark loader (102 languages, ~12 hours per language).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (language, sample rate, max duration).</param>
+    /// <returns>A FLEURS data loader.</returns>
+    public static FleursDataLoader<T> Fleurs<T>(FleursDataLoaderOptions? options = null)
+    {
+        return new FleursDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an AudioSet large-scale audio event dataset loader (2M+ clips, 527 categories).
+    /// Requires pre-downloaded audio (YouTube clips converted to WAV).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, clip duration).</param>
+    /// <returns>An AudioSet data loader.</returns>
+    public static AudioSetDataLoader<T> AudioSet<T>(AudioSetDataLoaderOptions? options = null)
+    {
+        return new AudioSetDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an ESC-50 environmental sound classification dataset loader (2000 clips, 50 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, test fold).</param>
+    /// <returns>An ESC-50 data loader.</returns>
+    public static Esc50DataLoader<T> Esc50<T>(Esc50DataLoaderOptions? options = null)
+    {
+        return new Esc50DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an UrbanSound8K urban sound classification dataset loader (8732 clips, 10 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, max duration, test fold).</param>
+    /// <returns>An UrbanSound8K data loader.</returns>
+    public static UrbanSound8kDataLoader<T> UrbanSound8k<T>(UrbanSound8kDataLoaderOptions? options = null)
+    {
+        return new UrbanSound8kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an FSD50K audio event dataset loader (51,197 clips, 200 sound event classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, max duration).</param>
+    /// <returns>An FSD50K data loader.</returns>
+    public static Fsd50kDataLoader<T> Fsd50k<T>(Fsd50kDataLoaderOptions? options = null)
+    {
+        return new Fsd50kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a MUSDB18 music source separation dataset loader (150 tracks, 4 stems).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, segment duration).</param>
+    /// <returns>A MUSDB18 data loader.</returns>
+    public static Musdb18DataLoader<T> Musdb18<T>(Musdb18DataLoaderOptions? options = null)
+    {
+        return new Musdb18DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a MAESTRO piano performance dataset loader (~200 hours, aligned MIDI and audio).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (version, sample rate, max duration).</param>
+    /// <returns>A MAESTRO data loader.</returns>
+    public static MaestroDataLoader<T> Maestro<T>(MaestroDataLoaderOptions? options = null)
+    {
+        return new MaestroDataLoader<T>(options);
+    }
+
+    // --- Text/NLP Benchmark Loaders ---
+
+    /// <summary>
+    /// Creates a GLUE benchmark data loader (9 NLU tasks for evaluating language understanding).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (task, max sequence length, vocabulary size).</param>
+    /// <returns>A GLUE data loader.</returns>
+    public static GlueDataLoader<T> Glue<T>(GlueDataLoaderOptions? options = null)
+    {
+        return new GlueDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a SuperGLUE benchmark data loader (8 advanced NLU tasks).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (task, max sequence length, vocabulary size).</param>
+    /// <returns>A SuperGLUE data loader.</returns>
+    public static SuperGlueDataLoader<T> SuperGlue<T>(SuperGlueDataLoaderOptions? options = null)
+    {
+        return new SuperGlueDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a SQuAD reading comprehension data loader (100K+ question-answer pairs).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (context length, question length, version).</param>
+    /// <returns>A SQuAD data loader.</returns>
+    public static SquadDataLoader<T> Squad<T>(SquadDataLoaderOptions? options = null)
+    {
+        return new SquadDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a WikiText-103 language modeling data loader (100M+ tokens from Wikipedia).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sequence length, vocabulary size).</param>
+    /// <returns>A WikiText-103 data loader.</returns>
+    public static WikiText103DataLoader<T> WikiText103<T>(WikiText103DataLoaderOptions? options = null)
+    {
+        return new WikiText103DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a streaming text dataset for LLM pre-training on large text corpora.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sequence length, vocabulary size, file pattern).</param>
+    /// <returns>A streaming text dataset loader.</returns>
+    public static StreamingTextDataset<T> StreamingText<T>(StreamingTextDatasetOptions? options = null)
+    {
+        return new StreamingTextDataset<T>(options);
+    }
+
+    // --- Video Benchmark Loaders ---
+
+    /// <summary>
+    /// Creates a Kinetics-400 video action recognition data loader (400 classes, ~300K clips).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (frames per video, resolution, normalization).</param>
+    /// <returns>A Kinetics-400 data loader.</returns>
+    public static Kinetics400DataLoader<T> Kinetics400<T>(Kinetics400DataLoaderOptions? options = null)
+    {
+        return new Kinetics400DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an HMDB-51 video action recognition data loader (51 classes, 6.8K clips).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (frames per video, resolution, split number).</param>
+    /// <returns>An HMDB-51 data loader.</returns>
+    public static Hmdb51DataLoader<T> Hmdb51<T>(Hmdb51DataLoaderOptions? options = null)
+    {
+        return new Hmdb51DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a UCF-101 video action recognition data loader (101 classes, 13.3K clips).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (frames per video, resolution, split number).</param>
+    /// <returns>A UCF-101 data loader.</returns>
+    public static Ucf101DataLoader<T> Ucf101<T>(Ucf101DataLoaderOptions? options = null)
+    {
+        return new Ucf101DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Something-Something V2 video understanding data loader (174 classes, ~220K clips).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (frames per video, resolution).</param>
+    /// <returns>A Something-Something V2 data loader.</returns>
+    public static SomethingSomethingV2DataLoader<T> SomethingSomethingV2<T>(SomethingSomethingV2DataLoaderOptions? options = null)
+    {
+        return new SomethingSomethingV2DataLoader<T>(options);
+    }
+
+    // --- 3D Point Cloud Loaders ---
+
+    /// <summary>
+    /// Creates a KITTI 3D object detection data loader (LiDAR point clouds with bounding boxes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (points per sample, include reflectance).</param>
+    /// <returns>A KITTI data loader.</returns>
+    public static KittiDataLoader<T> Kitti<T>(KittiDataLoaderOptions? options = null)
+    {
+        return new KittiDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a SemanticKITTI per-point semantic segmentation data loader (28 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (points per sample, num classes).</param>
+    /// <returns>A SemanticKITTI data loader.</returns>
+    public static SemanticKittiDataLoader<T> SemanticKitti<T>(SemanticKittiDataLoaderOptions? options = null)
+    {
+        return new SemanticKittiDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Waymo Open Dataset 3D detection data loader (LiDAR point clouds).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (points per sample, include intensity).</param>
+    /// <returns>A Waymo data loader.</returns>
+    public static WaymoDataLoader<T> Waymo<T>(WaymoDataLoaderOptions? options = null)
+    {
+        return new WaymoDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a nuScenes 3D object detection data loader (LiDAR point clouds, 23 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (points per sample, include intensity).</param>
+    /// <returns>A nuScenes data loader.</returns>
+    public static NuScenesDataLoader<T> NuScenes<T>(NuScenesDataLoaderOptions? options = null)
+    {
+        return new NuScenesDataLoader<T>(options);
+    }
+
+    // --- Graph Benchmark Loaders ---
+
+    /// <summary>
+    /// Creates a QM9 molecular property prediction data loader (~134K molecules, 19 properties).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (target property, max samples).</param>
+    /// <returns>A QM9 data loader.</returns>
+    public static Qm9DataLoader<T> Qm9<T>(Qm9DataLoaderOptions? options = null)
+    {
+        return new Qm9DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a ZINC molecular dataset data loader (~250K drug-like molecules).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (use subset, max samples).</param>
+    /// <returns>A ZINC data loader.</returns>
+    public static ZincDataLoader<T> Zinc<T>(ZincDataLoaderOptions? options = null)
+    {
+        return new ZincDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a protein structure graph classification data loader.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (feature dimension, num classes).</param>
+    /// <returns>A protein data loader.</returns>
+    public static ProteinDataLoader<T> Protein<T>(ProteinDataLoaderOptions? options = null)
+    {
+        return new ProteinDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Wikidata5M knowledge graph link prediction data loader (~5M entities, 21M triplets).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (embedding dimension, max samples).</param>
+    /// <returns>A Wikidata5M data loader.</returns>
+    public static Wikidata5mDataLoader<T> Wikidata5m<T>(Wikidata5mDataLoaderOptions? options = null)
+    {
+        return new Wikidata5mDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a temporal graph data loader for dynamic link prediction.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (feature dimensions, max samples).</param>
+    /// <returns>A temporal graph data loader.</returns>
+    public static TemporalGraphDataLoader<T> TemporalGraph<T>(TemporalGraphDataLoaderOptions? options = null)
+    {
+        return new TemporalGraphDataLoader<T>(options);
+    }
+
+    // --- Document AI Loaders ---
+
+    /// <summary>
+    /// Creates a DocVQA document visual question answering data loader.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (image size, max question length).</param>
+    /// <returns>A DocVQA data loader.</returns>
+    public static DocVqaDataLoader<T> DocVqa<T>(DocVqaDataLoaderOptions? options = null)
+    {
+        return new DocVqaDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a PubLayNet document layout analysis data loader (~360K images, 5 categories).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (image size, max regions).</param>
+    /// <returns>A PubLayNet data loader.</returns>
+    public static PubLayNetDataLoader<T> PubLayNet<T>(PubLayNetDataLoaderOptions? options = null)
+    {
+        return new PubLayNetDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an ADE20K semantic segmentation data loader (~25K images, 150 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (image size, num classes, normalization).</param>
+    /// <returns>An ADE20K data loader.</returns>
+    public static Ade20kDataLoader<T> Ade20k<T>(Ade20kDataLoaderOptions? options = null)
+    {
+        return new Ade20kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a CelebA face attributes data loader (~200K images, 40 binary attributes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (image size, num attributes, normalization).</param>
+    /// <returns>A CelebA data loader.</returns>
+    public static CelebADataLoader<T> CelebA<T>(CelebADataLoaderOptions? options = null)
+    {
+        return new CelebADataLoader<T>(options);
+    }
+
+    #endregion
+
+    #region Format-Specific Loaders
+
+    /// <summary>
+    /// Creates a Parquet file data loader for reading columnar data from Apache Parquet files.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Parquet is a popular columnar file format for tabular data.
+    /// <code>
+    /// var loader = DataLoaders.FromParquet&lt;float&gt;(new ParquetDataLoaderOptions
+    /// {
+    ///     FilePath = "data.parquet",
+    ///     LabelColumn = "target"
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Options specifying the file path, label column, and feature columns.</param>
+    /// <returns>A Parquet data loader.</returns>
+    public static ParquetDataLoader<T> FromParquet<T>(ParquetDataLoaderOptions options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ParquetDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a typed WebDataset data loader for reading samples from TAR archives,
+    /// compatible with <c>AiModelBuilder.ConfigureDataLoader()</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> WebDataset is a format where training samples are packed into TAR files
+    /// for efficient sequential reading, commonly used for large-scale training.
+    /// <code>
+    /// var loader = DataLoaders.FromWebDataset&lt;float&gt;(
+    ///     new[] { "shard-000.tar", "shard-001.tar" },
+    ///     sample =&gt;
+    ///     {
+    ///         var image = ImageHelper&lt;float&gt;.LoadImageFromBytes(sample[".jpg"]);
+    ///         var label = new Tensor&lt;float&gt;(new[] { 1 });
+    ///         return (image, label);
+    ///     });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="tarPaths">One or more paths to TAR archive files.</param>
+    /// <param name="sampleParser">Function to convert raw sample bytes into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="options">Optional WebDataset configuration.</param>
+    /// <returns>A typed WebDataset data loader.</returns>
+    public static WebDatasetDataLoader<T> FromWebDataset<T>(
+        string[] tarPaths,
+        Func<Dictionary<string, byte[]>, (Tensor<T>, Tensor<T>)> sampleParser,
+        int batchSize = 32,
+        WebDatasetOptions? options = null)
+    {
+        if (tarPaths is null || tarPaths.Length == 0)
+        {
+            throw new ArgumentException("At least one TAR path is required.", nameof(tarPaths));
+        }
+
+        if (sampleParser is null)
+        {
+            throw new ArgumentNullException(nameof(sampleParser));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        return new WebDatasetDataLoader<T>(tarPaths, sampleParser, batchSize, options);
+    }
+
+    /// <summary>
+    /// Creates a typed WebDataset data loader for a single TAR archive.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="tarPath">Path to the TAR archive file.</param>
+    /// <param name="sampleParser">Function to convert raw sample bytes into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="options">Optional WebDataset configuration.</param>
+    /// <returns>A typed WebDataset data loader.</returns>
+    public static WebDatasetDataLoader<T> FromWebDataset<T>(
+        string tarPath,
+        Func<Dictionary<string, byte[]>, (Tensor<T>, Tensor<T>)> sampleParser,
+        int batchSize = 32,
+        WebDatasetOptions? options = null)
+    {
+        if (string.IsNullOrWhiteSpace(tarPath))
+        {
+            throw new ArgumentNullException(nameof(tarPath));
+        }
+
+        if (sampleParser is null)
+        {
+            throw new ArgumentNullException(nameof(sampleParser));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        return new WebDatasetDataLoader<T>(new[] { tarPath }, sampleParser, batchSize, options);
+    }
+
+    /// <summary>
+    /// Creates a typed JSONL data loader for reading JSON Lines files,
+    /// compatible with <c>AiModelBuilder.ConfigureDataLoader()</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> JSONL files have one JSON object per line, commonly used for LLM training data.
+    /// <code>
+    /// var loader = DataLoaders.FromJsonl&lt;float&gt;(
+    ///     "train.jsonl",
+    ///     record =&gt;
+    ///     {
+    ///         var features = new Tensor&lt;float&gt;(new[] { 10 });
+    ///         var label = new Tensor&lt;float&gt;(new[] { 1 });
+    ///         return (features, label);
+    ///     });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="filePath">Path to the JSONL file.</param>
+    /// <param name="recordParser">Function to convert a parsed JObject into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="textField">Optional field name for text content.</param>
+    /// <param name="labelField">Optional field name for labels.</param>
+    /// <param name="shuffleBufferSize">Buffer size for shuffling (0 = no shuffle).</param>
+    /// <returns>A typed JSONL data loader.</returns>
+    public static JsonlDataLoader<T> FromJsonl<T>(
+        string filePath,
+        Func<Newtonsoft.Json.Linq.JObject, (Tensor<T>, Tensor<T>)> recordParser,
+        int batchSize = 32,
+        string? textField = null,
+        string? labelField = null,
+        int shuffleBufferSize = 0)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        if (recordParser is null)
+        {
+            throw new ArgumentNullException(nameof(recordParser));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (shuffleBufferSize < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(shuffleBufferSize), "Shuffle buffer size cannot be negative.");
+        }
+
+        return new JsonlDataLoader<T>(
+            new[] { filePath }, recordParser, batchSize, textField, labelField, shuffleBufferSize);
+    }
+
+    /// <summary>
+    /// Creates a typed JSONL data loader for reading multiple JSONL files.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="filePaths">Paths to the JSONL files.</param>
+    /// <param name="recordParser">Function to convert a parsed JObject into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="textField">Optional field name for text content.</param>
+    /// <param name="labelField">Optional field name for labels.</param>
+    /// <param name="shuffleBufferSize">Buffer size for shuffling (0 = no shuffle).</param>
+    /// <returns>A typed JSONL data loader.</returns>
+    public static JsonlDataLoader<T> FromJsonl<T>(
+        string[] filePaths,
+        Func<Newtonsoft.Json.Linq.JObject, (Tensor<T>, Tensor<T>)> recordParser,
+        int batchSize = 32,
+        string? textField = null,
+        string? labelField = null,
+        int shuffleBufferSize = 0)
+    {
+        if (filePaths is null || filePaths.Length == 0)
+        {
+            throw new ArgumentException("At least one file path is required.", nameof(filePaths));
+        }
+
+        if (recordParser is null)
+        {
+            throw new ArgumentNullException(nameof(recordParser));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (shuffleBufferSize < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(shuffleBufferSize), "Shuffle buffer size cannot be negative.");
+        }
+
+        return new JsonlDataLoader<T>(
+            filePaths, recordParser, batchSize, textField, labelField, shuffleBufferSize);
+    }
+
+    /// <summary>
+    /// Creates a typed sharded streaming data loader for deterministic, resumable reading,
+    /// compatible with <c>AiModelBuilder.ConfigureDataLoader()</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Sharded datasets split data into multiple files (shards)
+    /// for parallel and resumable loading, ideal for large-scale distributed training.
+    /// <code>
+    /// var loader = DataLoaders.FromShards&lt;float&gt;(
+    ///     new[] { "shard_0.bin", "shard_1.bin" },
+    ///     recordBytes =&gt;
+    ///     {
+    ///         var features = new Tensor&lt;float&gt;(new[] { 784 });
+    ///         var label = new Tensor&lt;float&gt;(new[] { 10 });
+    ///         return (features, label);
+    ///     });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="shardPaths">Paths to the shard files.</param>
+    /// <param name="recordParser">Function to convert raw byte records into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="options">Optional sharded streaming configuration.</param>
+    /// <returns>A typed sharded streaming data loader.</returns>
+    public static ShardedStreamingDataLoader<T> FromShards<T>(
+        string[] shardPaths,
+        Func<byte[], (Tensor<T>, Tensor<T>)> recordParser,
+        int batchSize = 32,
+        ShardedStreamingDatasetOptions? options = null)
+    {
+        if (shardPaths is null || shardPaths.Length == 0)
+        {
+            throw new ArgumentException("At least one shard path is required.", nameof(shardPaths));
+        }
+
+        if (recordParser is null)
+        {
+            throw new ArgumentNullException(nameof(recordParser));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        return new ShardedStreamingDataLoader<T>(shardPaths, recordParser, batchSize, options);
+    }
+
+    #endregion
+
+    #region Wrapper/Utility Methods
+
+    /// <summary>
+    /// Wraps any data loader with stateful checkpointing support for mid-epoch resume.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This adds the ability to save and restore the exact position
+    /// in a dataset, so training can resume after interruptions without repeating data.
+    /// <code>
+    /// var baseLoader = DataLoaders.Mnist&lt;float&gt;();
+    /// var stateful = DataLoaders.WithCheckpointing(baseLoader);
+    ///
+    /// // Save state mid-epoch
+    /// var state = stateful.GetState();
+    ///
+    /// // Later, resume exactly where you left off
+    /// stateful.LoadState(state);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <typeparam name="TInput">The input type.</typeparam>
+    /// <typeparam name="TOutput">The output type.</typeparam>
+    /// <param name="loader">The data loader to wrap with checkpointing.</param>
+    /// <returns>A stateful data loader with checkpoint support.</returns>
+    public static StatefulDataLoader<T, TInput, TOutput> WithCheckpointing<T, TInput, TOutput>(
+        InputOutputDataLoaderBase<T, TInput, TOutput> loader)
+    {
+        if (loader is null)
+        {
+            throw new ArgumentNullException(nameof(loader));
+        }
+
+        return new StatefulDataLoader<T, TInput, TOutput>(loader);
+    }
+
+    /// <summary>
+    /// Creates a new empty multimodal dataset for building vision-language or multi-modal training samples.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A multimodal dataset holds samples that combine data from
+    /// different modalities (image + text, audio + video, etc.):
+    /// <code>
+    /// var dataset = DataLoaders.Multimodal&lt;float&gt;();
+    /// var sample = new MultimodalSample&lt;float&gt;(
+    ///     new ModalitySample&lt;float&gt;(ModalityType.Image, imageTensor),
+    ///     new ModalitySample&lt;float&gt;(ModalityType.Text, textTensor));
+    /// dataset.Add(sample);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <returns>An empty multimodal dataset ready for sample addition.</returns>
+    public static MultimodalDataset<T> Multimodal<T>()
+    {
+        return new MultimodalDataset<T>();
+    }
+
+    /// <summary>
+    /// Creates a multimodal dataset pre-populated with samples.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="samples">The multimodal samples to add.</param>
+    /// <returns>A multimodal dataset containing the provided samples.</returns>
+    public static MultimodalDataset<T> Multimodal<T>(
+        IEnumerable<MultimodalSample<T>> samples)
+    {
+        if (samples is null)
+        {
+            throw new ArgumentNullException(nameof(samples));
+        }
+
+        var dataset = new MultimodalDataset<T>();
+        foreach (var sample in samples)
+        {
+            dataset.Add(sample);
+        }
+
+        return dataset;
+    }
+
+    /// <summary>
+    /// Wraps a data loader with a composable transform pipeline applied to features.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to add preprocessing to any existing data loader
+    /// without modifying the loader itself. The transforms are applied to each batch's features.
+    /// <code>
+    /// var baseLoader = DataLoaders.FromArrays(features, labels);
+    /// var normalized = DataLoaders.WithTransforms(baseLoader,
+    ///     new NormalizeTransform&lt;float&gt;(mean, std));
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="loader">The source data loader.</param>
+    /// <param name="transform">The transform to apply to each feature array in the batch.</param>
+    /// <returns>A new data loader that applies transforms on iteration.</returns>
+    public static TransformedDataLoader<T> WithTransforms<T>(
+        InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>> loader,
+        ITransform<T[], T[]> transform)
+    {
+        if (loader is null)
+        {
+            throw new ArgumentNullException(nameof(loader));
+        }
+
+        if (transform is null)
+        {
+            throw new ArgumentNullException(nameof(transform));
+        }
+
+        return new TransformedDataLoader<T>(loader, transform);
+    }
+
+    #endregion
+}

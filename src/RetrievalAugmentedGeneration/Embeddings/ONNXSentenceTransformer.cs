@@ -1,0 +1,269 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+using AiDotNet.Tokenization.HuggingFace;
+using AiDotNet.Tokenization.Interfaces;
+using Microsoft.ML.OnnxRuntime;
+
+namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
+{
+    /// <summary>
+    /// Production-ready sentence transformer for generating semantic embeddings using ONNX Runtime.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    public class ONNXSentenceTransformer<T> : EmbeddingModelBase<T>
+    {
+        private readonly string _modelPath;
+        private readonly int _dimension;
+        private readonly int _maxTokens;
+        private volatile InferenceSession? _session;
+        private volatile ITokenizer? _tokenizer;
+        private readonly object _initLock = new();
+        private bool _disposed;
+
+        public override int EmbeddingDimension => _dimension;
+        public override int MaxTokens => _maxTokens;
+
+        public ONNXSentenceTransformer(string modelPath, int dimension = 384, int maxTokens = 512)
+        {
+            if (string.IsNullOrWhiteSpace(modelPath))
+                throw new ArgumentException("Model path cannot be empty", nameof(modelPath));
+            if (dimension <= 0)
+                throw new ArgumentException("Dimension must be positive", nameof(dimension));
+            if (maxTokens <= 0)
+                throw new ArgumentException("Max tokens must be positive", nameof(maxTokens));
+
+            _modelPath = modelPath;
+            _dimension = dimension;
+            _maxTokens = maxTokens;
+        }
+
+        /// <summary>
+        /// Ensures the ONNX model and tokenizer are loaded, loading lazily on first use.
+        /// Returns false if the model file is unavailable (caller should use fallback).
+        /// </summary>
+        private bool EnsureModelLoaded()
+        {
+            if (_session != null && _tokenizer != null)
+            {
+                return true;
+            }
+
+            lock (_initLock)
+            {
+                if (_session != null && _tokenizer != null)
+                {
+                    return true;
+                }
+
+                if (!File.Exists(_modelPath))
+                {
+                    return false;
+                }
+
+                var session = new InferenceSession(_modelPath);
+                var modelDir = Path.GetDirectoryName(_modelPath) ?? ".";
+                var tokenizer = AutoTokenizer.FromPretrained(modelDir);
+
+                // Assign both atomically so concurrent readers never see a partial state
+                _tokenizer = tokenizer;
+                _session = session;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Gets the inference session, ensuring it's loaded.
+        /// </summary>
+        /// <exception cref="FileNotFoundException">Thrown when the ONNX model file is not found.</exception>
+        private InferenceSession Session
+        {
+            get
+            {
+                if (!EnsureModelLoaded())
+                {
+                    throw new FileNotFoundException($"ONNX model file not found: {_modelPath}", _modelPath);
+                }
+                return _session ?? throw new InvalidOperationException("Failed to load ONNX session.");
+            }
+        }
+
+        /// <summary>
+        /// Gets the tokenizer, ensuring it's loaded.
+        /// </summary>
+        /// <exception cref="FileNotFoundException">Thrown when the ONNX model file is not found.</exception>
+        private ITokenizer Tokenizer
+        {
+            get
+            {
+                if (!EnsureModelLoaded())
+                {
+                    throw new FileNotFoundException($"ONNX model file not found: {_modelPath}", _modelPath);
+                }
+                return _tokenizer ?? throw new InvalidOperationException("Failed to load tokenizer.");
+            }
+        }
+
+        protected override Vector<T> EmbedCore(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return CreateZeroVector();
+
+            // Throw on missing model — consistent with PyTorch behavior.
+            if (!EnsureModelLoaded())
+                throw new FileNotFoundException($"ONNX model file not found: {_modelPath}", _modelPath);
+
+            // 1. Tokenize (model is guaranteed loaded at this point)
+            var tokenizationResult = Tokenizer.Encode(text, new AiDotNet.Tokenization.Models.EncodingOptions
+            {
+                MaxLength = _maxTokens,
+                Truncation = true,
+                Padding = true
+            });
+
+            var inputIds = tokenizationResult.TokenIds.Select(id => (long)id).ToArray();
+            var attentionMask = tokenizationResult.AttentionMask.Select(m => (long)m).ToArray();
+
+            var seqLength = inputIds.Length;
+            var inputShape = new[] { 1, seqLength };
+
+            // 2. Prepare inputs (only the ones the loaded session declares)
+            var declaredInputs = new HashSet<string>(Session.InputMetadata.Keys);
+            var inputs = BuildOnnxInputs(declaredInputs, inputIds, attentionMask, inputShape);
+
+            // 3. Run inference
+            using var results = Session.Run(inputs);
+
+            // 4. Process output (last_hidden_state is typical for sentence-transformers)
+            var lastHiddenState = results.First(r => r.Name == "last_hidden_state").AsTensor<float>();
+
+            // 5. Mean Pooling
+            var embedding = ApplyMeanPooling(lastHiddenState, attentionMask);
+
+            // 6. Convert to generic type T and normalize
+            var values = new T[_dimension];
+            for (int i = 0; i < Math.Min(_dimension, embedding.Length); i++)
+            {
+                values[i] = NumOps.FromDouble(embedding[i]);
+            }
+
+            return new Vector<T>(values).Normalize();
+        }
+
+        /// <summary>
+        /// Builds the list of ONNX inputs for a sentence-transformer encode call.
+        /// </summary>
+        /// <param name="declaredInputs">The names of the inputs the loaded session declares (typically <c>Session.InputMetadata.Keys</c>).</param>
+        /// <param name="inputIds">Int64 token ids, shape [batch, seqLen].</param>
+        /// <param name="attentionMask">Int64 attention mask, same shape as <paramref name="inputIds"/>.</param>
+        /// <param name="inputShape">The [batch, seqLen] shape shared by every input tensor.</param>
+        /// <remarks>
+        /// input_ids is always supplied. attention_mask and token_type_ids are only
+        /// added when the session declares them, so models exported without them keep
+        /// working. token_type_ids is built here as an all-zeros int64 tensor with the
+        /// SAME shape as input_ids (single-sentence embedding → all segment 0). We do
+        /// NOT forward the tokenizer's TokenTypeIds, because some sentence-transformer
+        /// tokenizers return an empty TokenTypeIds array; feeding that as a length-0
+        /// tensor makes onnxruntime throw
+        /// "Length of memory (0) must match product of dimensions (seqLen)".
+        /// </remarks>
+        internal static List<NamedOnnxValue> BuildOnnxInputs(
+            ICollection<string> declaredInputs,
+            long[] inputIds,
+            long[] attentionMask,
+            int[] inputShape)
+        {
+            var inputs = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor("input_ids", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(inputIds, inputShape))
+            };
+
+            if (declaredInputs.Contains("attention_mask"))
+            {
+                inputs.Add(NamedOnnxValue.CreateFromTensor("attention_mask", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(attentionMask, inputShape)));
+            }
+
+            // Some models (e.g. all-MiniLM-L6-v2) declare token_type_ids. Build it as
+            // an all-zeros int64 tensor with the SAME shape as input_ids rather than
+            // forwarding a possibly-empty tokenizer array.
+            if (declaredInputs.Contains("token_type_ids"))
+            {
+                var tokenTypeIds = new long[inputIds.Length];
+                inputs.Add(NamedOnnxValue.CreateFromTensor("token_type_ids", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(tokenTypeIds, inputShape)));
+            }
+
+            return inputs;
+        }
+
+        private float[] ApplyMeanPooling(Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> lastHiddenState, long[] attentionMask)
+        {
+            int seqLength = lastHiddenState.Dimensions[1];
+            int hiddenDim = lastHiddenState.Dimensions[2];
+            var pooled = new float[hiddenDim];
+            float sumMask = 0;
+
+            for (int i = 0; i < seqLength; i++)
+            {
+                if (attentionMask[i] == 0) continue;
+
+                sumMask += 1;
+                for (int d = 0; d < hiddenDim; d++)
+                {
+                    pooled[d] += lastHiddenState[0, i, d];
+                }
+            }
+
+            if (sumMask > 0)
+            {
+                for (int d = 0; d < hiddenDim; d++)
+                {
+                    pooled[d] /= sumMask;
+                }
+            }
+
+            return pooled;
+        }
+
+        private Vector<T> CreateZeroVector()
+        {
+            var values = new T[_dimension];
+            for (int i = 0; i < _dimension; i++)
+            {
+                values[i] = NumOps.Zero;
+            }
+            return new Vector<T>(values);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    _session?.Dispose();
+                    if (_tokenizer is IDisposable disposableTokenizer)
+                    {
+                        disposableTokenizer.Dispose();
+                    }
+                }
+
+                _disposed = true;
+            }
+
+            base.Dispose(disposing);
+        }
+    }
+}
+
+
+

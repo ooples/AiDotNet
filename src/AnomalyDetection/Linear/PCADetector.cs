@@ -1,0 +1,375 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.AnomalyDetection.Linear;
+
+/// <summary>
+/// Detects anomalies using Principal Component Analysis (PCA) reconstruction error.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> PCA-based anomaly detection works by projecting data onto
+/// the main directions of variation (principal components) and measuring how well
+/// points can be reconstructed. Anomalies have high reconstruction error.
+/// </para>
+/// <para>
+/// The algorithm works by:
+/// 1. Fit PCA on training data to find principal components
+/// 2. Project each point onto these components
+/// 3. Reconstruct the point from the projection
+/// 4. Measure reconstruction error (anomaly score)
+/// </para>
+/// <para>
+/// <b>When to use:</b>
+/// - Linear relationships in data
+/// - When anomalies deviate from the main data structure
+/// - High-dimensional data that can be compressed
+/// </para>
+/// <para>
+/// <b>Industry Standard Defaults:</b>
+/// - Components: min(n_samples, n_features) or specified
+/// - Variance threshold: 0.95 (keep 95% of variance)
+/// - Contamination: 0.1 (10%)
+/// </para>
+/// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ResearchPaper("A Geometric Framework for Unsupervised Anomaly Detection", "https://doi.org/10.1007/978-1-4615-0755-0")]
+public class PCADetector<T> : AnomalyDetectorBase<T>
+{
+    /// <summary>Eigenvalues below this threshold are treated as zero to avoid division by near-zero values in Mahalanobis distance.</summary>
+    private const double EigenvalueFloor = 1e-10;
+
+    private readonly int? _nComponents;
+    private readonly double _varianceThreshold;
+    private int _fittedComponents;
+    private Vector<T>? _mean;
+    private Vector<T> FittedMean => _mean ?? throw new InvalidOperationException("PCADetector not fitted. Call Fit() first.");
+    private Matrix<T>? _components;
+    private Matrix<T> FittedComponents => _components ?? throw new InvalidOperationException("PCADetector not fitted. Call Fit() first.");
+    private Vector<T>? _explainedVariance;
+    private Vector<T> FittedExplainedVariance => _explainedVariance ?? throw new InvalidOperationException("PCADetector not fitted. Call Fit() first.");
+
+    /// <summary>
+    /// Gets the number of components used.
+    /// </summary>
+    public int NComponents => _fittedComponents;
+
+    /// <summary>
+    /// Gets the variance threshold.
+    /// </summary>
+    public double VarianceThreshold => _varianceThreshold;
+
+    /// <summary>
+    /// Creates a new PCA anomaly detector.
+    /// </summary>
+    /// <param name="nComponents">
+    /// Number of principal components. If null, determined by variance threshold.
+    /// </param>
+    /// <param name="varianceThreshold">
+    /// Proportion of variance to retain. Default is 0.95 (95%).
+    /// Used when nComponents is not specified.
+    /// </param>
+    /// <param name="contamination">Expected proportion of anomalies. Default is 0.1 (10%).</param>
+    /// <param name="randomSeed">Random seed for reproducibility. Default is 42.</param>
+    public PCADetector(int? nComponents = null, double varianceThreshold = 0.95,
+        double contamination = 0.1, int randomSeed = 42)
+        : base(contamination, randomSeed)
+    {
+        if (nComponents.HasValue && nComponents.Value < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(nComponents),
+                "NComponents must be at least 1 if specified.");
+        }
+
+        if (varianceThreshold <= 0 || varianceThreshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(varianceThreshold),
+                "VarianceThreshold must be between 0 (exclusive) and 1 (inclusive). Recommended is 0.95.");
+        }
+
+        _nComponents = nComponents;
+        _varianceThreshold = varianceThreshold;
+    }
+
+    /// <inheritdoc/>
+    public override void Fit(Matrix<T> X)
+    {
+        ValidateInput(X);
+
+        int n = X.Rows;
+        int d = X.Columns;
+
+        // Compute mean
+        _mean = new Vector<T>(d);
+        for (int j = 0; j < d; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                sum = NumOps.Add(sum, X[i, j]);
+            }
+            _mean[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
+        }
+
+        // Center data
+        var centered = new Matrix<T>(n, d);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                centered[i, j] = NumOps.Subtract(X[i, j], _mean[j]);
+            }
+        }
+
+        // Compute covariance matrix
+        var covariance = ComputeCovariance(centered, n, d);
+
+        // Compute eigendecomposition (simplified power iteration)
+        var (eigenvalues, eigenvectors) = ComputeEigenDecomposition(covariance, d);
+
+        // Determine number of components
+        _fittedComponents = _nComponents ?? DetermineComponents(eigenvalues);
+        _fittedComponents = Math.Min(_fittedComponents, d);
+
+        // Store components (top eigenvectors)
+        _components = new Matrix<T>(_fittedComponents, d);
+        _explainedVariance = new Vector<T>(_fittedComponents);
+
+        for (int c = 0; c < _fittedComponents; c++)
+        {
+            _explainedVariance[c] = eigenvalues[c];
+            for (int j = 0; j < d; j++)
+            {
+                _components[c, j] = eigenvectors[c, j];
+            }
+        }
+
+        // Calculate scores for training data to set threshold
+        var trainingScores = ScoreAnomaliesInternal(X);
+        SetThresholdFromContamination(trainingScores);
+
+        _isFitted = true;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> ScoreAnomalies(Matrix<T> X)
+    {
+        EnsureFitted();
+        return ScoreAnomaliesInternal(X);
+    }
+
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    {
+        ValidateInput(X);
+
+        var scores = new Vector<T>(X.Rows);
+        int d = X.Columns;
+
+        // Pre-allocate reusable vectors outside the loop
+        var centered = new Vector<T>(d);
+        var projected = new Vector<T>(_fittedComponents);
+        var reconstructed = new Vector<T>(d);
+        var compCol = new Vector<T>(_fittedComponents);
+
+        for (int i = 0; i < X.Rows; i++)
+        {
+            // Center the point
+            for (int j = 0; j < d; j++)
+                centered[j] = NumOps.Subtract(X[i, j], FittedMean[j]);
+
+            // Project onto components
+            for (int c = 0; c < _fittedComponents; c++)
+            {
+                T dot = NumOps.Zero;
+                for (int j = 0; j < d; j++)
+                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], FittedComponents[c, j]));
+                projected[c] = dot;
+            }
+
+            // Reconstruct from projection
+            for (int j = 0; j < d; j++)
+            {
+                for (int c = 0; c < _fittedComponents; c++) compCol[c] = FittedComponents[c, j];
+                reconstructed[j] = Engine.DotProduct(projected, compCol);
+            }
+
+            // Compute reconstruction error (residual from unretained components)
+            T reconstructionError = NumOps.Zero;
+            for (int j = 0; j < d; j++)
+            {
+                T diff = NumOps.Subtract(centered[j], reconstructed[j]);
+                reconstructionError = NumOps.Add(reconstructionError, NumOps.Multiply(diff, diff));
+            }
+
+            // Compute Mahalanobis distance in PCA space (distance along retained components,
+            // weighted by inverse eigenvalues). This catches outliers that lie far from the mean
+            // along principal component directions, even when reconstruction error is low.
+            T mahalanobis = NumOps.Zero;
+            T eigenFloor = NumOps.FromDouble(EigenvalueFloor);
+            for (int c = 0; c < _fittedComponents; c++)
+            {
+                T eigenvalue = FittedExplainedVariance[c];
+                if (NumOps.GreaterThan(eigenvalue, eigenFloor))
+                {
+                    T proj = projected[c];
+                    mahalanobis = NumOps.Add(mahalanobis, NumOps.Divide(NumOps.Multiply(proj, proj), eigenvalue));
+                }
+            }
+
+            // Combined score: Hotelling's T² (Mahalanobis in PC space) + SPE/Q (reconstruction error).
+            scores[i] = NumOps.Add(mahalanobis, reconstructionError);
+        }
+
+        return scores;
+    }
+
+    private Matrix<T> ComputeCovariance(Matrix<T> centered, int n, int d)
+    {
+        var cov = new Matrix<T>(d, d);
+
+        // Pre-allocate column vectors outside all loops
+        var colI = new Vector<T>(n);
+        var colJ = new Vector<T>(n);
+        for (int i = 0; i < d; i++)
+        {
+            for (int k = 0; k < n; k++) colI[k] = centered[k, i];
+
+            for (int j = i; j < d; j++)
+            {
+                for (int k = 0; k < n; k++) colJ[k] = centered[k, j];
+                cov[i, j] = NumOps.Divide(Engine.DotProduct(colI, colJ), NumOps.FromDouble(n - 1));
+                cov[j, i] = cov[i, j];
+            }
+        }
+
+        return cov;
+    }
+
+    private (Vector<T> eigenvalues, Matrix<T> eigenvectors) ComputeEigenDecomposition(Matrix<T> matrix, int d)
+    {
+        // Simplified power iteration method for eigendecomposition
+        var random = RandomHelper.CreateSeededRandom(_randomSeed);
+        var eigenvalues = new Vector<T>(d);
+        var eigenvectors = new Matrix<T>(d, d);
+        var A = CopyMatrix(matrix, d);
+
+        for (int e = 0; e < d; e++)
+        {
+            // Initialize random vector
+            var v = new Vector<T>(d);
+            for (int j = 0; j < d; j++)
+            {
+                v[j] = NumOps.FromDouble(random.NextDouble() - 0.5);
+            }
+
+            // Power iteration
+            for (int iter = 0; iter < 100; iter++)
+            {
+                // Multiply A * v
+                var Av = new Vector<T>(d);
+                for (int i = 0; i < d; i++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int j = 0; j < d; j++)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(A[i, j], v[j]));
+                    }
+                    Av[i] = sum;
+                }
+
+                // Normalize
+                T norm = NumOps.Sqrt(Engine.DotProduct(Av, Av));
+
+                if (NumOps.LessThan(norm, NumOps.FromDouble(1e-10))) break;
+
+                for (int j = 0; j < d; j++)
+                {
+                    v[j] = NumOps.Divide(Av[j], norm);
+                }
+            }
+
+            // Compute eigenvalue: v'Av
+            var Av2 = new Vector<T>(d);
+            for (int i = 0; i < d; i++)
+            {
+                T sum = NumOps.Zero;
+                for (int j = 0; j < d; j++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(A[i, j], v[j]));
+                }
+                Av2[i] = sum;
+            }
+
+            T eigenvalue = Engine.DotProduct(v, Av2);
+
+            eigenvalues[e] = eigenvalue;
+            for (int j = 0; j < d; j++)
+            {
+                eigenvectors[e, j] = v[j];
+            }
+
+            // Deflate matrix: A = A - lambda * v * v'
+            for (int i = 0; i < d; i++)
+            {
+                for (int j = 0; j < d; j++)
+                {
+                    A[i, j] = NumOps.Subtract(A[i, j],
+                        NumOps.Multiply(eigenvalue, NumOps.Multiply(v[i], v[j])));
+                }
+            }
+        }
+
+        return (eigenvalues, eigenvectors);
+    }
+
+    private Matrix<T> CopyMatrix(Matrix<T> source, int d)
+    {
+        var copy = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                copy[i, j] = source[i, j];
+            }
+        }
+        return copy;
+    }
+
+    private int DetermineComponents(Vector<T> eigenvalues)
+    {
+        // Find number of components to explain variance threshold
+        T totalVariance = NumOps.Zero;
+        for (int i = 0; i < eigenvalues.Length; i++)
+        {
+            T ev = eigenvalues[i];
+            if (NumOps.GreaterThan(ev, NumOps.Zero))
+                totalVariance = NumOps.Add(totalVariance, ev);
+        }
+
+        T cumulativeVariance = NumOps.Zero;
+        T threshold = NumOps.FromDouble(_varianceThreshold);
+        for (int i = 0; i < eigenvalues.Length; i++)
+        {
+            T ev = eigenvalues[i];
+            if (NumOps.GreaterThan(ev, NumOps.Zero))
+                cumulativeVariance = NumOps.Add(cumulativeVariance, ev);
+
+            if (NumOps.GreaterThan(totalVariance, NumOps.Zero) &&
+                !NumOps.LessThan(NumOps.Divide(cumulativeVariance, totalVariance), threshold))
+            {
+                return i + 1;
+            }
+        }
+
+        return eigenvalues.Length;
+    }
+}

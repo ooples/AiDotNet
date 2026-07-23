@@ -1,0 +1,262 @@
+using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+
+namespace AiDotNet.Video.Motion;
+
+/// <summary>
+/// SEA-RAFT simple efficient accurate RAFT with mixture of Laplace loss.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "SEA-RAFT: Simple, Efficient, Accurate RAFT for Optical Flow" (Teed et al., ECCV 2024 Oral, Best Paper Candidate)</item>
+/// </list></para>
+/// <para><b>For Beginners:</b> SEA-RAFT extends RAFT with Scale-Equivariant Architecture for better handling of objects at different scales. It improves flow accuracy for both small and large motions.</para>
+/// <para>
+/// SEA-RAFT simplifies RAFT with a mixture of Laplace loss and direct initial flow prediction, achieving state-of-the-art accuracy with improved efficiency.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a SEA-RAFT model for simple, efficient optical flow
+/// var seaRaft = new SEARAFT&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new SEARAFT&lt;double&gt;(architecture);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("SEA-RAFT: Simple, Efficient, Accurate RAFT for Optical Flow",
+    "https://arxiv.org/abs/2405.14793",
+    Year = 2024,
+    Authors = "Yihan Wang, Lahav Lipson, Jia Deng")]
+public class SEARAFT<T> : OpticalFlowBase<T>
+{
+    private readonly SEARAFTOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    private int _numFeatures;
+    private int _numLayers;
+    private ConvolutionalLayer<T>? _featureExtract;
+    private readonly List<ConvolutionalLayer<T>> _processingBlocks;
+    private ConvolutionalLayer<T>? _outputConv;
+
+    /// <summary>
+    /// Creates a new SEARAFT model for native training and inference.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
+    /// <param name="numLayers">Number of processing layers. Default: 8.</param>
+    /// <param name="options">Optional configuration options.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SEARAFT()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            // 2 frames stacked channel-wise (2×3=6): the lazy _featureExtract conv is sized from
+            // InputDepth by ResolveLazyLayerShapes, and EstimateFlow feeds it the concatenated pair,
+            // so it must be 6 not 3. Single-encoder flow models only (RAFT/GMFlow have a separate
+            // 3-channel context encoder and are excluded). PredictCore splits per-frame via Shape[1]/2.
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
+            outputSize: 2))
+    {
+    }
+
+    public SEARAFT(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 64,
+        int numLayers = 8,
+        SEARAFTOptions? options = null)
+        : base(architecture, new MeanSquaredErrorLoss<T>())
+    {
+        _options = options ?? new SEARAFTOptions();
+        Options = _options;
+
+        _numFeatures = numFeatures;
+        _numLayers = numLayers;
+        _processingBlocks = [];
+
+        InitializeNativeLayers(architecture);
+    }
+
+    private void InitializeNativeLayers(NeuralNetworkArchitecture<T> arch)
+    {
+        int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
+        int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
+        int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
+
+        _featureExtract = new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1);
+
+        for (int i = 0; i < _numLayers; i++)
+        {
+            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1));
+        }
+
+        _outputConv = new ConvolutionalLayer<T>(2, 3, 1, 1);
+
+        InitializeLayers();
+    }
+
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        if (_featureExtract is not null)
+            Layers.Add(_featureExtract);
+        foreach (var block in _processingBlocks)
+            Layers.Add(block);
+        if (_outputConv is not null)
+            Layers.Add(_outputConv);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> EstimateFlow(Tensor<T> frame0, Tensor<T> frame1)
+    {
+        int channels = frame0.Shape[0];
+        int height = frame0.Shape[1];
+        int width = frame0.Shape[2];
+
+        // Concatenate frames as input pair
+        var concat = ConcatenateFeatures(frame0, frame1);
+        if (_featureExtract is null || _outputConv is null)
+            throw new InvalidOperationException("Model layers not initialized.");
+
+        var feat = _featureExtract.Forward(concat);
+        foreach (var block in _processingBlocks)
+        {
+            feat = block.Forward(feat);
+        }
+        var rawFlow = _outputConv.Forward(feat);
+
+        // Extract 2-channel flow field
+        var flow = new Tensor<T>([2, height, width]);
+        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
+        {
+            flow.Data.Span[i] = rawFlow.Data.Span[i];
+        }
+
+        return flow;
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        if (_featureExtract is not null)
+        {
+            var p = _featureExtract.GetParameters();
+            if (offset + p.Length <= parameters.Length)
+            {
+                var sub = new Vector<T>(p.Length);
+                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+                _featureExtract.SetParameters(sub);
+                offset += p.Length;
+            }
+        }
+        foreach (var block in _processingBlocks)
+        {
+            var p = block.GetParameters();
+            if (offset + p.Length <= parameters.Length)
+            {
+                var sub = new Vector<T>(p.Length);
+                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+                block.SetParameters(sub);
+                offset += p.Length;
+            }
+        }
+        if (_outputConv is not null)
+        {
+            var p = _outputConv.GetParameters();
+            if (offset + p.Length <= parameters.Length)
+            {
+                var sub = new Vector<T>(p.Length);
+                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+                _outputConv.SetParameters(sub);
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "ModelName", "SEARAFT" },
+                { "NumFeatures", _numFeatures },
+                { "NumLayers", _numLayers }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_numFeatures);
+        writer.Write(_numLayers);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _numFeatures = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new SEARAFT<T>(Architecture, _numFeatures, _numLayers, _options);
+    }
+}

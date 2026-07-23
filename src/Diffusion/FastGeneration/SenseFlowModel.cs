@@ -1,0 +1,169 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.FastGeneration;
+
+/// <summary>
+/// SenseFlow model for accelerated flow-matching generation via knowledge distillation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// SenseFlow accelerates flow-matching models (like FLUX) through a combination of
+/// progressive distillation and feature alignment. Maintains the straight-path ODE
+/// formulation while reducing the number of steps needed from 20-50 to 4-8.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Flow-matching models like FLUX generate amazing images but
+/// need 20+ steps. SenseFlow is a distilled version that captures the same quality in
+/// 4-8 steps by learning to take "bigger strides" along the generation path, like a
+/// student who learns shortcuts from a thorough teacher.
+/// </para>
+/// <para>
+/// Reference: SenseTime, "SenseFlow: Accelerated Flow-Matching Generation", 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 6 };
+/// var model = new SenseFlowModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("SenseFlow: Accelerated Flow-Matching Generation", "https://arxiv.org/abs/2501.04601", Year = 2024, Authors = "SenseTime")]
+public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 16;
+    private const double DEFAULT_GUIDANCE = 3.5;
+
+    private FluxDoubleStreamPredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+
+    /// <summary>
+    /// Initializes a new SenseFlow model.
+    /// </summary>
+    public SenseFlowModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        FluxDoubleStreamPredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.0001,
+                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear,
+                DefaultInferenceSteps = 4 // SenseFlow is distilled for 4-8 step generation
+            },
+            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(FluxDoubleStreamPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new FluxDoubleStreamPredictor<T>(
+            variant: FluxPredictorVariant.Dev,
+            inputChannels: LATENT_CHANNELS,
+            contextDim: 4096,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2, latentScaleFactor: 0.3611, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        return Vector<T>.Concatenate(new[] { pp, vp });
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+        var pp = new Vector<T>(parameters.AsSpan().Slice(0, pc).ToArray());
+        var vp = new Vector<T>(parameters.AsSpan().Slice(pc, vc).ToArray());
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // #1711: delegate to predictor/VAE Clone (probe-forward + copy); DiT LazyDense weights resolve
+        // via the FORWARD path so a model-level SetParameters(GetParameters()) clone re-RNG-initialized.
+        var clone = new SenseFlowModel<T>(
+            conditioner: _conditioner,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            seed: null);
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "SenseFlow", Version = "1.0",
+            Description = "Accelerated flow-matching generation via progressive distillation and feature alignment",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "distilled-flux-flow-matching");
+        m.SetProperty("base_model", "FLUX.1");
+        m.SetProperty("text_encoder", "CLIP-L + T5-XXL");
+        m.SetProperty("context_dim", 4096);
+        m.SetProperty("distillation_method", "progressive-flow-matching");
+        m.SetProperty("optimal_steps", 4);
+        m.SetProperty("max_recommended_steps", 8);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        return m;
+    }
+}

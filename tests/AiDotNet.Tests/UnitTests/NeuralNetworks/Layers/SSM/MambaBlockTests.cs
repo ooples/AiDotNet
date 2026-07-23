@@ -1,0 +1,436 @@
+using AiDotNet.NeuralNetworks.Layers.SSM;
+using AiDotNet.Tensors;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
+
+/// <summary>
+/// Unit tests for <see cref="MambaBlock{T}"/>.
+/// </summary>
+public class MambaBlockTests
+{
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ValidParameters_CreatesBlock()
+    {
+        int seqLen = 16;
+        int modelDim = 64;
+        int stateDim = 16;
+        int expandFactor = 2;
+        int convKernel = 4;
+
+        var block = new MambaBlock<float>(seqLen, modelDim, stateDim, expandFactor, convKernel);
+
+        Assert.Equal(modelDim, block.ModelDimension);
+        Assert.Equal(stateDim, block.StateDimension);
+        Assert.Equal(modelDim * expandFactor, block.InnerDimension);
+        Assert.Equal(convKernel, block.ConvKernelSize);
+        Assert.Equal((int)Math.Ceiling((double)modelDim / 16), block.DtRank);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_DefaultParameters_UsesCorrectDefaults()
+    {
+        var block = new MambaBlock<float>(16);
+
+        // Default values from the Mamba paper
+        Assert.Equal(256, block.ModelDimension);
+        Assert.Equal(16, block.StateDimension);
+        Assert.Equal(512, block.InnerDimension); // 256 * 2
+        Assert.Equal(4, block.ConvKernelSize);
+        Assert.Equal(16, block.DtRank); // ceil(256/16)
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_CustomDtRank_UsesProvidedValue()
+    {
+        var block = new MambaBlock<float>(16, modelDimension: 64, dtRank: 8);
+
+        Assert.Equal(8, block.DtRank);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task S6Scan_CarriedState_MatchesFullScan()
+    {
+        // Localizes the bug: a full seqLen=2 scan must equal two seqLen=1 scans carrying the hidden state.
+        await Task.CompletedTask;
+        int inner = 4;
+        int state = 3;
+        var rng = new Random(7);
+
+        Tensor<double> Rand(int[] shape, double scale = 1.0)
+        {
+            var t = new Tensor<double>(shape);
+            for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 2 - 1) * scale;
+            return t;
+        }
+
+        var x = Rand(new[] { 1, 2, inner });
+        var delta = Rand(new[] { 1, 2, inner }, 0.5); // softplus output is positive; keep modest
+        for (int i = 0; i < delta.Length; i++) delta[i] = System.Math.Abs(delta[i]) + 0.1;
+        var aLog = Rand(new[] { inner, state }, 0.5);
+        var b = Rand(new[] { 1, 2, state });
+        var c = Rand(new[] { 1, 2, state });
+        var d = Rand(new[] { inner });
+
+        var (fullOut, _) = S6Scan<double>.SequentialScanForward(x, delta, aLog, b, c, d, 1, 2, inner, state);
+
+        Tensor<double> Slice(Tensor<double> src, int t, int dim2)
+        {
+            var s = new Tensor<double>(new[] { 1, 1, dim2 });
+            for (int j = 0; j < dim2; j++) s[new[] { 0, 0, j }] = src[new[] { 0, t, j }];
+            return s;
+        }
+
+        var (out0, h0) = S6Scan<double>.SequentialScanForward(
+            Slice(x, 0, inner), Slice(delta, 0, inner), aLog, Slice(b, 0, state), Slice(c, 0, state), d, 1, 1, inner, state);
+        var carried = h0.GetSliceAlongDimension(1, 1).Clone(); // [1, inner, state]
+        var (out1, _) = S6Scan<double>.SequentialScanForward(
+            Slice(x, 1, inner), Slice(delta, 1, inner), aLog, Slice(b, 1, state), Slice(c, 1, state), d, 1, 1, inner, state, carried);
+
+        for (int j = 0; j < inner; j++)
+        {
+            double e0 = fullOut[new[] { 0, 0, j }];
+            double a0 = out0[new[] { 0, 0, j }];
+            Assert.True(System.Math.Abs(e0 - a0) < 1e-12, $"t=0 scan mismatch d={j}: {e0:G12} vs {a0:G12}");
+            double e1 = fullOut[new[] { 0, 1, j }];
+            double a1 = out1[new[] { 0, 0, j }];
+            Assert.True(System.Math.Abs(e1 - a1) < 1e-12, $"t=1 carried scan mismatch d={j}: {e1:G12} vs {a1:G12}");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Step_Incremental_MatchesForward_SingleBlock()
+    {
+        // Isolated block-level check: per-token Step (carrying conv window + SSM hidden state) must
+        // reproduce the full-sequence Forward exactly, with no surrounding layers in play.
+        await Task.CompletedTask;
+        int seqLen = 5;
+        int modelDim = 16;
+        int stateDim = 8;
+
+        var block = new MambaBlock<double>(seqLen, modelDim, stateDim, expandFactor: 2);
+
+        var p = block.GetParameters();
+        var rng = new Random(123);
+        for (int i = 0; i < p.Length; i++)
+        {
+            p[i] = (rng.NextDouble() * 2 - 1) * 0.3;
+        }
+        block.SetParameters(p);
+
+        var input = new Tensor<double>(new[] { 1, seqLen, modelDim });
+        var rng2 = new Random(321);
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = rng2.NextDouble() * 2 - 1;
+        }
+
+        var full = block.Forward(input); // [1, seqLen, modelDim]
+
+        var state = block.CreateStepState(1);
+        for (int t = 0; t < seqLen; t++)
+        {
+            var token = new Tensor<double>(new[] { 1, 1, modelDim });
+            for (int d = 0; d < modelDim; d++)
+            {
+                token[new[] { 0, 0, d }] = input[new[] { 0, t, d }];
+            }
+
+            var stepOut = block.Step(token, state); // [1, 1, modelDim]
+            for (int d = 0; d < modelDim; d++)
+            {
+                double e = full[new[] { 0, t, d }];
+                double a = stepOut[new[] { 0, 0, d }];
+                Assert.True(System.Math.Abs(e - a) < 1e-9,
+                    $"Single-block Step diverged from Forward at t={t}, d={d}: {e:G9} vs {a:G9}");
+            }
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenModelDimensionNotPositive()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new MambaBlock<float>(16, modelDimension: 0));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenStateDimensionNotPositive()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new MambaBlock<float>(16, modelDimension: 64, stateDimension: 0));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenExpandFactorNotPositive()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new MambaBlock<float>(16, modelDimension: 64, expandFactor: 0));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_ThrowsWhenConvKernelNotPositive()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new MambaBlock<float>(16, modelDimension: 64, convKernelSize: 0));
+    }
+
+    [Theory]
+    [InlineData(64, 16, 2, 4)]
+    [InlineData(32, 8, 2, 4)]
+    [InlineData(128, 32, 2, 4)]
+    [InlineData(64, 16, 4, 4)]  // larger expansion
+    [InlineData(64, 16, 2, 8)]  // larger conv kernel
+    public void Forward_3D_ProducesValidOutput(int modelDim, int stateDim, int expand, int convK)
+    {
+        int batchSize = 2;
+        int seqLen = 8;
+        var block = new MambaBlock<float>(seqLen, modelDim, stateDim, expand, convK);
+        var input = CreateRandomTensor(new[] { batchSize, seqLen, modelDim });
+
+        var output = block.Forward(input);
+
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Theory]
+    [InlineData(64, 16)]
+    [InlineData(32, 8)]
+    public void Forward_2D_ProducesValidOutput(int modelDim, int stateDim)
+    {
+        int seqLen = 8;
+        var block = new MambaBlock<float>(seqLen, modelDim, stateDim);
+        var input = CreateRandomTensor(new[] { seqLen, modelDim });
+
+        var output = block.Forward(input);
+
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+        Assert.False(ContainsNaN(output));
+    }
+
+
+
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_MatchesExpectedFormula()
+    {
+        int modelDim = 32;
+        int stateDim = 8;
+        int expandFactor = 2;
+        int convKernel = 4;
+        int innerDim = modelDim * expandFactor; // 64
+        int dtRank = (int)Math.Ceiling((double)modelDim / 16); // 2
+
+        var block = new MambaBlock<float>(8, modelDim, stateDim, expandFactor, convKernel);
+
+        int expectedParams =
+            modelDim * (innerDim * 2) + (innerDim * 2) +   // input proj weights + bias
+            innerDim * convKernel + innerDim +               // conv weights + bias
+            innerDim * (dtRank + stateDim * 2) +            // x_proj weights
+            dtRank * innerDim + innerDim +                   // dt_proj weights + bias
+            innerDim * stateDim +                            // A_log
+            innerDim +                                       // D param
+            innerDim * modelDim + modelDim;                  // output proj weights + bias
+
+        Assert.Equal(expectedParams, (int)block.ParameterCount);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GetParameters_SetParameters_RoundTrip()
+    {
+        int seqLen = 4;
+        int modelDim = 32;
+        int stateDim = 8;
+        var block = new MambaBlock<float>(seqLen, modelDim, stateDim);
+
+        var params1 = block.GetParameters();
+        Assert.True(params1.Length > 0);
+        Assert.Equal(block.ParameterCount, params1.Length);
+
+        // Set parameters back (should not throw)
+        block.SetParameters(params1);
+
+        var params2 = block.GetParameters();
+        Assert.Equal(params1.Length, params2.Length);
+
+        // Values should match exactly
+        for (int i = 0; i < params1.Length; i++)
+        {
+            Assert.Equal(params1[i], params2[i]);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SetParameters_ThrowsOnWrongLength()
+    {
+        var block = new MambaBlock<float>(4, 32, 8);
+        var wrongParams = new Vector<float>(10); // wrong length
+
+        Assert.Throws<ArgumentException>(() => block.SetParameters(wrongParams));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ResetState_ClearsInternalState()
+    {
+        var block = new MambaBlock<float>(4, 32, 8);
+        var input = CreateRandomTensor(new[] { 1, 4, 32 });
+        block.Forward(input);
+
+        block.ResetState();
+
+        // Should not throw and should be usable again
+        var output = block.Forward(input);
+        Assert.NotNull(output);
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Forward_DeterministicWithSameParameters()
+    {
+        int seqLen = 4;
+        int modelDim = 32;
+        int stateDim = 8;
+        var block1 = new MambaBlock<float>(seqLen, modelDim, stateDim);
+        var block2 = new MambaBlock<float>(seqLen, modelDim, stateDim);
+
+        // Copy parameters from block1 to block2
+        block2.SetParameters(block1.GetParameters());
+
+        var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
+        var output1 = block1.Forward(input);
+        var output2 = block2.Forward(input);
+
+        var arr1 = output1.ToArray();
+        var arr2 = output2.ToArray();
+
+        Assert.Equal(arr1.Length, arr2.Length);
+        for (int i = 0; i < arr1.Length; i++)
+        {
+            Assert.True(MathF.Abs(arr1[i] - arr2[i]) < 1e-5f,
+                $"Output mismatch at index {i}: {arr1[i]:G6} vs {arr2[i]:G6}");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterCount_IncreasesWithExpansion()
+    {
+        int modelDim = 32;
+        int stateDim = 8;
+
+        var block2x = new MambaBlock<float>(8, modelDim, stateDim, expandFactor: 2);
+        var block4x = new MambaBlock<float>(8, modelDim, stateDim, expandFactor: 4);
+
+        Assert.True(block4x.ParameterCount > block2x.ParameterCount,
+            $"4x expand ({block4x.ParameterCount}) should have more params than 2x ({block2x.ParameterCount})");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SupportsTraining_ReturnsTrue()
+    {
+        var block = new MambaBlock<float>(4, 32, 8);
+        Assert.True(block.SupportsTraining);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GetMetadata_ContainsExpectedKeys()
+    {
+        var block = new MambaBlock<float>(8, 64, 16, expandFactor: 2, convKernelSize: 4);
+
+        // GetMetadata is internal but accessible via InternalsVisibleTo
+        var metadata = block.GetMetadata();
+
+        Assert.True(metadata.ContainsKey("ModelDimension"));
+        Assert.True(metadata.ContainsKey("StateDimension"));
+        Assert.True(metadata.ContainsKey("InnerDimension"));
+        Assert.True(metadata.ContainsKey("ConvKernelSize"));
+        Assert.True(metadata.ContainsKey("DtRank"));
+        Assert.Equal("64", metadata["ModelDimension"]);
+        Assert.Equal("16", metadata["StateDimension"]);
+        Assert.Equal("128", metadata["InnerDimension"]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GetWeightAccessors_ReturnCorrectShapes()
+    {
+        int modelDim = 64;
+        int stateDim = 16;
+        int expandFactor = 2;
+        int innerDim = modelDim * expandFactor;
+
+        var block = new MambaBlock<float>(8, modelDim, stateDim, expandFactor);
+
+        var inputWeights = block.GetInputProjectionWeights();
+        Assert.Equal(new[] { modelDim, innerDim * 2 }, inputWeights.Shape.ToArray());
+
+        var outputWeights = block.GetOutputProjectionWeights();
+        Assert.Equal(new[] { innerDim, modelDim }, outputWeights.Shape.ToArray());
+
+        var aLog = block.GetALogParameter();
+        Assert.Equal(new[] { innerDim, stateDim }, aLog.Shape.ToArray());
+
+        var dParam = block.GetDParameter();
+        Assert.Equal(new[] { innerDim }, dParam.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Forward_Double_ProducesValidOutput()
+    {
+        int seqLen = 4;
+        int modelDim = 32;
+        int stateDim = 8;
+        var block = new MambaBlock<double>(seqLen, modelDim, stateDim);
+        var input = CreateRandomDoubleTensor(new[] { 1, seqLen, modelDim });
+
+        var output = block.Forward(input);
+
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
+        Assert.False(ContainsNaNDouble(output));
+    }
+
+
+    #region Helpers
+
+    private static Tensor<float> CreateRandomTensor(int[] shape)
+    {
+        var tensor = new Tensor<float>(shape);
+        var random = new Random(42);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = (float)(random.NextDouble() * 2 - 1);
+        }
+        return tensor;
+    }
+
+    private static Tensor<double> CreateRandomDoubleTensor(int[] shape)
+    {
+        var tensor = new Tensor<double>(shape);
+        var random = new Random(42);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = random.NextDouble() * 2 - 1;
+        }
+        return tensor;
+    }
+
+    private static bool ContainsNaN(Tensor<float> tensor)
+    {
+        foreach (var value in tensor.ToArray())
+        {
+            if (float.IsNaN(value)) return true;
+        }
+        return false;
+    }
+
+    private static bool ContainsNaNDouble(Tensor<double> tensor)
+    {
+        foreach (var value in tensor.ToArray())
+        {
+            if (double.IsNaN(value)) return true;
+        }
+        return false;
+    }
+
+    #endregion
+}

@@ -1,0 +1,389 @@
+using AiDotNet.Attributes;
+using AiDotNet.Extensions;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
+
+namespace AiDotNet.VisionLanguage.InstructionTuned;
+
+/// <summary>
+/// Phi-3-Vision: compact 4.2B parameter model with strong vision capabilities via curated data.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Phi-3-Vision (Abdin et al., 2024) is a compact multimodal model with 4.2B parameters that
+/// achieves strong performance through high-quality curated training data rather than model scale.
+/// It uses CLIP-ViT with MLP projection into the Phi-3 language model backbone.
+/// </para>
+/// <para><b>References:</b>
+/// <list type="bullet"><item>Paper: "Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone" (Abdin et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Phi-3-Vision from Microsoft proves that you don't need a
+/// massive model to get strong visual AI. At just 4.2 billion parameters, it's small enough
+/// to run on a phone, yet achieves performance that rivals much larger models. The secret
+/// is high-quality training data — Microsoft carefully curated the training examples to
+/// maximize what the model learns from each one. It uses a CLIP-ViT vision encoder connected
+/// to the Phi-3 language model through an MLP projection, keeping the architecture simple
+/// while relying on data quality for performance. Default values follow the original paper
+/// settings.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Phi-3-Vision model for compact on-device visual AI
+/// // using CLIP-ViT with Phi-3 backbone at only 4.2B parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Phi3Vision&lt;double&gt;(architecture, "phi3vision.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Phi3Vision&lt;double&gt;(architecture, new Phi3VisionOptions());
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper(
+    "Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone",
+    "https://arxiv.org/abs/2404.14219",
+    Year = 2024,
+    Authors = "Abdin et al."
+)]
+public class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+{
+    private readonly Phi3VisionOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    private int _encoderLayerEnd;
+
+    public Phi3Vision(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        Phi3VisionOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new Phi3VisionOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+        TryAutoEnableWeightStreaming();
+    }
+
+    public Phi3Vision(
+        NeuralNetworkArchitecture<T> architecture,
+        Phi3VisionOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new Phi3VisionOptions();
+        _options.ValidateVisualSizing();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+        TryAutoEnableWeightStreaming();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
+    /// <summary>
+    /// Generates text using Phi-3-Vision's compact data-centric architecture.
+    /// Phi-3-Vision (Abdin et al., 2024) uses:
+    /// (1) CLIP-ViT-L/14 vision encoder with sub-image decomposition for high-res
+    ///     processing (splits into crops, each encoded independently),
+    /// (2) 2-layer MLP connector with GELU activation (same as LLaVA-1.5) for
+    ///     vision-to-language projection,
+    /// (3) High-quality curated training data enables 4.2B model to match larger
+    ///     models on vision-language benchmarks,
+    /// (4) Phi-3-mini decoder backbone (3.8B parameters).
+    /// </summary>
+    public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
+
+        // Step 1: CLIP-ViT-L/14 vision encoder
+        var visualFeatures = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visualFeatures = Layers[i].Forward(visualFeatures);
+
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
+        if (prompt is not null)
+        {
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
+        }
+        else
+        {
+            fusedInput = visualFeatures;
+        }
+
+        var output = fusedInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+
+        return output;
+    }
+
+    public Tensor<T> Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage
+    )
+    {
+        ThrowIfDisposed();
+        var sb = new System.Text.StringBuilder();
+        sb.Append(_options.SystemPrompt);
+        foreach (var (role, content) in conversationHistory)
+            sb.Append($"\n{role}: {content}");
+        sb.Append($"\nUser: {userMessage}\nAssistant:");
+        return GenerateFromImage(image, sb.ToString());
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            // Patch-size validation only matters for the default vision-adapter
+            // stack — custom Architecture.Layers stacks never consult
+            // _options.ImageSize / _options.MaxVisualTokens, so rejecting them
+            // for invalid patch options breaks valid custom builds.
+            ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultVisionAdapterLayers(
+                    _options.VisionDim,
+                    _options.VisionDim * 2,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    patchSize: ComputePatchSize()
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+        ValidateEncoderDecoderBoundary(_encoderLayerEnd);
+    }
+
+    // ViT patch size derived from the paper's image size and visual-token budget.
+    // Phi-3-Vision (Abdin et al. 2024): 336 / sqrt(576) = 14, matching the paper's 14x14 patches.
+    private int ComputePatchSize() =>
+        ComputeVisualPatchSize(_options.ImageSize, _options.MaxVisualTokens, roundUp: true);
+
+    // +2 leading layers from the helper: PatchEmbedding + LayerNorm. Previously +1 (LayerNorm only).
+    private void ComputeEncoderDecoderBoundary()
+    {
+        _encoderLayerEnd = ComputeVisionLanguageBoundary(
+            leadingLayerCount: 2,
+            visionLayerCount: _options.NumVisionLayers,
+            visionBlockLayerCount: TransformerBlockLayerCount(_options.DropoutRate),
+            trailingLayerCount: 6
+        );
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        TryAutoEnableWeightStreaming();
+        return Accelerate(
+            input,
+            () =>
+            {
+                var c = input;
+                foreach (var l in Layers)
+                    c = l.Forward(c);
+                return c;
+            }
+        );
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        TryAutoEnableWeightStreaming();
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    // Phi-3-Vision's decoder/vision blocks are lazy FullyConnected/attention
+    // layers that report ParameterCount == 0 until the first forward, so weight
+    // streaming would otherwise engage too late (after the first forward has
+    // already materialized ~15 GB on the GC heap and OOM'd a 16 GB runner). A
+    // coarse structural estimate (≈12·d² per transformer block for QKVO + FFN,
+    // plus the token embedding) lets the auto-detector turn streaming on in the
+    // constructor so those weights stream as they materialize.
+    protected override long EstimateStructuralParameterCount()
+    {
+        // ONNX mode keeps weights in the external runtime; the AiDotNet layer
+        // list is empty, so there is nothing for weight streaming to manage.
+        if (!_useNativeMode)
+            return 0L;
+        long visionDim = _options.VisionDim;
+        long decoderDim = _options.DecoderDim;
+        long vision = (long)_options.NumVisionLayers * 12L * visionDim * visionDim;
+        long decoder = (long)_options.NumDecoderLayers * 12L * decoderDim * decoderDim;
+        long embeddings = (long)_options.VocabSize * decoderDim;
+        return vision + decoder + embeddings;
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "Phi-3-Vision-Native" : "Phi-3-Vision-ONNX",
+            Description =
+                "Phi-3-Vision: A Highly Capable Language Model Locally on Your Phone (Abdin et al., 2024)",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "Phi-3-Vision";
+        m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
+        m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.DecoderDim);
+        writer.Write(_options.ProjectionDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumHeads);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.DecoderDim = reader.ReadInt32();
+        _options.ProjectionDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new Phi3Vision<T>(Architecture, mp, _options);
+        return new Phi3Vision<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(Phi3Vision<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
+}

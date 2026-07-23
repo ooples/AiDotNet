@@ -1,0 +1,42 @@
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tests.ModelFamilyTests.Base;
+
+namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
+
+/// <summary>
+/// Paper-faithful invariant tests for EfficientNet-B0 per Tan &amp; Le 2019,
+/// "EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", ICML 2019.
+/// </summary>
+/// <remarks>
+/// Default ctor instantiates EfficientNet-B0 with the ImageNet-1k classification
+/// head (NumClasses = 1000), per paper Table 1. OutputShape mirrors that
+/// contract — overriding to a smaller class count would not match the
+/// paper-faithful default model.
+///
+/// InputShape is unbatched rank-3 [C, H, W]. NeuralNetworkBase.Predict
+/// auto-promotes that to rank-4 [1, C, H, W] internally and squeezes
+/// the unit batch axis off the output, so a single-sample inference
+/// returns a rank-1 [NumClasses] tensor — NOT [1, NumClasses]. The
+/// OutputShape override must match that unbatched contract; otherwise
+/// the warm-up Predict path (when EffectiveOutputShape falls back to
+/// OutputShape) trains against a rank-2 target whose ranks don't
+/// match the inference output.
+/// </remarks>
+public class EfficientNetNetworkTests : NeuralNetworkModelTestBase<float>
+{
+    protected override int[] InputShape => [3, 64, 64];
+    protected override int[] OutputShape => [1000];
+
+    // MoreData's default 50+200-iteration probe overruns the 120 s per-test gate on EfficientNet-B0
+    // (MBConv + squeeze-excitation is multi-second per step even at 64x64) — the lighter 10-iteration
+    // Training and 100-iteration memorization tests fit, only MoreData does not. Cap MoreData to a
+    // smoke gap (10 vs 30 steps): still catches a training DIVERGENCE (long-run loss >> short-run
+    // loss), with the relaxed absolute tolerance the generated heavy-model scaffolds use.
+    protected override int MoreDataShortIterations => 10;
+    protected override int MoreDataLongIterations => 30;
+    protected override double MoreDataTolerance => 0.5;
+
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new EfficientNetNetwork<float>();
+}

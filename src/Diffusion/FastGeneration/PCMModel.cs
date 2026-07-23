@@ -1,0 +1,189 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.FastGeneration;
+
+/// <summary>
+/// Phased Consistency Model (PCM) for flexible-step generation with phase-based training.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// PCM divides the diffusion trajectory into phases and enforces consistency within each
+/// phase rather than across the entire trajectory. This phased approach allows the model
+/// to maintain high quality across different step configurations (1, 2, 4, 8, 16 steps)
+/// without the quality degradation seen in standard consistency models at higher steps.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Standard consistency models work great at 1-2 steps but lose
+/// quality at higher steps. PCM fixes this by dividing the generation process into phases
+/// and handling each phase separately. This means you get good results from 1 to 16 steps,
+/// giving you maximum flexibility in the speed/quality tradeoff.
+/// </para>
+/// <para>
+/// Reference: Wang et al., "Phased Consistency Model", NeurIPS 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 4 };
+/// var model = new PCMModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Phased Consistency Model", "https://arxiv.org/abs/2405.18407", Year = 2024, Authors = "Wang et al.")]
+public class PCMModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 4;
+    private const double DEFAULT_GUIDANCE = 5.0;
+
+    private UNetNoisePredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+    private readonly bool _isXLVariant;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+
+    /// <summary>
+    /// Initializes a new Phased Consistency Model.
+    /// </summary>
+    /// <param name="isXLVariant">Whether to use SDXL architecture (default: true).</param>
+    public PCMModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        bool isXLVariant = true,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.00085,
+                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        _isXLVariant = isXLVariant;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(UNetNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        int contextDim = _isXLVariant ? 2048 : 768;
+        int[] channelMults = _isXLVariant ? [1, 2, 4] : [1, 2, 4, 4];
+        int[] attnRes = _isXLVariant ? [4, 2] : [4, 2, 1];
+
+        _predictor = predictor ?? new UNetNoisePredictor<T>(
+            inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
+            baseChannels: 320, channelMultipliers: channelMults,
+            numResBlocks: 2, attentionResolutions: attnRes,
+            contextDim: contextDim, architecture: Architecture, seed: seed);
+
+        double latentScale = _isXLVariant ? 0.13025 : 0.18215;
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2, latentScaleFactor: latentScale, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        var combined = new Vector<T>(pp.Length + vp.Length);
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Clone the ACTUAL predictor/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // conditioner/isXLVariant/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
+        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
+        // shapes no longer lined up 1:1 and Clone diverged. Cloning the resolved predictor/VAE (+ same
+        // architecture/options/scheduler) makes the clone structurally identical.
+        var clone = new PCMModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner, isXLVariant: _isXLVariant, seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "Phased Consistency Model (PCM)", Version = "1.0",
+            Description = "Phase-based consistency training for flexible 1-16 step generation without quality degradation",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "phased-consistency-unet");
+        m.SetProperty("base_model", _isXLVariant ? "Stable Diffusion XL" : "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", _isXLVariant ? "CLIP ViT-L/14 + OpenCLIP ViT-bigG/14" : "CLIP ViT-L/14");
+        m.SetProperty("context_dim", _isXLVariant ? 2048 : 768);
+        m.SetProperty("distillation_method", "phased-consistency");
+        m.SetProperty("optimal_steps", 4);
+        m.SetProperty("max_recommended_steps", 16);
+        m.SetProperty("is_xl_variant", _isXLVariant);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        return m;
+    }
+}

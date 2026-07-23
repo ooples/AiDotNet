@@ -1,0 +1,116 @@
+namespace AiDotNet.Serving.ContinuousBatching;
+
+/// <summary>
+/// Configuration for the continuous batcher.
+/// </summary>
+public class ContinuousBatcherConfig
+{
+    /// <summary>
+    /// Scheduler configuration.
+    /// </summary>
+    public BatchSchedulerConfig SchedulerConfig { get; set; } = new();
+
+    /// <summary>
+    /// Default end-of-sequence token ID when none is configured.
+    /// </summary>
+    public const int DefaultEosTokenId = 2;
+
+    /// <summary>
+    /// End-of-sequence token ID.
+    /// </summary>
+    public int EosTokenId { get; set; } = DefaultEosTokenId;
+
+    /// <summary>
+    /// Milliseconds to sleep when idle.
+    /// </summary>
+    public int IdleSleepMs { get; set; } = 10;
+
+    /// <summary>
+    /// Whether to automatically start the batcher when a request is submitted.
+    /// </summary>
+    public bool AutoStart { get; set; } = true;
+
+    /// <summary>
+    /// Maximum number of tokens in context (prompt + generated).
+    /// </summary>
+    public int MaxContextLength { get; set; } = 4096;
+
+    /// <summary>
+    /// Maximum prompt tokens prefilled per step for CHUNKED prefill. When &gt; 0, a prompt longer than this
+    /// is prefilled in chunks across successive steps (interleaving with ongoing decode) instead of one
+    /// large forward, bounding the decode-latency spike a long prompt would otherwise cause. 0 (default)
+    /// prefills the whole prompt in one forward.
+    /// </summary>
+    public int MaxPrefillChunkTokens { get; set; } = 0;
+
+    /// <summary>
+    /// Whether the paged incremental model accepts a multi-token forward that yields per-position logits
+    /// (batched prefill / speculative verification). False for sequence-collapsing models (e.g. those
+    /// with a Flatten before the head), which MUST be prefilled one token at a time so a shape-dependent
+    /// head does not re-fit its weights to a varying flattened width. Default true.
+    /// </summary>
+    public bool SupportsBatchedPrefill { get; set; } = true;
+
+    /// <summary>
+    /// Whether to enable speculative decoding.
+    /// </summary>
+    public bool EnableSpeculativeDecoding { get; set; } = false;
+
+    /// <summary>
+    /// Policy for when speculative decoding should run (default: Auto).
+    /// </summary>
+    public AiDotNet.Configuration.SpeculationPolicy SpeculationPolicy { get; set; } = AiDotNet.Configuration.SpeculationPolicy.Auto;
+
+    /// <summary>
+    /// Number of tokens to draft ahead when speculative decoding is enabled.
+    /// </summary>
+    public int SpeculationDepth { get; set; } = 4;
+
+    /// <summary>
+    /// Speculative decoding method to use (default: Auto).
+    /// </summary>
+    /// <remarks>
+    /// This keeps the public serving surface compact while enabling internal selection of
+    /// classic draft-model speculation vs tree-based alternatives (Medusa/EAGLE).
+    /// </remarks>
+    public AiDotNet.Configuration.SpeculativeMethod SpeculativeMethod { get; set; } = AiDotNet.Configuration.SpeculativeMethod.Auto;
+
+    /// <summary>
+    /// Whether to use tree-based speculation (multiple draft continuations).
+    /// </summary>
+    /// <remarks>
+    /// This is an advanced option; when false the batcher uses classic speculative decoding.
+    /// Some speculative methods may implicitly enable this internally.
+    /// </remarks>
+    public bool UseTreeSpeculation { get; set; } = false;
+
+    /// <summary>
+    /// Branching factor for tree speculation (continuations explored per step). When 0, the
+    /// batcher derives it from <see cref="SpeculativeMethod"/> (Medusa = 4, otherwise 2).
+    /// </summary>
+    public int TreeBranchFactor { get; set; } = 0;
+
+    /// <summary>
+    /// Maximum depth of the speculation tree. When 0, the batcher derives it from
+    /// <see cref="SpeculationDepth"/>.
+    /// </summary>
+    public int MaxTreeDepth { get; set; } = 0;
+
+    /// <summary>
+    /// Creates config for a specific model.
+    /// </summary>
+    public static ContinuousBatcherConfig ForModel(string modelName, int maxBatchSize = 8)
+    {
+        return new ContinuousBatcherConfig
+        {
+            SchedulerConfig = BatchSchedulerConfig.ForModel(modelName, maxBatchSize),
+            MaxContextLength = modelName.ToLowerInvariant() switch
+            {
+                "llama-7b" or "llama-13b" => 4096,
+                "llama-70b" => 4096,
+                "gpt2" => 1024,
+                _ => 2048
+            }
+        };
+    }
+}

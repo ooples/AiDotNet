@@ -1,0 +1,68 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Video Processing"
+  seoTitle="80+ Video Processing Models for .NET - AiDotNet"
+  seoDescription="Video super-resolution, frame interpolation, tracking, and understanding. BasicVSR++, RIFE, ByteTrack, VideoMAE and 80+ implementations in C#."
+  count="80+"
+  tagline="Complete video understanding, enhancement, and analysis pipeline"
+  description="Process, enhance, and understand video content with 80+ implementations. Super-resolution with BasicVSR++, frame interpolation with RIFE, object tracking with ByteTrack, and action recognition with VideoMAE - all in pure C#."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2m5 2V2m5 2V2M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"/></svg>'
+  useCases={['Video Enhancement', 'Slow Motion', 'Surveillance', 'Sports Analytics', 'Content Creation', 'Medical Video', 'Drone Footage', 'Streaming']}
+  subcategories={[
+    {
+      name: 'Video Super-Resolution',
+      description: 'Upscale video resolution while preserving temporal consistency.',
+      items: [
+        { name: 'BasicVSR / BasicVSR++', detail: 'Bidirectional propagation with second-order grid propagation and flow-guided deformable alignment.' },
+        { name: 'EDVR', detail: 'Enhanced Deformable Video Restoration with temporal and spatial attention.' },
+        { name: 'VRT / RVRT', detail: 'Video Restoration Transformer with recurrent variant for long videos.' },
+        { name: 'RealESRGAN (Video)', detail: 'Real-world video super-resolution with temporal consistency.' },
+      ]
+    },
+    {
+      name: 'Frame Interpolation',
+      description: 'Generate intermediate frames for smooth slow-motion and frame rate conversion.',
+      items: [
+        { name: 'RIFE', detail: 'Real-Time Intermediate Flow Estimation for fast, high-quality interpolation.' },
+        { name: 'IFRNet', detail: 'Intermediate Feature Refine Network for efficient frame synthesis.' },
+        { name: 'AMT', detail: 'All-Pairs Multi-Field Transforms for robust frame interpolation.' },
+        { name: 'FILM', detail: 'Frame Interpolation for Large Motion with multi-scale feature extraction.' },
+        { name: 'FLAVR', detail: 'Flow-Agnostic Video Representations for multi-frame interpolation.' },
+      ]
+    },
+    {
+      name: 'Object Tracking',
+      description: 'Track objects across video frames with identity preservation.',
+      items: [
+        { name: 'ByteTrack', detail: 'Simple and effective multi-object tracking using byte-level association.' },
+        { name: 'BoT-SORT', detail: 'Bag of Tricks for robust multi-object tracking.' },
+        { name: 'DeepSORT', detail: 'Deep appearance features with Kalman filter for re-identification.' },
+        { name: 'StrongSORT', detail: 'Enhanced SORT with AFLink and GSI post-processing.' },
+      ]
+    },
+    {
+      name: 'Video Understanding',
+      description: 'Action recognition, video captioning, and temporal understanding.',
+      items: [
+        { name: 'VideoMAE', detail: 'Masked autoencoder pre-training for video representation learning.' },
+        { name: 'TimeSformer', detail: 'Is Space-Time Attention All You Need? Divided space-time attention.' },
+        { name: 'InternVideo', detail: 'General video foundation model for understanding and generation.' },
+        { name: 'Video-LLaVA', detail: 'Large language and vision assistant for video understanding.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train a video super-resolution model with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new BasicVSRPlusPlus<float>(scaleFactor: 4))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(lowResFrames, highResFrames);
+
+var upscaled = result.Predict(newLowResFrame);`}
+  codeTitle="Video processing with AiModelBuilder"
+/>

@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+	  <TargetFrameworks>net10.0;net471</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	  <LangVersion>latest</LangVersion>
+    <!-- CA1822: BenchmarkDotNet requires instance methods for benchmarks -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
+    <!-- Benchmark projects should not be packaged as NuGet packages -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+
+    <!-- Competitor Libraries for Benchmarking -->
+    <PackageReference Include="Accord" />
+    <PackageReference Include="Accord.Math" />
+    <PackageReference Include="Accord.Statistics" />
+    <PackageReference Include="Accord.MachineLearning" />
+    <!-- Microsoft.ML only supports x64/x86 architectures, limit to net10.0 for CI compatibility -->
+    <PackageReference Include="Microsoft.ML" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="TensorFlow.NET" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="SciSharp.TensorFlow.Redist" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="TorchSharp" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="TorchSharp-cuda-windows" Condition="'$(TargetFramework)' == 'net10.0'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\AiDotNet.csproj" />
+  </ItemGroup>
+
+  <!-- Python baseline script for #1272 acceptance criterion #1 (SDXL head-to-head).
+       Copied to the build output so SDXLEndToEndBenchmark can spawn it as a
+       subprocess via Process.Start("python", scriptPath). -->
+  <ItemGroup>
+    <None Update="Diffusion\diffusers_sdxl_baseline.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!--
+    Native acceleration packages are now provided via NuGet.
+    OpenBLAS and CLBlast are included via AiDotNet's transitive dependencies.
+    OneDNN will be added once the AiDotNet.Native.OneDNN package is published.
+  -->
+
+</Project>
+

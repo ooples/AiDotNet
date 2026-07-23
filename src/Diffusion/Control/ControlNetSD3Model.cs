@@ -1,0 +1,237 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+
+namespace AiDotNet.Diffusion.Control;
+
+/// <summary>
+/// ControlNet adapted for Stable Diffusion 3's MMDiT architecture.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Adapts ControlNet conditioning for SD3's Multi-Modal Diffusion Transformer (MMDiT)
+/// architecture. Uses 16-channel latent space and supports dual text encoders
+/// (CLIP + T5) for enhanced prompt understanding with control signal injection.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This brings ControlNet control to Stable Diffusion 3 models.
+/// SD3 uses a completely different architecture from SD1.5/SDXL, so this version
+/// is specially designed to inject control signals into the transformer blocks.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a ControlNet for Stable Diffusion 3
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 16,
+///     Height = 1024,
+///     Width = 1024,
+///     NumInferenceSteps = 28
+/// };
+/// var model = new ControlNetSD3Model&lt;float&gt;(options, ControlType.Canny);
+///
+/// // Generate with control on SD3's MMDiT architecture
+/// var controlImage = Tensor&lt;float&gt;.Random(new[] { 1, 1, 1024, 1024 });
+/// var result = model.Predict(controlImage);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
+public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
+{
+    private const int SD3_LATENT_CHANNELS = 16;
+    private const int SD3_CONTEXT_DIM = 4096;
+    private const double DEFAULT_GUIDANCE = 7.0;
+
+    private MMDiTXNoisePredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private ControlNetEncoder<T> _controlEncoder;
+    private readonly IConditioningModule<T>? _conditioner;
+    private readonly ControlType _controlType;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => SD3_LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _controlEncoder.ParameterCount;
+
+    /// <summary>
+    /// Initializes a new ControlNet-SD3 model.
+    /// </summary>
+    public ControlNetSD3Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        MMDiTXNoisePredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        ControlType controlType = ControlType.Canny,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.0001,
+                BetaEnd = 1.0,
+                BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
+            architecture)
+    {
+        _controlType = controlType;
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae), nameof(_controlEncoder))]
+    private void InitializeLayers(MMDiTXNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new MMDiTXNoisePredictor<T>(seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3,
+            latentChannels: SD3_LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocksPerLevel: 2,
+            seed: seed);
+
+        _controlEncoder = new ControlNetEncoder<T>(
+            inputChannels: 3,
+            baseChannels: 320,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        var predParams = _predictor.GetParameters();
+        for (int i = 0; i < predParams.Length; i++) allParams.Add(predParams[i]);
+        var ctrlParams = _controlEncoder.GetParameters();
+        for (int i = 0; i < ctrlParams.Length; i++) allParams.Add(ctrlParams[i]);
+        return new Vector<T>(allParams.ToArray());
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int predCount = checked((int)_predictor.ParameterCount);
+        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
+        long expectedTotal = (long)predCount + ctrlCount;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int offset = 0;
+        var predParams = new T[predCount];
+        for (int i = 0; i < predCount; i++) predParams[i] = parameters[offset + i];
+        _predictor.SetParameters(new Vector<T>(predParams));
+        offset += predCount;
+
+        var ctrlParams = new T[ctrlCount];
+        for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
+        _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
+    }
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // Stream this model's ACTUAL trainable sub-modules in GetParameters() order (the MMDiT-X
+        // predictor + controlEncoder — the VAE is intentionally excluded from this model's parameter
+        // surface). The inherited LatentDiffusionModelBase path streams NoisePredictor + VAE +
+        // Conditioner, so it would enumerate the wrong tensors here. The large predictor streams
+        // per-tensor (flat-free, #1624); the smaller control encoder is wrapped as a single trailing
+        // chunk. Concrete virtual calls (not the IParameterizable default-interface surface the base
+        // gates off on net471), so the read side streams on every target framework.
+        foreach (var c in _predictor.GetParameterChunks()) yield return c;
+        var enc = _controlEncoder.GetParameters();
+        if (enc.Length > 0) yield return new Tensor<T>(new[] { enc.Length }, enc);
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        // Buffer the streamed chunks into one flat vector and delegate to this model's SetParameters,
+        // which distributes to predictor + controlEncoder in the matching GetParameterChunks order.
+        // The inherited LatentDiffusionModelBase override routes chunks to NoisePredictor + VAE +
+        // Conditioner instead and would mis-assign this model's control-encoder parameters.
+        // EnsureOwnWeights detaches any copy-on-write-shared tensors before the in-place writes.
+        EnsureOwnWeights();
+        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Clone the ACTUAL predictor and VAE (mirrors InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved MMDiT-X
+        // predictor and VAE, so once the source resolved its lazy layers via a forward pass the
+        // trainable-layer shapes no longer lined up 1:1 — TryShareParametersFrom bailed and the chunk
+        // fallback ran. Cloning the resolved predictor/VAE makes the clone structurally identical so the
+        // copy-on-write share succeeds (which also transfers the control encoder, walked by reflection).
+        var clone = new ControlNetSD3Model<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (MMDiTXNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            controlType: _controlType,
+            seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "ControlNet-SD3",
+            Version = "1.0",
+            Description = "ControlNet adapted for Stable Diffusion 3 MMDiT architecture",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
+            Complexity = ParameterCount
+        };
+
+        metadata.SetProperty("architecture", "mmdit-x-controlnet");
+        metadata.SetProperty("base_model", "Stable Diffusion 3");
+        metadata.SetProperty("text_encoder", "CLIP-L + CLIP-G + T5-XXL");
+        metadata.SetProperty("context_dim", SD3_CONTEXT_DIM);
+        metadata.SetProperty("control_type", _controlType.ToString());
+        metadata.SetProperty("latent_channels", SD3_LATENT_CHANNELS);
+        metadata.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+
+        return metadata;
+    }
+}

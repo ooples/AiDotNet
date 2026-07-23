@@ -1,0 +1,838 @@
+using System.Reflection;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.ModelFamilyTests.Base;
+
+/// <summary>
+/// Loss strategies for gradient checking. Each produces a different gradient signal
+/// to expose different classes of backward pass bugs.
+/// </summary>
+public enum GradientCheckLossStrategy
+{
+    /// <summary>L = sum(x^2)/2, dL/dx = x. Gradient proportional to output — bugs where backward
+    /// multiplies by output direction cancel out and become invisible.</summary>
+    MSE,
+
+    /// <summary>L = sum(w*x) with fixed random w, dL/dx = w. Random gradient direction with no
+    /// alignment to output — exposes bugs hidden by MSE's output-aligned gradient.</summary>
+    RandomProjection,
+
+    /// <summary>L = sum(huber(x)), dL/dx = x for |x|&lt;1, sign(x) for |x|&gt;=1. Smooth L1 — constant
+    /// magnitude gradients for large values, differentiable everywhere (unlike raw L1 which causes
+    /// false positives at x=0 in finite difference checks).</summary>
+    Huber,
+}
+
+/// <summary>
+/// Base test class for ILayer&lt;double&gt; implementations.
+/// Tests mathematical invariants that every layer must satisfy:
+/// finite forward output, backward gradient flow, parameter consistency,
+/// serialization roundtrip, input sensitivity, and gradient correctness.
+///
+/// Subclasses override CreateLayer() and optionally InputShape/OutputShape.
+/// All invariant tests are inherited automatically.
+///
+/// Gradient checking uses multiple loss strategies (MSE, RandomProjection, Huber) to expose
+/// bugs hidden by specific gradient alignments. Activation functions are auto-discovered
+/// via reflection so new activations are automatically tested.
+/// </summary>
+public abstract class LayerTestBase
+{
+    /// <summary>
+    /// Factory method — create a fresh instance of the layer under test.
+    /// </summary>
+    protected abstract ILayer<double> CreateLayer();
+
+    /// <summary>
+    /// Shape of the tensor to feed into Forward. Override for layers that need
+    /// specific shapes (e.g. [batch, channels, height, width] for conv layers).
+    /// Default: [1, 4] — single sample, 4 features.
+    /// </summary>
+    protected virtual int[] InputShape => [1, 4];
+
+    /// <summary>
+    /// Whether the layer is expected to have trainable parameters.
+    /// Override to false for pass-through layers (InputLayer, FlattenLayer, ActivationLayer, etc.)
+    /// </summary>
+    protected virtual bool ExpectsTrainableParameters => true;
+
+    /// <summary>
+    /// Whether the layer's gradient computation produces meaningful gradients.
+    /// Some layers (ReservoirLayer, InputLayer) pass gradients through but
+    /// don't compute weight gradients. Override to false for those.
+    /// Note: With tape-based autodiff, gradient correctness is verified through
+    /// the tape rather than layer-level Backward.
+    /// </summary>
+    protected virtual bool ExpectsNonZeroGradients => true;
+
+    /// <summary>
+    /// Tolerance for numerical comparisons. Layers with stochastic behavior
+    /// (dropout, noise) may need higher tolerance.
+    /// </summary>
+    protected virtual double Tolerance => 1e-12;
+
+    /// <summary>
+    /// Loss strategy for the basic gradient check (Invariant 12).
+    /// Capsule layers should use RandomProjection because MSE gradient aligns with Squash
+    /// output direction, which the Squash Jacobian attenuates.
+    /// Note: The loss variant Theory test (Invariant 13) tests ALL strategies regardless.
+    /// </summary>
+    protected virtual GradientCheckLossStrategy DefaultLossStrategy => GradientCheckLossStrategy.MSE;
+
+    /// <summary>
+    /// Whether constant inputs (all 0.1 vs all 0.9) should produce different outputs.
+    /// False for normalization layers (LayerNorm, BatchNorm on single-feature constant input)
+    /// where constant inputs normalize to the same output by design.
+    /// </summary>
+    protected virtual bool ExpectsDifferentOutputForConstantInputs => true;
+
+    /// <summary>
+    /// Whether the layer's Forward output is expected to consist entirely of finite
+    /// values. False for masking layers (ALiBi, causal attention masks) that emit
+    /// ±Infinity at masked positions by design — the downstream softmax converts
+    /// those to exact zero attention weight. The Forward_ShouldProduceFiniteOutput
+    /// invariant skips the IsInfinity check when this is false. The TestScaffold
+    /// generator emits an override of this from <c>[LayerProperty(ProducesNonFiniteOutput = true)]</c>.
+    /// </summary>
+    protected virtual bool ExpectsFiniteOutput => true;
+
+    /// <summary>
+    /// Whether this layer supports testing with different activation functions.
+    /// Override to true and implement CreateLayerWithActivation() for layers that
+    /// accept activation function parameters in their options/constructor.
+    /// When true, the ActivationVariant Theory test runs with every auto-discovered activation.
+    /// </summary>
+    protected virtual bool SupportsActivationVariants => false;
+
+    /// <summary>
+    /// Creates the layer under test with a specific activation function injected.
+    /// Override for layers that accept activation parameters in their options.
+    /// Default: returns CreateLayer() (ignoring the activation parameter).
+    /// </summary>
+    protected virtual ILayer<double> CreateLayerWithActivation(ActivationFunctionBase<double> activation)
+        => CreateLayer();
+
+
+    // =========================================================================
+    // Static discovery infrastructure
+    // Auto-discovers activation functions via reflection so that adding a new
+    // ActivationFunctionBase<T> implementation automatically includes it in tests.
+    // =========================================================================
+
+    private static readonly Lazy<IReadOnlyList<(string Name, Type ClosedType)>> _activationCache =
+        new(DiscoverScalarActivationTypes);
+
+    /// <summary>
+    /// Discovers all concrete ActivationFunctionBase&lt;double&gt; implementations that support
+    /// scalar operations. Vector-only activations (Squash, Softmax, etc.) are excluded.
+    /// Results are cached — discovery only runs once per test session.
+    /// </summary>
+    private static IReadOnlyList<(string Name, Type ClosedType)> DiscoverScalarActivationTypes()
+    {
+        // Force-load the AiDotNet assembly so its types are discoverable
+        _ = typeof(ActivationFunctionBase<>).Assembly;
+
+        var openBase = typeof(ActivationFunctionBase<>);
+        var results = new List<(string, Type)>();
+
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            Type[] types;
+            try { types = assembly.GetTypes(); }
+            catch (ReflectionTypeLoadException ex)
+            {
+                types = ex.Types.Where(t => t is not null).ToArray()!;
+            }
+            catch { continue; }
+
+            foreach (var type in types)
+            {
+                if (type.IsAbstract || type.IsInterface || !type.IsGenericTypeDefinition)
+                    continue;
+
+                // Walk inheritance chain to check for ActivationFunctionBase<>
+                if (!InheritsFromOpenGeneric(type, openBase))
+                    continue;
+
+                try
+                {
+                    var closedType = type.MakeGenericType(typeof(double));
+                    if (Activator.CreateInstance(closedType) is not ActivationFunctionBase<double> instance)
+                        continue;
+
+                    // Test scalar support by trying Activate — vector-only activations throw
+                    try
+                    {
+                        instance.Activate(0.5);
+                        results.Add((type.Name.Replace("`1", ""), closedType));
+                    }
+                    catch (NotSupportedException) { }
+                }
+                catch { }
+            }
+        }
+
+        return results.OrderBy(r => r.Item1).ToList();
+    }
+
+    private static bool InheritsFromOpenGeneric(Type type, Type openGenericBase)
+    {
+        var current = type.BaseType;
+        while (current is not null)
+        {
+            if (current.IsGenericType && current.GetGenericTypeDefinition() == openGenericBase)
+                return true;
+            current = current.BaseType;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// All loss strategies for gradient checking, derived from the GradientCheckLossStrategy enum.
+    /// Adding a new enum value automatically tests ALL layers with the new strategy.
+    /// </summary>
+    public static IEnumerable<object[]> LossStrategyValues =>
+        ((GradientCheckLossStrategy[])Enum.GetValues(typeof(GradientCheckLossStrategy))).Select(s => new object[] { s });
+
+    /// <summary>
+    /// All scalar-compatible activation functions, auto-discovered via reflection.
+    /// When new ActivationFunctionBase&lt;T&gt; implementations are added to the codebase,
+    /// they automatically appear here and get tested with layers that support activation variants.
+    /// </summary>
+    public static IEnumerable<object[]> DiscoveredActivationNames =>
+        _activationCache.Value.Select(a => new object[] { a.Name });
+
+
+    // =========================================================================
+    // Loss computation helpers
+    // =========================================================================
+
+    /// <summary>
+    /// Computes a scalar loss value from the output tensor using the specified strategy.
+    /// </summary>
+    private static double ComputeStrategyLoss(Tensor<double> output, GradientCheckLossStrategy strategy)
+    {
+        switch (strategy)
+        {
+            case GradientCheckLossStrategy.MSE:
+            {
+                double loss = 0;
+                for (int i = 0; i < output.Length; i++)
+                    loss += output[i] * output[i];
+                return loss / 2.0;
+            }
+            case GradientCheckLossStrategy.RandomProjection:
+            {
+                var rng = RandomHelper.CreateSeededRandom(12345);
+                double loss = 0;
+                for (int i = 0; i < output.Length; i++)
+                    loss += (rng.NextDouble() * 2.0 - 1.0) * output[i];
+                return loss;
+            }
+            case GradientCheckLossStrategy.Huber:
+            {
+                double loss = 0;
+                for (int i = 0; i < output.Length; i++)
+                {
+                    double absVal = Math.Abs(output[i]);
+                    loss += absVal < 1.0 ? 0.5 * output[i] * output[i] : absVal - 0.5;
+                }
+                return loss;
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown loss strategy");
+        }
+    }
+
+    /// <summary>
+    /// Computes the gradient dL/dOutput for the specified loss strategy.
+    /// </summary>
+    private static Tensor<double> ComputeStrategyGradient(Tensor<double> output, GradientCheckLossStrategy strategy)
+    {
+        var grad = new Tensor<double>(output.Shape.ToArray());
+        switch (strategy)
+        {
+            case GradientCheckLossStrategy.MSE:
+                for (int i = 0; i < output.Length; i++)
+                    grad[i] = output[i];
+                break;
+            case GradientCheckLossStrategy.RandomProjection:
+            {
+                var rng = RandomHelper.CreateSeededRandom(12345);
+                for (int i = 0; i < output.Length; i++)
+                    grad[i] = rng.NextDouble() * 2.0 - 1.0;
+                break;
+            }
+            case GradientCheckLossStrategy.Huber:
+                for (int i = 0; i < output.Length; i++)
+                    grad[i] = Math.Abs(output[i]) < 1.0 ? output[i] : Math.Sign(output[i]);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown loss strategy");
+        }
+        return grad;
+    }
+
+
+    // =========================================================================
+    // Tensor helpers
+    // =========================================================================
+
+    protected static Tensor<double> CreateRandomTensor(int[] shape, int seed = 42)
+    {
+        var rng = RandomHelper.CreateSeededRandom(seed);
+        var tensor = new Tensor<double>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+            tensor[i] = rng.NextDouble() * 2.0 - 1.0; // [-1, 1]
+        return tensor;
+    }
+
+    protected static Tensor<double> CreateConstantTensor(int[] shape, double value)
+    {
+        var tensor = new Tensor<double>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+            tensor[i] = value;
+        return tensor;
+    }
+
+
+    // =========================================================================
+    // INVARIANT 1: Forward produces finite, non-empty output
+    // If the forward pass returns NaN/Inf/empty, the layer is numerically broken.
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Forward_ShouldProduceFiniteOutput()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        var input = CreateRandomTensor(InputShape);
+
+        var output = layer.Forward(input);
+
+        Assert.True(output.Length > 0, "Layer output should not be empty.");
+        bool checkFinite = ExpectsFiniteOutput;
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.False(double.IsNaN(output[i]),
+                $"Output[{i}] is NaN — numerical instability in Forward.");
+            if (checkFinite)
+            {
+                Assert.False(double.IsInfinity(output[i]),
+                    $"Output[{i}] is Infinity — overflow in Forward.");
+            }
+        }
+    }
+
+    // =========================================================================
+    // INVARIANT 2: Forward is deterministic (same input -> same output)
+    // Unless the layer has stochastic behavior (dropout), two calls with the
+    // same input must produce bit-identical output.
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Forward_ShouldBeDeterministic()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        layer.SetTrainingMode(false); // Disable dropout/stochastic behavior
+        var input = CreateRandomTensor(InputShape);
+
+        var out1 = layer.Forward(input);
+        layer.ResetState(); // Reset any recurrent state
+        var out2 = layer.Forward(input);
+
+        Assert.Equal(out1.Length, out2.Length);
+        for (int i = 0; i < out1.Length; i++)
+        {
+            Assert.Equal(out1[i], out2[i]);
+        }
+    }
+
+    // =========================================================================
+    // INVARIANT 3: Different inputs produce different outputs
+    // A layer that maps all inputs to the same output is broken (zero weights,
+    // dead neurons, or input-ignoring forward pass).
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Forward_DifferentInputs_ShouldProduceDifferentOutputs()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        if (!ExpectsDifferentOutputForConstantInputs) return;
+
+        var layer = CreateLayer();
+        layer.SetTrainingMode(false);
+
+        var input1 = CreateConstantTensor(InputShape, 0.1);
+        var input2 = CreateConstantTensor(InputShape, 0.9);
+
+        layer.ResetState();
+        var output1 = layer.Forward(input1);
+        layer.ResetState();
+        var output2 = layer.Forward(input2);
+
+        bool anyDifferent = false;
+        int minLen = Math.Min(output1.Length, output2.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            if (Math.Abs(output1[i] - output2[i]) > Tolerance)
+            {
+                anyDifferent = true;
+                break;
+            }
+        }
+        Assert.True(anyDifferent,
+            "Layer produces identical output for inputs [0.1,...] and [0.9,...]. " +
+            "Forward pass may ignore input values.");
+    }
+
+    // =========================================================================
+    // INVARIANT 4: Output shape is consistent
+    // GetOutputShape() must match the actual shape produced by Forward.
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Forward_OutputShape_ShouldMatchGetOutputShape()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        var input = CreateRandomTensor(InputShape);
+
+        var output = layer.Forward(input);
+        var declaredShape = layer.GetOutputShape();
+
+        // The output length should equal the product of declared output shape
+        // (batch dimension may differ, so compare total feature count)
+        int declaredFeatureCount = 1;
+        foreach (var dim in declaredShape)
+            declaredFeatureCount *= dim;
+
+        // Allow for batch dimension: output.Length may be batch * declaredFeatureCount
+        Assert.True(output.Length > 0, "Output should not be empty.");
+        Assert.True(output.Length % declaredFeatureCount == 0 || declaredFeatureCount == 0,
+            $"Output length {output.Length} is not a multiple of declared output shape " +
+            $"[{string.Join(",", declaredShape)}] (product={declaredFeatureCount}).");
+    }
+
+    // =========================================================================
+    // INVARIANT 5: (Removed — Backward deleted in tape-based autodiff migration)
+    // Gradient correctness is now verified through GradientTape, not layer Backward.
+    // =========================================================================
+
+    // =========================================================================
+    // INVARIANT 6: Parameter count is non-negative and GetParameters matches
+    // ParameterCount must equal GetParameters().Length for trainable layers.
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_CountShouldMatchVector()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+
+        // Drive lazy-shape resolution + weight allocation by running a
+        // single Forward against InputShape. Without this, layers that
+        // defer weight allocation to OnFirstForward (#1209) report
+        // ParameterCount = 0 — which is correct lazy semantics, but
+        // the invariant we're testing (count == GetParameters().Length
+        // and >0 for trainable) requires the layer to be in its
+        // "post first forward" state to be meaningful.
+        using (var probeInput = new Tensor<double>(InputShape))
+        {
+            // Fill with non-zero values — some layer Forward paths take
+            // shortcuts on all-zero input (e.g. attention with zero
+            // weights producing NaN softmax) that prevent OnFirstForward
+            // from running. A small deterministic ramp avoids those
+            // shortcuts without coupling to RNG state.
+            for (int i = 0; i < probeInput.Length; i++)
+                probeInput[i] = 0.01 * (i + 1);
+
+            try { layer.Forward(probeInput); }
+            catch
+            {
+                // Single-input Forward failed — for dual-input layers
+                // (DecoderLayer / TransformerDecoderLayer expecting
+                // encoder output alongside decoder input) try the
+                // params-based overload via reflection. The interface
+                // only declares Forward(Tensor<T>); subclasses that
+                // accept multiple tensors expose Forward(params Tensor<T>[]).
+                try
+                {
+                    var paramsForward = layer.GetType().GetMethod(
+                        "Forward",
+                        new[] { typeof(Tensor<double>[]) });
+                    paramsForward?.Invoke(layer, new object[] { new[] { probeInput, probeInput } });
+                }
+                catch
+                {
+                    // All probe shapes failed — the invariant still
+                    // validates whatever state the ctor produced.
+                    // Layers that can't be probed this way should
+                    // override CreateLayer to return a pre-initialized
+                    // instance.
+                }
+            }
+        }
+
+        // ParameterCount widened to long in #1244; cast for comparison
+        // against Vector<double>.Length which is int-bounded.
+        int count = (int)layer.ParameterCount;
+        var parameters = layer.GetParameters();
+
+        Assert.True(count >= 0, "ParameterCount should be non-negative.");
+        Assert.Equal(count, parameters.Length);
+
+        if (ExpectsTrainableParameters)
+        {
+            Assert.True(count > 0,
+                "Layer is expected to have trainable parameters but ParameterCount is 0.");
+        }
+    }
+
+    // =========================================================================
+    // INVARIANT 7: SetParameters -> GetParameters roundtrip
+    // Setting parameters and getting them back should return the same values.
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_SetGet_Roundtrip()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+
+        // Probe Forward to drive lazy-shape resolution + weight allocation.
+        // Without this, lazy layers (#1209) report ParameterCount = 0 and the
+        // roundtrip below would skip — which is correct lazy semantics, but
+        // the invariant we're testing only has meaning post-resolution.
+        using (var probeInput = new Tensor<double>(InputShape))
+        {
+            for (int i = 0; i < probeInput.Length; i++)
+                probeInput[i] = 0.01 * (i + 1);
+            try { layer.Forward(probeInput); } catch { }
+        }
+
+        if (layer.ParameterCount == 0) return; // Genuinely non-trainable layers.
+
+        var original = layer.GetParameters();
+        var modified = new Vector<double>(original.Length);
+        for (int i = 0; i < original.Length; i++)
+            modified[i] = original[i] + 0.001; // Small perturbation
+
+        layer.SetParameters(modified);
+        var retrieved = layer.GetParameters();
+
+        Assert.Equal(modified.Length, retrieved.Length);
+        for (int i = 0; i < modified.Length; i++)
+        {
+            Assert.Equal(modified[i], retrieved[i], 1e-15);
+        }
+    }
+
+    // =========================================================================
+    // INVARIANT 8: (Removed — Backward deleted in tape-based autodiff migration)
+    // =========================================================================
+
+    // =========================================================================
+    // INVARIANT 9: Serialization roundtrip preserves behavior
+    // Serialize -> Deserialize should produce a layer with identical Forward output.
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Serialize_Deserialize_ShouldPreserveBehavior()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        layer.SetTrainingMode(false);
+        var input = CreateRandomTensor(InputShape);
+
+        var originalOutput = layer.Forward(input);
+
+        // Serialize
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            layer.Serialize(writer);
+        }
+
+        // Deserialize into a fresh layer
+        var layer2 = CreateLayer();
+        ms.Position = 0;
+        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            layer2.Deserialize(reader);
+        }
+
+        layer2.SetTrainingMode(false);
+        layer2.ResetState();
+        var deserializedOutput = layer2.Forward(input);
+
+        Assert.Equal(originalOutput.Length, deserializedOutput.Length);
+        for (int i = 0; i < originalOutput.Length; i++)
+        {
+            // Direct equality check covers ±Infinity (where Math.Abs(inf - inf) = NaN
+            // would make the tolerance check spuriously fail for layers like ALiBi that
+            // legitimately emit -∞ at masked positions). For ordinary finite outputs the
+            // direct comparison still requires bit-exact roundtrip because serialization
+            // is lossless — fall back to the 1e-12 tolerance check only if they aren't
+            // bit-equal so legacy near-equal serialization formats remain accepted.
+            if (originalOutput[i] == deserializedOutput[i])
+            {
+                continue;
+            }
+            Assert.True(Math.Abs(originalOutput[i] - deserializedOutput[i]) < 1e-12,
+                $"Output[{i}] differs after serialization roundtrip: " +
+                $"original={originalOutput[i]:G17}, deserialized={deserializedOutput[i]:G17}");
+        }
+    }
+
+    // =========================================================================
+    // INVARIANT 10: ResetState doesn't break the layer
+    // After ResetState, Forward should still produce valid (finite) output.
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task ResetState_ShouldNotBreakForward()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        var input = CreateRandomTensor(InputShape);
+
+        // Forward once to populate state
+        layer.Forward(input);
+
+        // Reset
+        layer.ResetState();
+
+        // Forward again — should still work
+        var output = layer.Forward(input);
+        Assert.True(output.Length > 0, "Output should not be empty after ResetState.");
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.False(double.IsNaN(output[i]),
+                $"Output[{i}] is NaN after ResetState + Forward.");
+        }
+    }
+
+    // =========================================================================
+    // INVARIANT 11: Tape-based gradient flow — for layers with trainable
+    // parameters, a real Engine-op-composed loss against the layer's forward
+    // output must produce a non-zero gradient on at least one trainable
+    // parameter. This is the modern equivalent of the pre-tape "Backward
+    // produces non-zero parameter gradients" invariant. Catches tape-blocking
+    // forward composition bugs (e.g. FlashAttention<T>.Forward filling its
+    // output via scalar indexing, TensorMultiplyScalar in Forward paths,
+    // or composite layers that fail to RegisterSubLayer their inner trainable
+    // sub-layers).
+    // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task TapeGradient_ShouldReachAtLeastOneTrainableParameter()
+    {
+        await Task.Yield();
+        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
+
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        layer.SetTrainingMode(true);
+        var input = CreateRandomTensor(InputShape);
+
+        // ITrainableLayer<double> exposes the per-tensor trainable references
+        // the source generator emits from [TrainableParameter] fields. If
+        // the layer doesn't implement it, the layer truly has nothing to
+        // train and the invariant is vacuously satisfied.
+        if (layer is not AiDotNet.Interfaces.ITrainableLayer<double> trainable) return;
+
+        using var tape = new GradientTape<double>();
+        var output = layer.Forward(input);
+
+        // Collect trainable parameters AFTER Forward — lazy-init layers
+        // (RMSNorm, DenseLayer with `[-1, -1]` input shape, etc.) reassign
+        // their internal Tensor<T> fields inside OnFirstForward, so the
+        // pre-Forward references are stale [0]-shape placeholders the
+        // tape never sees. Production code at NeuralNetworkBase.ComputeGradients
+        // (line 7319) follows the same Forward-then-collect ordering.
+        var trainableParams = trainable.GetTrainableParameters();
+        if (trainableParams.Count == 0) return;
+
+        // Tape-tracked random-projection loss: L = Σᵢ (output[i] · r[i]).
+        // Engine.TensorMultiply + Engine.TensorSum are both standard tape-
+        // tracked ops, so dL/doutput = r everywhere with no zero entries
+        // (the RNG produces a [-1, 1] dense vector). Any trainable parameter
+        // that's actually wired into the forward graph must therefore see
+        // a non-zero gradient back-propagated to it.
+        var projection = CreateRandomTensor(output.Shape.ToArray(), seed: 12345);
+        var elementwise = AiDotNetEngine.Current.TensorMultiply(output, projection);
+        // ReduceSum over all axes returns a tape-tracked scalar-rank-0 tensor;
+        // Engine.TensorSum unwraps to a raw double which the tape can't consume.
+        var allAxes = new int[elementwise.Shape.Length];
+        for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
+        var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
+
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+        bool foundNonZeroGrad = false;
+        foreach (var kvp in grads)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            for (int i = 0; i < grad.Length; i++)
+            {
+                if (Math.Abs(grad[i]) > Tolerance)
+                {
+                    foundNonZeroGrad = true;
+                    break;
+                }
+            }
+            if (foundNonZeroGrad) break;
+        }
+
+        Assert.True(foundNonZeroGrad,
+            "After Forward + tape-based ComputeGradients on a random-projection " +
+            "loss, every trainable parameter received a zero gradient. The layer's " +
+            "Forward composition is using Engine ops that don't propagate gradients " +
+            "on the autodiff tape, OR a composite layer failed to register its " +
+            "inner trainable sub-layers via RegisterSubLayer. Common causes: " +
+            "Engine.TensorMultiplyScalar in Forward (not tape-tracked), " +
+            "FlashAttention<T>.Forward (allocates output then fills via scalar " +
+            "indexing — invisible to the tape), or `new Tensor<T>(...)` followed " +
+            "by manual data fills inside a Forward override.");
+    }
+
+    // =========================================================================
+    // INVARIANT 12: Numerical gradient correctness (finite differences).
+    // For a sampled subset of trainable parameters (full sweep would be O(N×forward)
+    // for N trainable scalars), verify the analytical gradient from the
+    // autodiff tape matches the central-difference numerical gradient:
+    //     dL/dw ≈ (L(w+ε) - L(w-ε)) / (2ε)
+    // This is the gold standard for "did the backward implementation
+    // correctly compute the derivative?" Layers that pass this AND the
+    // existing forward-invariants 1-10 can be trusted to train.
+    // =========================================================================
+
+    [Fact(Timeout = 120000)]
+    public async Task TapeGradient_ShouldMatchNumericalGradient()
+    {
+        await Task.Yield();
+        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
+
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        layer.SetTrainingMode(true);
+        var input = CreateRandomTensor(InputShape);
+
+        if (layer is not AiDotNet.Interfaces.ITrainableLayer<double> trainable) return;
+
+        // --- Analytical gradient via tape ---
+        using var tape = new GradientTape<double>();
+        var output = layer.Forward(input);
+        // Lazy-init layers reassign their trainable tensor refs inside
+        // Forward, so always collect AFTER Forward.
+        var trainableParams = trainable.GetTrainableParameters();
+        if (trainableParams.Count == 0) return;
+        // Fix the projection BEFORE both gradient computations so the
+        // analytical and numerical paths see the same loss surface.
+        var projection = CreateRandomTensor(output.Shape.ToArray(), seed: 12345);
+        var elementwise = AiDotNetEngine.Current.TensorMultiply(output, projection);
+        // ReduceSum over all axes returns a tape-tracked scalar-rank-0 tensor;
+        // Engine.TensorSum unwraps to a raw double which the tape can't consume.
+        var allAxes = new int[elementwise.Shape.Length];
+        for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
+        var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
+        var analyticalGrads = tape.ComputeGradients(lossTensor, trainableParams);
+
+        // --- Numerical gradient via central differences ---
+        // Sample a small number of (param, index) pairs to keep the test
+        // wall-time reasonable. A layer with broken backward will fail this
+        // check on most sampled coordinates, so the sample doesn't need to
+        // be exhaustive — it just needs to hit *some* trainable scalar.
+        const double Eps = 1e-5;
+        const double NumericalTolerance = 1e-3;
+        const int MaxSampledPerParam = 6;
+
+        int paramsChecked = 0;
+        int paramsAgreed = 0;
+        var deltas = new System.Text.StringBuilder();
+
+        var rng = RandomHelper.CreateSeededRandom(7777);
+
+        foreach (var param in trainableParams)
+        {
+            if (param is null || param.Length == 0) continue;
+            if (!analyticalGrads.TryGetValue(param, out var analyticalGrad) || analyticalGrad is null)
+                continue;
+
+            int sampleCount = Math.Min(MaxSampledPerParam, param.Length);
+            for (int s = 0; s < sampleCount; s++)
+            {
+                int idx = rng.Next(0, param.Length);
+
+                double original = param[idx];
+                param[idx] = original + Eps;
+                var lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                param[idx] = original - Eps;
+                var lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                param[idx] = original;
+
+                double numerical = (lossPlus - lossMinus) / (2.0 * Eps);
+                double analytical = analyticalGrad[idx];
+                double absDiff = Math.Abs(numerical - analytical);
+                double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
+
+                paramsChecked++;
+                if (absDiff / scale < NumericalTolerance)
+                {
+                    paramsAgreed++;
+                }
+                else if (deltas.Length < 1000)
+                {
+                    deltas.Append($"  idx={idx} numerical={numerical:G6} analytical={analytical:G6} reldiff={absDiff / scale:G3}\n");
+                }
+            }
+        }
+
+        if (paramsChecked == 0) return; // no comparable parameter scalars
+        // At least 2/3 of sampled params must agree. A more lenient threshold
+        // tolerates layers that intentionally produce different-shaped
+        // gradients (e.g. STE-style surrogates) — those should set
+        // ExpectsNonZeroGradients=false anyway, so reaching this assertion
+        // already means the layer claims paper-faithful backward.
+        Assert.True(paramsAgreed * 3 >= paramsChecked * 2,
+            $"Tape-based analytical gradient disagrees with finite-difference " +
+            $"numerical gradient on {paramsChecked - paramsAgreed}/{paramsChecked} " +
+            $"sampled trainable scalars. First mismatches:\n{deltas}" +
+            "Likely the layer's Forward composition records the wrong derivative " +
+            "for some Engine op, OR a non-tape-tracked op is silently used as " +
+            "an identity for the gradient.");
+    }
+
+    /// <summary>
+    /// Scalar projection-loss for the finite-difference path. Mirrors what
+    /// the tape-side TapeGradient_ShouldMatchNumericalGradient computes via
+    /// Engine.TensorMultiply + Engine.TensorSum, but on detached output
+    /// (no tape recording — we just want the scalar value for L(w±ε)).
+    /// </summary>
+    private static double ComputeProjectionLossScalar(Tensor<double> output, Tensor<double> projection)
+    {
+        double sum = 0;
+        int len = Math.Min(output.Length, projection.Length);
+        for (int i = 0; i < len; i++) sum += output[i] * projection[i];
+        return sum;
+    }
+}

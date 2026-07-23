@@ -1,0 +1,372 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Usage Analytics - AiDotNet Admin" description="Platform-wide API usage analytics and performance metrics." activeTab="usage">
+  <div class="space-y-8">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Usage Analytics</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Platform-wide API usage and performance metrics</p>
+      </div>
+      <select
+        id="date-range"
+        class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+      >
+        <option value="7">Last 7 days</option>
+        <option value="14">Last 14 days</option>
+        <option value="30" selected>Last 30 days</option>
+      </select>
+    </div>
+
+    <!-- Summary stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Calls</p>
+        <p id="stat-total" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Avg Latency</p>
+        <p id="stat-avg-latency" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">P95 Latency</p>
+        <p id="stat-p95" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Success Rate</p>
+        <p id="stat-success" class="text-3xl font-bold">
+          <span class="text-green-500">--</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- Daily calls chart -->
+    <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+      <h2 class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">API Calls Per Day</h2>
+      <div id="chart-container" class="h-48 flex items-end gap-1">
+        <p class="text-sm text-slate-400 w-full text-center">Loading chart...</p>
+      </div>
+      <div id="chart-labels" class="flex justify-between mt-2 text-xs text-slate-400 dark:text-slate-500"></div>
+    </div>
+
+    <!-- Status code breakdown -->
+    <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+      <h2 class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">Status Code Breakdown</h2>
+      <div id="status-breakdown" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <p class="text-sm text-slate-400 col-span-full text-center">Loading...</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Top endpoints -->
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <h2 class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">Top Endpoints</h2>
+        <div id="top-endpoints" class="space-y-3">
+          <p class="text-sm text-slate-400 text-center">Loading...</p>
+        </div>
+      </div>
+
+      <!-- Top models -->
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <h2 class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">Top Models</h2>
+        <div id="top-models" class="space-y-3">
+          <p class="text-sm text-slate-400 text-center">Loading...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top users by volume -->
+    <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+      <h2 class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4">Top Users by API Call Volume</h2>
+      <div class="overflow-x-auto">
+        <table id="top-users-table" class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="text-left py-2 px-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">User</th>
+              <th class="text-left py-2 px-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Calls</th>
+              <th class="text-left py-2 px-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Avg Latency</th>
+              <th class="text-left py-2 px-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Success Rate</th>
+            </tr>
+          </thead>
+          <tbody id="top-users-body" class="divide-y divide-slate-100 dark:divide-slate-800">
+            <tr><td colspan="4" class="py-4 text-center text-sm text-slate-400">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../../lib/supabase';
+
+    interface UsageRow {
+      user_id: string;
+      endpoint: string;
+      model_id: string | null;
+      status_code: number;
+      latency_ms: number | null;
+      created_at: string;
+    }
+
+    let allUsage: UsageRow[] = [];
+
+    async function loadAnalytics(days: number) {
+      const MAX_ROWS = 10000;
+
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+
+      // Fetch exact total count separately (not limited by MAX_ROWS)
+      const { count: exactTotal } = await supabase
+        .from('api_usage')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', since.toISOString());
+
+      const { data: usage, error: usageError } = await supabase
+        .from('api_usage')
+        .select('user_id, endpoint, model_id, status_code, latency_ms, created_at')
+        .gte('created_at', since.toISOString())
+        .order('created_at', { ascending: true })
+        .limit(MAX_ROWS);
+
+      if (usageError) {
+        console.error('Usage load error:', usageError);
+        const container = document.getElementById('chart-container');
+        if (container) container.innerHTML = '<p class="text-sm text-red-500 w-full text-center">Failed to load analytics.</p>';
+        return;
+      }
+
+      allUsage = usage || [];
+      renderAll(days, exactTotal || allUsage.length);
+    }
+
+    async function renderAll(days: number, exactTotal: number) {
+      const data = allUsage;
+      const setEl = (id: string, val: string) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      };
+
+      // Summary stats — use exact count from server, not sample length
+      setEl('stat-total', exactTotal.toLocaleString());
+
+      if (exactTotal > 0) {
+        const latencies = data.filter(d => d.latency_ms != null).map(d => d.latency_ms as number);
+        if (latencies.length > 0) {
+          const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length);
+          setEl('stat-avg-latency', `${avg}ms`);
+          const sorted = [...latencies].sort((a, b) => a - b);
+          const p95Index = Math.min(Math.ceil(sorted.length * 0.95) - 1, sorted.length - 1);
+          const p95 = sorted[p95Index];
+          setEl('stat-p95', `${p95}ms`);
+        }
+        const successCount = data.filter(d => d.status_code >= 200 && d.status_code < 400).length;
+        const successRate = Math.round((successCount / exactTotal) * 100);
+        const successEl = document.getElementById('stat-success');
+        if (successEl) {
+          const color = successRate >= 95 ? 'text-green-500' : successRate >= 80 ? 'text-yellow-500' : 'text-red-500';
+          successEl.innerHTML = `<span class="${color}">${successRate}%</span>`;
+        }
+      } else {
+        setEl('stat-avg-latency', '--');
+        setEl('stat-p95', '--');
+      }
+
+      // Daily chart
+      renderChart(data, days);
+
+      // Status code breakdown
+      renderStatusBreakdown(data);
+
+      // Top endpoints
+      renderTopList('top-endpoints', groupAndSort(data, 'endpoint'));
+
+      // Top models
+      renderTopList('top-models', groupAndSort(data.filter(d => d.model_id), 'model_id'));
+
+      // Top users
+      await renderTopUsers(data);
+    }
+
+    function renderChart(data: UsageRow[], days: number) {
+      const container = document.getElementById('chart-container');
+      const labels = document.getElementById('chart-labels');
+      if (!container || !labels) return;
+
+      // Group by date
+      const dayCounts = new Map<string, number>();
+      const now = new Date();
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        dayCounts.set(d.toISOString().slice(0, 10), 0);
+      }
+      for (const row of data) {
+        const dateKey = row.created_at.slice(0, 10);
+        if (dayCounts.has(dateKey)) {
+          dayCounts.set(dateKey, (dayCounts.get(dateKey) || 0) + 1);
+        }
+      }
+
+      const entries = Array.from(dayCounts.entries());
+      const maxCount = Math.max(...entries.map(([, c]) => c), 1);
+
+      container.innerHTML = entries.map(([date, count]) => {
+        const height = Math.max((count / maxCount) * 100, 2);
+        const bgClass = count > 0 ? 'bg-brand-blue/70 dark:bg-brand-purple/70' : 'bg-slate-200 dark:bg-slate-700';
+        return `<div class="flex-1 flex flex-col items-center justify-end gap-1">
+          <span class="text-xs text-slate-500 dark:text-slate-400">${count}</span>
+          <div class="${bgClass} rounded-t w-full" style="height: ${height}%"></div>
+        </div>`;
+      }).join('');
+
+      // Show labels for every ~7th day
+      const step = Math.max(1, Math.floor(entries.length / 7));
+      labels.innerHTML = entries
+        .filter((_, i) => i % step === 0 || i === entries.length - 1)
+        .map(([date]) => {
+          const d = new Date(date);
+          return `<span>${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>`;
+        }).join('');
+    }
+
+    function renderStatusBreakdown(data: UsageRow[]) {
+      const container = document.getElementById('status-breakdown');
+      if (!container) return;
+
+      const groups = new Map<string, number>();
+      for (const row of data) {
+        const bucket = row.status_code < 300 ? '2xx Success' : row.status_code < 400 ? '3xx Redirect' : row.status_code < 500 ? '4xx Client Error' : '5xx Server Error';
+        groups.set(bucket, (groups.get(bucket) || 0) + 1);
+      }
+
+      const bucketColors: Record<string, string> = {
+        '2xx Success': 'text-green-500 bg-green-50 dark:bg-green-900/20',
+        '3xx Redirect': 'text-blue-500 bg-blue-50 dark:bg-blue-900/20',
+        '4xx Client Error': 'text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20',
+        '5xx Server Error': 'text-red-500 bg-red-50 dark:bg-red-900/20',
+      };
+
+      if (groups.size === 0) {
+        container.innerHTML = '<p class="text-sm text-slate-400 col-span-full text-center">No data</p>';
+        return;
+      }
+
+      container.innerHTML = Array.from(groups.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([bucket, count]) => {
+          const color = bucketColors[bucket] || 'text-slate-500 bg-slate-50 dark:bg-slate-800';
+          return `<div class="rounded-xl ${color} p-4 text-center">
+            <p class="text-2xl font-bold">${count}</p>
+            <p class="text-xs font-medium mt-1">${bucket}</p>
+          </div>`;
+        }).join('');
+    }
+
+    function groupAndSort(data: UsageRow[], field: keyof UsageRow): [string, number][] {
+      const counts = new Map<string, number>();
+      for (const row of data) {
+        const key = String(row[field] || 'unknown');
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    }
+
+    function renderTopList(containerId: string, items: [string, number][]) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      if (items.length === 0) {
+        container.innerHTML = '<p class="text-sm text-slate-400 text-center">No data</p>';
+        return;
+      }
+
+      const maxCount = items[0][1];
+      container.innerHTML = items.map(([name, count]) => {
+        const pct = Math.round((count / maxCount) * 100);
+        return `<div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-sm font-mono text-slate-700 dark:text-slate-300">${escapeHtml(name)}</span>
+            <span class="text-sm text-slate-500 dark:text-slate-400">${count}</span>
+          </div>
+          <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2">
+            <div class="bg-brand-blue dark:bg-brand-purple h-2 rounded-full" style="width: ${pct}%"></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    async function renderTopUsers(data: UsageRow[]) {
+      const tbody = document.getElementById('top-users-body');
+      if (!tbody) return;
+
+      // Group by user
+      const userStats = new Map<string, { calls: number; latencies: number[]; successes: number }>();
+      for (const row of data) {
+        let stats = userStats.get(row.user_id);
+        if (!stats) {
+          stats = { calls: 0, latencies: [], successes: 0 };
+          userStats.set(row.user_id, stats);
+        }
+        stats.calls++;
+        if (row.latency_ms != null) stats.latencies.push(row.latency_ms);
+        if (row.status_code >= 200 && row.status_code < 400) stats.successes++;
+      }
+
+      const sorted = Array.from(userStats.entries())
+        .sort((a, b) => b[1].calls - a[1].calls)
+        .slice(0, 10);
+
+      // Fetch only the profiles needed for top-10 users
+      const topUserIds = sorted.map(([uid]) => uid);
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', topUserIds);
+
+      const nameMap = new Map<string, string>();
+      if (profiles) {
+        for (const p of profiles) {
+          nameMap.set(p.id, p.full_name || 'Unknown');
+        }
+      }
+
+      if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-sm text-slate-400">No data</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = sorted.map(([userId, stats]) => {
+        const name = nameMap.get(userId) || 'Unknown';
+        const avgLatency = stats.latencies.length > 0
+          ? Math.round(stats.latencies.reduce((a, b) => a + b, 0) / stats.latencies.length)
+          : 0;
+        const successRate = Math.round((stats.successes / stats.calls) * 100);
+        const successColor = successRate >= 95 ? 'text-green-500' : successRate >= 80 ? 'text-yellow-500' : 'text-red-500';
+        return `<tr>
+          <td class="py-2 px-3 text-slate-900 dark:text-white font-medium">${escapeHtml(name)}</td>
+          <td class="py-2 px-3 text-slate-600 dark:text-slate-400">${stats.calls.toLocaleString()}</td>
+          <td class="py-2 px-3 text-slate-600 dark:text-slate-400">${avgLatency}ms</td>
+          <td class="py-2 px-3 ${successColor} font-medium">${successRate}%</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function escapeHtml(str: string): string {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    // Event listeners
+    document.getElementById('date-range')?.addEventListener('change', (e) => {
+      const days = parseInt((e.target as HTMLSelectElement).value);
+      loadAnalytics(days);
+    });
+
+    // Initial load — wait for admin auth guard
+    await (window as any).__adminReady;
+    loadAnalytics(30);
+  </script>
+</AdminLayout>

@@ -1,0 +1,191 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.SuperResolution;
+
+/// <summary>
+/// PASD: Pixel-Aware Stable Diffusion for real-world image super-resolution.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// PASD uses pixel-aware cross-attention to inject low-resolution structural information
+/// directly into the diffusion U-Net's attention layers. This ensures the super-resolved
+/// image preserves the original structure while generating realistic high-frequency details.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> When upscaling images, it's crucial to keep the original
+/// structure intact while adding detail. PASD weaves the low-resolution image information
+/// directly into the diffusion model's attention mechanism, ensuring the output matches
+/// the input's structure perfectly while adding sharp, realistic details.
+/// </para>
+/// <para>
+/// Technical specifications:
+/// - Architecture: SD2.1 U-Net with pixel-aware cross-attention
+/// - Text encoder: OpenCLIP ViT-H/14 (1024-dim) — uses image captions for guidance
+/// - Pixel-aware attention: LR features injected into cross-attention at every layer
+/// - Scale factor: 4x upscaling
+/// - Personalized stylization also supported
+///
+/// Reference: Yang et al., "Pixel-Aware Stable Diffusion for Realistic Image Super-resolution and Personalized Stylization", 2024
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 20 };
+/// var model = new PASDModel&lt;float&gt;(options);
+/// var lowRes = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var highRes = model.Predict(lowRes);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SuperResolution)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Pixel-Aware Stable Diffusion for Realistic Image Super-resolution and Personalized Stylization", "https://arxiv.org/abs/2308.14469", Year = 2024, Authors = "Yang et al.")]
+public class PASDModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 4;
+    private const int PASD_CONTEXT_DIM = 1024;
+    private const double DEFAULT_GUIDANCE = 7.5;
+    private const int SCALE_FACTOR = 4;
+
+    private UNetNoisePredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+
+    public PASDModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.00085,
+                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(UNetNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new UNetNoisePredictor<T>(
+            inputChannels: LATENT_CHANNELS + 4, outputChannels: LATENT_CHANNELS,
+            baseChannels: 320, channelMultipliers: [1, 2, 4, 4],
+            numResBlocks: 2, attentionResolutions: [4, 2, 1],
+            contextDim: PASD_CONTEXT_DIM, architecture: Architecture, seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2, latentScaleFactor: 0.18215, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        // Widen the size arithmetic to long. Per-component lengths fit
+        // in int (Vector<T> is int-indexable), but their sum can cross
+        // int.MaxValue. checked() narrows back to int at the Vector<T>
+        // ctor boundary so foundation-scale checkpoints fail fast
+        // instead of silently wrapping the size.
+        long total = (long)pp.Length + vp.Length;
+        var combined = new Vector<T>(checked((int)total));
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Clone the ACTUAL predictor/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved sub-models, so once
+        // the source resolved its lazy layers via a forward pass the trainable-layer shapes no longer
+        // lined up 1:1 and Clone diverged. Cloning the resolved predictor/VAE (+ same architecture/
+        // options/scheduler) makes the clone structurally identical.
+        var clone = new PASDModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "PASD", Version = "1.0",
+            Description = "Pixel-aware stable diffusion for structure-preserving real-world super-resolution",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "pixel-aware-sd21-sr-unet");
+        m.SetProperty("base_model", "Stable Diffusion 2.1");
+        m.SetProperty("text_encoder", "OpenCLIP ViT-H/14");
+        m.SetProperty("context_dim", PASD_CONTEXT_DIM);
+        m.SetProperty("attention_method", "pixel-aware-cross-attention");
+        m.SetProperty("scale_factor", SCALE_FACTOR);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        return m;
+    }
+}

@@ -1,0 +1,584 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a spectral normalization layer that normalizes the weights of a layer by their spectral norm.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Spectral normalization is a weight normalization technique that constrains the Lipschitz constant
+/// of a neural network layer. It does this by dividing the weight matrix by its largest singular value
+/// (spectral norm). This technique is particularly effective for stabilizing GAN training.
+/// </para>
+/// <para><b>For Beginners:</b> Spectral normalization keeps layer weights from getting too large.
+///
+/// Key benefits:
+/// - Stabilizes GAN training by preventing extreme weight values
+/// - Ensures the discriminator doesn't become too powerful too quickly
+/// - Helps prevent mode collapse in GANs
+/// - Computationally efficient compared to other normalization methods
+///
+/// How it works:
+/// - Computes the largest singular value of the weight matrix
+/// - Divides all weights by this value
+/// - Keeps weights normalized throughout training
+///
+/// Reference: Miyato et al., "Spectral Normalization for Generative Adversarial Networks" (2018)
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Regularization)]
+[LayerTask(LayerTask.Regularization)]
+[LayerProperty(IsTrainable = true)]
+public class SpectralNormalizationLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// The underlying layer whose weights will be normalized.
+    /// </summary>
+    private readonly ILayer<T> _innerLayer;
+
+    /// <summary>
+    /// The left singular vector used for power iteration to compute the spectral norm.
+    /// </summary>
+    private Tensor<T>? _u;
+
+    /// <summary>
+    /// The right singular vector used for power iteration.
+    /// </summary>
+    private Tensor<T>? _v;
+
+    /// <summary>
+    /// The number of power iterations to perform when computing the spectral norm.
+    /// </summary>
+    private readonly int _powerIterations;
+
+    /// <summary>
+    /// Epsilon value for numerical stability.
+    /// </summary>
+    private readonly T _epsilon;
+
+    /// <summary>
+    /// Cached input from the last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Cached output from the last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// Original weights stored during Forward, to be restored after Backward.
+    /// </summary>
+    private Vector<T>? _originalParameters;
+
+    /// <summary>
+    /// Flag indicating that normalized weights are currently applied.
+    /// </summary>
+    private bool _normalizedWeightsApplied;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    public override long ParameterCount => _innerLayer.ParameterCount;
+    public override bool SupportsTraining => _innerLayer.SupportsTraining;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU-resident training.
+    /// Delegates to the inner layer's capability.
+    /// </summary>
+    public override bool SupportsGpuTraining =>
+        _innerLayer is LayerBase<T> innerBase && innerBase.SupportsGpuTraining;
+
+    /// <summary>
+    /// GPU-resident power iteration vectors.
+    /// </summary>
+    private Tensor<T>? _uGpu;
+    private Tensor<T>? _vGpu;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SpectralNormalizationLayer{T}"/> class.
+    /// </summary>
+    /// <param name="innerLayer">The layer whose weights will be spectrally normalized.</param>
+    /// <param name="powerIterations">The number of power iterations to perform. Default is 1.</param>
+    public SpectralNormalizationLayer(ILayer<T> innerLayer, int powerIterations = 1)
+        : base(innerLayer.GetInputShape(), innerLayer.GetOutputShape())
+    {
+        _innerLayer = innerLayer;
+        _powerIterations = powerIterations;
+        _epsilon = NumOps.FromDouble(1e-12);
+
+        // u and v are lazily initialized based on the actual weight matrix shape.
+    }
+
+    /// <summary>
+    /// Normalizes a vector tensor in-place using Engine operations.
+    /// </summary>
+    private void NormalizeVector(ref Tensor<T> vector)
+    {
+        // === Vectorized L2 normalization using IEngine (Phase B: US-GPU-015) ===
+        var squared = Engine.TensorMultiply(vector, vector);
+        T sumSquared = Engine.TensorSum(squared);
+        T norm = NumOps.Sqrt(sumSquared);
+        T normPlusEps = NumOps.Add(norm, _epsilon);
+
+        // Vectorized division by scalar
+        vector = Engine.TensorDivideScalar(vector, normPlusEps);
+    }
+
+    /// <summary>
+    /// Initializes or reinitializes the power iteration vectors when dimensions change.
+    /// </summary>
+    private void EnsurePowerIterationVectors(int rows, int cols)
+    {
+        if (_u is null || _v is null || _u.Shape[0] != rows || _v.Shape[0] != cols)
+        {
+            var u = Engine.TensorRandomUniformRange<T>([rows], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+            var v = Engine.TensorRandomUniformRange<T>([cols], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+            NormalizeVector(ref u);
+            NormalizeVector(ref v);
+            _u = u;
+            _v = v;
+        }
+    }
+
+    /// <summary>
+    /// Estimates the number of bias parameters, if present.
+    /// </summary>
+    private int GetBiasCount(int paramCount)
+    {
+        if (OutputShape.Length == 0)
+        {
+            return 0;
+        }
+
+        int biasCount = OutputShape[0];
+        if (biasCount <= 0 || biasCount >= paramCount)
+        {
+            return 0;
+        }
+
+        return biasCount;
+    }
+
+    /// <summary>
+    /// Computes the spectral norm using power iteration with vectorized operations.
+    /// </summary>
+    private T ComputeSpectralNorm(Tensor<T> weights)
+    {
+        // weights shape: [outputSize, inputSize]
+        int outputSize = weights.Shape[0];
+        int inputSize = weights.Shape[1];
+
+        var u = _u ?? throw new InvalidOperationException("Power iteration vector u has not been initialized.");
+        var v = _v ?? throw new InvalidOperationException("Power iteration vector v has not been initialized.");
+
+        // Power iteration using vectorized matrix operations
+        for (int iter = 0; iter < _powerIterations; iter++)
+        {
+            // v = W^T @ u, then normalize
+            // W^T shape: [inputSize, outputSize]
+            var wT = Engine.TensorTranspose(weights);
+
+            // Reshape u for matrix multiplication: [outputSize] -> [outputSize, 1]
+            var uReshaped = u.Reshape(outputSize, 1);
+
+            // v_new = W^T @ u: [inputSize, outputSize] @ [outputSize, 1] -> [inputSize, 1]
+            var vNew = Engine.TensorMatMul(wT, uReshaped);
+            v = vNew.Reshape(inputSize);
+            NormalizeVector(ref v);
+
+            // u = W @ v, then normalize
+            // Reshape v for matrix multiplication: [inputSize] -> [inputSize, 1]
+            var vReshaped = v.Reshape(inputSize, 1);
+
+            // u_new = W @ v: [outputSize, inputSize] @ [inputSize, 1] -> [outputSize, 1]
+            var uNew = Engine.TensorMatMul(weights, vReshaped);
+            u = uNew.Reshape(outputSize);
+            NormalizeVector(ref u);
+        }
+
+        // Only update u and v during training — inference should be deterministic
+        if (IsTrainingMode)
+        {
+            _u = u;
+            _v = v;
+        }
+
+        // Compute spectral norm: u^T @ W @ v
+        var vReshaped2 = v.Reshape(inputSize, 1);
+        var Wv = Engine.TensorMatMul(weights, vReshaped2).Reshape(outputSize);
+
+        // Dot product u^T @ Wv using Engine.DotProduct
+        T spectralNorm = Engine.DotProduct(u.ToVector(), Wv.ToVector());
+
+        return spectralNorm;
+    }
+
+    /// <summary>
+    /// Performs the forward pass through the layer with spectrally normalized weights.
+    /// </summary>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+
+        // Get weights from inner layer
+        var parameters = _innerLayer.GetParameters();
+        int paramCount = parameters.Length;
+
+        if (paramCount == 0)
+        {
+            // No parameters to normalize, just forward through inner layer
+            var result = _innerLayer.Forward(input);
+            _lastOutput = result;
+            return result;
+        }
+
+        // Store original parameters to restore after Backward
+        _originalParameters = parameters.Clone();
+
+        int biasCount = GetBiasCount(paramCount);
+        int weightCount = paramCount - biasCount;
+
+        // Reshape weight parameters into 2D matrix for spectral norm computation
+        // Use square-ish shape to minimize condition number issues
+        int rows = (int)Math.Ceiling(Math.Sqrt(weightCount));
+        int cols = (weightCount + rows - 1) / rows;
+
+        // Create weight tensor [rows, cols] with zero-padding if needed
+        var weights = new Tensor<T>([rows, cols]);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                int idx = i * cols + j;
+                weights[new int[] { i, j }] = idx < weightCount ? parameters[idx] : NumOps.Zero;
+            }
+        }
+
+        EnsurePowerIterationVectors(rows, cols);
+
+        // Compute spectral norm
+        T spectralNorm = ComputeSpectralNorm(weights);
+        T normPlusEps = NumOps.Add(spectralNorm, _epsilon);
+
+        // Normalize weight parameters by spectral norm
+        var normalizedParams = new Vector<T>(paramCount);
+        for (int i = 0; i < weightCount; i++)
+        {
+            normalizedParams[i] = NumOps.Divide(parameters[i], normPlusEps);
+        }
+
+        // Copy bias parameters unchanged
+        for (int i = weightCount; i < paramCount; i++)
+        {
+            normalizedParams[i] = parameters[i];
+        }
+
+        _innerLayer.SetParameters(normalizedParams);
+        _normalizedWeightsApplied = true;
+
+        try
+        {
+            // Forward through inner layer with normalized weights
+            _lastOutput = _innerLayer.Forward(input);
+            return _lastOutput;
+        }
+        catch
+        {
+            // Restore original weights on exception
+            RestoreOriginalWeights();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors with GPU-accelerated spectral normalization.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>A GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs spectral normalization using GPU-accelerated power iteration,
+    /// keeping all computations on GPU for maximum performance.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // Get weights from inner layer
+        var parameters = _innerLayer.GetParameters();
+        int paramCount = parameters.Length;
+
+        if (paramCount == 0)
+        {
+            // No parameters to normalize, just forward through inner layer
+            if (_innerLayer is LayerBase<T> innerBase)
+            {
+                return innerBase.ForwardGpu(input);
+            }
+            throw new InvalidOperationException("Inner layer does not support ForwardGpu.");
+        }
+
+        // Store original parameters to restore after forward
+        _originalParameters = parameters.Clone();
+
+        int biasCount = GetBiasCount(paramCount);
+        int weightCount = paramCount - biasCount;
+
+        // Reshape weight parameters into 2D matrix for spectral norm computation
+        int rows = (int)Math.Ceiling(Math.Sqrt(weightCount));
+        int cols = (weightCount + rows - 1) / rows;
+
+        // Create weight tensor [rows, cols] with zero-padding if needed
+        var weightsData = new float[rows * cols];
+        for (int i = 0; i < weightCount; i++)
+        {
+            weightsData[i] = Convert.ToSingle(parameters[i]);
+        }
+
+        // Upload weights to GPU
+        var weightsGpu = gpuEngine.UploadToGpu(new Tensor<T>(
+            DirectGpuEngine.FromFloatArray<T>(weightsData), [rows, cols]), GpuTensorRole.Weight);
+
+        // Initialize GPU power iteration vectors if needed
+        EnsureGpuPowerIterationVectors(gpuEngine, rows, cols);
+
+        // Run power iteration on GPU
+        float spectralNorm = gpuEngine.PowerIterationGpu(
+            weightsGpu, ref _uGpu!, ref _vGpu!, _powerIterations, Convert.ToSingle(_epsilon));
+
+        // Normalize weight parameters by spectral norm
+        var normalizedParams = new Vector<T>(paramCount);
+        T normDivisor = NumOps.FromDouble(spectralNorm);
+        for (int i = 0; i < weightCount; i++)
+        {
+            normalizedParams[i] = NumOps.Divide(parameters[i], normDivisor);
+        }
+
+        // Copy bias parameters unchanged
+        for (int i = weightCount; i < paramCount; i++)
+        {
+            normalizedParams[i] = parameters[i];
+        }
+
+        _innerLayer.SetParameters(normalizedParams);
+        _normalizedWeightsApplied = true;
+
+        try
+        {
+            // Forward through inner layer with normalized weights
+            if (_innerLayer is LayerBase<T> innerBase)
+            {
+                return innerBase.ForwardGpu(input);
+            }
+            throw new InvalidOperationException("Inner layer does not support ForwardGpu.");
+        }
+        catch
+        {
+            // Restore original weights on exception
+            RestoreOriginalWeights();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Initializes or reinitializes the GPU power iteration vectors when dimensions change.
+    /// </summary>
+    private void EnsureGpuPowerIterationVectors(DirectGpuTensorEngine gpuEngine, int rows, int cols)
+    {
+        if (_uGpu is null || _vGpu is null || _uGpu.Shape[0] != rows || _vGpu.Shape[0] != cols)
+        {
+            // Create random normalized vectors on CPU, then upload to GPU
+            var uData = new float[rows];
+            var vData = new float[cols];
+            var random = RandomHelper.CreateSecureRandom();
+
+            // Initialize with random values
+            float uNorm = 0, vNorm = 0;
+            for (int i = 0; i < rows; i++)
+            {
+                uData[i] = (float)(random.NextDouble() * 2 - 1);
+                uNorm += uData[i] * uData[i];
+            }
+            for (int i = 0; i < cols; i++)
+            {
+                vData[i] = (float)(random.NextDouble() * 2 - 1);
+                vNorm += vData[i] * vData[i];
+            }
+
+            // Normalize
+            uNorm = (float)Math.Sqrt(uNorm);
+            vNorm = (float)Math.Sqrt(vNorm);
+            for (int i = 0; i < rows; i++) uData[i] /= uNorm;
+            for (int i = 0; i < cols; i++) vData[i] /= vNorm;
+
+            // Upload to GPU
+            _uGpu = gpuEngine.UploadToGpu(new Tensor<T>(
+                DirectGpuEngine.FromFloatArray<T>(uData), [rows]), GpuTensorRole.Activation);
+            _vGpu = gpuEngine.UploadToGpu(new Tensor<T>(
+                DirectGpuEngine.FromFloatArray<T>(vData), [cols]), GpuTensorRole.Activation);
+        }
+    }
+
+    /// <summary>
+    /// Restores the original weights after Backward or on exception.
+    /// </summary>
+    private void RestoreOriginalWeights()
+    {
+        if (_normalizedWeightsApplied && _originalParameters != null)
+        {
+            _innerLayer.SetParameters(_originalParameters);
+            _normalizedWeightsApplied = false;
+            _originalParameters = null;
+        }
+    }
+
+    /// <summary>
+    /// Updates the parameters of the inner layer.
+    /// </summary>
+    public override void UpdateParameters(T learningRate)
+    {
+        _innerLayer.UpdateParameters(learningRate);
+    }
+
+    /// <summary>
+    /// Gets the parameters of the inner layer.
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        return _innerLayer.GetParameters();
+    }
+
+    /// <summary>
+    /// Sets the parameters of the inner layer.
+    /// </summary>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _innerLayer.SetParameters(parameters);
+    }
+
+    /// <summary>
+    /// Gets the parameter gradients from the inner layer.
+    /// </summary>
+    public override Vector<T> GetParameterGradients()
+    {
+        return _innerLayer.GetParameterGradients();
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer.
+    /// </summary>
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastOutput = null;
+        RestoreOriginalWeights();
+        _innerLayer.ResetState();
+    }
+
+    public override void Serialize(BinaryWriter writer)
+    {
+        base.Serialize(writer);
+        // Serialize power iteration vectors for deterministic deserialization
+        bool hasU = _u != null;
+        writer.Write(hasU);
+        if (hasU && _u != null)
+        {
+            writer.Write(_u.Length);
+            for (int i = 0; i < _u.Length; i++)
+                writer.Write(NumOps.ToDouble(_u[i]));
+        }
+        bool hasV = _v != null;
+        writer.Write(hasV);
+        if (hasV && _v != null)
+        {
+            writer.Write(_v.Length);
+            for (int i = 0; i < _v.Length; i++)
+                writer.Write(NumOps.ToDouble(_v[i]));
+        }
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        base.Deserialize(reader);
+        // Restore power iteration vectors
+        bool hasU = reader.ReadBoolean();
+        if (hasU)
+        {
+            int uLen = reader.ReadInt32();
+            _u = new Tensor<T>([uLen]);
+            for (int i = 0; i < uLen; i++)
+                _u[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        bool hasV = reader.ReadBoolean();
+        if (hasV)
+        {
+            int vLen = reader.ReadInt32();
+            _v = new Tensor<T>([vLen]);
+            for (int i = 0; i < vLen; i++)
+                _v[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+    }
+
+    /// <summary>
+    /// GPU-resident parameter update using the provided optimizer configuration.
+    /// Delegates to the inner layer's UpdateParametersGpu method.
+    /// </summary>
+    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
+    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
+    {
+        // Delegate to inner layer's GPU parameter update
+        if (_innerLayer is LayerBase<T> innerBase && innerBase.SupportsGpuTraining)
+        {
+            innerBase.UpdateParametersGpu(config);
+        }
+        else
+        {
+            // Fall back to CPU parameter update if inner layer doesn't support GPU training
+            throw new InvalidOperationException(
+                $"Inner layer ({_innerLayer.GetType().Name}) does not support GPU-resident training. " +
+                "Use UpdateParameters() for CPU-based parameter updates.");
+        }
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _innerLayer.ClearGradients();
+    }
+
+    /// <summary>
+    /// Persists the inner layer's type name + shape and the
+    /// power-iteration count so DeserializationHelper can reconstruct
+    /// the wrapped layer concretely. Issue #1239 wrapped-layer round-trip.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InnerLayerTypeName"] = _innerLayer.GetType().Name;
+        metadata["InnerLayerInputShape"] = string.Join(",", _innerLayer.GetInputShape());
+        metadata["InnerLayerOutputShape"] = string.Join(",", _innerLayer.GetOutputShape());
+        metadata["PowerIterations"] = _powerIterations.ToString();
+        return metadata;
+    }
+}

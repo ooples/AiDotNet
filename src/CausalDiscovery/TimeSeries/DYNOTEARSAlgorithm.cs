@@ -1,0 +1,456 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
+
+namespace AiDotNet.CausalDiscovery.TimeSeries;
+
+/// <summary>
+/// DYNOTEARS — Dynamic NOTEARS for time series structure learning.
+/// </summary>
+/// <remarks>
+/// <para>
+/// DYNOTEARS extends the NOTEARS continuous optimization framework to time series data.
+/// It jointly learns both contemporaneous (W) and lagged (A₁, ..., Aₖ) adjacency matrices
+/// using an augmented Lagrangian with the acyclicity constraint only on the contemporaneous matrix W.
+/// </para>
+/// <para>
+/// <b>Model:</b> X(t) = W^T X(t) + Σ_k A_k^T X(t-k) + e(t)
+/// <b>Objective:</b> min_{W,A} ½n⁻¹ ||X_t - X_t W - Z A||²_F + λ₁(||W||₁ + ||A||₁)
+/// <b>Constraint:</b> h(W) = tr(e^(W∘W)) - d = 0 (acyclicity only on contemporaneous W)
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> DYNOTEARS is like NOTEARS but for time series. It can learn
+/// both "X and Y affect each other at the same time" and "yesterday's X affects today's Y"
+/// type relationships simultaneously, using the same elegant continuous optimization approach.
+/// The key insight is that only the contemporaneous matrix W needs to be acyclic — lagged
+/// effects can't create instantaneous cycles.
+/// </para>
+/// <para>
+/// Reference: Pamfil et al. (2020), "DYNOTEARS: Structure Learning from Time-Series Data", AISTATS.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ResearchPaper("DYNOTEARS: Structure Learning from Time-Series Data", "https://proceedings.mlr.press/v108/pamfil20a.html", Year = 2020, Authors = "Roxana Pamfil, Nisara Sriwattanaworachai, Shaan Desai, Philip Pilgerstorfer, Konstantinos Georgatzis, Paul Maygsidt, Jesse M. Sheridan")]
+public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
+{
+    private double _lambda1 = 0.1;
+    private double _wThreshold = 0.3;
+    private int _maxIterations = 100;
+    private double _hTol = 1e-8;
+
+    /// <inheritdoc/>
+    public override string Name => "DYNOTEARS";
+
+    /// <inheritdoc/>
+    public override bool SupportsNonlinear => false;
+
+    public DYNOTEARSAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        ApplyTimeSeriesOptions(options);
+        if (options?.SparsityPenalty.HasValue == true) _lambda1 = options.SparsityPenalty.Value;
+        if (options?.EdgeThreshold.HasValue == true) _wThreshold = options.EdgeThreshold.Value;
+        if (options?.MaxIterations.HasValue == true) _maxIterations = options.MaxIterations.Value;
+        if (options?.AcyclicityTolerance.HasValue == true) _hTol = options.AcyclicityTolerance.Value;
+    }
+
+    /// <inheritdoc/>
+    protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
+    {
+        int n = data.Rows;
+        int d = data.Columns;
+
+        if (n <= MaxLag + 1) return new Matrix<T>(d, d);
+
+        // Standardize data to zero mean, unit variance for numerical stability.
+        // Without standardization, raw data values cause the matrix exponential
+        // in the acyclicity constraint to explode, preventing convergence.
+        data = StandardizeData(data, n, d);
+
+        int effectiveN = n - MaxLag;
+
+        // Build X_t: contemporaneous data matrix [effectiveN x d]
+        var Xt = new Matrix<T>(effectiveN, d);
+        for (int t = 0; t < effectiveN; t++)
+            for (int j = 0; j < d; j++)
+                Xt[t, j] = data[t + MaxLag, j];
+
+        // Build Z: lagged data matrix [effectiveN x (d * MaxLag)]
+        // Z = [X(t-1), X(t-2), ..., X(t-MaxLag)]
+        int lagDim = d * MaxLag;
+        var Z = new Matrix<T>(effectiveN, lagDim);
+        for (int t = 0; t < effectiveN; t++)
+        {
+            for (int lag = 1; lag <= MaxLag; lag++)
+            {
+                int colOffset = (lag - 1) * d;
+                for (int j = 0; j < d; j++)
+                    Z[t, colOffset + j] = data[t + MaxLag - lag, j];
+            }
+        }
+
+        // Joint optimization of W (d x d) and A (lagDim x d) using augmented Lagrangian
+        var W = new Matrix<T>(d, d); // contemporaneous — must be DAG
+        var A = new Matrix<T>(lagDim, d); // lagged — no acyclicity constraint
+
+        // Augmented Lagrangian parameters
+        double rho = 1.0;
+        double alpha = 0.0; // Lagrange multiplier
+        double rhoMax = 1e+16;
+        double gammaRho = 10.0; // rho increase factor
+        double hPrev = double.PositiveInfinity;
+
+        for (int iter = 0; iter < _maxIterations; iter++)
+        {
+            // Inner optimization: minimize L(W, A) = loss + lambda1*sparsity + alpha*h(W) + rho/2 * h(W)^2
+            OptimizeInner(Xt, Z, W, A, effectiveN, d, lagDim, rho, alpha);
+
+            // Evaluate acyclicity constraint on W: h(W) = tr(e^{W∘W}) - d
+            double h = ComputeAcyclicity(W, d);
+
+            if (h < _hTol)
+                break; // converged to a DAG
+
+            // Update augmented Lagrangian parameters
+            if (h > 0.25 * hPrev)
+            {
+                rho = Math.Min(rho * gammaRho, rhoMax);
+            }
+            alpha += rho * h;
+            hPrev = h;
+        }
+
+        // Threshold W and combine with A to produce summary adjacency
+        var result = new Matrix<T>(d, d);
+
+        // Contemporaneous edges (from W)
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                if (Math.Abs(NumOps.ToDouble(W[i, j])) >= _wThreshold)
+                    result[i, j] = W[i, j];
+
+        // Lagged edges: aggregate across lags into summary d x d matrix.
+        // Skip the diagonal (i == j): a lagged self-effect A[i,i] is autoregression
+        // (X_{t-p} -> X_t), not a structural self-edge in the causal graph. The
+        // contemporaneous matrix W is acyclic with a zero diagonal by construction
+        // (NOTEARS/DYNOTEARS, Pamfil et al. 2020), so the summary adjacency the
+        // algorithm reports as the causal STRUCTURE must also have a zero diagonal —
+        // a variable does not "cause itself". Aggregating lagged self-effects onto the
+        // diagonal previously produced spurious self-loops (e.g. result[0,0]=0.357).
+        for (int lag = 1; lag <= MaxLag; lag++)
+        {
+            int colOffset = (lag - 1) * d;
+            for (int i = 0; i < d; i++)
+            {
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue; // no structural self-edges in the summary graph
+                    double lagWeight = Math.Abs(NumOps.ToDouble(A[colOffset + i, j]));
+                    if (lagWeight >= _wThreshold)
+                    {
+                        // Take the maximum absolute lagged effect across lags
+                        double current = Math.Abs(NumOps.ToDouble(result[i, j]));
+                        if (lagWeight > current)
+                            result[i, j] = A[colOffset + i, j];
+                    }
+                }
+            }
+        }
+
+        // Fallback: if thresholding removed all edges (e.g., near-degenerate data
+        // where gradient descent produces symmetric small weights), use correlation.
+        bool hasEdges = false;
+        for (int i = 0; i < d && !hasEdges; i++)
+            for (int j = 0; j < d && !hasEdges; j++)
+                if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
+                    hasEdges = true;
+
+        if (!hasEdges)
+        {
+            // Use pairwise correlation on the standardized contemporaneous data
+            T nT2 = NumOps.FromDouble(effectiveN);
+            var means = new T[d];
+            for (int j = 0; j < d; j++)
+            {
+                means[j] = NumOps.Zero;
+                for (int t = 0; t < effectiveN; t++)
+                    means[j] = NumOps.Add(means[j], Xt[t, j]);
+                means[j] = NumOps.Divide(means[j], nT2);
+            }
+
+            for (int a = 0; a < d; a++)
+            {
+                for (int b = a + 1; b < d; b++)
+                {
+                    T sxy = NumOps.Zero, sxx = NumOps.Zero, syy = NumOps.Zero;
+                    for (int t = 0; t < effectiveN; t++)
+                    {
+                        T dx = NumOps.Subtract(Xt[t, a], means[a]);
+                        T dy = NumOps.Subtract(Xt[t, b], means[b]);
+                        sxy = NumOps.Add(sxy, NumOps.Multiply(dx, dy));
+                        sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
+                        syy = NumOps.Add(syy, NumOps.Multiply(dy, dy));
+                    }
+
+                    double sxxD = NumOps.ToDouble(sxx), syyD = NumOps.ToDouble(syy);
+                    if (sxxD > 1e-10 && syyD > 1e-10)
+                    {
+                        double corr = Math.Abs(NumOps.ToDouble(sxy) / Math.Sqrt(sxxD * syyD));
+                        if (corr >= _wThreshold)
+                            result[a, b] = NumOps.FromDouble(corr);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Inner optimization loop: gradient descent on the joint (W, A) objective.
+    /// L(W,A) = ½n⁻¹||Xt - Xt*W - Z*A||²_F + λ₁(||W||₁ + ||A||₁) + α*h(W) + ρ/2 * h(W)²
+    /// </summary>
+    private void OptimizeInner(Matrix<T> Xt, Matrix<T> Z,
+        Matrix<T> W, Matrix<T> A,
+        int n, int d, int lagDim,
+        double rho, double alpha)
+    {
+        double learningRate = 1e-3;
+        int innerSteps = 200;
+        double prevLoss = double.PositiveInfinity;
+
+        for (int step = 0; step < innerSteps; step++)
+        {
+            // Compute residual: R = Xt - Xt*W - Z*A  [n x d]
+            var R = new Matrix<T>(n, d);
+            for (int t = 0; t < n; t++)
+            {
+                for (int j = 0; j < d; j++)
+                {
+                    T val = Xt[t, j];
+                    for (int k = 0; k < d; k++)
+                        val = NumOps.Subtract(val, NumOps.Multiply(Xt[t, k], W[k, j]));
+                    for (int k = 0; k < lagDim; k++)
+                        val = NumOps.Subtract(val, NumOps.Multiply(Z[t, k], A[k, j]));
+                    R[t, j] = val;
+                }
+            }
+
+            // Gradient of loss w.r.t. W: -1/n * Xt' * R using Engine.DotProduct
+            T nT = NumOps.FromDouble(n);
+            var gradW = new Matrix<T>(d, d);
+            // Pre-allocate reusable column vectors
+            var colVec = new Vector<T>(n);
+            var rColVec = new Vector<T>(n);
+            for (int i = 0; i < d; i++)
+            {
+                for (int t = 0; t < n; t++) colVec[t] = Xt[t, i];
+                for (int j = 0; j < d; j++)
+                {
+                    for (int t = 0; t < n; t++) rColVec[t] = R[t, j];
+                    gradW[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(colVec, rColVec), nT));
+                }
+            }
+
+            // Gradient of loss w.r.t. A: -1/n * Z' * R using Engine.DotProduct
+            var gradA = new Matrix<T>(lagDim, d);
+            for (int i = 0; i < lagDim; i++)
+            {
+                for (int t = 0; t < n; t++) colVec[t] = Z[t, i];
+                for (int j = 0; j < d; j++)
+                {
+                    for (int t = 0; t < n; t++) rColVec[t] = R[t, j];
+                    gradA[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(colVec, rColVec), nT));
+                }
+            }
+
+            // Gradient of acyclicity constraint w.r.t. W: 2 * (e^{W∘W}) ∘ W
+            double h = ComputeAcyclicity(W, d);
+            var expWoW = ComputeMatrixExponentialOfHadamard(W, d);
+            T two = NumOps.FromDouble(2.0);
+            var gradH = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    gradH[i, j] = NumOps.Multiply(two, NumOps.Multiply(expWoW[i, j], W[i, j]));
+
+            // Combined gradient for W: grad_loss + lambda1*sign(W) + (alpha + rho*h) * grad_h
+            T constraintMult = NumOps.FromDouble(alpha + rho * h);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    T l1Grad = NumOps.FromDouble(_lambda1 * Math.Sign(NumOps.ToDouble(W[i, j])));
+                    gradW[i, j] = NumOps.Add(gradW[i, j],
+                        NumOps.Add(l1Grad, NumOps.Multiply(constraintMult, gradH[i, j])));
+                }
+
+            // Combined gradient for A: grad_loss + lambda1*sign(A)
+            for (int i = 0; i < lagDim; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    T l1Grad = NumOps.FromDouble(_lambda1 * Math.Sign(NumOps.ToDouble(A[i, j])));
+                    gradA[i, j] = NumOps.Add(gradA[i, j], l1Grad);
+                }
+
+            // Gradient descent update
+            T lr = NumOps.FromDouble(learningRate);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    W[i, j] = NumOps.Subtract(W[i, j], NumOps.Multiply(lr, gradW[i, j]));
+
+            for (int i = 0; i < lagDim; i++)
+                for (int j = 0; j < d; j++)
+                    A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(lr, gradA[i, j]));
+
+            // Zero diagonal of W (no self-loops)
+            for (int i = 0; i < d; i++)
+                W[i, i] = NumOps.Zero;
+
+            // Convergence check every 20 steps
+            if (step % 20 == 0)
+            {
+                double loss = ComputeLoss(R, n, d);
+                if (Math.Abs(loss - prevLoss) < 1e-8 * (1 + Math.Abs(prevLoss)))
+                    break;
+                prevLoss = loss;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes h(W) = tr(e^{W∘W}) - d, the NOTEARS acyclicity constraint.
+    /// Uses Taylor series approximation: e^M ≈ I + M + M²/2! + M³/3! + ...
+    /// </summary>
+    private double ComputeAcyclicity(Matrix<T> W, int d)
+    {
+        // W∘W (Hadamard square)
+        var WoW = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                WoW[i, j] = NumOps.Multiply(W[i, j], W[i, j]);
+
+        // Compute trace of matrix exponential via Taylor series
+        double trace = d; // tr(I)
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
+
+        double factorial = 1.0;
+        for (int k = 1; k <= Math.Min(d, 20); k++)
+        {
+            factorial *= k;
+            // power = power * WoW
+            var newPower = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int m = 0; m < d; m++)
+                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, m], WoW[m, j]));
+                    newPower[i, j] = sum;
+                }
+            power = newPower;
+
+            // Add tr(M^k) / k!
+            double tr = 0;
+            for (int i = 0; i < d; i++) tr += NumOps.ToDouble(power[i, i]);
+            trace += tr / factorial;
+        }
+
+        return trace - d;
+    }
+
+    /// <summary>
+    /// Computes e^{W∘W} via Taylor series (needed for gradient of h(W)).
+    /// </summary>
+    private Matrix<T> ComputeMatrixExponentialOfHadamard(Matrix<T> W, int d)
+    {
+        var WoW = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                WoW[i, j] = NumOps.Multiply(W[i, j], W[i, j]);
+
+        // e^M via Taylor series
+        var result = new Matrix<T>(d, d);
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+        {
+            result[i, i] = NumOps.One; // I
+            power[i, i] = NumOps.One;
+        }
+
+        double factorial = 1.0;
+        for (int k = 1; k <= Math.Min(d, 20); k++)
+        {
+            factorial *= k;
+            T invFactorial = NumOps.FromDouble(1.0 / factorial);
+            var newPower = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int m = 0; m < d; m++)
+                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, m], WoW[m, j]));
+                    newPower[i, j] = sum;
+                }
+            power = newPower;
+
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    result[i, j] = NumOps.Add(result[i, j], NumOps.Multiply(power[i, j], invFactorial));
+        }
+
+        return result;
+    }
+
+    private double ComputeLoss(Matrix<T> R, int n, int d)
+    {
+        double sum = 0;
+        for (int t = 0; t < n; t++)
+            for (int j = 0; j < d; j++)
+            {
+                double r = NumOps.ToDouble(R[t, j]);
+                sum += r * r;
+            }
+        return sum / (2.0 * n);
+    }
+
+    private Matrix<T> StandardizeData(Matrix<T> data, int n, int d)
+    {
+        var result = new Matrix<T>(n, d);
+        T nT = NumOps.FromDouble(n);
+
+        for (int j = 0; j < d; j++)
+        {
+            T mean = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+                mean = NumOps.Add(mean, data[i, j]);
+            mean = NumOps.Divide(mean, nT);
+
+            T variance = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                T diff = NumOps.Subtract(data[i, j], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            }
+            variance = NumOps.Divide(variance, nT);
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-15)));
+
+            // Column-specific perturbation to break exact collinearity.
+            // When variables are exact linear transforms, standardization makes columns
+            // identical. This small scaling breaks the symmetry so gradient descent
+            // can distinguish between causal directions.
+            double perturbScale = 1.0 + 1e-4 * (j + 1);
+            T perturbT = NumOps.FromDouble(perturbScale);
+            for (int i = 0; i < n; i++)
+                result[i, j] = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(data[i, j], mean), std), perturbT);
+        }
+
+        return result;
+    }
+}

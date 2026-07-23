@@ -1,0 +1,428 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Tokenization.Interfaces;
+
+namespace AiDotNet.NeuralNetworks
+{
+    /// <summary>
+    /// Sentence-BERT (SBERT) style shared sentence-encoder tower: a transformer encoder
+    /// that maps a tokenized input to a fixed-size embedding (default 768-d, BERT vocab
+    /// 30522, max length 512) for semantic similarity and retrieval.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+    /// <remarks>
+    /// <para>
+    /// This implements the SHARED ENCODER of a Siamese/dual-encoder setup (Reimers &amp; Gurevych
+    /// 2019, "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"): the same encoder
+    /// is applied independently to each sentence, and the resulting embeddings are compared by a
+    /// distance/cosine metric. <see cref="Predict"/> returns the encoder embedding for one input;
+    /// pair training (contrastive/triplet) compares two such embeddings.
+    /// </para>
+    /// <para>
+    /// NOTE: this is distinct from <see cref="SiameseNetwork{T}"/>, which is the
+    /// pair-in / similarity-score-out VERIFICATION network of Koch et al. 2015 (twin subnetwork +
+    /// L1-distance sigmoid head). This class is the sentence-embedding ENCODER tower; that class
+    /// is the end-to-end pair verifier.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A Siamese Network is like having two identical twins who think exactly 
+    /// the same way. You give a different photo to each twin, and they each describe what they see 
+    /// using a list of numbers. Because the twins think the same way, if the photos are similar, 
+    /// their descriptions will be almost identical. This is the most popular way to build face 
+    /// recognition or "find similar" search systems.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new SiameseNeuralNetworkOptions { InputSize = 784, EmbeddingSize = 128 };
+    /// var model = new SiameseNeuralNetwork&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.General)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.EmbeddingModel)]
+    [ModelTask(ModelTask.Embedding)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelComplexity(ModelComplexity.Medium)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks", "https://arxiv.org/abs/1908.10084", Year = 2019, Authors = "Nils Reimers, Iryna Gurevych")]
+    public class SiameseNeuralNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
+    {
+        private readonly SiameseNeuralNetworkOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
+        #region Fields
+
+        /// <summary>
+        /// The tokenizer used to process text inputs into numerical token IDs.
+        /// </summary>
+        private readonly ITokenizer? _tokenizer;
+
+        /// <summary>
+        /// The dimensionality of the shared embedding space.
+        /// </summary>
+        private int _embeddingDimension;
+
+        /// <summary>
+        /// The maximum length of input sequences the model will process.
+        /// </summary>
+        private int _maxSequenceLength;
+
+        /// <summary>
+        /// The number of unique tokens the shared encoder can recognize.
+        /// </summary>
+        private int _vocabSize;
+
+        /// <summary>
+        /// The loss function used to evaluate similarity (defaults to ContrastiveLoss).
+        /// </summary>
+        private ILossFunction<T> _lossFunction;
+
+        /// <summary>
+        /// The optimization algorithm used to update the shared parameters of the dual encoders.
+        /// </summary>
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+        #endregion
+
+        #region Properties
+
+        /// <inheritdoc/>
+        public int EmbeddingDimension => _embeddingDimension;
+
+        /// <inheritdoc/>
+        public int MaxTokens => _maxSequenceLength;
+
+        #endregion
+
+        #region Constructors
+
+        /// <summary>
+        /// Initializes a new instance of the SiameseNeuralNetwork with default configuration.
+        /// </summary>
+        public SiameseNeuralNetwork()
+            : this(new NeuralNetworkArchitecture<T>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 768,
+                outputSize: 768))
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the SiameseNeuralNetwork model.
+        /// </summary>
+        /// <param name="architecture">The configuration defining the model's structural metadata.</param>
+        /// <param name="tokenizer">Optional tokenizer for text processing.</param>
+        /// <param name="optimizer">Optional optimizer for training.</param>
+        /// <param name="vocabSize">The size of the shared vocabulary (default: 30522).</param>
+        /// <param name="embeddingDimension">The dimension of the shared embeddings (default: 768).</param>
+        /// <param name="maxSequenceLength">The maximum allowed input length (default: 512).</param>
+        /// <param name="lossFunction">Optional loss function. Defaults to Mean Squared Error — see
+        /// remarks on why contrastive loss is NOT the default for the single-tower training path.</param>
+        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
+        /// <remarks>
+        /// The shared-tower <see cref="Predict"/> emits an EMBEDDING, and the standard
+        /// <c>Train(input, expectedOutput)</c> path optimises that embedding toward a target embedding
+        /// — a representation-regression objective whose correct loss is mean squared error.
+        /// ContrastiveLoss is a PAIR loss: it consumes <c>(distance, similarity-label)</c>, so its
+        /// scalar <see cref="ILossFunction{T}"/> interface throws and its tape form
+        /// (<c>ComputeTapeLoss</c>) reinterprets <c>predicted</c> as a distance and <c>target</c> as a
+        /// 0/1 label. Feeding it an embedding + a target embedding produced a wrong-direction gradient
+        /// that INCREASED the embedding error during training (Training_ShouldReduceLoss: 1.31 → 1.43).
+        /// Contrastive/triplet pair training (Bromley 1993 / Koch 2015) is exposed through the
+        /// dedicated pair API; the generic single-input Train path uses MSE.
+        /// </remarks>
+        public SiameseNeuralNetwork(
+            NeuralNetworkArchitecture<T> architecture,
+            ITokenizer? tokenizer = null,
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+            int vocabSize = 30522,
+            int embeddingDimension = 768,
+            int maxSequenceLength = 512,
+            ILossFunction<T>? lossFunction = null,
+            double maxGradNorm = 1.0,
+            SiameseNeuralNetworkOptions? options = null)
+            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+        {
+            _options = options ?? new SiameseNeuralNetworkOptions();
+            Options = _options;
+            _tokenizer = tokenizer;
+            _vocabSize = vocabSize;
+            _embeddingDimension = embeddingDimension;
+            _maxSequenceLength = maxSequenceLength;
+            _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+            InitializeLayersCore(false);
+        }
+
+        #endregion
+
+        #region Initialization
+
+        /// <summary>
+        /// Sets up the shared encoder layers for the Siamese twins using defaults from LayerHelper.
+        /// </summary>
+        /// <remarks>
+        /// <b>For Beginners:</b> This method builds the "twin's brain." It sets up a transformer 
+        /// encoder that is shared by both sides of the network to ensure that identical inputs 
+        /// always produce identical results.
+        /// </remarks>
+        protected override void InitializeLayers()
+        {
+            InitializeLayersCore(true);
+        }
+
+        private void InitializeLayersCore(bool useVirtualValidation)
+        {
+            if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            {
+                Layers.AddRange(Architecture.Layers);
+                if (useVirtualValidation)
+                {
+                    ValidateCustomLayers(Layers);
+                }
+                else
+                {
+                    ValidateCustomLayersInternal(Layers);
+                }
+            }
+            else
+            {
+                // Default Siamese architecture: Transformer-based encoder from LayerHelper
+                Layers.AddRange(LayerHelper<T>.CreateDefaultSiameseLayers(
+                    Architecture,
+                    _vocabSize,
+                    _embeddingDimension,
+                    _maxSequenceLength));
+            }
+        }
+
+        #endregion
+
+        #region IEmbeddingModel Implementation
+
+        /// <summary>
+        /// Encodes a single string into a normalized embedding vector using the shared encoder brain.
+        /// </summary>
+        public Vector<T> Embed(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return new Vector<T>(_embeddingDimension);
+
+            var tokenizer = _tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
+            var tokenResult = tokenizer.Encode(text);
+            var tokens = tokenResult.TokenIds.Take(_maxSequenceLength).ToList();
+            if (tokens.Count == 0) tokens.Add(0);
+
+            var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
+            var output = Predict(inputTensor);
+
+            // Standard mean pooling to get a single vector from token representations
+            int seqLen = output.Shape[1];
+            int dim = output.Shape[2];
+            var result = new Vector<T>(dim);
+            if (seqLen == 0) return result.SafeNormalize();
+
+            for (int d = 0; d < dim; d++)
+            {
+                T sum = NumOps.Zero;
+                for (int s = 0; s < seqLen; s++)
+                {
+                    sum = NumOps.Add(sum, output[0, s, d]);
+                }
+                result[d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
+            }
+
+            return result.SafeNormalize();
+        }
+
+        /// <summary>
+        /// Encodes a batch of strings into a matrix of embedding vectors.
+        /// </summary>
+        public Matrix<T> EmbedBatch(IEnumerable<string> texts)
+        {
+            var textList = texts.ToList();
+            var matrix = new Matrix<T>(textList.Count, _embeddingDimension);
+            for (int i = 0; i < textList.Count; i++)
+            {
+                var emb = Embed(textList[i]);
+                for (int j = 0; j < _embeddingDimension; j++) matrix[i, j] = emb[j];
+            }
+            return matrix;
+        }
+
+        /// <summary>
+        /// Asynchronously encodes a single string into a normalized embedding vector.
+        /// </summary>
+        public Task<Vector<T>> EmbedAsync(string text)
+        {
+            return Task.FromResult(Embed(text));
+        }
+
+        /// <summary>
+        /// Asynchronously encodes a batch of strings into a matrix of embedding vectors.
+        /// </summary>
+        public Task<Matrix<T>> EmbedBatchAsync(IEnumerable<string> texts)
+        {
+            return Task.FromResult(EmbedBatch(texts));
+        }
+
+        #endregion
+
+        #region Methods
+
+        /// <summary>
+        /// Performs a forward pass through the shared encoder.
+        /// </summary>
+        public Tensor<T> Forward(Tensor<T> input)
+        {
+            if (TryForwardGpuOptimized(input, out var gpuResult))
+                return gpuResult;
+
+            Tensor<T> output = input;
+            foreach (var layer in Layers)
+            {
+                output = layer.Forward(output);
+            }
+
+            return output;
+        }
+
+        /// <summary>
+        /// Updates the shared parameters of the dual encoders.
+        /// </summary>
+        public override void UpdateParameters(Vector<T> parameters)
+        {
+            int index = 0;
+            foreach (var layer in Layers)
+            {
+                int layerParameterCount = checked((int)layer.ParameterCount);
+                if (layerParameterCount > 0)
+                {
+                    var layerParameters = parameters.Slice(index, layerParameterCount);
+                    layer.UpdateParameters(layerParameters);
+                    index += layerParameterCount;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> for
+        /// compiled-plan replay; <see cref="Forward"/> remains the eager fallback.
+        /// </summary>
+        protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
+
+        /// <summary>
+        /// Trains the model on pairs of inputs using a similarity learning objective.
+        /// </summary>
+        /// <param name="input">The input tensor containing a pair of sequences [2, seq_len].</param>
+        /// <param name="expectedOutput">The target similarity label (1 for same, 0 for different) as a tensor of [1].</param>
+        /// <remarks>
+        /// <b>For Beginners:</b> This is where the twins learn. You show one twin the first input 
+        /// and the other twin the second input. You then tell them if the inputs are the same 
+        /// or different (the label). They adjust their shared brain to make similar inputs 
+        /// have nearly identical coordinate summaries.
+        /// </remarks>
+        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        {
+            SetTrainingMode(true);
+            try
+            {
+                TrainWithTape(input, expectedOutput, _optimizer);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
+        }
+
+        private Vector<T> PoolOutput(Tensor<T> output)
+        {
+            int seqLen = output.Shape[1];
+            int dim = output.Shape[2];
+            var result = new Vector<T>(dim);
+            if (seqLen == 0) return result.SafeNormalize();
+
+            for (int d = 0; d < dim; d++)
+            {
+                T sum = NumOps.Zero;
+                for (int s = 0; s < seqLen; s++)
+                {
+                    sum = NumOps.Add(sum, output[0, s, d]);
+                }
+                result[d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
+            }
+
+            return result.SafeNormalize();
+        }
+
+        /// <inheritdoc/>
+        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        {
+            return new SiameseNeuralNetwork<T>(
+                Architecture,
+                _tokenizer,
+                null, // Fresh optimizer for new instance
+                _vocabSize,
+                _embeddingDimension,
+                _maxSequenceLength,
+                _lossFunction,
+                Convert.ToDouble(MaxGradNorm));
+        }
+
+        /// <summary>
+        /// Retrieves metadata about the Siamese dual-encoder model.
+        /// </summary>
+        public override ModelMetadata<T> GetModelMetadata()
+        {
+            return new ModelMetadata<T>
+            {
+                Name = "SiameseNeuralNetwork",
+                Description = "Standardized Siamese dual-encoder high-performance network",
+                Complexity = ParameterCount,
+                AdditionalInfo = new Dictionary<string, object>
+                {
+                    { "EmbeddingDimension", _embeddingDimension },
+                    { "VocabSize", _vocabSize },
+                    { "MaxSequenceLength", _maxSequenceLength }
+                }
+            };
+        }
+
+        /// <inheritdoc/>
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+            writer.Write(_vocabSize);
+            writer.Write(_embeddingDimension);
+            writer.Write(_maxSequenceLength);
+        }
+
+        /// <inheritdoc/>
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+            _vocabSize = reader.ReadInt32();
+            _embeddingDimension = reader.ReadInt32();
+            _maxSequenceLength = reader.ReadInt32();
+        }
+
+        #endregion
+    }
+}

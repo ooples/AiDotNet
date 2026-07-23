@@ -1,0 +1,652 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
+
+/// <summary>
+/// Unit tests for MobileNetV2 and MobileNetV3 network implementations.
+/// </summary>
+public class MobileNetTests
+{
+    #region MobileNetV2 Configuration Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2Configuration_DefaultValues_AreCorrect()
+    {
+        // Arrange & Act - Use the standard factory method
+        var config = MobileNetV2Configuration.CreateStandard(numClasses: 1000);
+
+        // Assert
+        Assert.Equal(MobileNetV2WidthMultiplier.Alpha100, config.WidthMultiplier);
+        Assert.Equal(3, config.InputChannels);
+        Assert.Equal(224, config.InputHeight);
+        Assert.Equal(224, config.InputWidth);
+        Assert.Equal(1000, config.NumClasses);
+        Assert.Equal(1.0, config.Alpha);
+    }
+
+    [Theory]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha035, 0.35)]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha050, 0.5)]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha075, 0.75)]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha100, 1.0)]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha140, 1.4)]
+    public void MobileNetV2Configuration_WidthMultiplier_ReturnsCorrectAlpha(
+        MobileNetV2WidthMultiplier multiplier, double expectedAlpha)
+    {
+        // Arrange
+        var config = new MobileNetV2Configuration(multiplier, numClasses: 10);
+
+        // Assert
+        Assert.Equal(expectedAlpha, config.Alpha);
+    }
+
+    #endregion
+
+    #region MobileNetV2 Construction Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_100_Construction_CreatesValidNetwork()
+    {
+        // Arrange & Act
+        var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(MobileNetV2WidthMultiplier.Alpha100, network.WidthMultiplier);
+        Assert.Equal(10, network.NumClasses);
+        Assert.True(network.Layers.Count > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_035_Construction_CreatesValidNetwork()
+    {
+        // Arrange & Act
+        var network = MobileNetV2Network<double>.MobileNetV2_035(numClasses: 10);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(MobileNetV2WidthMultiplier.Alpha035, network.WidthMultiplier);
+        Assert.Equal(10, network.NumClasses);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_CustomConfig_CreatesValidNetwork()
+    {
+        // Arrange - Use factory method for testing custom channels
+        var network = MobileNetV2Network<double>.MobileNetV2_075(numClasses: 10, inputChannels: 1);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.True(network.Layers.Count > 0);
+    }
+
+    [Theory]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha035)]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha050)]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha075)]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha100)]
+    [InlineData(MobileNetV2WidthMultiplier.Alpha140)]
+    public void MobileNetV2_AllWidthMultipliers_AreValid(MobileNetV2WidthMultiplier multiplier)
+    {
+        // Arrange & Act - Use factory methods based on multiplier
+        var network = multiplier switch
+        {
+            MobileNetV2WidthMultiplier.Alpha035 => MobileNetV2Network<double>.MobileNetV2_035(numClasses: 10),
+            MobileNetV2WidthMultiplier.Alpha050 => MobileNetV2Network<double>.MobileNetV2_050(numClasses: 10),
+            MobileNetV2WidthMultiplier.Alpha075 => MobileNetV2Network<double>.MobileNetV2_075(numClasses: 10),
+            MobileNetV2WidthMultiplier.Alpha100 => MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10),
+            MobileNetV2WidthMultiplier.Alpha140 => MobileNetV2Network<double>.MobileNetV2_140(numClasses: 10),
+            _ => MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10)
+        };
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(multiplier, network.WidthMultiplier);
+    }
+
+    #endregion
+
+    #region MobileNetV2 Forward Pass Tests
+
+    [Fact(Timeout = 120000)]
+    [Trait("Category", "Integration")]
+    public async Task MobileNetV2_Forward_ProducesCorrectOutputShape()
+    {
+        await Task.Run(() =>
+        {
+            // Arrange - use factory method
+            var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
+
+            // Use standard 224x224 resolution expected by MobileNetV2
+            var input = new Tensor<double>([1, 3, 224, 224]);
+            var random = new Random(123);
+            for (int i = 0; i < input.Length; i++)
+                input[i] = random.NextDouble() * 0.5 + 0.1;
+
+            // Act
+            var output = network.Predict(input);
+
+            // Assert - output should have values for 10 classes
+            Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
+        });
+    }
+
+    [Fact(Timeout = 120000)]
+    [Trait("Category", "Integration")]
+    public async Task MobileNetV2_Forward_ReturnsNonZeroOutput()
+    {
+        await Task.Run(() =>
+        {
+            // Arrange
+            var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
+
+            var input = new Tensor<double>([1, 3, 224, 224]);
+            var random = new Random(42);
+            for (int i = 0; i < input.Length; i++)
+                input[i] = random.NextDouble();
+
+            // Act
+            var output = network.Predict(input);
+
+            // Assert
+            bool hasNonZero = output.ToArray().Any(v => Math.Abs(v) > 1e-10);
+            Assert.True(hasNonZero, "Output should have at least some non-zero values");
+        });
+    }
+
+    #endregion
+
+    #region MobileNetV3 Configuration Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Configuration_DefaultValues_AreCorrect()
+    {
+        // Arrange & Act - Use the Large factory method
+        var config = MobileNetV3Configuration.CreateLarge(numClasses: 1000);
+
+        // Assert
+        Assert.Equal(MobileNetV3Variant.Large, config.Variant);
+        Assert.Equal(MobileNetV3WidthMultiplier.Alpha100, config.WidthMultiplier);
+        Assert.Equal(3, config.InputChannels);
+        Assert.Equal(224, config.InputHeight);
+        Assert.Equal(224, config.InputWidth);
+        Assert.Equal(1000, config.NumClasses);
+    }
+
+    [Theory]
+    [InlineData(MobileNetV3WidthMultiplier.Alpha075, 0.75)]
+    [InlineData(MobileNetV3WidthMultiplier.Alpha100, 1.0)]
+    public void MobileNetV3Configuration_WidthMultiplier_ReturnsCorrectAlpha(
+        MobileNetV3WidthMultiplier multiplier, double expectedAlpha)
+    {
+        // Arrange
+        var config = new MobileNetV3Configuration(MobileNetV3Variant.Large, numClasses: 10, widthMultiplier: multiplier);
+
+        // Assert
+        Assert.Equal(expectedAlpha, config.Alpha);
+    }
+
+    #endregion
+
+    #region MobileNetV3 Construction Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Large_Construction_CreatesValidNetwork()
+    {
+        // Arrange & Act
+        var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(MobileNetV3Variant.Large, network.Variant);
+        Assert.Equal(10, network.NumClasses);
+        Assert.True(network.Layers.Count > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Small_Construction_CreatesValidNetwork()
+    {
+        // Arrange & Act
+        var network = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(MobileNetV3Variant.Small, network.Variant);
+        Assert.Equal(10, network.NumClasses);
+        Assert.True(network.Layers.Count > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3_CustomConfig_CreatesValidNetwork()
+    {
+        // Arrange - Use factory method for testing custom channels
+        var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10, inputChannels: 1);
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.True(network.Layers.Count > 0);
+    }
+
+    [Theory]
+    [InlineData(MobileNetV3Variant.Large)]
+    [InlineData(MobileNetV3Variant.Small)]
+    public void MobileNetV3_AllVariants_AreValid(MobileNetV3Variant variant)
+    {
+        // Arrange & Act - Use factory methods based on variant
+        var network = variant switch
+        {
+            MobileNetV3Variant.Large => MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10),
+            MobileNetV3Variant.Small => MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10),
+            _ => MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10)
+        };
+
+        // Assert
+        Assert.NotNull(network);
+        Assert.Equal(variant, network.Variant);
+    }
+
+    #endregion
+
+    #region MobileNetV3 Forward Pass Tests
+
+    [Fact(Timeout = 120000)]
+    [Trait("Category", "Integration")]
+    public async Task MobileNetV3Large_Forward_ProducesCorrectOutputShape()
+    {
+        await Task.Run(() =>
+        {
+            // Arrange - Use factory method
+            var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10);
+
+            // Use standard 224x224 resolution expected by MobileNetV3
+            var input = new Tensor<double>([1, 3, 224, 224]);
+            var random = new Random(123);
+            for (int i = 0; i < input.Length; i++)
+                input[i] = random.NextDouble() * 0.5 + 0.1;
+
+            // Act
+            var output = network.Predict(input);
+
+            // Assert
+            Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
+        });
+    }
+
+    [Fact(Timeout = 120000)]
+    [Trait("Category", "Integration")]
+    public async Task MobileNetV3Small_Forward_ProducesCorrectOutputShape()
+    {
+        await Task.Run(() =>
+        {
+            // Arrange - Use factory method
+            var network = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
+
+            // Use standard 224x224 resolution expected by MobileNetV3
+            var input = new Tensor<double>([1, 3, 224, 224]);
+            var random = new Random(123);
+            for (int i = 0; i < input.Length; i++)
+                input[i] = random.NextDouble() * 0.5 + 0.1;
+
+            // Act
+            var output = network.Predict(input);
+
+            // Assert
+            Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
+        });
+    }
+
+    #endregion
+
+    #region InvertedResidualBlock Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_Construction_CreatesValidBlock()
+    {
+        await Task.Yield();
+        // Arrange & Act — lazy ctor: only outChannels/expansionRatio/
+        // stride/useSE are known up front; InChannels resolves on first
+        // Forward via OnFirstForward(input).
+        var block = new InvertedResidualBlock<double>(
+            outChannels: 64,
+            expansionRatio: 6,
+            stride: 2,
+            useSE: false);
+
+        // Pre-Forward: inChannels is still the -1 sentinel.
+        Assert.NotNull(block);
+        Assert.Equal(-1, block.InChannels);
+        Assert.Equal(64, block.OutChannels);
+        Assert.Equal(6, block.ExpansionRatio);
+        Assert.Equal(2, block.Stride);
+        Assert.True(block.SupportsTraining);
+
+        // After first Forward: InChannels is resolved from input.Shape[1].
+        var input = new Tensor<double>([1, 32, 8, 8]);
+        block.Forward(input);
+        Assert.Equal(32, block.InChannels);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_WithSE_CreatesValidBlock()
+    {
+        // Arrange & Act
+        var block = new InvertedResidualBlock<double>(
+            outChannels: 96,
+            expansionRatio: 6,
+            stride: 1,
+            useSE: true,
+            seRatio: 4);
+
+        // Assert
+        Assert.NotNull(block);
+        Assert.True(block.SupportsTraining);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_Forward_ProducesOutput()
+    {
+        // Arrange
+        var block = new InvertedResidualBlock<double>(
+            outChannels: 32,
+            expansionRatio: 6,
+            stride: 1,
+            useSE: false);
+
+        var input = new Tensor<double>([1, 32, 8, 8]);
+        var random = new Random(42);
+        for (int i = 0; i < input.Length; i++)
+            input[i] = random.NextDouble();
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(1, output.Shape[0]); // Batch
+        Assert.Equal(32, output.Shape[1]); // Channels
+        Assert.Equal(8, output.Shape[2]); // Height (stride=1)
+        Assert.Equal(8, output.Shape[3]); // Width
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InvertedResidualBlock_WithStride2_ReducesSpatialDimensions()
+    {
+        // Arrange
+        var block = new InvertedResidualBlock<double>(
+            outChannels: 64,
+            expansionRatio: 6,
+            stride: 2,
+            useSE: false);
+
+        var input = new Tensor<double>([1, 32, 16, 16]);
+        var random = new Random(42);
+        for (int i = 0; i < input.Length; i++)
+            input[i] = random.NextDouble();
+
+        // Act
+        var output = block.Forward(input);
+
+        // Assert
+        Assert.Equal(1, output.Shape[0]); // Batch
+        Assert.Equal(64, output.Shape[1]); // New channels
+        Assert.Equal(8, output.Shape[2]); // Height reduced by stride
+        Assert.Equal(8, output.Shape[3]); // Width reduced by stride
+    }
+
+    #endregion
+
+    #region ReLU6 Activation Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ReLU6Activation_Activate_ClampsToSix()
+    {
+        // Arrange
+        var activation = new ReLU6Activation<double>();
+
+        // Act & Assert
+        Assert.Equal(0.0, activation.Activate(-1.0), 6);
+        Assert.Equal(0.0, activation.Activate(0.0), 6);
+        Assert.Equal(3.0, activation.Activate(3.0), 6);
+        Assert.Equal(6.0, activation.Activate(6.0), 6);
+        Assert.Equal(6.0, activation.Activate(10.0), 6);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ReLU6Activation_Derivative_ReturnsCorrectValues()
+    {
+        // Arrange
+        var activation = new ReLU6Activation<double>();
+
+        // Act & Assert
+        Assert.Equal(0.0, activation.Derivative(-1.0), 6); // Out of range
+        Assert.Equal(0.0, activation.Derivative(0.0), 6);  // At boundary
+        Assert.Equal(1.0, activation.Derivative(3.0), 6);  // In range
+        Assert.Equal(0.0, activation.Derivative(6.0), 6);  // At boundary
+        Assert.Equal(0.0, activation.Derivative(10.0), 6); // Out of range
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ReLU6Activation_SupportsJitCompilation()
+    {
+        // Arrange
+        var activation = new ReLU6Activation<double>();
+
+        // Assert
+        Assert.False(activation.SupportsJitCompilation); // TensorOperations.Minimum not yet implemented
+    }
+
+    #endregion
+
+    #region HardSwish Activation Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task HardSwishActivation_Activate_ComputesCorrectly()
+    {
+        // Arrange
+        var activation = new HardSwishActivation<double>();
+
+        // Act & Assert
+        // x <= -3: output is 0
+        Assert.Equal(0.0, activation.Activate(-4.0), 6);
+        Assert.Equal(0.0, activation.Activate(-3.0), 6);
+
+        // x >= 3: output equals x
+        Assert.Equal(3.0, activation.Activate(3.0), 6);
+        Assert.Equal(5.0, activation.Activate(5.0), 6);
+
+        // In between: x * (x + 3) / 6
+        // x = 0: 0 * (0 + 3) / 6 = 0
+        Assert.Equal(0.0, activation.Activate(0.0), 6);
+
+        // x = 1: 1 * (1 + 3) / 6 = 4/6 = 0.666...
+        Assert.Equal(0.6666, activation.Activate(1.0), 3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HardSwishActivation_Derivative_ReturnsCorrectValues()
+    {
+        // Arrange
+        var activation = new HardSwishActivation<double>();
+
+        // Act & Assert
+        // x <= -3: derivative = 0
+        Assert.Equal(0.0, activation.Derivative(-4.0), 6);
+
+        // x >= 3: derivative = 1
+        Assert.Equal(1.0, activation.Derivative(4.0), 6);
+
+        // -3 < x < 3: derivative = (2x + 3) / 6
+        // x = 0: (0 + 3) / 6 = 0.5
+        Assert.Equal(0.5, activation.Derivative(0.0), 6);
+
+        // x = 1: (2 + 3) / 6 = 5/6 ≈ 0.833
+        Assert.Equal(0.8333, activation.Derivative(1.0), 3);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HardSwishActivation_SupportsJitCompilation()
+    {
+        // Arrange
+        var activation = new HardSwishActivation<double>();
+
+        // Assert
+        Assert.False(activation.SupportsJitCompilation); // TensorOperations.Minimum not yet implemented
+    }
+
+    #endregion
+
+    #region Metadata Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_GetModelMetadata_ReturnsValidMetadata()
+    {
+        // Arrange
+        var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
+
+        // Act
+        var metadata = network.GetModelMetadata();
+
+        // Assert
+        Assert.NotNull(metadata);
+        Assert.Equal("MobileNetV2Network", metadata.AdditionalInfo["NetworkType"]);
+        Assert.Equal(1.0, (double)metadata.AdditionalInfo["WidthMultiplier"]);
+        Assert.Equal(10, metadata.AdditionalInfo["NumClasses"]);
+        Assert.True((int)metadata.AdditionalInfo["LayerCount"] > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3_GetModelMetadata_ReturnsValidMetadata()
+    {
+        // Arrange
+        var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10);
+
+        // Act
+        var metadata = network.GetModelMetadata();
+
+        // Assert
+        Assert.NotNull(metadata);
+        Assert.Equal("MobileNetV3Network", metadata.AdditionalInfo["NetworkType"]);
+        Assert.Equal("Large", metadata.AdditionalInfo["Variant"]);
+        Assert.Equal(10, metadata.AdditionalInfo["NumClasses"]);
+        Assert.True((int)metadata.AdditionalInfo["LayerCount"] > 0);
+    }
+
+    #endregion
+
+    #region Clone Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var original = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<MobileNetV2Network<double>>(clone);
+
+        var clonedNetwork = (MobileNetV2Network<double>)clone;
+        Assert.Equal(original.WidthMultiplier, clonedNetwork.WidthMultiplier);
+        Assert.Equal(original.NumClasses, clonedNetwork.NumClasses);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var original = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.IsType<MobileNetV3Network<double>>(clone);
+
+        var clonedNetwork = (MobileNetV3Network<double>)clone;
+        Assert.Equal(original.Variant, clonedNetwork.Variant);
+        Assert.Equal(original.NumClasses, clonedNetwork.NumClasses);
+    }
+
+    #endregion
+
+    #region Enum Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2WidthMultiplier_EnumValues_AreDistinct()
+    {
+        // Arrange
+        var values = Enum.GetValues(typeof(MobileNetV2WidthMultiplier)).Cast<MobileNetV2WidthMultiplier>().ToArray();
+
+        // Assert
+        Assert.Equal(7, values.Length);
+        Assert.Contains(MobileNetV2WidthMultiplier.Alpha035, values);
+        Assert.Contains(MobileNetV2WidthMultiplier.Alpha050, values);
+        Assert.Contains(MobileNetV2WidthMultiplier.Alpha075, values);
+        Assert.Contains(MobileNetV2WidthMultiplier.Alpha100, values);
+        Assert.Contains(MobileNetV2WidthMultiplier.Alpha125, values);
+        Assert.Contains(MobileNetV2WidthMultiplier.Alpha130, values);
+        Assert.Contains(MobileNetV2WidthMultiplier.Alpha140, values);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3Variant_EnumValues_AreDistinct()
+    {
+        // Arrange
+        var values = Enum.GetValues(typeof(MobileNetV3Variant)).Cast<MobileNetV3Variant>().ToArray();
+
+        // Assert
+        Assert.Equal(2, values.Length);
+        Assert.Contains(MobileNetV3Variant.Large, values);
+        Assert.Contains(MobileNetV3Variant.Small, values);
+    }
+
+    #endregion
+
+    #region Training Tests (Skipped for CI)
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV2_Train_CompletesWithoutError()
+    {
+        await Task.Yield();
+        // Arrange - Use factory method
+        var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
+
+        var input = new Tensor<double>([1, 3, 224, 224]);
+        var target = new Tensor<double>([10]);
+        for (int i = 0; i < input.Length; i++) input[i] = 0.5;
+        target[0] = 1.0;
+
+        // Act & Assert - should not throw
+        network.Train(input, target);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MobileNetV3_Train_CompletesWithoutError()
+    {
+        await Task.Yield();
+        // Arrange - Use factory method
+        var network = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
+
+        var input = new Tensor<double>([1, 3, 224, 224]);
+        var target = new Tensor<double>([10]);
+        for (int i = 0; i < input.Length; i++) input[i] = 0.5;
+        target[0] = 1.0;
+
+        // Act & Assert - should not throw
+        network.Train(input, target);
+    }
+
+    #endregion
+}

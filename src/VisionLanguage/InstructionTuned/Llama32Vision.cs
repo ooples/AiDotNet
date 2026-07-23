@@ -1,0 +1,358 @@
+using AiDotNet.Attributes;
+using AiDotNet.Extensions;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
+
+namespace AiDotNet.VisionLanguage.InstructionTuned;
+
+/// <summary>
+/// Llama 3.2 Vision: Meta's 11B/90B vision models for edge/mobile deployment.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Llama 3.2 Vision (Meta, 2024) extends the Llama 3.2 language model with vision capabilities,
+/// available in 11B and 90B parameter variants. It uses a ViT vision encoder with MLP projection
+/// to integrate visual features into the Llama decoder, optimized for edge and mobile deployment.
+/// </para>
+/// <para><b>References:</b>
+/// <list type="bullet"><item>Paper: "The Llama 3 Herd of Models" (Meta, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Llama 3.2 Vision adds image understanding to Meta's popular
+/// Llama 3.2 language model. Available in 11B and 90B parameter sizes, it uses a ViT vision
+/// encoder connected through an MLP projection to the Llama decoder. The 11B variant is
+/// particularly notable for being optimized for edge and mobile deployment — it can run on
+/// devices like phones and laptops rather than requiring expensive cloud servers. The 90B
+/// variant provides stronger performance for server-side use. Both models can describe images,
+/// answer visual questions, and reason about visual content. Default values follow the original
+/// paper settings.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Llama 3.2 Vision model for edge/mobile visual AI
+/// // using ViT encoder with Llama 3.2 decoder backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Llama32Vision&lt;double&gt;(architecture, "llama32vision.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Llama32Vision&lt;double&gt;(architecture, new Llama32VisionOptions());
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper(
+    "The Llama 3 Herd of Models",
+    "https://arxiv.org/abs/2407.21783",
+    Year = 2024,
+    Authors = "Grattafiori et al."
+)]
+public class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+{
+    private readonly Llama32VisionOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    private int _encoderLayerEnd;
+
+    public Llama32Vision(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        Llama32VisionOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new Llama32VisionOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public Llama32Vision(
+        NeuralNetworkArchitecture<T> architecture,
+        Llama32VisionOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new Llama32VisionOptions();
+        _options.ValidateVisualSizing();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
+    /// <summary>
+    /// Generates text using Llama 3.2 Vision's cross-attention adapter architecture.
+    /// Llama 3.2 Vision (Meta, 2024) uses:
+    /// (1) ViT-H/14 vision encoder with adapter layers for efficient vision-language
+    ///     alignment optimized for edge and mobile deployment,
+    /// (2) Cross-attention layers interleaved in the decoder at regular intervals
+    ///     (every 4th layer) for deep vision-language fusion,
+    /// (3) Gated cross-attention: visual features are gated before injection to
+    ///     prevent catastrophic forgetting of language capabilities,
+    /// (4) LLaMA-3.2 decoder backbone (11B/90B variants).
+    /// </summary>
+    public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
+
+        // Step 1: ViT-H/14 vision encoder
+        var visualFeatures = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visualFeatures = Layers[i].Forward(visualFeatures);
+
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
+        if (prompt is not null)
+        {
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
+        }
+        else
+        {
+            fusedInput = visualFeatures;
+        }
+
+        var output = fusedInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+
+        return output;
+    }
+
+    public Tensor<T> Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage
+    )
+    {
+        ThrowIfDisposed();
+        var sb = new System.Text.StringBuilder();
+        sb.Append(_options.SystemPrompt);
+        foreach (var (role, content) in conversationHistory)
+            sb.Append($"\n{role}: {content}");
+        sb.Append($"\nUser: {userMessage}\nAssistant:");
+        return GenerateFromImage(image, sb.ToString());
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            // Validate visual-patch options only when building the default VLM stack —
+            // ComputePatchSize() is the only consumer of _options.ImageSize /
+            // _options.MaxVisualTokens; when Architecture.Layers is supplied those
+            // options are irrelevant and validation would spuriously reject custom-
+            // layer setups.
+            ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultVisionAdapterLayers(
+                    _options.VisionDim,
+                    _options.VisionDim * 2,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    patchSize: ComputePatchSize()
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+        ValidateEncoderDecoderBoundary(_encoderLayerEnd);
+    }
+
+    // Llama-3.2-Vision (Meta 2024): 336 / sqrt(576) = 14 — CLIP-style ViT-L/14.
+    private int ComputePatchSize() =>
+        ComputeVisualPatchSize(_options.ImageSize, _options.MaxVisualTokens, roundUp: true);
+
+    // +2 leading layers from the helper: PatchEmbedding + LayerNorm.
+    private void ComputeEncoderDecoderBoundary()
+    {
+        _encoderLayerEnd = ComputeVisionLanguageBoundary(
+            leadingLayerCount: 2,
+            visionLayerCount: _options.NumVisionLayers,
+            visionBlockLayerCount: TransformerBlockLayerCount(_options.DropoutRate),
+            trailingLayerCount: 6
+        );
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "Llama-3.2-Vision-Native" : "Llama-3.2-Vision-ONNX",
+            Description = "Llama 3.2 Vision: Meta's Vision Models for Edge/Mobile (2024)",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "Llama-3.2-Vision";
+        m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
+        m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.DecoderDim);
+        writer.Write(_options.ProjectionDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumHeads);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.DecoderDim = reader.ReadInt32();
+        _options.ProjectionDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new Llama32Vision<T>(Architecture, mp, _options);
+        return new Llama32Vision<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(Llama32Vision<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
+}

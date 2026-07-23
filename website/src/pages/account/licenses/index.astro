@@ -1,0 +1,484 @@
+---
+import AccountLayout from '../../../layouts/AccountLayout.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<AccountLayout title="Licenses - AiDotNet" description="View and manage your AiDotNet BSL license keys and machine activations." activeTab="licenses">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">License Keys</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage your AiDotNet library license keys and machine activations</p>
+      </div>
+      <a
+        href={`${base}pricing/`}
+        class="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-brand-blue to-brand-purple text-white text-sm font-medium rounded-xl hover:shadow-lg transition-all"
+      >
+        Get a License
+      </a>
+    </div>
+
+    <!-- No licenses placeholder -->
+    <div id="no-licenses" class="hidden bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-12 text-center">
+      <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+        <svg class="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
+        </svg>
+      </div>
+      <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">No license keys yet</h3>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4 max-w-md mx-auto">
+        Get a free community license for open-source and personal projects, or upgrade to Professional or Enterprise for commercial use.
+      </p>
+      <a
+        href={`${base}pricing/`}
+        class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-brand-blue to-brand-purple text-white text-sm font-medium rounded-xl hover:shadow-lg transition-all"
+      >
+        View Pricing &amp; Get a License
+      </a>
+    </div>
+
+    <!-- Loading state -->
+    <div id="licenses-loading" class="text-center py-12">
+      <p class="text-sm text-slate-500 dark:text-slate-400">Loading your licenses...</p>
+    </div>
+
+    <!--
+      Post-checkout provisioning banner. Shown only when the URL carries
+      ?new=true (set by Stripe Payment Links' success redirect). The page
+      polls license_keys until the Stripe webhook creates the new row, so
+      the customer doesn't see an empty "No licenses yet" state in the
+      ~1-3 second window between Stripe redirect and webhook fan-out.
+    -->
+    <div id="new-license-banner" class="hidden bg-gradient-to-r from-brand-blue/10 to-brand-purple/10 border border-brand-blue/30 rounded-2xl p-6">
+      <div class="flex items-center gap-4">
+        <!--
+          Three pre-rendered SVG icons for the banner's three states:
+          loading (spinner), success (checkmark), and timeout (warning).
+          The client-side script toggles the `hidden` class on each —
+          it never calls innerHTML. Keeping the SVGs in the markup means
+          no future change to the status-display code can accidentally
+          introduce an HTML-injection surface.
+        -->
+        <div class="shrink-0">
+          <svg id="new-license-icon-loading" class="w-6 h-6 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <svg id="new-license-icon-success" class="hidden w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          <svg id="new-license-icon-warning" class="hidden w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <p id="new-license-title" class="text-sm font-semibold text-slate-900 dark:text-white">Issuing your license...</p>
+          <p id="new-license-subtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">This usually takes a couple of seconds.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- License cards -->
+    <div id="licenses-container" class="hidden space-y-4">
+    </div>
+
+    <!-- Setup instructions -->
+    <div id="setup-section" class="hidden bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+      <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">Setup Instructions</h2>
+      <div class="space-y-4 text-sm text-slate-600 dark:text-slate-300">
+        <div>
+          <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Option 1: Environment Variable</h3>
+          <p class="mb-2">Set the <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-xs">AIDOTNET_LICENSE_KEY</code> environment variable:</p>
+          <pre class="bg-slate-900 text-slate-100 rounded-xl p-4 overflow-x-auto"><code id="env-var-code">AIDOTNET_LICENSE_KEY=your-key-here</code></pre>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Option 2: License File</h3>
+          <p class="mb-2">Save your key to <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-xs">~/.aidotnet/license.key</code></p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Option 3: Code</h3>
+          <pre class="bg-slate-900 text-slate-100 rounded-xl p-4 overflow-x-auto"><code>var license = new AiDotNetLicenseKey("your-key-here");
+var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../../lib/supabase';
+
+    interface LicenseKey {
+      id: string;
+      license_key: string;
+      tier: string;
+      status: string;
+      max_activations: number;
+      organization_name: string | null;
+      issued_at: string;
+      expires_at: string | null;
+    }
+
+    interface Activation {
+      id: string;
+      machine_id_hash: string;
+      license_key_id: string;
+      hostname: string | null;
+      os_description: string | null;
+      first_seen_at: string;
+      last_seen_at: string;
+      is_active: boolean;
+    }
+
+    // Checkout success redirect arrives with ?new=true. When set, we
+    // render the spinner banner instead of the "No licenses yet" empty
+    // state and poll license_keys until the stripe-webhook edge function's
+    // INSERT lands.
+    //
+    // Timing assumptions:
+    //   - p50 webhook latency: ~1.5s (Stripe redirect → webhook event
+    //                                 delivered → INSERT visible).
+    //   - p99 webhook latency: ~5-8s (Stripe retries + edge function
+    //                                 cold-start worst case).
+    //   - POLL_INTERVAL_MS = 1s keeps us under the read-rate limit with
+    //     a wide margin and matches the p50 so first-paint of the new
+    //     license happens within ~2s of arrival.
+    //   - POLL_TIMEOUT_MS = 30s is 3-5x the p99 so any legitimate slow
+    //     webhook still wins, while a truly stuck webhook surfaces to
+    //     the user as the amber "taking longer than expected" banner
+    //     instead of an infinite spinner.
+    //   - baseline count: how many licenses exist BEFORE the new one
+    //                     arrives. Polling waits for count to INCREASE
+    //                     so a customer who already held other-tier
+    //                     licenses sees the new row specifically, not
+    //                     their old ones.
+    //
+    // Revisit these numbers if the webhook pipeline changes (e.g., if
+    // stripe-webhook starts calling an external API during provisioning).
+    const POLL_INTERVAL_MS = 1000;
+    const POLL_TIMEOUT_MS = 30_000;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isPostCheckout = urlParams.get('new') === 'true';
+
+    async function loadLicenses() {
+      const loadingEl = document.getElementById('licenses-loading');
+      const noLicensesEl = document.getElementById('no-licenses');
+      const containerEl = document.getElementById('licenses-container');
+      const setupEl = document.getElementById('setup-section');
+      const bannerEl = document.getElementById('new-license-banner');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.location.href = `${import.meta.env.BASE_URL}login/?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+        return;
+      }
+
+      // Post-checkout flow: reveal the provisioning banner before the
+      // first fetch so the user sees the spinner instantly rather than
+      // any flash of the default loading state.
+      if (isPostCheckout && bannerEl) {
+        bannerEl.classList.remove('hidden');
+        if (loadingEl) loadingEl.classList.add('hidden');
+      }
+
+      const { data: licenses, error } = await supabase
+        .from('license_keys')
+        .select('id, license_key, tier, status, max_activations, organization_name, issued_at, expires_at')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      if (loadingEl && !isPostCheckout) loadingEl.classList.add('hidden');
+
+      // Post-checkout: if the license list hasn't grown since we arrived,
+      // the Stripe webhook hasn't landed yet. Keep polling until it does
+      // (or we hit the deadline). First render sets the baseline to the
+      // current count; subsequent renders short-circuit the poll when the
+      // count goes up.
+      if (isPostCheckout && !error) {
+        const initialCount = licenses?.length ?? 0;
+        const ok = await pollUntilNewLicenseAppears(session.user.id, initialCount);
+        // Toggle one of three pre-rendered SVG icons instead of rewriting
+        // innerHTML. Static markup in the template makes future status
+        // additions a matter of adding another element + toggle, not a
+        // new innerHTML sink.
+        const iconLoading = document.getElementById('new-license-icon-loading');
+        const iconSuccess = document.getElementById('new-license-icon-success');
+        const iconWarning = document.getElementById('new-license-icon-warning');
+        if (ok && bannerEl) {
+          // Success: swap banner copy + icon, then hide the banner after
+          // a brief celebratory pause so the new license row can render.
+          const title = document.getElementById('new-license-title');
+          const subtitle = document.getElementById('new-license-subtitle');
+          if (title) title.textContent = 'License issued!';
+          if (subtitle) subtitle.textContent = 'Your new key is ready below.';
+          iconLoading?.classList.add('hidden');
+          iconSuccess?.classList.remove('hidden');
+          setTimeout(() => bannerEl.classList.add('hidden'), 2500);
+        } else if (bannerEl) {
+          const title = document.getElementById('new-license-title');
+          const subtitle = document.getElementById('new-license-subtitle');
+          if (title) title.textContent = 'License issuance is taking longer than expected.';
+          if (subtitle) {
+            // Build the subtitle via DOM APIs instead of innerHTML. The
+            // content is static today, but swapping it out with a builder
+            // means future maintainers can't accidentally introduce an
+            // HTML-injection vector by interpolating a user-supplied
+            // value (error message, email address, etc.) into the string.
+            subtitle.textContent = 'Please refresh in a minute. If the license still isn\'t here, ';
+
+            // Diagnostic mailto so support gets the user's auth context,
+            // session id (if available from Stripe redirect), URL, UA,
+            // and timestamp without the user having to gather any of it
+            // themselves. Previous behavior was a bare "email support"
+            // text link that opened an empty message — support couldn't
+            // tell which checkout failed without a back-and-forth.
+            const ts = new Date().toISOString();
+            const stripeSession = new URLSearchParams(window.location.search).get('session_id') || '(none)';
+            const body =
+              'My Stripe checkout completed but no license appeared in /account/licenses/.\n\n' +
+              'User ID: ' + session.user.id + '\n' +
+              'Email: ' + (session.user.email ?? '(no email on session)') + '\n' +
+              'Stripe checkout session_id: ' + stripeSession + '\n' +
+              'Page URL: ' + window.location.href + '\n' +
+              'Timestamp (UTC): ' + ts + '\n' +
+              'User Agent: ' + navigator.userAgent + '\n';
+            const mailLink = document.createElement('a');
+            mailLink.href =
+              'mailto:support@aidotnet.dev'
+              + '?subject=' + encodeURIComponent('[aidotnet.dev] License not issued after checkout')
+              + '&body=' + encodeURIComponent(body);
+            mailLink.className = 'underline';
+            mailLink.textContent = 'report to support';
+            subtitle.appendChild(mailLink);
+            subtitle.append(' — the email is pre-filled with diagnostic details.');
+          }
+          iconLoading?.classList.add('hidden');
+          iconWarning?.classList.remove('hidden');
+        }
+        // Replace the URL so the banner doesn't reappear if the user
+        // clicks browser-back or refreshes after success.
+        const cleanUrl = window.location.pathname + window.location.hash;
+        history.replaceState(null, '', cleanUrl);
+        // Re-fetch once more to render the final list with the new row.
+        const { data: refreshed } = await supabase
+          .from('license_keys')
+          .select('id, license_key, tier, status, max_activations, organization_name, issued_at, expires_at')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false });
+        if (refreshed) await renderLicenses(refreshed);
+        if (loadingEl) loadingEl.classList.add('hidden');
+        return;
+      }
+
+      if (error) {
+        console.error('Failed to load licenses:', error);
+        if (noLicensesEl) {
+          noLicensesEl.innerHTML = '<p class="text-red-500">Failed to load licenses. Please try again later.</p>';
+          noLicensesEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      await renderLicenses(licenses);
+    }
+
+    /**
+     * Polls license_keys until the user's license count exceeds
+     * `initialCount`, or POLL_TIMEOUT_MS elapses. Resolves `true` when a
+     * new row appears, `false` on timeout.
+     *
+     * Used exclusively after a Stripe Payment Link success redirect
+     * (`?new=true`) to cover the async gap between Stripe's redirect and
+     * the stripe-webhook edge function's INSERT.
+     */
+    async function pollUntilNewLicenseAppears(userId: string, initialCount: number): Promise<boolean> {
+      const deadline = Date.now() + POLL_TIMEOUT_MS;
+      // Check first, sleep between retries. If the Stripe webhook already
+      // landed while the initial loadLicenses() fetch was in flight, the
+      // first poll wins immediately and we save a full POLL_INTERVAL_MS
+      // of spinner time on the happy path.
+      while (true) {
+        // head=true + count=exact asks PostgREST for just the Content-Range
+        // row count, not the rows themselves. Saves fetching every license
+        // ID on every poll iteration — negligible for a handful of licenses
+        // but a real win for enterprise users with many.
+        const { count, error: pollError } = await supabase
+          .from('license_keys')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId);
+        if (pollError) {
+          console.error('License poll failed:', pollError);
+        } else if ((count ?? 0) > initialCount) {
+          return true;
+        }
+        if (Date.now() >= deadline) return false;
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
+    }
+
+    /**
+     * Renders the license list + setup instructions. Extracted so both the
+     * normal load path and the post-checkout polling path can share the
+     * exact same rendering behavior.
+     */
+    async function renderLicenses(licenses: LicenseKey[]) {
+      const noLicensesEl = document.getElementById('no-licenses');
+      const containerEl = document.getElementById('licenses-container');
+      const setupEl = document.getElementById('setup-section');
+
+      if (!licenses || licenses.length === 0) {
+        if (noLicensesEl) noLicensesEl.classList.remove('hidden');
+        if (containerEl) containerEl.classList.add('hidden');
+        if (setupEl) setupEl.classList.add('hidden');
+        return;
+      }
+
+      // Store for secure Copy-Key handler lookup (keeps the raw key out of
+      // the rendered DOM — we only show a masked preview).
+      loadedLicenses = licenses.map((l) => ({ id: l.id, license_key: l.license_key }));
+
+      if (noLicensesEl) noLicensesEl.classList.add('hidden');
+      if (containerEl) containerEl.classList.remove('hidden');
+      if (setupEl) setupEl.classList.remove('hidden');
+
+      // Load activations for all licenses
+      const licenseIds = licenses.map((l) => l.id);
+      const { data: activations, error: activationsError } = await supabase
+        .from('license_activations')
+        .select('id, license_key_id, machine_id_hash, hostname, os_description, first_seen_at, last_seen_at, is_active')
+        .in('license_key_id', licenseIds)
+        .order('last_seen_at', { ascending: false });
+
+      if (activationsError) {
+        console.error('Failed to load activations:', activationsError.message);
+      }
+
+      const activationsByLicense = new Map<string, Activation[]>();
+      if (activations) {
+        for (const a of activations) {
+          const list = activationsByLicense.get(a.license_key_id) || [];
+          list.push(a);
+          activationsByLicense.set(a.license_key_id, list);
+        }
+      }
+
+      if (containerEl) {
+        containerEl.innerHTML = licenses
+          .map((l) => renderLicenseCard(l, activationsByLicense.get(l.id) || []))
+          .join('');
+
+        const activeKey = licenses.find((l) => l.status === 'active');
+        if (activeKey) {
+          const envCode = document.getElementById('env-var-code');
+          if (envCode) envCode.textContent = `AIDOTNET_LICENSE_KEY=${activeKey.license_key}`;
+        }
+      }
+    }
+
+    function tierBadge(tier: string): string {
+      const colors: Record<string, string> = {
+        community: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300',
+        professional: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+        enterprise: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+      };
+      return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${colors[tier] || colors.community}">${tier}</span>`;
+    }
+
+    function statusBadge(status: string): string {
+      const colors: Record<string, string> = {
+        active: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+        suspended: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+        revoked: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+        expired: 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
+      };
+      return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${colors[status] || colors.expired}">${status}</span>`;
+    }
+
+    function renderLicenseCard(license: LicenseKey, activations: Activation[]): string {
+      const activeActivations = activations.filter(a => a.is_active);
+      const issued = new Date(license.issued_at).toLocaleDateString();
+      const expires = license.expires_at ? new Date(license.expires_at).toLocaleDateString() : 'Never';
+
+      // Mask key: show first 8 and last 4 characters
+      const maskedKey = license.license_key.length > 16
+        ? license.license_key.substring(0, 8) + '...' + license.license_key.substring(license.license_key.length - 4)
+        : license.license_key;
+
+      const activationsHtml = activeActivations.length > 0
+        ? activeActivations.map(a => `
+          <div class="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50 dark:bg-slate-900/50">
+            <div class="text-xs">
+              <span class="font-medium text-slate-700 dark:text-slate-300">${escapeHtml(a.hostname || 'Unknown machine')}</span>
+              <span class="text-slate-400 ml-2">${escapeHtml(a.os_description || '')}</span>
+            </div>
+            <span class="text-xs text-slate-400">Last seen: ${new Date(a.last_seen_at).toLocaleDateString()}</span>
+          </div>
+        `).join('')
+        : '<p class="text-xs text-slate-400 py-2">No active machines. Use your license key to activate.</p>';
+
+      return `
+        <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+              ${tierBadge(license.tier)}
+              ${statusBadge(license.status)}
+            </div>
+            <button class="copy-key-btn text-xs font-medium text-brand-blue hover:underline" data-key-id="${license.id}">
+              Copy Key
+            </button>
+          </div>
+
+          <div class="mb-4">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-mono text-sm text-slate-700 dark:text-slate-300">${escapeHtml(maskedKey)}</span>
+            </div>
+            <div class="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <span>Issued: ${issued}</span>
+              <span>Expires: ${expires}</span>
+              ${license.organization_name ? `<span>Org: ${escapeHtml(license.organization_name)}</span>` : ''}
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Machine Activations</h3>
+              <span class="text-xs text-slate-500">${activeActivations.length} / ${license.max_activations}</span>
+            </div>
+            <div class="space-y-1.5">
+              ${activationsHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function escapeHtml(str: string): string {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    // Store loaded licenses for secure key lookup (avoids exposing keys in DOM)
+    let loadedLicenses: Array<{ id: string; license_key: string }> = [];
+
+    // Copy key handler
+    document.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('copy-key-btn')) {
+        const keyId = target.dataset.keyId;
+        const license = loadedLicenses.find(l => l.id === keyId);
+        if (license) {
+          try {
+            await navigator.clipboard.writeText(license.license_key);
+            target.textContent = 'Copied!';
+            setTimeout(() => { target.textContent = 'Copy Key'; }, 2000);
+          } catch {
+            target.textContent = 'Copy failed';
+            setTimeout(() => { target.textContent = 'Copy Key'; }, 2000);
+          }
+        }
+      }
+    });
+
+    loadLicenses();
+  </script>
+</AccountLayout>

@@ -1,0 +1,198 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Options;
+
+namespace AiDotNet.NeuralNetworks;
+
+/// <summary>
+/// Implements a Falcon Mamba language model: embedding + N MambaBlock blocks + RMS norm + LM head.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Falcon Mamba from TII (Technology Innovation Institute) is a pure Mamba-based language model
+/// trained at 7B scale, achieving competitive results with Transformer-based models while
+/// maintaining constant memory during generation regardless of sequence length.
+/// </para>
+/// <para><b>For Beginners:</b> Falcon Mamba is a 7-billion parameter language model that works
+/// without attention mechanisms (unlike GPT or LLaMA). Instead, it uses the Mamba architecture
+/// which processes sequences with constant memory, meaning it can handle infinitely long
+/// conversations without slowing down. This makes it uniquely suited for applications requiring
+/// very long context windows.</para>
+/// <para><b>Reference:</b> Zuo et al., "Falcon Mamba: The First Competitive Attention-free 7B Language Model", 2024.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new FalconMambaOptions { VocabSize = 65024, ModelDim = 4096, NumLayers = 64 };
+/// var model = new FalconMambaLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Falcon Mamba: The First Competitive Attention-free 7B Language Model", "https://arxiv.org/abs/2410.05355", Year = 2024, Authors = "Jingwei Zuo, Younes Belkada, Paul Music, Rouven Bauer, Komal Kumar Bein, Yago Gimenez")]
+public class FalconMambaLanguageModel<T> : NeuralNetworkBase<T>
+{
+    private readonly FalconMambaOptions _options;
+    private readonly int _vocabSize;
+    private readonly int _modelDimension;
+    private readonly int _numLayers;
+    private readonly int _stateDimension;
+    private readonly int _expandFactor;
+    private readonly int _maxSeqLength;
+
+    /// <inheritdoc />
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc />
+    public override ModelOptions GetOptions() => _options;
+
+    /// <summary>Gets the vocabulary size.</summary>
+    public int VocabSize => _vocabSize;
+
+    /// <summary>Gets the model dimension (d_model).</summary>
+    public int ModelDimension => _modelDimension;
+
+    /// <summary>Gets the number of Falcon Mamba blocks.</summary>
+    public int NumLayers => _numLayers;
+
+    #region Constructors
+
+    public FalconMambaLanguageModel(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 65024,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int stateDimension = 16,
+        int expandFactor = 2,
+        int maxSeqLength = 512,
+        ILossFunction<T>? lossFunction = null,
+        FalconMambaOptions? options = null)
+        : base(architecture,
+            // The LM head (DenseLayer(vocabSize, activation: null) in
+            // CreateFalconMambaLayers) emits RAW LOGITS, so the default loss
+            // must be the logits-domain cross-entropy (log_softmax + NLL,
+            // PyTorch nn.CrossEntropyLoss semantics). The TextGeneration
+            // default (CategoricalCrossEntropyLoss) requires PROBABILITY
+            // inputs — applied to logits it clamps them into [1e-7, 1] and
+            // optimizes a broken objective whose gradient pushes every
+            // in-range logit toward 1, which diverges training.
+            lossFunction ?? new LossFunctions.CrossEntropyWithLogitsLoss<T>())
+    {
+        _options = options ?? new FalconMambaOptions();
+        Options = _options;
+        _vocabSize = vocabSize;
+        _modelDimension = modelDimension;
+        _numLayers = numLayers;
+        _stateDimension = stateDimension;
+        _expandFactor = expandFactor;
+        _maxSeqLength = maxSeqLength;
+        InitializeLayers();
+    }
+
+    #endregion
+
+    #region Initialization
+
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateFalconMambaLayers(
+                _vocabSize, _modelDimension, _numLayers, _stateDimension, _expandFactor, _maxSeqLength));
+        }
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Overrides
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        SetTrainingMode(false);
+        return Accelerate(input, () =>
+        {
+            var output = input;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                output = Layers[i].Forward(output);
+            }
+            return output;
+        });
+    }
+
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        if (gradients.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
+                nameof(gradients));
+        }
+
+        var currentParams = GetParameters();
+        T learningRate = NumOps.FromDouble(0.001);
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
+        SetParameters(currentParams);
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "Architecture", "FalconMamba" },
+                { "VocabSize", _vocabSize },
+                { "ModelDimension", _modelDimension },
+                { "NumLayers", _numLayers },
+                { "StateDimension", _stateDimension },
+                { "ExpandFactor", _expandFactor },
+                { "MaxSeqLength", _maxSeqLength },
+                { "LayerCount", Layers.Count }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_vocabSize);
+        writer.Write(_modelDimension);
+        writer.Write(_numLayers);
+        writer.Write(_stateDimension);
+        writer.Write(_expandFactor);
+        writer.Write(_maxSeqLength);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _ = reader.ReadInt32();
+        _ = reader.ReadInt32();
+        _ = reader.ReadInt32();
+        _ = reader.ReadInt32();
+        _ = reader.ReadInt32();
+        _ = reader.ReadInt32();
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new FalconMambaLanguageModel<T>(
+            Architecture, _vocabSize, _modelDimension, _numLayers, _stateDimension,
+            _expandFactor, _maxSeqLength, LossFunction, _options);
+    }
+
+    #endregion
+}

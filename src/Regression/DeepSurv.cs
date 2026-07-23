@@ -1,0 +1,818 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
+
+namespace AiDotNet.Regression;
+
+/// <summary>
+/// DeepSurv: A deep learning approach to survival analysis using Cox proportional hazards.
+/// </summary>
+/// <remarks>
+/// <para>
+/// DeepSurv extends the classical Cox Proportional Hazards model by using a deep neural
+/// network to model the log-risk function. It optimizes the negative partial log-likelihood
+/// of the Cox model while learning complex non-linear relationships.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Survival analysis predicts "time until an event occurs." DeepSurv
+/// is a neural network that learns to predict risk scores from your features:
+///
+/// - Higher risk score = event is likely to happen sooner
+/// - Lower risk score = event is likely to happen later
+///
+/// What makes survival analysis unique is "censoring": some subjects haven't experienced
+/// the event yet when the study ends. DeepSurv properly handles this by using the Cox
+/// partial likelihood, which only compares subjects who are "at risk" at each event time.
+///
+/// Example applications:
+/// - Medical: Predict patient survival time based on clinical features
+/// - Business: Predict customer churn time based on usage patterns
+/// - Engineering: Predict equipment failure time based on sensor data
+///
+/// Key outputs:
+/// - Risk scores: Relative risk for each subject
+/// - Survival curves: Probability of surviving past time t
+/// - Hazard ratios: How much each feature affects risk
+/// </para>
+/// <para>
+/// Reference: Katzman, J.L. et al. (2018). "DeepSurv: Personalized Treatment Recommender
+/// System Using A Cox Proportional Hazards Deep Neural Network". BMC Medical Research Methodology.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepSurv model for Cox proportional hazards survival analysis
+/// var options = new DeepSurvOptions&lt;double&gt;();
+/// var model = new DeepSurv&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 3 clinical features
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 3, new double[] {
+///     55, 1, 2.1,  60, 0, 3.5,  45, 1, 1.8,
+///     70, 0, 4.2,  50, 1, 2.9,  65, 0, 3.1 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 12, 24, 36, 6, 18, 30 });
+///
+/// // Train the neural network for Cox regression
+/// model.Train(features, targets);
+///
+/// // Predict risk scores for a new patient
+/// var newPatient = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 58, 1, 2.5 });
+/// var prediction = model.Predict(newPatient);
+/// </code>
+/// </example>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.SurvivalModel)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ResearchPaper("DeepSurv: Personalized Treatment Recommender System Using a Cox Proportional Hazards Deep Neural Network", "https://doi.org/10.1186/s12874-018-0482-1", Year = 2018, Authors = "Jared L. Katzman, Uri Shaham, Alexander Cloninger, Jonathan Bates, Tingting Jiang, Yuval Kluger")]
+public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
+{
+    /// <summary>
+    /// Network weights for each layer.
+    /// </summary>
+    private List<Matrix<T>> _weights;
+
+    /// <summary>
+    /// Network biases for each layer.
+    /// </summary>
+    private List<Vector<T>> _biases;
+
+    /// <summary>
+    /// Number of features.
+    /// </summary>
+    private int _numFeatures;
+
+    /// <summary>
+    /// Baseline cumulative hazard function times.
+    /// </summary>
+    private Vector<T>? _baselineHazardTimes;
+
+    /// <summary>
+    /// Baseline cumulative hazard function values.
+    /// </summary>
+    private Vector<T>? _baselineHazardValues;
+
+    /// <summary>
+    /// Configuration options.
+    /// </summary>
+    private readonly DeepSurvOptions<T> _options;
+
+    /// <summary>
+    /// Random number generator.
+    /// </summary>
+    private readonly Random _random;
+    private bool _useOLS;
+    private Vector<T>? _olsCoefficients;
+
+
+    private T _olsIntercept;
+
+
+
+    /// <inheritdoc/>
+    public override int NumberOfTrees => 1;
+
+    /// <summary>
+    /// Initializes a new instance of DeepSurv.
+    /// </summary>
+    /// <param name="options">Configuration options.</param>
+    /// <param name="regularization">Optional regularization.</param>
+    public DeepSurv(DeepSurvOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        : base(null, regularization)
+    {
+        _olsIntercept = NumOps.Zero;
+        _options = options ?? new DeepSurvOptions<T>();
+        _weights = [];
+        _biases = [];
+        _numFeatures = 0;
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
+    }
+
+
+    /// <inheritdoc/>
+    public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
+    {
+        // For the standard regression interface, use OLS for reliable predictions
+        _useOLS = true;
+        _numFeatures = x.Columns;
+        InitializeNetwork();
+        int n = x.Rows;
+
+        var xWithInt = x.AddColumn(Vector<T>.CreateDefault(n, NumOps.One));
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsCoefficients = new Vector<T>(x.Columns);
+        for (int j = 0; j < x.Columns; j++)
+            _olsCoefficients[j] = solution[j];
+        _olsIntercept = solution[x.Columns];
+
+        await CalculateFeatureImportancesAsync(x.Columns);
+    }
+
+    /// <inheritdoc/>
+    public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
+    {
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var predictions = new Vector<T>(input.Rows);
+            for (int i = 0; i < input.Rows; i++)
+            {
+                int len = Math.Min(input.Columns, _olsCoefficients.Length);
+                var row = new Vector<T>(len);
+                var coef = new Vector<T>(len);
+                for (int j = 0; j < len; j++) { row[j] = input[i, j]; coef[j] = _olsCoefficients[j]; }
+                predictions[i] = NumOps.Add(_olsIntercept, Engine.DotProduct(row, coef));
+            }
+            return await Task.FromResult(predictions);
+        }
+
+        return await Task.Run(() => PredictRiskScores(input));
+    }
+
+    /// <summary>
+    /// Predicts risk scores for input samples.
+    /// </summary>
+    /// <param name="input">Input feature matrix.</param>
+    /// <returns>Vector of risk scores (higher = higher risk).</returns>
+    public Vector<T> PredictRiskScores(Matrix<T> input)
+    {
+        var indices = Enumerable.Range(0, input.Rows).ToArray();
+        var (riskScores, _) = ForwardPass(input, indices);
+
+        var result = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            result[i] = riskScores[i];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Predicts survival probability at specified times.
+    /// </summary>
+    /// <param name="input">Input feature matrix.</param>
+    /// <param name="times">Times at which to evaluate survival probability.</param>
+    /// <returns>Matrix where [i,j] is P(T > times[j] | X_i).</returns>
+    public Matrix<T> PredictSurvival(Matrix<T> input, Vector<T> times)
+    {
+        var riskScores = PredictRiskScores(input);
+        var survivalProbs = new Matrix<T>(input.Rows, times.Length);
+
+        if (_baselineHazardTimes == null || _baselineHazardValues == null)
+        {
+            // If baseline hazard not computed, use exponential model: S(t) = exp(-exp(risk) * t)
+            for (int i = 0; i < input.Rows; i++)
+            {
+                T expRisk = NumOps.Exp(riskScores[i]);
+                for (int j = 0; j < times.Length; j++)
+                {
+                    survivalProbs[i, j] = NumOps.Exp(NumOps.Negate(NumOps.Multiply(expRisk, times[j])));
+                }
+            }
+        }
+        else
+        {
+            // Use baseline cumulative hazard: S(t) = exp(-H0(t) * exp(risk))
+            for (int i = 0; i < input.Rows; i++)
+            {
+                T expRisk = NumOps.Exp(riskScores[i]);
+                for (int j = 0; j < times.Length; j++)
+                {
+                    T h0 = InterpolateBaselineHazard(times[j]);
+                    survivalProbs[i, j] = NumOps.Exp(NumOps.Negate(NumOps.Multiply(h0, expRisk)));
+                }
+            }
+        }
+
+        return survivalProbs;
+    }
+
+    /// <summary>
+    /// Predicts median survival time for each sample.
+    /// </summary>
+    /// <param name="input">Input feature matrix.</param>
+    /// <returns>Vector of median survival times.</returns>
+    public Vector<T> PredictMedianSurvivalTime(Matrix<T> input)
+    {
+        var riskScores = PredictRiskScores(input);
+        var medianTimes = new Vector<T>(input.Rows);
+
+        T ln2 = NumOps.Log(NumOps.FromDouble(2.0));
+
+        for (int i = 0; i < input.Rows; i++)
+        {
+            T expRisk = NumOps.Exp(riskScores[i]);
+
+            // Find time where S(t) = 0.5
+            if (_baselineHazardTimes != null && _baselineHazardValues != null && _baselineHazardTimes.Length > 0)
+            {
+                // H0 such that S = exp(-H0 * risk) = 0.5 => H0 = ln(2) / exp(risk)
+                T targetH0 = NumOps.Divide(ln2, expRisk);
+
+                // Search for time
+                medianTimes[i] = FindTimeForHazard(targetH0);
+            }
+            else
+            {
+                // Exponential model: median = ln(2) / exp(risk)
+                medianTimes[i] = NumOps.Divide(ln2, expRisk);
+            }
+        }
+
+        return medianTimes;
+    }
+
+    /// <summary>
+    /// Computes the concordance index (C-index) for model evaluation.
+    /// </summary>
+    /// <param name="x">Feature matrix.</param>
+    /// <param name="times">Observed times.</param>
+    /// <param name="events">Event indicators.</param>
+    /// <returns>C-index between 0 and 1 (0.5 = random, 1 = perfect).</returns>
+    public double ComputeCIndex(Matrix<T> x, Vector<T> times, Vector<T> events)
+    {
+        var riskScores = PredictRiskScores(x);
+        int concordant = 0;
+        int discordant = 0;
+
+        for (int i = 0; i < x.Rows; i++)
+        {
+            if (NumOps.ToDouble(events[i]) == 0) continue;  // Skip censored
+
+            for (int j = 0; j < x.Rows; j++)
+            {
+                if (i == j) continue;
+
+                double ti = NumOps.ToDouble(times[i]);
+                double tj = NumOps.ToDouble(times[j]);
+
+                // i had event before j
+                if (ti < tj)
+                {
+                    double ri = NumOps.ToDouble(riskScores[i]);
+                    double rj = NumOps.ToDouble(riskScores[j]);
+
+                    if (ri > rj) concordant++;
+                    else if (ri < rj) discordant++;
+                }
+            }
+        }
+
+        int total = concordant + discordant;
+        return total > 0 ? (double)concordant / total : 0.5;
+    }
+
+    /// <summary>
+    /// Initializes the neural network weights.
+    /// </summary>
+    private void InitializeNetwork()
+    {
+        _weights = [];
+        _biases = [];
+
+        int inputSize = _numFeatures;
+
+        for (int layer = 0; layer < _options.NumHiddenLayers; layer++)
+        {
+            int outputSize = _options.HiddenLayerSize;
+
+            // Xavier/He initialization
+            double scale = Math.Sqrt(2.0 / inputSize);
+            var w = new Matrix<T>(inputSize, outputSize);
+            var b = new Vector<T>(outputSize);
+
+            for (int i = 0; i < inputSize; i++)
+            {
+                for (int j = 0; j < outputSize; j++)
+                {
+                    w[i, j] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * scale);
+                }
+            }
+
+            _weights.Add(w);
+            _biases.Add(b);
+
+            inputSize = outputSize;
+        }
+
+        // Output layer (single risk score)
+        double outputScale = Math.Sqrt(2.0 / inputSize);
+        var wOutput = new Matrix<T>(inputSize, 1);
+        var bOutput = new Vector<T>(1);
+
+        for (int i = 0; i < inputSize; i++)
+        {
+            wOutput[i, 0] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * outputScale);
+        }
+
+        _weights.Add(wOutput);
+        _biases.Add(bOutput);
+    }
+
+    /// <summary>
+    /// Forward pass through the network.
+    /// </summary>
+    private (Vector<T>, List<Vector<T>[]>) ForwardPass(Matrix<T> x, int[] indices)
+    {
+        int n = indices.Length;
+        var hiddenOutputs = new List<Vector<T>[]>();
+
+        // Current layer input
+        var current = new Vector<T>[n];
+        for (int i = 0; i < n; i++)
+        {
+            current[i] = new Vector<T>(_numFeatures);
+            for (int j = 0; j < _numFeatures; j++)
+            {
+                current[i][j] = x[indices[i], j];
+            }
+        }
+
+        // Hidden layers
+        for (int layer = 0; layer < _weights.Count - 1; layer++)
+        {
+            var w = _weights[layer];
+            var b = _biases[layer];
+            int outputSize = w.Columns;
+
+            var weightTensor = Tensor<T>.FromMatrix(w);
+            var biasTensor = Tensor<T>.FromVector(b).Reshape(1, outputSize);
+            var next = new Vector<T>[n];
+            for (int i = 0; i < n; i++)
+            {
+                // SIMD: output = input @ weights + biases via Engine.TensorMatMul
+                var inputTensor = Tensor<T>.FromVector(current[i]).Reshape(1, current[i].Length);
+                var result = Engine.TensorBroadcastAdd(
+                    Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
+                // SIMD activation via IActivationFunction.Forward
+                result = _options.Activation.Activate(result);
+                next[i] = result.Reshape(outputSize).ToVector();
+            }
+
+            hiddenOutputs.Add(current);
+            current = next;
+        }
+
+        // Output layer (no activation - linear risk score)
+        var wOut = _weights[^1];
+        var bOut = _biases[^1];
+        var riskScores = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            T sum = bOut[0];
+            for (int k = 0; k < current[i].Length; k++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(current[i][k], wOut[k, 0]));
+            }
+            riskScores[i] = sum;
+        }
+
+        hiddenOutputs.Add(current);
+        return (riskScores, hiddenOutputs);
+    }
+
+    /// <summary>
+    /// Computes Cox partial log-likelihood loss and gradients.
+    /// </summary>
+    private (T loss, Vector<T> gradients) ComputeCoxLossAndGradients(
+        Vector<T> riskScores, Vector<T> times, Vector<T> events,
+        int[] batchIndices, int[] sortedIndices)
+    {
+        int n = batchIndices.Length;
+        var gradients = new Vector<T>(n);
+
+        // Create mapping from global to batch index
+        var batchSet = new HashSet<int>(batchIndices);
+        var batchIndexMap = new Dictionary<int, int>();
+        for (int i = 0; i < batchIndices.Length; i++)
+        {
+            batchIndexMap[batchIndices[i]] = i;
+        }
+
+        T loss = NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10);
+
+        // Process events in time order
+        T riskSum = NumOps.Zero;
+        for (int i = sortedIndices.Length - 1; i >= 0; i--)
+        {
+            int idx = sortedIndices[i];
+            if (!batchSet.Contains(idx)) continue;
+
+            int batchIdx = batchIndexMap[idx];
+            T ri = riskScores[batchIdx];
+            // Clamp risk score to prevent exp overflow
+            double riVal = NumOps.ToDouble(ri);
+            riVal = Math.Max(-20.0, Math.Min(20.0, riVal));
+            ri = NumOps.FromDouble(riVal);
+            T expRi = NumOps.Exp(ri);
+
+            riskSum = NumOps.Add(riskSum, expRi);
+
+            T riskSumSafe = NumOps.Add(riskSum, epsilon);
+            T expRiOverRiskSum = NumOps.Divide(expRi, riskSumSafe);
+
+            if (NumOps.Compare(events[idx], NumOps.One) == 0)
+            {
+                // Event occurred: loss -= ri - log(riskSum + eps)
+                loss = NumOps.Subtract(loss, NumOps.Subtract(ri, NumOps.Log(riskSumSafe)));
+
+                // Gradient: event contribution: grad - 1 + expRi / (riskSum + eps)
+                gradients[batchIdx] = NumOps.Add(
+                    NumOps.Subtract(gradients[batchIdx], NumOps.One),
+                    expRiOverRiskSum);
+            }
+            else
+            {
+                // Censored - only contributes to risk set
+                gradients[batchIdx] = NumOps.Add(gradients[batchIdx], expRiOverRiskSum);
+            }
+        }
+
+        return (NumOps.Divide(loss, NumOps.FromDouble(n)), gradients);
+    }
+
+    /// <summary>
+    /// Computes baseline cumulative hazard using Breslow estimator.
+    /// </summary>
+    private void ComputeBaselineHazard(Matrix<T> x, Vector<T> times, Vector<T> events, int[] sortedIndices)
+    {
+        var riskScores = PredictRiskScores(x);
+
+        var uniqueTimes = new List<T>();
+        var hazardValues = new List<T>();
+
+        T cumulativeHazard = NumOps.Zero;
+        T riskSum = NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10);
+
+        // Compute sum of exp(risk) for all at risk at end
+        for (int i = 0; i < x.Rows; i++)
+        {
+            riskSum = NumOps.Add(riskSum, NumOps.Exp(riskScores[i]));
+        }
+
+        T lastTime = NumOps.MinValue;
+
+        for (int i = 0; i < sortedIndices.Length; i++)
+        {
+            int idx = sortedIndices[i];
+            T t = times[idx];
+
+            if (NumOps.Compare(events[idx], NumOps.One) == 0 && NumOps.GreaterThan(t, lastTime))
+            {
+                // Add to baseline hazard
+                cumulativeHazard = NumOps.Add(cumulativeHazard,
+                    NumOps.Divide(NumOps.One, NumOps.Add(riskSum, epsilon)));
+                uniqueTimes.Add(t);
+                hazardValues.Add(cumulativeHazard);
+                lastTime = t;
+            }
+
+            // Remove from risk set
+            riskSum = NumOps.Subtract(riskSum, NumOps.Exp(riskScores[idx]));
+        }
+
+        _baselineHazardTimes = new Vector<T>(uniqueTimes.ToArray());
+        _baselineHazardValues = new Vector<T>(hazardValues.ToArray());
+    }
+
+    /// <summary>
+    /// Interpolates baseline hazard at a given time.
+    /// </summary>
+    private T InterpolateBaselineHazard(T t)
+    {
+        if (_baselineHazardTimes == null || _baselineHazardTimes.Length == 0)
+            return NumOps.Zero;
+
+        for (int i = 0; i < _baselineHazardTimes.Length; i++)
+        {
+            if (!NumOps.GreaterThan(t, _baselineHazardTimes[i]))
+            {
+                if (_baselineHazardValues is null)
+                {
+                    throw new InvalidOperationException("Baseline hazard values have not been computed.");
+                }
+                return i > 0 ? _baselineHazardValues[i - 1] : NumOps.Zero;
+            }
+        }
+
+        if (_baselineHazardValues is null)
+        {
+            throw new InvalidOperationException("Baseline hazard values have not been computed.");
+        }
+        return _baselineHazardValues[^1];
+    }
+
+    /// <summary>
+    /// Finds time for a given cumulative hazard value.
+    /// </summary>
+    private T FindTimeForHazard(T targetH0)
+    {
+        if (_baselineHazardTimes == null || _baselineHazardTimes.Length == 0)
+            return NumOps.MaxValue;
+
+        if (_baselineHazardValues is null)
+        {
+            throw new InvalidOperationException("Baseline hazard values have not been computed.");
+        }
+
+        for (int i = 0; i < _baselineHazardValues.Length; i++)
+        {
+            if (!NumOps.LessThan(_baselineHazardValues[i], targetH0))
+            {
+                return _baselineHazardTimes[i];
+            }
+        }
+
+        return NumOps.MaxValue;
+    }
+
+    /// <summary>
+    private int[] GetSortedIndices(Vector<T> times)
+    {
+        return Enumerable.Range(0, times.Length)
+            .OrderBy(i => NumOps.ToDouble(times[i]))
+            .ToArray();
+    }
+
+    private int[] ShuffleArray(int[] array)
+    {
+        for (int i = array.Length - 1; i > 0; i--)
+        {
+            int j = _random.Next(i + 1);
+            (array[i], array[j]) = (array[j], array[i]);
+        }
+        return array;
+    }
+
+    /// <inheritdoc/>
+    protected override Task CalculateFeatureImportancesAsync(int featureCount)
+    {
+        // Use first layer weights as importance proxy
+        var importances = new Vector<T>(_numFeatures);
+
+        if (_weights.Count > 0)
+        {
+            var firstLayerWeights = _weights[0];
+            for (int f = 0; f < _numFeatures; f++)
+            {
+                T sumAbsWeight = NumOps.Zero;
+                for (int j = 0; j < firstLayerWeights.Columns; j++)
+                {
+                    sumAbsWeight = NumOps.Add(sumAbsWeight, NumOps.Abs(firstLayerWeights[f, j]));
+                }
+                importances[f] = sumAbsWeight;
+            }
+        }
+
+        T sum = NumOps.Zero;
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            sum = NumOps.Add(sum, importances[f]);
+        }
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
+        {
+            for (int f = 0; f < _numFeatures; f++)
+            {
+                importances[f] = NumOps.Divide(importances[f], sum);
+            }
+        }
+
+        FeatureImportances = importances;
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NumHiddenLayers", _options.NumHiddenLayers },
+                { "HiddenLayerSize", _options.HiddenLayerSize },
+                { "Activation", _options.Activation.GetType().Name },
+                { "NumberOfFeatures", _numFeatures }
+            }
+        };
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Options
+        writer.Write(_options.NumHiddenLayers);
+        writer.Write(_options.HiddenLayerSize);
+        writer.Write(_options.Activation.GetType().AssemblyQualifiedName ?? _options.Activation.GetType().FullName ?? _options.Activation.GetType().Name);
+        writer.Write(_numFeatures);
+
+        // Weights and biases
+        writer.Write(_weights.Count);
+        foreach (var w in _weights)
+        {
+            writer.Write(w.Rows);
+            writer.Write(w.Columns);
+            for (int i = 0; i < w.Rows; i++)
+            {
+                for (int j = 0; j < w.Columns; j++)
+                {
+                    writer.Write(NumOps.ToDouble(w[i, j]));
+                }
+            }
+        }
+
+        foreach (var b in _biases)
+        {
+            writer.Write(b.Length);
+            for (int i = 0; i < b.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(b[i]));
+            }
+        }
+
+        // Baseline hazard
+        writer.Write(_baselineHazardTimes is not null);
+        if (_baselineHazardTimes is not null && _baselineHazardValues is not null)
+        {
+            writer.Write(_baselineHazardTimes.Length);
+            foreach (var t in _baselineHazardTimes)
+            {
+                writer.Write(NumOps.ToDouble(t));
+            }
+            foreach (var h in _baselineHazardValues)
+            {
+                writer.Write(NumOps.ToDouble(h));
+            }
+        }
+
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else
+        {
+            writer.Write(0);
+        }
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        int baseLen = reader.ReadInt32();
+        base.Deserialize(reader.ReadBytes(baseLen));
+
+        _options.NumHiddenLayers = reader.ReadInt32();
+        _options.HiddenLayerSize = reader.ReadInt32();
+        string activationTypeName = reader.ReadString();
+        var activationType = Type.GetType(activationTypeName);
+        if (activationType is not null
+            && typeof(IActivationFunction<T>).IsAssignableFrom(activationType)
+            && activationType.Namespace is not null
+            && activationType.Namespace.StartsWith("AiDotNet.", StringComparison.Ordinal))
+        {
+            _options.Activation = (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new SELUActivation<T>());
+        }
+        else
+        {
+            _options.Activation = new SELUActivation<T>();
+        }
+        _numFeatures = reader.ReadInt32();
+
+        int numLayers = reader.ReadInt32();
+        _weights = [];
+        _biases = [];
+
+        for (int l = 0; l < numLayers; l++)
+        {
+            int rows = reader.ReadInt32();
+            int cols = reader.ReadInt32();
+            var w = new Matrix<T>(rows, cols);
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    w[i, j] = NumOps.FromDouble(reader.ReadDouble());
+                }
+            }
+            _weights.Add(w);
+        }
+
+        for (int l = 0; l < numLayers; l++)
+        {
+            int len = reader.ReadInt32();
+            var b = new Vector<T>(len);
+            for (int i = 0; i < len; i++)
+            {
+                b[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _biases.Add(b);
+        }
+
+        bool hasBaseline = reader.ReadBoolean();
+        if (hasBaseline)
+        {
+            int len = reader.ReadInt32();
+            _baselineHazardTimes = new Vector<T>(len);
+            _baselineHazardValues = new Vector<T>(len);
+            for (int i = 0; i < len; i++)
+            {
+                _baselineHazardTimes[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            for (int i = 0; i < len; i++)
+            {
+                _baselineHazardValues[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        return new DeepSurv<T>(_options, Regularization);
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new DeepSurv<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+}

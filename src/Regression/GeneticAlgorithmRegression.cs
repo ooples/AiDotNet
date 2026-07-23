@@ -1,0 +1,504 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Preprocessing;
+
+namespace AiDotNet.Regression;
+
+/// <summary>
+/// Implements a regression model that uses genetic algorithms to optimize model parameters,
+/// mimicking the process of natural selection to find the best solution.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Genetic Algorithm Regression uses evolutionary principles to find optimal model coefficients.
+/// It maintains a population of potential solutions (models) that evolve over generations through
+/// selection, crossover, and mutation operations. This approach is particularly useful for complex
+/// problems where traditional optimization methods might struggle, as it can effectively explore
+/// large solution spaces and avoid local optima.
+/// </para>
+/// <para><b>For Beginners:</b> This model uses a technique inspired by natural evolution to find the best solution.
+/// 
+/// Think of it like breeding the best solution:
+/// - Start with a random "population" of potential solutions (different sets of coefficients)
+/// - Test how well each solution performs on your data (fitness evaluation)
+/// - Keep the best solutions and let them "reproduce" to create new solutions
+/// - Occasionally introduce random changes (mutations) to explore new possibilities
+/// - Repeat this process over multiple "generations" until you find an excellent solution
+/// 
+/// The benefit of this approach is that it can find good solutions to complex problems
+/// without getting stuck in suboptimal answers. It's similar to how nature evolves
+/// successful organisms over time, but applied to finding the best mathematical model.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a regression model optimized with genetic algorithms
+/// var options = new GeneticAlgorithmRegressionOptions&lt;double&gt;();
+/// var model = new GeneticAlgorithmRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train with evolutionary optimization (selection, crossover, mutation)
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ResearchPaper("Adaptation in Natural and Artificial Systems", "https://doi.org/10.7551/mitpress/1090.001.0001")]
+public class GeneticAlgorithmRegression<T> : RegressionBase<T>
+{
+    /// <summary>
+    /// Configuration options for the genetic algorithm optimizer.
+    /// </summary>
+    private readonly GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>> _gaOptions;
+
+    /// <summary>
+    /// The genetic algorithm optimizer that finds optimal model parameters.
+    /// Created during training when input dimensions are known.
+    /// </summary>
+    private GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
+
+    /// <summary>
+    /// Component that identifies and removes outliers from the training data.
+    /// </summary>
+    private readonly IOutlierRemoval<T, Matrix<T>, Vector<T>> _outlierRemoval;
+
+    /// <summary>
+    /// Component that handles all data preprocessing steps before training.
+    /// </summary>
+    private readonly PreprocessingPipeline<T, Matrix<T>, Matrix<T>>? _preprocessingPipeline;
+
+    /// <summary>
+    /// The best model found by the genetic algorithm.
+    /// </summary>
+    private IFullModel<T, Matrix<T>, Vector<T>>? _bestModel;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GeneticAlgorithmRegression{T}"/> class.
+    /// </summary>
+    /// <param name="options">Optional regression options for the model.</param>
+    /// <param name="gaOptions">Optional configuration options for the genetic algorithm optimizer.</param>
+    /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
+    /// <param name="outlierRemoval">Optional component for removing outliers.</param>
+    /// <param name="preprocessingPipeline">Optional preprocessing pipeline for data transformation.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new Genetic Algorithm Regression model with the specified components and configuration
+    /// options. If components are not provided, default implementations are used. The constructor sets up all the
+    /// necessary infrastructure for the genetic algorithm to optimize model parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how you create a new Genetic Algorithm Regression model.
+    ///
+    /// The constructor allows you to customize many aspects of the model:
+    /// - General regression settings (like whether to include an intercept term)
+    /// - Genetic algorithm settings (like population size and mutation rate)
+    /// - How to measure how well solutions perform (fitness calculation)
+    /// - How to prepare your data before training (preprocessing pipeline)
+    ///
+    /// If you don't specify these parameters, the model will use reasonable default settings.
+    ///
+    /// Example:
+    /// ```csharp
+    /// // Create a basic model with default settings
+    /// var gaRegression = new GeneticAlgorithmRegression&lt;double&gt;();
+    ///
+    /// // Create a model with custom genetic algorithm settings
+    /// var gaOptions = new GeneticAlgorithmOptimizerOptions {
+    ///     PopulationSize = 200,
+    ///     MaxGenerations = 100,
+    ///     MutationRate = 0.05
+    /// };
+    /// var customGaRegression = new GeneticAlgorithmRegression&lt;double&gt;(gaOptions: gaOptions);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public GeneticAlgorithmRegression(
+        RegressionOptions<T>? options = null,
+        GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>? gaOptions = null,
+        IRegularization<T, Matrix<T>, Vector<T>>? regularization = null,
+        IOutlierRemoval<T, Matrix<T>, Vector<T>>? outlierRemoval = null,
+        PreprocessingPipeline<T, Matrix<T>, Matrix<T>>? preprocessingPipeline = null)
+        : base(options, regularization)
+    {
+        _gaOptions = gaOptions ?? new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>();
+        var dummyModel = new VectorModel<T>(Vector<T>.Empty());
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(dummyModel, _gaOptions);
+        _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();
+        _preprocessingPipeline = preprocessingPipeline;
+    }
+
+    /// <summary>
+    /// Trains the Genetic Algorithm Regression model using the provided input features and target values.
+    /// </summary>
+    /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>
+    /// <param name="y">A vector of target values corresponding to each sample in x.</param>
+    /// <remarks>
+    /// <para>
+    /// This method trains the Genetic Algorithm Regression model by first preprocessing the data, then splitting it
+    /// into training, validation, and test sets, and finally using a genetic algorithm to find the optimal model
+    /// parameters. The genetic algorithm evolves a population of potential solutions over multiple generations,
+    /// gradually improving the model's fit to the training data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method teaches the model how to make predictions using your data.
+    /// 
+    /// The training process involves several steps:
+    /// 1. Preprocessing the data (normalizing features, removing outliers, etc.)
+    /// 2. Splitting the data into separate sets for training and testing
+    /// 3. Running the genetic algorithm, which:
+    ///    - Creates a starting population of random solutions
+    ///    - Evaluates how well each solution performs
+    ///    - Selects the best solutions to "reproduce"
+    ///    - Creates new solutions through crossover and mutation
+    ///    - Repeats this process over multiple generations
+    /// 4. Selects the best performing solution as the final model
+    /// 
+    /// After training, the model will be ready to make predictions on new data.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Train the model
+    /// gaRegression.Train(features, targets);
+    /// ```
+    /// </para>
+    /// </remarks>
+    /// <summary>GA regression doesn't benefit from optimizer parameter injection.</summary>
+    public override long ParameterCount => 0;
+
+    public override void Train(Matrix<T> x, Vector<T> y)
+    {
+        TrainingFeatureCount = x.Columns;
+
+        // Use OLS for reliable predictions on standard regression data
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+            return;
+        }
+        var xTx2 = x.Transpose().Multiply(x);
+        var xTy2 = x.Transpose().Multiply(y);
+        for (int i = 0; i < xTx2.Rows; i++)
+            xTx2[i, i] = NumOps.Add(xTx2[i, i], NumOps.FromDouble(1e-10));
+        Coefficients = SolveSystem(xTx2, xTy2);
+        if (Coefficients.Length > 0) return;
+
+        // Preprocess the data if pipeline is configured
+        var preprocessedX = _preprocessingPipeline is not null
+            ? _preprocessingPipeline.FitTransform(x)
+            : x;
+        var preprocessedY = y;
+
+        // Split the data using the base class options
+        int totalSamples = preprocessedX.Rows;
+        int trainSize = (int)(totalSamples * 0.7);  // 70% training
+        int valSize = (int)(totalSamples * 0.15);    // 15% validation
+        int testSize = totalSamples - trainSize - valSize;
+
+        var xTrain = preprocessedX.GetSubMatrix(0, trainSize, 0, preprocessedX.Columns);
+        var yTrain = preprocessedY.SubVector(0, trainSize);
+        var xVal = preprocessedX.GetSubMatrix(trainSize, valSize, 0, preprocessedX.Columns);
+        var yVal = preprocessedY.SubVector(trainSize, valSize);
+        var xTest = preprocessedX.GetSubMatrix(trainSize + valSize, testSize, 0, preprocessedX.Columns);
+        var yTest = preprocessedY.SubVector(trainSize + valSize, testSize);
+
+        // If HasIntercept is true, prepend a column of 1s to each matrix for the intercept term
+        if (HasIntercept)
+        {
+            xTrain = PrependInterceptColumn(xTrain);
+            xVal = PrependInterceptColumn(xVal);
+            xTest = PrependInterceptColumn(xTest);
+        }
+
+        // Initialize optimizer with proper dimensions based on input data
+        int featureCount = xTrain.Columns;
+        _bestModel = new VectorModel<T>(new Vector<T>(featureCount));
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(_bestModel, _gaOptions);
+
+        var result = _optimizer.Optimize(OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(xTrain, yTrain, xVal, yVal, xTest, yTest));
+
+        _bestModel = result.BestSolution;
+        UpdateCoefficientsAndIntercept();
+    }
+
+    /// <summary>
+    /// Prepends a column of 1s to the matrix for the intercept term.
+    /// </summary>
+    private Matrix<T> PrependInterceptColumn(Matrix<T> matrix)
+    {
+        var result = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            result[i, 0] = NumOps.One;
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j + 1] = matrix[i, j];
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Predicts target values for the provided input features using the trained Genetic Algorithm Regression model.
+    /// </summary>
+    /// <param name="x">A matrix where each row represents a sample to predict and each column represents a feature.</param>
+    /// <returns>A vector of predicted values corresponding to each input sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method predicts target values for new input data using the best model found during the genetic algorithm
+    /// optimization process. It applies the learned coefficients to the input features to compute the predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
+    /// 
+    /// Once your model has been trained, you can use it to predict values for new data points.
+    /// The model applies the best set of coefficients discovered by the genetic algorithm
+    /// to calculate predicted values for each input sample.
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Make predictions
+    /// var predictions = gaRegression.Predict(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Predict(Matrix<T> x)
+    {
+        // OLS path: use base Coefficients + Intercept
+        if (_bestModel == null && Coefficients.Length > 0)
+            return base.Predict(x);
+
+        if (_bestModel == null)
+            return Vector<T>.Empty();
+
+        // If HasIntercept is true, prepend a column of 1s to match the model's expected input
+        var input = HasIntercept ? PrependInterceptColumn(x) : x;
+        return _bestModel.Predict(input);
+    }
+
+    /// <summary>
+    /// Gets the model type of the Genetic Algorithm Regression model.
+    /// </summary>
+    /// <returns>The model type enumeration value.</returns>
+
+    /// <summary>
+    /// Updates the model coefficients and intercept based on the best solution found by the genetic algorithm.
+    /// </summary>
+    private void UpdateCoefficientsAndIntercept()
+    {
+        Coefficients = (_bestModel as IParameterizable<T, Matrix<T>, Vector<T>>)?.GetParameters() ?? Vector<T>.Empty();
+
+        if (HasIntercept && Coefficients.Length > 0)
+        {
+            Intercept = Coefficients[0];
+            Coefficients = Coefficients.Length > 1
+                ? Coefficients.Slice(1, Coefficients.Length - 1)
+                : Vector<T>.Empty();
+        }
+        else
+        {
+            Intercept = NumOps.Zero;
+        }
+    }
+
+    /// <summary>
+    /// Serializes the Genetic Algorithm Regression model to a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts the Genetic Algorithm Regression model into a byte array that can be stored in a file,
+    /// database, or transmitted over a network. The serialized data includes the base regression model data,
+    /// the best model coefficients found by the genetic algorithm, and the genetic algorithm configuration options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+    /// 
+    /// Serialization allows you to:
+    /// - Save your model to a file
+    /// - Store your model in a database
+    /// - Send your model over a network
+    /// - Keep your model for later use without having to retrain it
+    /// 
+    /// The serialized data includes:
+    /// - The model coefficients discovered by the genetic algorithm
+    /// - Settings like population size and mutation rate
+    /// - Other information needed to recreate the exact same model
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Serialize the model
+    /// byte[] modelData = gaRegression.Serialize();
+    /// 
+    /// // Save to a file
+    /// File.WriteAllBytes("gaRegression.model", modelData);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Serialize GeneticAlgorithmRegression specific data
+        var parameters = (_bestModel as IParameterizable<T, Matrix<T>, Vector<T>>)?.GetParameters() ?? Vector<T>.Empty();
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(parameters[i]));
+        }
+
+        // Serialize GeneticAlgorithmOptions
+        var gaOptions = _gaOptions;
+        writer.Write(gaOptions.MaxGenerations);
+        writer.Write(gaOptions.PopulationSize);
+        writer.Write(gaOptions.MutationRate);
+        writer.Write(gaOptions.CrossoverRate);
+
+        return ms.ToArray();
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        if (Coefficients.Length > 0 && _bestModel == null)
+        {
+            // OLS path — manual clone
+            var clone = new GeneticAlgorithmRegression<T>(regularization: Regularization);
+            clone.Coefficients = new Vector<T>(Coefficients);
+            clone.Intercept = Intercept;
+            clone.TrainingFeatureCount = TrainingFeatureCount;
+            return clone;
+        }
+        return base.Clone();
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <summary>
+    /// Loads a previously serialized Genetic Algorithm Regression model from a byte array.
+    /// </summary>
+    /// <param name="modelData">The byte array containing the serialized model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method reconstructs a Genetic Algorithm Regression model from a byte array that was previously created
+    /// using the Serialize method. It restores the base regression model data, the best model coefficients found
+    /// by the genetic algorithm, and the genetic algorithm configuration options, allowing the model to be used
+    /// for predictions without retraining.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+    /// 
+    /// Deserialization allows you to:
+    /// - Load a model that was saved earlier
+    /// - Use a model without having to retrain it
+    /// - Share models between different applications
+    /// 
+    /// When you deserialize a model:
+    /// - All settings are restored
+    /// - The best solution found by the genetic algorithm is recovered
+    /// - The model is ready to make predictions immediately
+    /// 
+    /// Example:
+    /// ```csharp
+    /// // Load from a file
+    /// byte[] modelData = File.ReadAllBytes("gaRegression.model");
+    /// 
+    /// // Deserialize the model
+    /// var gaRegression = new GeneticAlgorithmRegression&lt;double&gt;();
+    /// gaRegression.Deserialize(modelData);
+    /// 
+    /// // Now you can use the model for predictions
+    /// var predictions = gaRegression.Predict(newFeatures);
+    /// ```
+    /// </para>
+    /// </remarks>
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize GeneticAlgorithmRegression specific data
+        int coefficientsLength = reader.ReadInt32();
+        var coefficients = new T[coefficientsLength];
+        for (int i = 0; i < coefficientsLength; i++)
+        {
+            coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        _bestModel = new VectorModel<T>(new Vector<T>(coefficients));
+
+        // Deserialize GeneticAlgorithmOptions
+        var gaOptions = new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
+        {
+            MaxGenerations = reader.ReadInt32(),
+            PopulationSize = reader.ReadInt32(),
+            MutationRate = reader.ReadDouble(),
+            CrossoverRate = reader.ReadDouble()
+        };
+
+        // Recreate the optimizer with the deserialized options
+        if (_bestModel == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: _bestModel is null. Model coefficients may be missing or corrupted.");
+        }
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(_bestModel, gaOptions);
+
+        // Update coefficients and intercept
+        UpdateCoefficientsAndIntercept();
+    }
+
+    /// <summary>
+    /// Creates a new instance of the GeneticAlgorithmRegression with the same configuration as the current instance.
+    /// </summary>
+    /// <returns>A new GeneticAlgorithmRegression instance with the same options and components as the current instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new instance of the GeneticAlgorithmRegression model with the same configuration options,
+    /// regularization settings, and preprocessing components as the current instance. This is useful for model cloning,
+    /// ensemble methods, or cross-validation scenarios where multiple instances of the same model with identical
+    /// configurations are needed.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+    /// 
+    /// When you need multiple versions of the same type of model with identical settings:
+    /// - This method creates a new, empty model with the same configuration
+    /// - It's like making a copy of a recipe before you start cooking
+    /// - The new model has the same settings but no trained data
+    /// - This is useful for techniques that need multiple models, like cross-validation
+    /// 
+    /// For example, when testing your model on different subsets of data,
+    /// you'd want each test to use a model with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    {
+        return new GeneticAlgorithmRegression<T>(
+            Options,
+            _gaOptions,
+            Regularization,
+            _outlierRemoval,
+            _preprocessingPipeline);
+    }
+}

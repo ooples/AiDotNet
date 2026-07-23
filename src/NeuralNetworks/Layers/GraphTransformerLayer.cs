@@ -1,0 +1,1391 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Memory;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Implements Graph Transformer layer using self-attention mechanisms on graph-structured data.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Graph Transformers apply the transformer architecture to graphs by treating graph structure
+/// as a bias in the attention mechanism. Unlike standard transformers that process sequences,
+/// Graph Transformers incorporate graph connectivity through:
+/// 1. Structural encodings (e.g., Laplacian eigenvectors)
+/// 2. Attention biasing based on graph structure
+/// 3. Relative positional encodings for graph nodes
+/// </para>
+/// <para>
+/// The attention computation is: Attention(Q, K, V) = softmax((QK^T + B)/√d_k)V
+/// where B is a learned bias based on graph structure.
+/// </para>
+/// <para><b>For Beginners:</b> Graph Transformers combine the power of transformers with graph structure.
+///
+/// Think of it like a meeting where:
+/// - **Standard transformers**: Everyone can talk to everyone equally
+/// - **Graph transformers**: People connected in the organizational chart get priority
+///
+/// Key advantages:
+/// - Captures long-range dependencies in graphs
+/// - More flexible than fixed neighborhood aggregation
+/// - Can attend to any node, not just immediate neighbors
+/// - Learns importance of connections dynamically
+///
+/// Use cases:
+/// - **Large molecules**: Atoms far apart but chemically important
+/// - **Social networks**: Identifying influential users across communities
+/// - **Knowledge graphs**: Multi-hop reasoning
+/// - **Program analysis**: Understanding code dependencies
+///
+/// Example: In a citation network, a paper can learn from:
+/// - Direct citations (immediate neighbors)
+/// - Indirectly related papers (through attention)
+/// - Important papers even if not directly cited
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerCategory(LayerCategory.Transformer)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "16, 4, 2, 8, true, 0.0, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+{
+    private readonly int _inputFeatures;
+    private readonly int _outputFeatures;
+    private readonly int _numHeads;
+    private readonly int _headDim;
+    private readonly bool _useStructuralEncoding;
+    private readonly double _dropoutRate;
+    private readonly Random _random;
+
+    /// <summary>
+    /// Query transformation weights for each head: [numHeads, inputFeatures, headDim]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _queryWeights;
+
+    /// <summary>
+    /// Key transformation weights for each head: [numHeads, inputFeatures, headDim]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _keyWeights;
+
+    /// <summary>
+    /// Value transformation weights for each head: [numHeads, inputFeatures, headDim]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _valueWeights;
+
+    /// <summary>
+    /// Output projection weights: [numHeads * headDim, outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _outputWeights;
+
+    /// <summary>
+    /// Output projection bias: [outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _outputBias;
+
+    /// <summary>
+    /// Structural bias for attention (learned from graph structure): [numHeads, maxNodes, maxNodes]
+    /// </summary>
+    private Tensor<T>? _structuralBias;
+
+    /// <summary>
+    /// Feed-forward network first layer weights: [outputFeatures, ffnHiddenDim]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _ffnWeights1;
+
+    /// <summary>
+    /// Feed-forward network second layer weights: [ffnHiddenDim, outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _ffnWeights2;
+
+    /// <summary>
+    /// Feed-forward network first layer bias: [ffnHiddenDim]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _ffnBias1;
+
+    /// <summary>
+    /// Feed-forward network second layer bias: [outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _ffnBias2;
+
+    /// <summary>
+    /// Layer normalization scale for first norm: [outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _layerNorm1Scale;
+
+    /// <summary>
+    /// Layer normalization bias for first norm: [outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _layerNorm1Bias;
+
+    /// <summary>
+    /// Layer normalization scale for second norm: [outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _layerNorm2Scale;
+
+    /// <summary>
+    /// Layer normalization bias for second norm: [outputFeatures]
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _layerNorm2Bias;
+
+    /// <summary>
+    /// The adjacency matrix defining graph structure.
+    /// </summary>
+    private Tensor<T>? _adjacencyMatrix;
+
+    /// <summary>
+    /// Cached values for backward pass.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+    private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastQueries;
+    private Tensor<T>? _lastKeys;
+    private Tensor<T>? _lastValues;
+    private Tensor<T>? _lastAttentionWeights;
+    private Tensor<T>? _lastHeadOutputs;
+    private Tensor<T>? _lastConcatenated;
+    private Tensor<T>? _lastAttnOutput;
+    private Tensor<T>? _lastNormed1;
+    private Tensor<T>? _lastFFNHidden;
+    private Tensor<T>? _lastFFNOutput;
+
+    /// <summary>
+    /// Gradients for parameters.
+    /// </summary>
+    private Tensor<T>? _queryWeightsGradient;
+    private Tensor<T>? _keyWeightsGradient;
+    private Tensor<T>? _valueWeightsGradient;
+    private Tensor<T>? _outputWeightsGradient;
+    private Tensor<T>? _outputBiasGradient;
+    private Tensor<T>? _ffnWeights1Gradient;
+    private Tensor<T>? _ffnWeights2Gradient;
+    private Tensor<T>? _ffnBias1Gradient;
+    private Tensor<T>? _ffnBias2Gradient;
+
+    private readonly int _ffnHiddenDim;
+
+    /// <summary>
+    /// Activation function for the feed-forward network hidden layer.
+    /// Default is GELU as used in transformer architectures.
+    /// </summary>
+    private readonly IActivationFunction<T> _ffnActivation;
+
+    /// <inheritdoc/>
+    public override long ParameterCount => GetParameters().Length;
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public int InputFeatures => _inputFeatures;
+
+    /// <inheritdoc/>
+    public int OutputFeatures => _outputFeatures;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GraphTransformerLayer{T}"/> class with a scalar activation function.
+    /// </summary>
+    /// <param name="inputFeatures">Number of input features per node.</param>
+    /// <param name="outputFeatures">Number of output features per node.</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="headDim">Dimension per attention head (default: 64).</param>
+    /// <param name="useStructuralEncoding">Whether to use structural bias (default: true).</param>
+    /// <param name="dropoutRate">Dropout rate for attention (default: 0.1).</param>
+    /// <param name="activationFunction">Scalar activation function for the layer output. Defaults to Identity if not specified.</param>
+    /// <param name="ffnActivation">Scalar activation function for FFN hidden layer. Defaults to GELU if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// Creates a Graph Transformer layer with multi-head attention and feed-forward network.
+    /// The layer includes skip connections and layer normalization for stable training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new Graph Transformer layer with scalar activation functions.
+    ///
+    /// Key parameters:
+    /// - numHeads: How many parallel attention mechanisms (more = capture different patterns)
+    /// - headDim: Size of each attention head (bigger = more expressive per head)
+    /// - useStructuralEncoding: Whether to bias attention toward connected nodes
+    ///   * true: Graph structure guides attention (recommended for most graphs)
+    ///   * false: Pure attention without graph bias (for dense/complete graphs)
+    /// - dropoutRate: Randomly ignore some attention during training (prevents overfitting)
+    /// - ffnActivation: Activation for the feed-forward network (GELU, ReLU, SiLU, etc.)
+    ///
+    /// The layer has two main components:
+    /// 1. **Multi-head attention**: Learns which nodes to focus on
+    /// 2. **Feed-forward network**: Processes the attended information
+    ///
+    /// Both use skip connections (adding input back to output) for better gradient flow.
+    /// </para>
+    /// </remarks>
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value - fields are initialized by InitializeWeightTensors()
+    public GraphTransformerLayer(
+        int inputFeatures,
+        int outputFeatures,
+        int numHeads = 8,
+        int headDim = 64,
+        bool useStructuralEncoding = true,
+        double dropoutRate = 0.1,
+        IActivationFunction<T>? activationFunction = null,
+        IActivationFunction<T>? ffnActivation = null)
+        : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
+    {
+        _inputFeatures = inputFeatures;
+        _outputFeatures = outputFeatures;
+        _numHeads = numHeads;
+        _headDim = headDim;
+        _useStructuralEncoding = useStructuralEncoding;
+        _dropoutRate = dropoutRate;
+        _random = RandomHelper.CreateSecureRandom();
+        _ffnActivation = ffnActivation ?? new GELUActivation<T>();
+        _ffnHiddenDim = 4 * outputFeatures;
+
+        InitializeWeightTensors();
+        InitializeParameters();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GraphTransformerLayer{T}"/> class with a vector activation function.
+    /// </summary>
+    /// <param name="inputFeatures">Number of input features per node.</param>
+    /// <param name="outputFeatures">Number of output features per node.</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="headDim">Dimension per attention head (default: 64).</param>
+    /// <param name="useStructuralEncoding">Whether to use structural bias (default: true).</param>
+    /// <param name="dropoutRate">Dropout rate for attention (default: 0.1).</param>
+    /// <param name="vectorActivationFunction">Vector activation function for the layer output. Defaults to Identity if not specified.</param>
+    /// <param name="ffnActivation">Scalar activation function for FFN hidden layer. Defaults to GELU if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// Creates a Graph Transformer layer with multi-head attention and feed-forward network,
+    /// using a vector activation function that operates on entire vectors rather than individual elements.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor is similar to the scalar version but uses a vector activation function.
+    ///
+    /// Vector activation functions like Softmax are useful for:
+    /// - Node classification problems (choosing between multiple node types)
+    /// - Problems where outputs need to sum to 1 (like probabilities)
+    /// - Cases where output values should influence each other
+    ///
+    /// For example, in a graph with molecules, you might use Softmax to classify
+    /// each atom node into one of several element types.
+    /// </para>
+    /// </remarks>
+    public GraphTransformerLayer(
+        int inputFeatures,
+        int outputFeatures,
+        int numHeads = 8,
+        int headDim = 64,
+        bool useStructuralEncoding = true,
+        double dropoutRate = 0.1,
+        IVectorActivationFunction<T>? vectorActivationFunction = null,
+        IActivationFunction<T>? ffnActivation = null)
+        : base([inputFeatures], [outputFeatures], vectorActivationFunction ?? new IdentityActivation<T>())
+    {
+        _inputFeatures = inputFeatures;
+        _outputFeatures = outputFeatures;
+        _numHeads = numHeads;
+        _headDim = headDim;
+        _useStructuralEncoding = useStructuralEncoding;
+        _dropoutRate = dropoutRate;
+        _random = RandomHelper.CreateSecureRandom();
+        _ffnActivation = ffnActivation ?? new GELUActivation<T>();
+        _ffnHiddenDim = 4 * outputFeatures;
+
+        InitializeWeightTensors();
+        InitializeParameters();
+    }
+#pragma warning restore CS8618
+
+    /// <summary>
+    /// Initializes weight tensors with appropriate shapes.
+    /// </summary>
+    private void InitializeWeightTensors()
+    {
+        // Initialize Q, K, V projections
+        _queryWeights = new Tensor<T>([_numHeads, _inputFeatures, _headDim]);
+        _keyWeights = new Tensor<T>([_numHeads, _inputFeatures, _headDim]);
+        _valueWeights = new Tensor<T>([_numHeads, _inputFeatures, _headDim]);
+
+        // Output projection
+        _outputWeights = new Tensor<T>([_numHeads * _headDim, _outputFeatures]);
+        _outputBias = new Tensor<T>([_outputFeatures]);
+
+        // Feed-forward network (2 layers)
+        // _ffnHiddenDim is initialized in constructor
+        _ffnWeights1 = new Tensor<T>([_outputFeatures, _ffnHiddenDim]);
+        _ffnWeights2 = new Tensor<T>([_ffnHiddenDim, _outputFeatures]);
+        _ffnBias1 = new Tensor<T>([_ffnHiddenDim]);
+        _ffnBias2 = new Tensor<T>([_outputFeatures]);
+
+        // Layer normalization parameters
+        _layerNorm1Scale = new Tensor<T>([_outputFeatures]);
+        _layerNorm1Bias = new Tensor<T>([_outputFeatures]);
+        _layerNorm2Scale = new Tensor<T>([_outputFeatures]);
+        _layerNorm2Bias = new Tensor<T>([_outputFeatures]);
+
+        // Register all trainable parameters for gradient tape discovery
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_ffnWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_ffnWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_ffnBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_ffnBias2, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_layerNorm1Scale, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_layerNorm1Bias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_layerNorm2Scale, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_layerNorm2Bias, PersistentTensorRole.Biases);
+    }
+
+    private void InitializeParameters()
+    {
+        // Xavier initialization for Q, K, V
+        T scaleQKV = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputFeatures + _headDim)));
+        InitializeTensor(_queryWeights, scaleQKV);
+        InitializeTensor(_keyWeights, scaleQKV);
+        InitializeTensor(_valueWeights, scaleQKV);
+
+        // Initialize output weights
+        T scaleOut = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numHeads * _headDim + _outputFeatures)));
+        InitializeTensor(_outputWeights, scaleOut);
+
+        // Initialize FFN weights
+        T scaleFFN1 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_outputFeatures + _ffnHiddenDim)));
+        InitializeTensor(_ffnWeights1, scaleFFN1);
+
+        T scaleFFN2 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_ffnHiddenDim + _outputFeatures)));
+        InitializeTensor(_ffnWeights2, scaleFFN2);
+
+        // Initialize layer norm to identity (scale=1, bias=0)
+        _layerNorm1Scale.Fill(NumOps.FromDouble(1.0));
+        _layerNorm1Bias.Fill(NumOps.Zero);
+        _layerNorm2Scale.Fill(NumOps.FromDouble(1.0));
+        _layerNorm2Bias.Fill(NumOps.Zero);
+
+        // Initialize biases to zero
+        _outputBias.Fill(NumOps.Zero);
+        _ffnBias1.Fill(NumOps.Zero);
+        _ffnBias2.Fill(NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Initializes a tensor with scaled random values.
+    /// </summary>
+    /// <param name="tensor">The tensor to initialize.</param>
+    /// <param name="scale">The scale factor for the random values.</param>
+    private void InitializeTensor(Tensor<T> tensor, T scale)
+    {
+        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
+        var halfTensor = new Tensor<T>(tensor._shape);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = scaled.GetFlat(i);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
+    {
+        _adjacencyMatrix = adjacencyMatrix;
+
+        // Initialize structural bias if needed
+        if (_useStructuralEncoding && _structuralBias == null)
+        {
+            int maxNodes = adjacencyMatrix.Shape[1];
+            _structuralBias = new Tensor<T>([_numHeads, maxNodes, maxNodes]);
+
+            // Simple initialization: bias toward connected nodes
+            T scale = NumOps.FromDouble(0.1);
+            InitializeTensor(_structuralBias, scale);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T>? GetAdjacencyMatrix()
+    {
+        return _adjacencyMatrix;
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Forward.");
+        }
+
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+
+        // Graph layer expects 3D: [batchSize, numNodes, features]
+        // Handle any-rank tensor: normalize to 3D for processing
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 2)
+        {
+            // 2D [nodes, features]: add batch dim
+            batchSize = 1;
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D [batchSize, nodes, features]
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else if (rank > 3)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+        else
+        {
+            // 1D: treat as single node with features
+            batchSize = 1;
+            processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
+        }
+
+        bool cacheBwd = ShouldCacheForBackward; // #1668: gate backward-only caches (arena safety)
+        _lastInput = cacheBwd ? processInput : null;
+        int numNodes = processInput.Shape[1];
+
+        // Multi-head attention block with residual connection
+        var attended = MultiHeadAttention(processInput, batchSize, numNodes);
+
+        // Add residual connection (with projection if dimensions don't match)
+        Tensor<T> residualInput;
+        if (_inputFeatures == _outputFeatures)
+        {
+            residualInput = processInput;
+        }
+        else
+        {
+            // Project input to match output dimensions
+            residualInput = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int n = 0; n < numNodes; n++)
+                {
+                    for (int f = 0; f < _outputFeatures; f++)
+                    {
+                        residualInput[b, n, f] = f < _inputFeatures ? processInput[b, n, f] : NumOps.Zero;
+                    }
+                }
+            }
+        }
+
+        var normed1 = Engine.TensorAdd(attended, residualInput);
+        _lastNormed1 = cacheBwd ? normed1 : null;
+
+        // Feed-forward network with residual
+        var ffnOutput = FeedForwardNetwork(normed1, batchSize, numNodes);
+        _lastFFNOutput = cacheBwd ? ffnOutput : null;
+
+        // Final residual and layer norm
+        var output = Engine.TensorAdd(normed1, ffnOutput);
+
+        var result = ApplyActivation(output);
+
+        // Only store for backward pass when an eager Backward will read it (#1668). Clear any
+        // prior cached output otherwise, so an arena-owned tensor from a previous step is not
+        // retained across the next denoise-loop Reset().
+        if (cacheBwd)
+        {
+            _lastOutput = result;
+        }
+        else
+        {
+            _lastOutput = null;
+        }
+
+        // Restore original shape for any-rank tensor support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            if (_originalInputShape.Length == 2)
+            {
+                // Was 2D, return [nodes, outputFeatures]
+                return Engine.Reshape(result, [numNodes, _outputFeatures]);
+            }
+            else if (_originalInputShape.Length == 1)
+            {
+                // Was 1D, return [outputFeatures]
+                return Engine.Reshape(result, [_outputFeatures]);
+            }
+            else
+            {
+                // Higher-rank: restore leading dimensions
+                var newShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                    newShape[d] = _originalInputShape[d];
+                newShape[_originalInputShape.Length - 1] = _outputFeatures;
+                return Engine.Reshape(result, newShape);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass for GraphTransformerLayer.
+    /// Implements multi-head self-attention with structural bias and FFN on GPU.
+    /// </summary>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine tensorEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = tensorEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable");
+
+        if (_adjacencyMatrix == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling ForwardGpu.");
+        }
+
+        var input = inputs[0];
+
+        // Handle batch dimension
+        int[] inputShape = input._shape;
+        int batchSize;
+        int numNodes;
+        int inputFeatures;
+
+        if (inputShape.Length == 2)
+        {
+            batchSize = 1;
+            numNodes = inputShape[0];
+            inputFeatures = inputShape[1];
+        }
+        else if (inputShape.Length == 3)
+        {
+            batchSize = inputShape[0];
+            numNodes = inputShape[1];
+            inputFeatures = inputShape[2];
+        }
+        else
+        {
+            throw new ArgumentException($"Input must be 2D [nodes, features] or 3D [batch, nodes, features], got {inputShape.Length}D");
+        }
+
+        // Upload output projection weights and bias
+        using var outputWeightsBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputWeights.Data.ToArray()));
+        using var outputBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_outputBias.Data.ToArray()));
+
+        // Upload FFN weights and biases
+        using var ffnWeights1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnWeights1.Data.ToArray()));
+        using var ffnWeights2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnWeights2.Data.ToArray()));
+        using var ffnBias1Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias1.Data.ToArray()));
+        using var ffnBias2Buffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_ffnBias2.Data.ToArray()));
+
+        // Upload structural bias if enabled - precompute per-head slices for efficient GPU access
+        IGpuBuffer[]? structuralBiasPerHead = null;
+        if (_useStructuralEncoding && _structuralBias != null)
+        {
+            // Precompute and upload each head's bias slice separately to avoid CPU fallbacks
+            structuralBiasPerHead = new IGpuBuffer[_numHeads];
+            for (int h = 0; h < _numHeads; h++)
+            {
+                int biasOffset = h * numNodes * numNodes;
+                float[] headBiasSlice = new float[numNodes * numNodes];
+                for (int i = 0; i < numNodes * numNodes; i++)
+                {
+                    int srcIdx = biasOffset + i;
+                    if (srcIdx < _structuralBias.Length)
+                    {
+                        headBiasSlice[i] = (float)NumOps.ToDouble(_structuralBias.Data.Span[srcIdx]);
+                    }
+                }
+                structuralBiasPerHead[h] = backend.AllocateBuffer(headBiasSlice);
+            }
+        }
+
+        // Precompute graph mask for 2D adjacency matrices (shared across all heads/batches)
+        IGpuBuffer? graphMaskBuffer = null;
+        if (_useStructuralEncoding && _adjacencyMatrix.Shape.Length == 2)
+        {
+            // Create negative infinity mask: negInfMask[i,j] = -1e9 if adj[i,j] == 0, else 0
+            float[] negInfMask = new float[numNodes * numNodes];
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    float adjValue = (float)NumOps.ToDouble(_adjacencyMatrix[i, j]);
+                    negInfMask[i * numNodes + j] = MathF.Abs(adjValue) < 1e-6f ? -1e9f : 0f;
+                }
+            }
+            graphMaskBuffer = backend.AllocateBuffer(negInfMask);
+        }
+
+        // Allocate output buffer
+        int outputSize = batchSize * numNodes * _outputFeatures;
+        using var outputBuffer = backend.AllocateBuffer(outputSize);
+
+        float sqrtDk = MathF.Sqrt(_headDim);
+
+        // Process batches using GPU-native views
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Use GPU-native view for batch slicing (no CPU download)
+            int batchInputOffset = b * numNodes * inputFeatures;
+            var batchView = input.CreateView(batchInputOffset, [numNodes, inputFeatures]);
+            var batchInputBuffer = batchView.Buffer;
+
+            // ========================================
+            // MULTI-HEAD SELF-ATTENTION
+            // ========================================
+
+            // Allocate buffer for concatenated head outputs: [numNodes, numHeads * headDim]
+            using var concatenatedHeadsBuffer = backend.AllocateBuffer(numNodes * _numHeads * _headDim);
+
+            for (int h = 0; h < _numHeads; h++)
+            {
+                // Extract weight slices for this head
+                float[] qWeights = ExtractHeadWeightsFloat(h, _queryWeights);
+                float[] kWeights = ExtractHeadWeightsFloat(h, _keyWeights);
+                float[] vWeights = ExtractHeadWeightsFloat(h, _valueWeights);
+
+                using var qWeightsBuffer = backend.AllocateBuffer(qWeights);
+                using var kWeightsBuffer = backend.AllocateBuffer(kWeights);
+                using var vWeightsBuffer = backend.AllocateBuffer(vWeights);
+
+                // Compute Q = X @ W_q: [numNodes, headDim]
+                using var queriesBuffer = backend.AllocateBuffer(numNodes * _headDim);
+                backend.Gemm(
+                    batchInputBuffer, qWeightsBuffer, queriesBuffer,
+                    numNodes, _headDim, inputFeatures);
+
+                // Compute K = X @ W_k: [numNodes, headDim]
+                using var keysBuffer = backend.AllocateBuffer(numNodes * _headDim);
+                backend.Gemm(
+                    batchInputBuffer, kWeightsBuffer, keysBuffer,
+                    numNodes, _headDim, inputFeatures);
+
+                // Compute V = X @ W_v: [numNodes, headDim]
+                using var valuesBuffer = backend.AllocateBuffer(numNodes * _headDim);
+                backend.Gemm(
+                    batchInputBuffer, vWeightsBuffer, valuesBuffer,
+                    numNodes, _headDim, inputFeatures);
+
+                // Compute attention scores: Q @ K^T / sqrt(d_k)
+                // Use GPU-native transpose operation
+                using var keysTransposedBuffer = backend.AllocateBuffer(_headDim * numNodes);
+                backend.Transpose(keysBuffer, keysTransposedBuffer, numNodes, _headDim);
+
+                // [numNodes, headDim] @ [headDim, numNodes] -> [numNodes, numNodes]
+                using var scoresBuffer = backend.AllocateBuffer(numNodes * numNodes);
+                backend.Gemm(
+                    queriesBuffer, keysTransposedBuffer, scoresBuffer,
+                    numNodes, numNodes, _headDim);
+
+                // Scale by 1/sqrt(d_k)
+                backend.Scale(scoresBuffer, scoresBuffer, 1.0f / sqrtDk, numNodes * numNodes);
+
+                // Add structural bias if enabled - use precomputed per-head bias buffer
+                if (_useStructuralEncoding && structuralBiasPerHead != null)
+                {
+                    // Direct GPU Add using precomputed bias slice for this head
+                    backend.Add(scoresBuffer, structuralBiasPerHead[h], scoresBuffer, numNodes * numNodes);
+                }
+
+                // Apply graph mask: use precomputed mask buffer for 2D adjacency, fallback for 3D
+                if (_useStructuralEncoding)
+                {
+                    if (graphMaskBuffer != null)
+                    {
+                        // GPU-native masking: add negative infinity mask to scores
+                        // scores = scores + negInfMask (where negInfMask[i,j] = -1e9 for non-adjacent)
+                        backend.Add(scoresBuffer, graphMaskBuffer, scoresBuffer, numNodes * numNodes);
+                    }
+                    else if (_adjacencyMatrix.Shape.Length == 3)
+                    {
+                        // 3D adjacency matrix: per-batch masking requires CPU fallback
+                        ApplyGraphMaskGpu(backend, scoresBuffer, _adjacencyMatrix, numNodes, b);
+                    }
+                }
+
+                // Apply softmax row-wise to get attention weights
+                using var attentionWeightsBuffer = backend.AllocateBuffer(numNodes * numNodes);
+                backend.Softmax(scoresBuffer, attentionWeightsBuffer, numNodes, numNodes);
+
+                // Apply attention to values: attn @ V
+                // [numNodes, numNodes] @ [numNodes, headDim] -> [numNodes, headDim]
+                using var headOutputBuffer = backend.AllocateBuffer(numNodes * _headDim);
+                backend.Gemm(
+                    attentionWeightsBuffer, valuesBuffer, headOutputBuffer,
+                    numNodes, _headDim, numNodes);
+
+                // Copy head output to concatenated buffer at correct offset
+                int headOffset = h * _headDim;
+                CopyHeadToConcat(backend, headOutputBuffer, concatenatedHeadsBuffer, numNodes, _headDim, headOffset, _numHeads * _headDim);
+            }
+
+            // ========================================
+            // OUTPUT PROJECTION
+            // ========================================
+
+            // Output projection: concatenated @ W_out + b_out
+            // [numNodes, numHeads*headDim] @ [numHeads*headDim, outputFeatures] -> [numNodes, outputFeatures]
+            using var attnOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            backend.Gemm(
+                concatenatedHeadsBuffer, outputWeightsBuffer, attnOutputBuffer,
+                numNodes, _outputFeatures, _numHeads * _headDim);
+
+            backend.BiasAdd(attnOutputBuffer, outputBiasBuffer, attnOutputBuffer, numNodes, _outputFeatures);
+
+            // ========================================
+            // RESIDUAL CONNECTION 1
+            // ========================================
+
+            using var residual1Buffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            if (_inputFeatures == _outputFeatures)
+            {
+                // Add input to attention output: residual1 = attn + input
+                backend.Add(attnOutputBuffer, batchInputBuffer, residual1Buffer, numNodes * _outputFeatures);
+            }
+            else
+            {
+                // No residual if dimensions don't match, just copy attention output
+                backend.Copy(attnOutputBuffer, residual1Buffer, numNodes * _outputFeatures);
+            }
+
+            // ========================================
+            // FEED-FORWARD NETWORK
+            // ========================================
+
+            // FFN layer 1: hidden = residual1 @ W1 + b1
+            using var ffnHiddenBuffer = backend.AllocateBuffer(numNodes * _ffnHiddenDim);
+            backend.Gemm(
+                residual1Buffer, ffnWeights1Buffer, ffnHiddenBuffer,
+                numNodes, _ffnHiddenDim, _outputFeatures);
+
+            backend.BiasAdd(ffnHiddenBuffer, ffnBias1Buffer, ffnHiddenBuffer, numNodes, _ffnHiddenDim);
+
+            // Apply GELU activation
+            backend.Gelu(ffnHiddenBuffer, ffnHiddenBuffer, numNodes * _ffnHiddenDim);
+
+            // FFN layer 2: ffnOutput = hidden @ W2 + b2
+            using var ffnOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            backend.Gemm(
+                ffnHiddenBuffer, ffnWeights2Buffer, ffnOutputBuffer,
+                numNodes, _outputFeatures, _ffnHiddenDim);
+
+            backend.BiasAdd(ffnOutputBuffer, ffnBias2Buffer, ffnOutputBuffer, numNodes, _outputFeatures);
+
+            // ========================================
+            // RESIDUAL CONNECTION 2 + ACTIVATION
+            // ========================================
+
+            // Add residual: batchOutput = residual1 + ffnOutput
+            using var batchOutputBuffer = backend.AllocateBuffer(numNodes * _outputFeatures);
+            backend.Add(residual1Buffer, ffnOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures);
+
+            // Apply activation if specified
+            ApplyGpuActivation(backend, batchOutputBuffer, batchOutputBuffer, numNodes * _outputFeatures, GetFusedActivationType());
+
+            // Copy batch output to the correct offset using GPU-native strided copy
+            int batchOutputOffset = b * numNodes * _outputFeatures;
+            int batchCopySize = numNodes * _outputFeatures;
+            backend.Copy2DStrided(batchOutputBuffer, outputBuffer, 1, batchCopySize, outputSize, batchOutputOffset);
+        }
+
+        // Clean up precomputed buffers
+        if (structuralBiasPerHead != null)
+        {
+            foreach (var buffer in structuralBiasPerHead)
+            {
+                buffer?.Dispose();
+            }
+        }
+        graphMaskBuffer?.Dispose();
+
+        // Return GPU tensor with appropriate shape
+        int[] outputShape = batchSize == 1
+            ? [numNodes, _outputFeatures]
+            : [batchSize, numNodes, _outputFeatures];
+
+        // Create a new buffer (non-using) and copy using GPU-native operation
+        var finalBuffer = backend.AllocateBuffer(outputSize);
+        backend.Copy(outputBuffer, finalBuffer, outputSize);
+        return GpuTensorHelper.UploadToGpu<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Extracts weight matrix for a specific head as a float array.
+    /// </summary>
+    private float[] ExtractHeadWeightsFloat(int headIndex, Tensor<T> weights)
+    {
+        float[] result = new float[_inputFeatures * _headDim];
+        for (int i = 0; i < _inputFeatures; i++)
+        {
+            for (int j = 0; j < _headDim; j++)
+            {
+                result[i * _headDim + j] = (float)NumOps.ToDouble(weights[headIndex, i, j]);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Applies graph mask to attention scores for 3D adjacency matrices with per-batch masking.
+    /// For 2D adjacency matrices, use the precomputed graphMaskBuffer with GPU Add instead.
+    /// </summary>
+    /// <param name="backend">The GPU backend.</param>
+    /// <param name="scoresBuffer">The attention scores buffer to mask.</param>
+    /// <param name="adjacencyMatrix">The 3D adjacency matrix [batch, nodes, nodes].</param>
+    /// <param name="numNodes">Number of nodes in the graph.</param>
+    /// <param name="batchIndex">The batch index for 3D adjacency matrix lookup.</param>
+    private void ApplyGraphMaskGpu(
+        IDirectGpuBackend backend,
+        IGpuBuffer scoresBuffer,
+        Tensor<T> adjacencyMatrix,
+        int numNodes,
+        int batchIndex)
+    {
+        // This is only called for 3D adjacency matrices where per-batch masking is needed
+        float[] scores = backend.DownloadBuffer(scoresBuffer);
+        const float negInf = -1e9f; // Use large negative value for softmax stability
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                float adjValue = (float)NumOps.ToDouble(adjacencyMatrix[batchIndex, i, j]);
+
+                if (MathF.Abs(adjValue) < 1e-6f)
+                {
+                    scores[i * numNodes + j] = negInf;
+                }
+            }
+        }
+
+        // Re-upload by allocating new buffer and copying
+        using var tempBuffer = backend.AllocateBuffer(scores);
+        backend.Copy(tempBuffer, scoresBuffer, scores.Length);
+    }
+
+    /// <summary>
+    /// Copies a head's output to the correct position in the concatenated buffer.
+    /// </summary>
+    private void CopyHeadToConcat(
+        IDirectGpuBackend backend,
+        IGpuBuffer headBuffer,
+        IGpuBuffer concatBuffer,
+        int numNodes,
+        int headDim,
+        int headOffset,
+        int totalConcatDim)
+    {
+        // Use GPU-native Copy2DStrided for efficient head concatenation
+        // Each row of head [numNodes, headDim] is copied to the corresponding
+        // row of concat [numNodes, totalConcatDim] at offset headOffset
+        backend.Copy2DStrided(headBuffer, concatBuffer, numNodes, headDim, totalConcatDim, headOffset);
+    }
+
+    private Tensor<T> MultiHeadAttention(Tensor<T> input, int batchSize, int numNodes)
+    {
+        // Rent attention tensors. headOutputs is forward scratch (consumed below); the _last*
+        // fields are manual-backward caches only (the forward uses per-head locals), so rent +
+        // populate them only when an eager Backward will read them (#1668) — leaving nothing for
+        // an arena Reset to alias in inference.
+        bool cacheBwd = ShouldCacheForBackward;
+        var headOutputs = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
+        _lastAttentionWeights = cacheBwd ? TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, numNodes]) : null;
+        _lastQueries = cacheBwd ? TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]) : null;
+        _lastKeys = cacheBwd ? TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]) : null;
+        _lastValues = cacheBwd ? TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]) : null;
+
+        // Attention scale factor: 1/sqrt(d_k). Compute as a scalar Multiply factor
+        // so we can use Engine.TensorMultiplyScalar instead of per-element Divide.
+        T invSqrtDk = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
+        T maskScale = NumOps.FromDouble(1e9);
+
+        // Build the additive adjacency mask once if we'll need it. Encoding is
+        // (adj * 1e9 - 1e9): where adj=1 → 0 (no penalty); where adj=0 → -1e9
+        // (drives softmax weight to ~0). Replaces per-element `if adj==0:
+        // score = -inf` branch + softmax-with-skip logic. Engine.TensorBroadcastAdd
+        // handles [1, N, N] → [B, N, N] broadcast for 2D adjacency.
+        Tensor<T>? additiveMask = null;
+        if (_useStructuralEncoding && _adjacencyMatrix != null)
+        {
+            var adj3D = _adjacencyMatrix.Shape.Length == 2
+                ? Engine.Reshape(_adjacencyMatrix, [1, numNodes, numNodes])
+                : _adjacencyMatrix;
+            var adjScaled = Engine.TensorMultiplyScalar(adj3D, maskScale);
+            additiveMask = Engine.TensorAddScalar(adjScaled, NumOps.Negate(maskScale));
+        }
+
+        for (int h = 0; h < _numHeads; h++)
+        {
+            // Compute Q, K, V for this head using batched matmul
+            var qWeightSlice = ExtractHeadWeights(_queryWeights, h);
+            var kWeightSlice = ExtractHeadWeights(_keyWeights, h);
+            var vWeightSlice = ExtractHeadWeights(_valueWeights, h);
+
+            var queries = BatchedMatMul3Dx2D(input, qWeightSlice, batchSize, numNodes, _inputFeatures, _headDim);
+            var keys = BatchedMatMul3Dx2D(input, kWeightSlice, batchSize, numNodes, _inputFeatures, _headDim);
+            var values = BatchedMatMul3Dx2D(input, vWeightSlice, batchSize, numNodes, _inputFeatures, _headDim);
+
+            // Compute attention scores: Q @ K^T / sqrt(d_k). Replaces the per-
+            // (b, i, j, d) scalar-NumOps inner quad-loop with one batched matmul
+            // and a vectorized scalar multiply.
+            //   queries: [B, N, D],  K^T: [B, D, N]  →  scores: [B, N, N]
+            var keysT = Engine.TensorPermute(keys, [0, 2, 1]);
+            var scores = Engine.TensorMatMul(queries, keysT);
+            scores = Engine.TensorMultiplyScalar(scores, invSqrtDk);
+
+            // Add structural bias for this head: slice [numHeads, N, N] → [1, N, N],
+            // broadcast-add over the batch dim. The previous code added per-element
+            // inside the inner loop.
+            if (_useStructuralEncoding && _structuralBias != null)
+            {
+                var biasH = Engine.TensorSlice(_structuralBias, [h, 0, 0], [1, numNodes, numNodes]);
+                scores = Engine.TensorBroadcastAdd(scores, biasH);
+            }
+
+            // Apply adjacency mask via additive penalty (precomputed above).
+            if (additiveMask != null)
+            {
+                scores = Engine.TensorBroadcastAdd(scores, additiveMask);
+            }
+
+            // Softmax over the last axis (j-dimension) — fused mean/exp/normalize.
+            var attnWeights = Engine.Softmax(scores);
+
+            // attn @ V: [B, N, N] @ [B, N, D] → [B, N, D]. Replaces the per-
+            // (b, i, d, j) scalar accumulation loop with one batched matmul.
+            var headOut = Engine.TensorMatMul(attnWeights, values);
+
+            // Store per-head Q/K/V/attn/output into the 4D caches at slot h.
+            // The scatter into [B, H, N, D] still needs explicit writes since
+            // there's no dest-slice-write Engine op — but this is bounded to
+            // O(B·N·D) per head, vs the O(B·N²·D) attention compute that just
+            // collapsed to two Engine ops above.
+            ScatterHeadSlice(headOutputs, headOut, h, batchSize, numNodes, _headDim);
+
+            // #1668: Q/K/V/attn-weight scatters populate backward-only caches; skip them when
+            // no eager Backward will read them. The combined null-check both expresses that
+            // (the fields are null in inference) and narrows them to non-null for the compiler.
+            if (_lastQueries != null && _lastKeys != null && _lastValues != null && _lastAttentionWeights != null)
+            {
+                ScatterHeadSlice(_lastQueries, queries, h, batchSize, numNodes, _headDim);
+                ScatterHeadSlice(_lastKeys, keys, h, batchSize, numNodes, _headDim);
+                ScatterHeadSlice(_lastValues, values, h, batchSize, numNodes, _headDim);
+
+                // Attention weights are [B, N, N] not [B, N, D]; separate scatter.
+                for (int b = 0; b < batchSize; b++)
+                    for (int i = 0; i < numNodes; i++)
+                        for (int j = 0; j < numNodes; j++)
+                            _lastAttentionWeights[b, h, i, j] = attnWeights[b, i, j];
+            }
+        }
+
+        _lastHeadOutputs = cacheBwd ? headOutputs : null;
+
+        // Concatenate heads: [batch, numNodes, numHeads * headDim]
+        var concatenated = TensorAllocator.Rent<T>([batchSize, numNodes, _numHeads * _headDim]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int n = 0; n < numNodes; n++)
+            {
+                int idx = 0;
+                for (int h = 0; h < _numHeads; h++)
+                {
+                    for (int d = 0; d < _headDim; d++)
+                    {
+                        concatenated[b, n, idx++] = headOutputs[b, h, n, d];
+                    }
+                }
+            }
+        }
+
+        _lastConcatenated = cacheBwd ? concatenated : null;
+
+        // Project concatenated output: [batch, numNodes, numHeads*headDim] @ [numHeads*headDim, outputFeatures]
+        var output = BatchedMatMul3Dx2D(concatenated, _outputWeights, batchSize, numNodes, _numHeads * _headDim, _outputFeatures);
+
+        // Add bias
+        var biasBroadcast = BroadcastBias(_outputBias, batchSize, numNodes);
+        output = Engine.TensorAdd(output, biasBroadcast);
+
+        _lastAttnOutput = cacheBwd ? output : null;
+        return output;
+    }
+
+    private Tensor<T> ExtractHeadWeights(Tensor<T> weights, int headIndex)
+    {
+        // Extract [inputFeatures, headDim] from [numHeads, inputFeatures, headDim]
+        var result = new Tensor<T>([_inputFeatures, _headDim]);
+        for (int i = 0; i < _inputFeatures; i++)
+        {
+            for (int j = 0; j < _headDim; j++)
+            {
+                result[i, j] = weights[headIndex, i, j];
+            }
+        }
+        return result;
+    }
+
+    private Tensor<T> BatchedMatMul3Dx2D(Tensor<T> input3D, Tensor<T> weights2D, int batch, int rows, int cols, int outputCols)
+    {
+        var flattened = input3D.Reshape([batch * rows, cols]);
+        var result = Engine.TensorMatMul(flattened, weights2D);
+        return result.Reshape([batch, rows, outputCols]);
+    }
+
+    /// <summary>
+    /// Writes a per-head [batch, rows, cols] tensor into the h-th slice of a
+    /// 4D destination [batch, numHeads, rows, cols]. There's no Engine
+    /// "set-slice" op; the writes are done element-wise but bounded to
+    /// O(B·rows·cols) per head — small relative to the attention compute that
+    /// the surrounding refactor offloaded to Engine.TensorMatMul.
+    /// </summary>
+    private static void ScatterHeadSlice(Tensor<T> destination4D, Tensor<T> source3D, int headIndex, int batchSize, int rows, int cols)
+    {
+        for (int b = 0; b < batchSize; b++)
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    destination4D[b, headIndex, r, c] = source3D[b, r, c];
+    }
+
+    private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize, int numNodes)
+    {
+        int outputFeatures = bias.Length;
+        var biasReshaped = bias.Reshape([1, 1, outputFeatures]);
+        var broadcast = Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
+        return broadcast;
+    }
+
+    private Tensor<T> FeedForwardNetwork(Tensor<T> input, int batchSize, int numNodes)
+    {
+        bool cacheBwd = ShouldCacheForBackward; // #1668: gate the backward-only FFN-hidden cache
+        // First layer: [batch, numNodes, outputFeatures] @ [outputFeatures, ffnHiddenDim]
+        var hidden = BatchedMatMul3Dx2D(input, _ffnWeights1, batchSize, numNodes, _outputFeatures, _ffnHiddenDim);
+
+        // Add bias1
+        var bias1Broadcast = BroadcastBias(_ffnBias1, batchSize, numNodes);
+        hidden = Engine.TensorAdd(hidden, bias1Broadcast);
+
+        // Apply FFN activation (configurable: GELU by default, but user can choose any activation)
+        hidden = ApplyFFNActivation(hidden);
+        _lastFFNHidden = cacheBwd ? hidden : null;
+
+        // Second layer: [batch, numNodes, ffnHiddenDim] @ [ffnHiddenDim, outputFeatures]
+        var output = BatchedMatMul3Dx2D(hidden, _ffnWeights2, batchSize, numNodes, _ffnHiddenDim, _outputFeatures);
+
+        // Add bias2
+        var bias2Broadcast = BroadcastBias(_ffnBias2, batchSize, numNodes);
+        output = Engine.TensorAdd(output, bias2Broadcast);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Applies the configured FFN activation function to the input tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to apply activation to.</param>
+    /// <returns>The tensor with activation applied element-wise.</returns>
+    /// <remarks>
+    /// Uses the _ffnActivation interface which allows users to configure any activation
+    /// function (GELU, ReLU, SiLU, etc.) rather than hardcoding GELU.
+    /// </remarks>
+    private Tensor<T> ApplyFFNActivation(Tensor<T> input)
+    {
+        var result = TensorAllocator.Rent<T>(input._shape);
+        for (int i = 0; i < input.Length; i++)
+        {
+            result[i] = _ffnActivation.Activate(input.GetFlat(i));
+        }
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null ||
+            _outputWeightsGradient == null || _outputBiasGradient == null ||
+            _ffnWeights1Gradient == null || _ffnWeights2Gradient == null ||
+            _ffnBias1Gradient == null || _ffnBias2Gradient == null)
+        {
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        }
+
+        // Update all parameters using Engine operations
+        var scaledQueryGrad = Engine.TensorMultiplyScalar(_queryWeightsGradient, learningRate);
+        _queryWeights = Engine.TensorSubtract(_queryWeights, scaledQueryGrad);
+
+        var scaledKeyGrad = Engine.TensorMultiplyScalar(_keyWeightsGradient, learningRate);
+        _keyWeights = Engine.TensorSubtract(_keyWeights, scaledKeyGrad);
+
+        var scaledValueGrad = Engine.TensorMultiplyScalar(_valueWeightsGradient, learningRate);
+        _valueWeights = Engine.TensorSubtract(_valueWeights, scaledValueGrad);
+
+        var scaledOutputWeightsGrad = Engine.TensorMultiplyScalar(_outputWeightsGradient, learningRate);
+        _outputWeights = Engine.TensorSubtract(_outputWeights, scaledOutputWeightsGrad);
+
+        var scaledOutputBiasGrad = Engine.TensorMultiplyScalar(_outputBiasGradient, learningRate);
+        _outputBias = Engine.TensorSubtract(_outputBias, scaledOutputBiasGrad);
+
+        var scaledFFN1Grad = Engine.TensorMultiplyScalar(_ffnWeights1Gradient, learningRate);
+        _ffnWeights1 = Engine.TensorSubtract(_ffnWeights1, scaledFFN1Grad);
+
+        var scaledFFN2Grad = Engine.TensorMultiplyScalar(_ffnWeights2Gradient, learningRate);
+        _ffnWeights2 = Engine.TensorSubtract(_ffnWeights2, scaledFFN2Grad);
+
+        var scaledFFNBias1Grad = Engine.TensorMultiplyScalar(_ffnBias1Gradient, learningRate);
+        _ffnBias1 = Engine.TensorSubtract(_ffnBias1, scaledFFNBias1Grad);
+
+        var scaledFFNBias2Grad = Engine.TensorMultiplyScalar(_ffnBias2Gradient, learningRate);
+        _ffnBias2 = Engine.TensorSubtract(_ffnBias2, scaledFFNBias2Grad);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeights.ToArray()),
+            new Vector<T>(_keyWeights.ToArray()),
+            new Vector<T>(_valueWeights.ToArray()),
+            new Vector<T>(_outputWeights.ToArray()),
+            new Vector<T>(_outputBias.ToArray()),
+            new Vector<T>(_ffnWeights1.ToArray()),
+            new Vector<T>(_ffnWeights2.ToArray()),
+            new Vector<T>(_ffnBias1.ToArray()),
+            new Vector<T>(_ffnBias2.ToArray()),
+            new Vector<T>(_layerNorm1Scale.ToArray()),
+            new Vector<T>(_layerNorm1Bias.ToArray()),
+            new Vector<T>(_layerNorm2Scale.ToArray()),
+            new Vector<T>(_layerNorm2Bias.ToArray())
+        );
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gQuery = _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_queryWeights.Length);
+        var gKey = _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_keyWeights.Length);
+        var gValue = _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_valueWeights.Length);
+        var gOutputWeights = _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_outputWeights.Length);
+        var gOutputBias = _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_outputBias.Length);
+        var gFfnWeights1 = _ffnWeights1Gradient != null ? new Vector<T>(_ffnWeights1Gradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_ffnWeights1.Length);
+        var gFfnWeights2 = _ffnWeights2Gradient != null ? new Vector<T>(_ffnWeights2Gradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_ffnWeights2.Length);
+        var gFfnBias1 = _ffnBias1Gradient != null ? new Vector<T>(_ffnBias1Gradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_ffnBias1.Length);
+        var gFfnBias2 = _ffnBias2Gradient != null ? new Vector<T>(_ffnBias2Gradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_ffnBias2.Length);
+        var gLn1Scale = new Vector<T>(_layerNorm1Scale.Length);
+        var gLn1Bias = new Vector<T>(_layerNorm1Bias.Length);
+        var gLn2Scale = new Vector<T>(_layerNorm2Scale.Length);
+        var gLn2Bias = new Vector<T>(_layerNorm2Bias.Length);
+
+        return Vector<T>.Concatenate(
+            gQuery, gKey, gValue, gOutputWeights, gOutputBias,
+            gFfnWeights1, gFfnWeights2, gFfnBias1, gFfnBias2,
+            gLn1Scale, gLn1Bias, gLn2Scale, gLn2Bias);
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputWeightsGradient = null;
+        _outputBiasGradient = null;
+        _ffnWeights1Gradient = null;
+        _ffnWeights2Gradient = null;
+        _ffnBias1Gradient = null;
+        _ffnBias2Gradient = null;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int querySize = _queryWeights.Length;
+        int keySize = _keyWeights.Length;
+        int valueSize = _valueWeights.Length;
+        int outputWeightsSize = _outputWeights.Length;
+        int outputBiasSize = _outputBias.Length;
+        int ffn1Size = _ffnWeights1.Length;
+        int ffn2Size = _ffnWeights2.Length;
+        int ffnBias1Size = _ffnBias1.Length;
+        int ffnBias2Size = _ffnBias2.Length;
+        int ln1ScaleSize = _layerNorm1Scale.Length;
+        int ln1BiasSize = _layerNorm1Bias.Length;
+        int ln2ScaleSize = _layerNorm2Scale.Length;
+        int ln2BiasSize = _layerNorm2Bias.Length;
+
+        int totalParams = querySize + keySize + valueSize + outputWeightsSize + outputBiasSize +
+                          ffn1Size + ffn2Size + ffnBias1Size + ffnBias2Size +
+                          ln1ScaleSize + ln1BiasSize + ln2ScaleSize + ln2BiasSize;
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+
+        int index = 0;
+
+        var queryParams = parameters.SubVector(index, querySize);
+        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights._shape);
+        index += querySize;
+
+        var keyParams = parameters.SubVector(index, keySize);
+        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights._shape);
+        index += keySize;
+
+        var valueParams = parameters.SubVector(index, valueSize);
+        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights._shape);
+        index += valueSize;
+
+        var outputWeightsParams = parameters.SubVector(index, outputWeightsSize);
+        _outputWeights = Tensor<T>.FromVector(outputWeightsParams).Reshape(_outputWeights._shape);
+        index += outputWeightsSize;
+
+        var outputBiasParams = parameters.SubVector(index, outputBiasSize);
+        _outputBias = Tensor<T>.FromVector(outputBiasParams);
+        index += outputBiasSize;
+
+        var ffn1Params = parameters.SubVector(index, ffn1Size);
+        _ffnWeights1 = Tensor<T>.FromVector(ffn1Params).Reshape(_ffnWeights1._shape);
+        index += ffn1Size;
+
+        var ffn2Params = parameters.SubVector(index, ffn2Size);
+        _ffnWeights2 = Tensor<T>.FromVector(ffn2Params).Reshape(_ffnWeights2._shape);
+        index += ffn2Size;
+
+        var ffnBias1Params = parameters.SubVector(index, ffnBias1Size);
+        _ffnBias1 = Tensor<T>.FromVector(ffnBias1Params);
+        index += ffnBias1Size;
+
+        var ffnBias2Params = parameters.SubVector(index, ffnBias2Size);
+        _ffnBias2 = Tensor<T>.FromVector(ffnBias2Params);
+        index += ffnBias2Size;
+
+        var ln1ScaleParams = parameters.SubVector(index, ln1ScaleSize);
+        _layerNorm1Scale = Tensor<T>.FromVector(ln1ScaleParams);
+        index += ln1ScaleSize;
+
+        var ln1BiasParams = parameters.SubVector(index, ln1BiasSize);
+        _layerNorm1Bias = Tensor<T>.FromVector(ln1BiasParams);
+        index += ln1BiasSize;
+
+        var ln2ScaleParams = parameters.SubVector(index, ln2ScaleSize);
+        _layerNorm2Scale = Tensor<T>.FromVector(ln2ScaleParams);
+        index += ln2ScaleSize;
+
+        var ln2BiasParams = parameters.SubVector(index, ln2BiasSize);
+        _layerNorm2Bias = Tensor<T>.FromVector(ln2BiasParams);
+    }
+
+    /// <inheritdoc/>
+    public override void Serialize(BinaryWriter writer)
+    {
+        base.Serialize(writer);
+        bool hasBias = _structuralBias != null;
+        writer.Write(hasBias);
+        if (hasBias)
+        {
+            var bias = _structuralBias ?? throw new InvalidOperationException("Structural bias is null during serialization.");
+            writer.Write(bias.Shape.Length);
+            foreach (var dim in bias._shape) writer.Write(dim);
+            for (int i = 0; i < bias.Length; i++)
+                writer.Write(NumOps.ToDouble(bias[i]));
+        }
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        base.Deserialize(reader);
+        bool hasBias = reader.ReadBoolean();
+        if (hasBias)
+        {
+            int rank = reader.ReadInt32();
+            var shape = new int[rank];
+            for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
+            _structuralBias = new Tensor<T>(shape);
+            for (int i = 0; i < _structuralBias.Length; i++)
+                _structuralBias[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+    }
+
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastOutput = null;
+        _lastQueries = null;
+        _lastKeys = null;
+        _lastValues = null;
+        _lastAttentionWeights = null;
+        _lastHeadOutputs = null;
+        _lastConcatenated = null;
+        _lastAttnOutput = null;
+        _lastNormed1 = null;
+        _lastFFNHidden = null;
+        _lastFFNOutput = null;
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputWeightsGradient = null;
+        _outputBiasGradient = null;
+        _ffnWeights1Gradient = null;
+        _ffnWeights2Gradient = null;
+        _ffnBias1Gradient = null;
+        _ffnBias2Gradient = null;
+    }
+}

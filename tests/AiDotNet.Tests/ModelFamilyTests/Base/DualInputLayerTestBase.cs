@@ -1,0 +1,305 @@
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
+using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
+
+namespace AiDotNet.Tests.ModelFamilyTests.Base;
+
+/// <summary>
+/// Base test class for layers that require two input tensors in their Forward pass
+/// (e.g., CrossAttention, TransformerDecoder, MemoryRead/Write).
+/// Tests mathematical invariants: finite output, determinism, gradient flow, and parameter consistency.
+///
+/// Subclasses override CreateLayer(), and optionally PrimaryInputShape/SecondaryInputShape.
+/// The Forward method is called via the layer's Forward(Tensor, Tensor) overload.
+/// </summary>
+public abstract class DualInputLayerTestBase
+{
+    /// <summary>
+    /// Factory method — create a fresh instance of the dual-input layer under test.
+    /// The returned layer must have a Forward(Tensor, Tensor) method.
+    /// </summary>
+    protected abstract ILayer<double> CreateLayer();
+
+    /// <summary>
+    /// Shape of the primary input tensor (first argument to Forward).
+    /// Default: [1, 4] — single sample, 4 features.
+    /// </summary>
+    protected virtual int[] PrimaryInputShape => [1, 4];
+
+    /// <summary>
+    /// Shape of the secondary input tensor (second argument to Forward).
+    /// Default: same as PrimaryInputShape.
+    /// </summary>
+    protected virtual int[] SecondaryInputShape => PrimaryInputShape;
+
+    /// <summary>Whether the layer has trainable parameters. Default: true.</summary>
+    protected virtual bool ExpectsTrainableParameters => true;
+
+    /// <summary>Whether Backward produces non-zero weight gradients. Default: true.</summary>
+    protected virtual bool ExpectsNonZeroGradients => true;
+
+    /// <summary>Whether different primary inputs should produce different outputs.
+    /// False for layers where the primary input doesn't affect the output (e.g., uniform attention).</summary>
+    protected virtual bool ExpectsDifferentOutputForDifferentInputs => true;
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+
+    protected static Tensor<double> CreateRandomTensor(int[] shape, int seed = 42)
+    {
+        var rng = new Random(seed);
+        var tensor = new Tensor<double>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+            tensor[i] = rng.NextDouble() * 2.0 - 1.0;
+        return tensor;
+    }
+
+    /// <summary>
+    /// Calls the dual-input Forward method via reflection, since ILayer only declares
+    /// Forward(Tensor). Layers with dual-input define an additional Forward(Tensor, Tensor).
+    /// </summary>
+    protected Tensor<double> ForwardDual(ILayer<double> layer, Tensor<double> primary, Tensor<double> secondary)
+    {
+        var method = layer.GetType().GetMethod("Forward",
+            new[] { typeof(Tensor<double>), typeof(Tensor<double>) });
+
+        if (method is null)
+        {
+            // Fall back to standard Forward with just the primary input
+            return layer.Forward(primary);
+        }
+
+        var result = method.Invoke(layer, new object[] { primary, secondary });
+        if (result is Tensor<double> tensor)
+            return tensor;
+
+        throw new InvalidOperationException(
+            $"Forward(Tensor, Tensor) on {layer.GetType().Name} returned {result?.GetType().Name ?? "null"} instead of Tensor<double>.");
+    }
+
+    // =========================================================================
+    // INVARIANT 1: Forward produces finite, non-empty output
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Forward_ShouldProduceFiniteOutput()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        var primary = CreateRandomTensor(PrimaryInputShape);
+        var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
+
+        var output = ForwardDual(layer, primary, secondary);
+
+        Assert.True(output.Length > 0, "Layer output should not be empty.");
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.False(double.IsNaN(output[i]),
+                $"Output[{i}] is NaN — numerical instability in Forward.");
+            Assert.False(double.IsInfinity(output[i]),
+                $"Output[{i}] is Infinity — overflow in Forward.");
+        }
+    }
+
+    // =========================================================================
+    // INVARIANT 2: Forward is deterministic
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Forward_ShouldBeDeterministic()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        layer.SetTrainingMode(false);
+        var primary = CreateRandomTensor(PrimaryInputShape);
+        var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
+
+        var out1 = ForwardDual(layer, primary, secondary);
+        layer.ResetState();
+        var out2 = ForwardDual(layer, primary, secondary);
+
+        Assert.Equal(out1.Length, out2.Length);
+        for (int i = 0; i < out1.Length; i++)
+            Assert.Equal(out1[i], out2[i]);
+    }
+
+    // =========================================================================
+    // INVARIANT 3: Different primary inputs produce different outputs
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Forward_DifferentPrimaryInputs_ShouldProduceDifferentOutputs()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        if (!ExpectsDifferentOutputForDifferentInputs) return;
+
+        var layer = CreateLayer();
+        layer.SetTrainingMode(false);
+        var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
+
+        var input1 = CreateRandomTensor(PrimaryInputShape, seed: 1);
+        var input2 = CreateRandomTensor(PrimaryInputShape, seed: 2);
+
+        layer.ResetState();
+        var output1 = ForwardDual(layer, input1, secondary);
+        layer.ResetState();
+        var output2 = ForwardDual(layer, input2, secondary);
+
+        bool anyDifferent = false;
+        int minLen = Math.Min(output1.Length, output2.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            {
+                anyDifferent = true;
+                break;
+            }
+        }
+        Assert.True(anyDifferent,
+            "Layer produces identical output for different primary inputs.");
+    }
+
+    // INVARIANT 4: (Removed — Backward deleted in tape-based autodiff migration)
+
+    // =========================================================================
+    // INVARIANT 5: Parameter count consistency
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_CountShouldMatchVector()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+
+        // Drive lazy-shape resolution + weight allocation by running a
+        // dual-input probe Forward against PrimaryInputShape /
+        // SecondaryInputShape. Without this, lazy layers (TransformerDecoder,
+        // CrossAttention, etc.) report ParameterCount = 0 because their
+        // weights resolve only on the first Forward call. The reflection
+        // probe handles both the params-Tensor[] dispatch and the
+        // (Tensor, Tensor) overload that some dual-input layers expose.
+        var primary = CreateRandomTensor(PrimaryInputShape);
+        var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
+        bool probed = false;
+
+        // Try the params-Tensor[] overload (DecoderLayer style) first.
+        // Only set `probed = true` when Invoke RETURNS (so a thrown
+        // exception during the underlying Forward doesn't lock out the
+        // remaining fallbacks).
+        try
+        {
+            var paramsForward = layer.GetType().GetMethod(
+                "Forward",
+                new[] { typeof(Tensor<double>[]) });
+            if (paramsForward is not null)
+            {
+                paramsForward.Invoke(layer, new object[] { new[] { primary, secondary } });
+                probed = true;
+            }
+        }
+        catch { /* fall through to next probe */ }
+
+        // Try the (Tensor, Tensor) overload (TransformerDecoderLayer style).
+        if (!probed)
+        {
+            try
+            {
+                var dualForward = layer.GetType().GetMethod(
+                    "Forward",
+                    new[] { typeof(Tensor<double>), typeof(Tensor<double>) });
+                if (dualForward is not null)
+                {
+                    dualForward.Invoke(layer, new object[] { primary, secondary });
+                    probed = true;
+                }
+            }
+            catch { /* fall through */ }
+        }
+
+        // Last resort: the single-input Forward declared by ILayer<T>.
+        // Many dual-input layers expose a single-input Forward that
+        // delegates to (input, input), which still drives the lazy
+        // resolution chain. Always run this even if a previous probe
+        // returned, because the layer's internal computation may have
+        // thrown after EnsureInitialized but before sub-layers reached
+        // their own first Forward — and the ParameterCount-vs-
+        // GetParameters invariant requires the full chain to be live.
+        try { layer.Forward(primary); }
+        catch { /* fall through */ }
+
+        int count = (int)layer.ParameterCount;
+        var parameters = layer.GetParameters();
+
+        Assert.True(count >= 0, "ParameterCount should be non-negative.");
+        Assert.Equal(count, parameters.Length);
+
+        if (ExpectsTrainableParameters)
+            Assert.True(count > 0, "Layer should have trainable parameters but ParameterCount is 0.");
+    }
+
+    // =========================================================================
+    // INVARIANT 6: SetParameters → GetParameters roundtrip
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_SetGet_Roundtrip()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+
+        // Probe Forward(primary) so lazy layers materialise their weights
+        // before the roundtrip — same rationale as the parameter-count probe.
+        using (var probe = new Tensor<double>(PrimaryInputShape))
+        {
+            for (int i = 0; i < probe.Length; i++) probe[i] = 0.01 * (i + 1);
+            try { layer.Forward(probe); } catch { }
+        }
+
+        if (layer.ParameterCount == 0) return;
+
+        var original = layer.GetParameters();
+        var modified = new Vector<double>(original.Length);
+        for (int i = 0; i < original.Length; i++)
+            modified[i] = original[i] + 0.001;
+
+        layer.SetParameters(modified);
+        var retrieved = layer.GetParameters();
+
+        Assert.Equal(modified.Length, retrieved.Length);
+        for (int i = 0; i < modified.Length; i++)
+            Assert.Equal(modified[i], retrieved[i], 1e-15);
+    }
+
+    // INVARIANT 7: (Removed — Backward deleted in tape-based autodiff migration)
+
+    // =========================================================================
+    // INVARIANT 8: ResetState doesn't break the layer
+    // =========================================================================
+
+    [Fact(Timeout = 30000)]
+    public async Task ResetState_ShouldNotBreakForward()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        var primary = CreateRandomTensor(PrimaryInputShape);
+        var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
+
+        ForwardDual(layer, primary, secondary);
+        layer.ResetState();
+
+        var output = ForwardDual(layer, primary, secondary);
+        Assert.True(output.Length > 0, "Output should not be empty after ResetState.");
+        for (int i = 0; i < output.Length; i++)
+            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN after ResetState + Forward.");
+    }
+}

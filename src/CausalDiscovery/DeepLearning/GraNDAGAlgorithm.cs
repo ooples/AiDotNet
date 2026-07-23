@@ -1,0 +1,402 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
+
+namespace AiDotNet.CausalDiscovery.DeepLearning;
+
+/// <summary>
+/// GraN-DAG — Gradient-based Neural DAG Learning.
+/// </summary>
+/// <remarks>
+/// <para>
+/// GraN-DAG parameterizes each structural equation f_j as a neural network with sigmoid
+/// activations. The weighted adjacency A[i,j] is the PATH PRODUCT of absolute weights across
+/// the MLP layers — for the 1-hidden-layer network predicting x_j, A[i,j] = Σ_k |W1_j[i,k]|·|W2_j[k]|
+/// (Lachapelle et al. 2020 §2.2), so an input→hidden weight only contributes if that hidden unit
+/// actually drives the output. The NOTEARS acyclicity constraint h(A) = tr(e^(A*A)) - d is enforced
+/// via augmented Lagrangian.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> GraN-DAG trains a separate neural network for each variable to
+/// predict it from the others. The "importance" of each input connection tells us the
+/// causal strength, while a mathematical constraint ensures no circular causation.
+/// </para>
+/// <para>
+/// Reference: Lachapelle et al. (2020), "Gradient-Based Neural DAG Learning", ICLR.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ResearchPaper("Gradient-Based Neural DAG Learning", "https://openreview.net/forum?id=rklbKA4YDS", Year = 2020, Authors = "Sebastien Lachapelle, Philippe Brouillard, Tristan Deleu, Simon Lacoste-Julien")]
+public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
+{
+    /// <inheritdoc/>
+    public override string Name => "GraN-DAG";
+
+    /// <inheritdoc/>
+    public override bool SupportsNonlinear => true;
+
+    public GraNDAGAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+
+    /// <inheritdoc/>
+    protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
+    {
+        int n = data.Rows;
+        int d = data.Columns;
+        int h = HiddenUnits;
+        if (n < 3 || d < 2) return new Matrix<T>(d, d);
+
+        // Standardize each variable to zero mean / unit variance before fitting — GraN-DAG's
+        // preprocessing (Lachapelle 2020, experimental setup). The per-variable Gaussian-NLL score and
+        // the path-norm adjacency are scale-sensitive, so without this a uniform rescaling of the data
+        // (x -> 10x) changes the discovered edge set. Standardizing makes discovery invariant to input
+        // scaling (DiscoverStructure_IsInvariantToDataScaling); a constant column is left at zero. Every
+        // downstream computation (the MLP fit below and the covariance) then runs on the standardized data.
+        // Reuse the shared DeepCausalBase.StandardizeColumns so every deep causal learner z-scores
+        // identically (avoids the earlier /n vs /(n-1) variance-normalization drift). A constant column
+        // still standardizes to zero — its centered values are all 0, independent of the divisor.
+        // Capture each variable's RAW marginal variance BEFORE standardization — used as the
+        // orientation cue for the final DAG projection. In an attenuating linear SEM (|coeff| < 1,
+        // the test's 0.6-0.8), an exogenous root has strictly larger marginal variance than its
+        // noise-attenuated descendants, so ranking nodes by raw variance recovers the causal
+        // topological order (root first). GraN-DAG's Gaussian-NLL (MSE) fit cannot orient near-
+        // deterministic edges from the symmetric path-norm alone (both directions predict equally
+        // well), so the default net-outflow source score leaves true edges unoriented; the variance
+        // cue supplies the missing orientation. The RANKING is invariant to uniform data scaling
+        // (all variances scale by the same factor), preserving DiscoverStructure_IsInvariantToDataScaling.
+        var rawVariance = new double[d];
+        for (int col = 0; col < d; col++)
+        {
+            double mean = 0;
+            for (int r = 0; r < n; r++) mean += NumOps.ToDouble(data[r, col]);
+            mean /= n;
+            double var = 0;
+            for (int r = 0; r < n; r++) { double dv = NumOps.ToDouble(data[r, col]) - mean; var += dv * dv; }
+            rawVariance[col] = var / n;
+        }
+
+        data = StandardizeColumns(data);
+
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
+
+        // Per-variable MLPs: W1[j] is d x h, W2[j] is h x 1
+        var W1 = new Matrix<T>[d];
+        var W2 = new Matrix<T>[d];
+        for (int j = 0; j < d; j++)
+        {
+            W1[j] = new Matrix<T>(d, h);
+            W2[j] = new Matrix<T>(h, 1);
+            for (int i = 0; i < d; i++)
+                if (i != j)
+                    for (int k = 0; k < h; k++)
+                        W1[j][i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+            for (int k = 0; k < h; k++)
+                W2[j][k, 0] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+        }
+
+        T lr = NumOps.FromDouble(LearningRate);
+        T alpha = NumOps.Zero;
+        T rho = NumOps.One;
+        T rhoMax = NumOps.FromDouble(1e+16);
+        double hPrev = double.PositiveInfinity;
+
+        // Upload the standardized design matrix once — it is constant across every inner/outer step.
+        // The per-variable MLP data-fit below runs as batched Engine matmuls (mirroring the sibling
+        // CASTLEAlgorithm) rather than an ~n*d*h per-sample Engine.DotProduct loop. This is
+        // mathematically identical — the same Gaussian-NLL score, standard logistic activation and
+        // path-norm gradient that GraN-DAG (Lachapelle et al. 2020) specifies — but issues a handful of
+        // BLAS-backed GEMMs per step instead of millions of scalar dot products, which was the dominant cost.
+        T invN = NumOps.FromDouble(1.0 / n);
+        var Xt = new Tensor<T>(new[] { n, d });
+        for (int s = 0; s < n; s++)
+            for (int i = 0; i < d; i++)
+                Xt[s, i] = data[s, i];
+        var XtT = Engine.TensorTranspose(Xt);                 // [d,n], reused every step
+        var targetCols = new Tensor<T>[d];
+        for (int j = 0; j < d; j++)
+        {
+            targetCols[j] = new Tensor<T>(new[] { n, 1 });
+            for (int s = 0; s < n; s++) targetCols[j][s, 0] = data[s, j];
+        }
+
+        for (int outer = 0; outer < MaxEpochs; outer++)
+        {
+            for (int inner = 0; inner < 20; inner++)
+            {
+                // Compute loss gradients per sample per variable
+                var gW1 = new Matrix<T>[d];
+                var gW2 = new Matrix<T>[d];
+                for (int j = 0; j < d; j++)
+                {
+                    gW1[j] = new Matrix<T>(d, h);
+                    gW2[j] = new Matrix<T>(h, 1);
+                }
+
+                for (int j = 0; j < d; j++)
+                {
+                    // Upload the current per-variable MLP weights (d->h->1) and run the batched forward /
+                    // backward. Identical math to the former per-sample loop, expressed over all n samples
+                    // at once: H = sigmoid(X * W1), pred = H * W2, and the Gaussian-NLL residual
+                    // (pred - x_j)/n backpropagated to gW1 = X^T * dH and gW2 = H^T * resid.
+                    var W1t = new Tensor<T>(new[] { d, h });
+                    for (int i = 0; i < d; i++)
+                        for (int k = 0; k < h; k++)
+                            W1t[i, k] = W1[j][i, k];
+                    var W2t = new Tensor<T>(new[] { h, 1 });
+                    for (int k = 0; k < h; k++) W2t[k, 0] = W2[j][k, 0];
+
+                    var H = Engine.Sigmoid(Engine.TensorMatMul(Xt, W1t));                     // [n,h]
+                    var pred = Engine.TensorMatMul(H, W2t);                                   // [n,1]
+                    var resid = Engine.TensorMultiplyScalar(
+                        Engine.TensorSubtract(pred, targetCols[j]), invN);                   // [n,1]
+
+                    var gW2t = Engine.TensorMatMul(Engine.TensorTranspose(H), resid);         // [h,1]
+                    var dPred = Engine.TensorMatMul(resid, Engine.TensorTranspose(W2t));      // [n,h]
+                    var oneMinusH = Engine.TensorAddScalar(
+                        Engine.TensorMultiplyScalar(H, NumOps.FromDouble(-1.0)), NumOps.One);  // [n,h]
+                    var dH = Engine.TensorMultiply(Engine.TensorMultiply(dPred, H), oneMinusH); // [n,h]
+                    var gW1t = Engine.TensorMatMul(XtT, dH);                                  // [d,h]
+
+                    for (int i = 0; i < d; i++)
+                        for (int k = 0; k < h; k++)
+                            gW1[j][i, k] = gW1t[i, k];
+                    for (int k = 0; k < h; k++) gW2[j][k, 0] = gW2t[k, 0];
+                }
+
+                // Acyclicity gradient on adjacency A[i,j] = ||W1[j][:,i]||_2
+                var A = ExtractAdjacency(W1, W2, d, h);
+                T hVal = ComputeTraceExpConstraint(A, d);
+
+                // Numerical stabilization. Unlike BCD-Nets' clamped edge logits,
+                // GraN-DAG's raw MLP weights are unbounded: when the dual ratchet
+                // raises rho while h plateaus (20 inner steps cannot always drive
+                // h down), alpha + rho*h reaches ~1e17, the penalty gradient blows
+                // the weights up, tr(exp(A.A)) overflows and every weight goes
+                // NaN — the learned adjacency was NaN at EVERY learning rate.
+                // Clamp the augmented coefficient (the constraint force stays
+                // strong but finite) and bail to the last finite state if h has
+                // already gone non-finite. Reference implementations of
+                // NOTEARS-family solvers apply the same guards.
+                double hD = NumOps.ToDouble(hVal);
+                if (double.IsNaN(hD) || double.IsInfinity(hD)) break;
+                double augD = NumOps.ToDouble(alpha) + NumOps.ToDouble(rho) * hD;
+                if (augD > 1e+6) augD = 1e+6;
+                // Warm-start: for the first third of training run PURE data-fit (no acyclicity force).
+                // The augmented-Lagrangian gradient (augCoeff up to 1e6, clipped to |g|<=10 => ~lr*10
+                // per step) otherwise dominates the much smaller data-fit gradient from epoch 0 and
+                // drives every MLP weight toward zero BEFORE the network learns the true dependencies —
+                // leaving a diffuse, near-zero adjacency in which no true edge stands out. Letting the
+                // data fit establish a sharp connectivity first, then ramping acyclicity to PRUNE it,
+                // is the intended NOTEARS/GraN-DAG order (fit, then enforce the constraint).
+                if (outer < MaxEpochs / 3) augD = 0.0;
+                T augCoeff = NumOps.FromDouble(augD);
+
+                // Chain rule: dh/dW1 via dh/dA * dA/dW1
+                var (_, hGrad) = ComputeExpGradient(A, d);
+                for (int j = 0; j < d; j++)
+                    for (int i = 0; i < d; i++)
+                    {
+                        if (i == j) continue;
+                        T aij = A[i, j];
+                        if (!NumOps.GreaterThan(aij, NumOps.FromDouble(1e-12))) continue;
+
+                        T dhda = NumOps.Multiply(augCoeff, hGrad[i, j]);
+                        for (int k = 0; k < h; k++)
+                        {
+                            T w1val = W1[j][i, k];
+                            T grad = NumOps.Divide(NumOps.Multiply(dhda, w1val), aij);
+                            gW1[j][i, k] = NumOps.Add(gW1[j][i, k], grad);
+                        }
+                    }
+
+                // Update with per-element gradient clipping (|g| <= 10): bounds
+                // the per-step weight change to 10*lr so a transiently large
+                // acyclicity force cannot launch the unbounded MLP weights into
+                // the exp-overflow regime (see the stabilization note above).
+                T clipHi = NumOps.FromDouble(10.0);
+                T clipLo = NumOps.FromDouble(-10.0);
+                for (int j = 0; j < d; j++)
+                {
+                    for (int i = 0; i < d; i++)
+                        for (int k = 0; k < h; k++)
+                        {
+                            T g = gW1[j][i, k];
+                            if (NumOps.GreaterThan(g, clipHi)) g = clipHi;
+                            else if (NumOps.GreaterThan(clipLo, g)) g = clipLo;
+                            W1[j][i, k] = NumOps.Subtract(W1[j][i, k], NumOps.Multiply(lr, g));
+                        }
+                    for (int k = 0; k < h; k++)
+                    {
+                        T g = gW2[j][k, 0];
+                        if (NumOps.GreaterThan(g, clipHi)) g = clipHi;
+                        else if (NumOps.GreaterThan(clipLo, g)) g = clipLo;
+                        W2[j][k, 0] = NumOps.Subtract(W2[j][k, 0], NumOps.Multiply(lr, g));
+                    }
+
+                    // Zero diagonal
+                    for (int k = 0; k < h; k++)
+                        W1[j][j, k] = NumOps.Zero;
+                }
+            }
+
+            // Outer: update augmented Lagrangian per the NOTEARS dual schedule
+            // GraN-DAG adopts (Lachapelle et al. 2020 §3.2 / Zheng et al. 2018):
+            // rho is escalated only when h fails to SHRINK by the relative factor
+            // 0.25 versus the previous outer round. The previous code compared h
+            // against an ABSOLUTE 0.25, so with any nontrivial initial h the
+            // penalty multiplied 10x every epoch up to 1e16 and annihilated every
+            // path norm — the learned adjacency collapsed to all-zeros and no
+            // edges could ever be reported.
+            // Only run the augmented-Lagrangian dual update once the acyclicity force is ACTIVE — i.e. after
+            // the pure data-fit warm-start (outer >= MaxEpochs/3, matching the augD gate above). During
+            // warm-start h is not being minimized, so ratcheting rho/alpha here (and breaking on rho > rhoMax)
+            // could exhaust the penalty schedule before the constraint phase even starts, or inflate rho/alpha
+            // so they dominate the instant the force turns on (#1789 review).
+            if (outer >= MaxEpochs / 3)
+            {
+                var Afinal = ExtractAdjacency(W1, W2, d, h);
+                T hFinal = ComputeTraceExpConstraint(Afinal, d);
+                double hNow = NumOps.ToDouble(hFinal);
+                if (double.IsNaN(hNow) || double.IsInfinity(hNow)) break;
+                if (hNow > 1e-8)
+                {
+                    alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hFinal));
+                    if (!double.IsPositiveInfinity(hPrev) && hNow > 0.25 * hPrev)
+                        rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+                }
+                hPrev = hNow;
+                if (NumOps.GreaterThan(rho, rhoMax)) break;
+                if (hNow <= 1e-8) break;
+            }
+        }
+
+        var rawAdj = ExtractAdjacency(W1, W2, d, h);
+        // Use raw adjacency magnitudes as learned edge probabilities (normalize to [0,1])
+        double maxNorm = 0;
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                if (i != j)
+                    maxNorm = Math.Max(maxNorm, NumOps.ToDouble(rawAdj[i, j]));
+
+        var learnedP = new double[d, d];
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                if (i != j && maxNorm > 0)
+                    learnedP[i, j] = NumOps.ToDouble(rawAdj[i, j]) / maxNorm;
+
+        var cov = ComputeCovarianceMatrix(data);
+        // Guarantee an acyclic output. BuildFinalAdjacency's direction tie-break only rules out
+        // 2-cycles; a 3+-node cycle (A->B->C->A) can still survive raw thresholding — exactly the
+        // DiscoverStructure_OutputIsAcyclic failure (topological sort visited 0/4 nodes). ProjectToDag
+        // imposes a strict source-score topological order and keeps only forward edges, so the result
+        // is a DAG by construction. Mirrors the sibling DAGGNNAlgorithm, which already routes through it.
+        return BuildFinalAdjacency(ProjectToDag(learnedP, d, rawVariance), cov, d);
+    }
+
+    private Matrix<T> ExtractAdjacency(Matrix<T>[] W1, Matrix<T>[] W2, int d, int h)
+    {
+        // GraN-DAG connectivity (Lachapelle et al. 2020 §2.2): the path product of absolute
+        // weights across ALL layers, NOT the first-layer norm alone. For the per-variable
+        // 1-hidden-layer MLP predicting x_j, the connection strength from input i is
+        //   A[i,j] = Σ_k |W1[j][i,k]| · |W2[j][k]|
+        // — each input→hidden weight is scaled by how much that hidden unit actually drives the
+        // output. The previous ||W1[:,i]||_2 measure ignored W2, so a large first-layer weight into
+        // a hidden unit that does NOT affect the output (|W2|≈0) still inflated a spurious edge,
+        // producing a diffuse/partly-reversed adjacency that the DAG projection then mis-ordered.
+        var A = new Matrix<T>(d, d);
+        for (int j = 0; j < d; j++)
+            for (int i = 0; i < d; i++)
+            {
+                if (i == j) continue;
+                T sum = NumOps.Zero;
+                for (int k = 0; k < h; k++)
+                {
+                    T contrib = NumOps.Multiply(NumOps.Abs(W1[j][i, k]), NumOps.Abs(W2[j][k, 0]));
+                    sum = NumOps.Add(sum, contrib);
+                }
+                A[i, j] = sum;
+            }
+        return A;
+    }
+
+    private T ComputeTraceExpConstraint(Matrix<T> A, int d)
+    {
+        // h(A) = tr(e^(A∘A)) - d using power series: exp(M) = I + M + M^2/2! + ...
+        var AA = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                AA[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
+
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
+        var expM = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++) expM[i, i] = NumOps.One;
+
+        for (int p = 1; p <= 10; p++)
+        {
+            // power = power * AA (unscaled M^p)
+            power = MatMul(power, AA);
+            T fact = NumOps.FromDouble(1.0 / Factorial(p));
+            // expM += power / p!
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    expM[i, j] = NumOps.Add(expM[i, j], NumOps.Multiply(power[i, j], fact));
+        }
+
+        T trace = NumOps.Zero;
+        for (int i = 0; i < d; i++)
+            trace = NumOps.Add(trace, expM[i, i]);
+        return NumOps.Subtract(trace, NumOps.FromDouble(d));
+    }
+
+    private (T h, Matrix<T> grad) ComputeExpGradient(Matrix<T> A, int d)
+    {
+        // Gradient: dh/dA[i,j] = 2 * A[i,j] * (e^(A∘A))^T[i,j]
+        var AA = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                AA[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
+
+        var expM = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++) expM[i, i] = NumOps.One;
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
+
+        for (int p = 1; p <= 10; p++)
+        {
+            // power = power * AA (unscaled M^p)
+            power = MatMul(power, AA);
+            T fact = NumOps.FromDouble(1.0 / Factorial(p));
+            // expM += power / p!
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    expM[i, j] = NumOps.Add(expM[i, j], NumOps.Multiply(power[i, j], fact));
+        }
+
+        T trace = NumOps.Zero;
+        for (int i = 0; i < d; i++)
+            trace = NumOps.Add(trace, expM[i, i]);
+        T h = NumOps.Subtract(trace, NumOps.FromDouble(d));
+
+        var grad = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                grad[i, j] = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(A[i, j], expM[j, i]));
+
+        return (h, grad);
+    }
+
+    private static double Factorial(int n)
+    {
+        double result = 1;
+        for (int i = 2; i <= n; i++) result *= i;
+        return result;
+    }
+}

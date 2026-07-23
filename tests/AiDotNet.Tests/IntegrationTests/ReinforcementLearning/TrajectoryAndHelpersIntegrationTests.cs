@@ -1,0 +1,127 @@
+using System.Collections.Generic;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.ReinforcementLearning.Agents.A3C;
+using AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
+using AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
+using AiDotNet.ReinforcementLearning.Agents.MuZero;
+using AiDotNet.ReinforcementLearning.Common;
+using Xunit;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
+
+[Collection("NonParallelIntegration")]
+public class TrajectoryAndHelpersIntegrationTests
+{
+    [Fact(Timeout = 120000)]
+    public async Task Trajectory_AddStepAndClear_TracksState()
+    {
+        var trajectory = new Trajectory<double>();
+        var state = CreateVector(2, 0.1);
+        var action = CreateVector(1, 1.0);
+
+        trajectory.AddStep(state, action, 1.0, value: 0.5, logProb: 0.1, done: false);
+
+        Assert.Equal(1, trajectory.Length);
+        Assert.Single(trajectory.States);
+        Assert.Single(trajectory.Actions);
+
+        trajectory.Advantages = new List<double> { 0.1 };
+        trajectory.Returns = new List<double> { 0.2 };
+
+        trajectory.Clear();
+
+        Assert.Equal(0, trajectory.Length);
+        Assert.Empty(trajectory.States);
+        Assert.Null(trajectory.Advantages);
+        Assert.Null(trajectory.Returns);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SequenceContext_LengthReflectsStates()
+    {
+        var context = new SequenceContext<double>();
+
+        context.States.Add(CreateVector(2, 0.1));
+        context.Actions.Add(CreateVector(1, 1.0));
+        context.ReturnsToGo.Add(1.5);
+
+        Assert.Equal(1, context.Length);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MCTSNode_DefaultsAndAssignments_Work()
+    {
+        var node = new MCTSNode<double>
+        {
+            HiddenState = CreateVector(2, 0.2),
+            Value = 0.5
+        };
+
+        node.Children[0] = new MCTSNode<double> { HiddenState = CreateVector(2, 0.3), Value = 0.0 };
+        node.VisitCounts[0] = 1;
+        node.QValues[0] = 0.25;
+        node.Rewards[0] = 0.1;
+        node.TotalVisits = 1;
+
+        Assert.Single(node.Children);
+        Assert.Equal(1, node.VisitCounts[0]);
+        Assert.Equal(1, node.TotalVisits);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TransitionData_DefaultsAndOverrides_Work()
+    {
+        var data = new TransitionData<double>();
+
+        Assert.Equal(0.0, data.Reward);
+        Assert.Equal(0.0, data.Probability);
+        Assert.Equal(string.Empty, data.NextState);
+
+        data.NextState = "s1";
+        data.Reward = 1.0;
+        data.Probability = 0.5;
+
+        Assert.Equal("s1", data.NextState);
+        Assert.Equal(1.0, data.Reward);
+        Assert.Equal(0.5, data.Probability);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task WorkerNetworks_DefaultsAndAssignments_Work()
+    {
+        var policyNetwork = CreateNetwork(2, 1);
+        var valueNetwork = CreateNetwork(2, 1);
+        var worker = new WorkerNetworks<double>(policyNetwork, valueNetwork);
+
+        Assert.NotNull(worker.Trajectory);
+        Assert.Empty(worker.Trajectory);
+        Assert.NotNull(worker.PolicyNetwork);
+        Assert.NotNull(worker.ValueNetwork);
+        Assert.Same(policyNetwork, worker.PolicyNetwork);
+        Assert.Same(valueNetwork, worker.ValueNetwork);
+    }
+
+    private static Vector<double> CreateVector(int size, double start)
+    {
+        var vector = new Vector<double>(size);
+        for (int i = 0; i < size; i++)
+        {
+            vector[i] = start + i * 0.1;
+        }
+        return vector;
+    }
+
+    private static NeuralNetwork<double> CreateNetwork(int inputSize, int outputSize)
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.ReinforcementLearning,
+            complexity: NetworkComplexity.Simple,
+            inputSize: inputSize,
+            outputSize: outputSize);
+
+        return new NeuralNetwork<double>(architecture);
+    }
+}

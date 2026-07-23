@@ -1,0 +1,45 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Audio Diffusion Models"
+  seoTitle="7 Audio Diffusion Models for .NET - AiDotNet"
+  seoDescription="Generate music, speech, and sound effects with diffusion models. AudioLDM, Bark, MusicGen, Riffusion, Stable Audio in C#."
+  count="7"
+  tagline="Text-to-music, text-to-audio, and sound effect generation"
+  description="Generate music, speech, and audio effects from text descriptions using diffusion-based models. From AudioLDM for general audio generation to MusicGen for text-to-music to Stable Audio for professional-quality output."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>'
+  useCases={['Music Production', 'Sound Design', 'Podcast Intros', 'Game Audio', 'Advertising', 'Film Scoring', 'Content Creation']}
+  subcategories={[
+    {
+      name: 'Audio Generation Models',
+      description: 'Generate diverse audio content from text descriptions.',
+      items: [
+        { name: 'AudioLDM / AudioLDM2', detail: 'Latent diffusion models for text-to-audio with CLAP conditioning.' },
+        { name: 'Bark', detail: 'Transformer-based model generating speech, music, and sound effects.' },
+        { name: 'MusicGen', detail: 'Meta text-to-music with melody conditioning and multi-track support.' },
+        { name: 'MusicLDM', detail: 'Latent diffusion specifically designed for music generation.' },
+        { name: 'Riffusion', detail: 'Real-time music generation through spectrogram diffusion.' },
+        { name: 'Stable Audio', detail: 'Stability AI high-quality audio and music generation.' },
+        { name: 'AudioGen', detail: 'Auto-regressive audio generation from text descriptions.' },
+        { name: 'MAGNeT', detail: 'Masked Generative Non-autoregressive audio Transformer.' },
+        { name: 'JEN-1', detail: 'Omnidirectional diffusion model for high-fidelity music generation.' },
+        { name: 'Make-An-Audio', detail: 'Multi-modal audio generation with temporal and spectral conditions.' },
+        { name: 'Noise2Music', detail: 'Cascaded diffusion model for music from text descriptions.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train an audio generation model with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new MusicGen<float>(duration: 30))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(audioData, labels);
+
+// Generate audio from prompt
+var audio = result.Predict(promptEmbedding);`}
+  codeTitle="Audio generation with AiModelBuilder"
+/>

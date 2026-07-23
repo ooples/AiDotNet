@@ -1,0 +1,457 @@
+﻿using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
+
+/// <summary>
+/// Open-Vocabulary SAM: SAM with text-based open-vocabulary recognition.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Text-prompted SAM segmentation. Open-vocabulary interactive segmentation.
+///
+/// Common use cases:
+/// - Text-prompted SAM segmentation
+/// - Open-vocabulary interactive segmentation
+/// - Large-vocabulary object segmentation
+/// - Combining SAM masks with CLIP recognition
+/// </para>
+/// <para>
+/// <b>Technical Details:</b>
+/// - SAM encoder-decoder with CLIP text alignment
+/// - Supports 20,000+ categories via open vocabulary
+/// - Interactive segmentation with automatic class labels
+/// - Region-level CLIP feature extraction for classification
+/// </para>
+/// <para>
+/// <b>Reference:</b> Yuan et al., "Open-Vocabulary SAM: Segment and Recognize Twenty-thousand Classes Interactively", ECCV 2024.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an OpenVocabSAM model for text-prompted interactive segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
+/// var model = new OpenVocabSAM&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for 20,000+ category segmentation
+/// var onnxModel = new OpenVocabSAM&lt;double&gt;(architecture, "openvocabsam.onnx", numClasses: 1);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Open-Vocabulary SAM: Segment and Recognize Twenty-thousand Classes Interactively", "https://arxiv.org/abs/2401.02955", Year = 2024, Authors = "Yuan et al.")]
+public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
+{
+    private readonly OpenVocabSAMOptions _options;
+    public override ModelOptions GetOptions() => _options;
+
+    #region Fields
+    private readonly int _height, _width, _channels, _numClasses;
+    private readonly int[] _channelDims;
+    private readonly int _neckEmbeddingDim;
+    private readonly int _decoderDim;
+    private readonly int[] _depths;
+    private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
+    #endregion
+
+    #region Properties
+    /// <summary>
+    /// Gets whether this OpenVocabSAM instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
+    internal bool UseNativeMode => _useNativeMode;
+    internal int NumClasses => _numClasses;
+    #endregion
+
+    #region Constructors
+    /// <summary>
+    /// Initializes OpenVocabSAM in native (trainable) mode.
+    /// </summary>
+    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
+    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
+    /// <param name="dropRate">Dropout rate (default: 0).</param>
+    /// <param name="options">Optional model options.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Creates a trainable OpenVocabSAM model.
+    /// </para>
+    /// </remarks>
+    public OpenVocabSAM(NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null, int numClasses = 1,
+        double dropRate = 0,
+        OpenVocabSAMOptions? options = null)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+    {
+        _options = options ?? new OpenVocabSAMOptions(); Options = _options;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        ValidateOptions(_options);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _neckEmbeddingDim = _options.NeckEmbeddingDimension;
+        _decoderDim = _options.DecoderDimension;
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Initializes OpenVocabSAM in ONNX (inference-only) mode.
+    /// </summary>
+    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
+    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
+    /// <param name="options">Optional model options.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Loads a pre-trained OpenVocabSAM from ONNX for inference.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
+    public OpenVocabSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
+        int numClasses = 1,
+        OpenVocabSAMOptions? options = null)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+    {
+        _options = options ?? new OpenVocabSAMOptions(); Options = _options;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"OpenVocabSAM ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = 0;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        ValidateOptions(_options);
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _neckEmbeddingDim = _options.NeckEmbeddingDimension;
+        _decoderDim = _options.DecoderDimension;
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load OpenVocabSAM ONNX model: {ex.Message}", ex); }
+        InitializeLayers();
+    }
+    #endregion
+
+    #region Public Methods
+    /// <summary>
+    /// Runs a forward pass to produce segmentation logits.
+    /// </summary>
+    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
+    /// <returns>Segmentation logits tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+
+    /// <summary>
+    /// Performs one training step.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Trains the model. Only available in native mode.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
+        if (input.Shape.Length == 3) input = AddBatchDimension(input);
+        if (expectedOutput.Shape.Length == 3) expectedOutput = AddBatchDimension(expectedOutput);
+        if (input.Shape.Length != 4) throw new ArgumentException($"Tape-based training requires rank 3 (CHW) or rank 4 (NCHW), got rank {input.Shape.Length}.", nameof(input));
+        if (expectedOutput.Shape.Length != 4) throw new ArgumentException($"Tape-based training target requires rank 3 (CHW) or rank 4 (NCHW), got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+    #endregion
+
+    #region Private Methods
+    private Tensor<T> Forward(Tensor<T> input)
+    {
+        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        var features = input;
+        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
+        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+    }
+
+    private Tensor<T> PredictOnnx(Tensor<T> input)
+    {
+        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
+        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        var inputData = new float[input.Length];
+        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
+        string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
+        using var results = _onnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+        var outputData = new T[outputTensor.Length];
+        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
+        if (!hasBatch) result = RemoveBatchDimension(result); return result;
+    }
+
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    #endregion
+
+    #region Abstract Implementation
+    /// <summary>
+    /// Initializes the encoder and decoder layers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In native mode, builds the neural network layers.
+    /// In ONNX mode, no layers are created.
+    /// </para>
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) { ClearLayers(); return; }
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            int encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
+            if (encoderLayerEnd < 0 || encoderLayerEnd > Architecture.Layers.Count)
+                throw new ArgumentOutOfRangeException(
+                    nameof(_options.EncoderLayerCount),
+                    $"EncoderLayerCount must be between 0 and {Architecture.Layers.Count}.");
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = encoderLayerEnd;
+        }
+        else
+        {
+            var encoderLayers = LayerHelper<T>.CreateOpenVocabSAMEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
+            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
+            int fH = _height / 32, fW = _width / 32;
+            var decoderLayers = LayerHelper<T>.CreateOpenVocabSAMDecoderLayers(
+                _channelDims[^1], _neckEmbeddingDim, _decoderDim, _numClasses, fH, fW);
+            Layers.AddRange(decoderLayers);
+        }
+    }
+
+    /// <summary>
+    /// Updates all trainable parameters from a flat parameter vector.
+    /// </summary>
+    /// <param name="parameters">Flat vector of all model parameters.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Replaces all model weights with new values.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+
+    /// <summary>
+    /// Collects metadata describing this model's configuration.
+    /// </summary>
+    /// <returns>Model metadata.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns a summary for saving or display.
+    /// </para>
+    /// </remarks>
+    public override ModelMetadata<T> GetModelMetadata() => new()
+    {
+        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "OpenVocabSAM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
+        ModelData = SerializeForMetadata()
+    };
+
+    /// <summary>
+    /// Writes configuration to a binary stream.
+    /// </summary>
+    /// <param name="writer">The binary writer.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses);
+        writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode);
+        writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd);
+        writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d);
+        writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d);
+        writer.Write(_neckEmbeddingDim);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.WeightDecay);
+    }
+
+    /// <summary>
+    /// Reads configuration from a binary stream.
+    /// </summary>
+    /// <param name="reader">The binary reader.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
+        _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString();
+        _ = reader.ReadInt32();
+        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
+        int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _options.NeckEmbeddingDimension = reader.ReadInt32();
+            _options.LearningRate = reader.ReadDouble();
+            _options.WeightDecay = reader.ReadDouble();
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance with the same configuration but fresh weights.
+    /// </summary>
+    /// <returns>A new model instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
+        ? new OpenVocabSAM<T>(Architecture, lossFunction: LossFunction, numClasses: _numClasses,
+            dropRate: _dropRate, options: _options)
+        : new OpenVocabSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            }
+        );
+
+    private static void ValidateOptions(OpenVocabSAMOptions options)
+    {
+        if (options.ChannelDimensions is null || options.ChannelDimensions.Length == 0)
+            throw new ArgumentException("At least one encoder channel dimension is required.", nameof(options));
+        if (options.StageDepths is null || options.StageDepths.Length != options.ChannelDimensions.Length)
+            throw new ArgumentException("StageDepths must contain one value per ChannelDimensions entry.", nameof(options));
+        if (options.ChannelDimensions.Any(d => d <= 0) || options.StageDepths.Any(d => d <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "Encoder channel dimensions and stage depths must be positive.");
+        if (options.NeckEmbeddingDimension <= 0 || options.DecoderDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "Neck and decoder dimensions must be positive.");
+        if (options.LearningRate <= 0 || double.IsNaN(options.LearningRate) || double.IsInfinity(options.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be finite and positive.");
+        if (options.WeightDecay < 0 || double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay must be finite and non-negative.");
+    }
+
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region IOpenVocabSegmentation Implementation
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IOpenVocabSegmentation<T>.MaxCategories => 20000;
+    int IOpenVocabSegmentation<T>.MaxPromptLength => 77;
+
+    OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
+    {
+        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
+        int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
+        int numText = classNames.Count;
+        var masks = new Tensor<T>([numText, h, w]);
+        var scores = new double[numText];
+        var semanticMap = new Tensor<T>([h, w]);
+        var textProbs = new double[numText][];
+        for (int t = 0; t < numText; t++)
+        {
+            var weights = Common.SegmentationTensorOps.TextToWeights(classNames[t], numC);
+            var scoreMap = Common.SegmentationTensorOps.WeightedChannelSum(logits, weights);
+            var probMap = Common.SegmentationTensorOps.Sigmoid(scoreMap);
+            double area = 0, confSum = 0;
+            textProbs[t] = new double[h * w];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    double v = NumOps.ToDouble(probMap[y, x]);
+                    textProbs[t][y * w + x] = v;
+                    if (v >= 0.5) { masks[t, y, x] = NumOps.FromDouble(1.0); area++; confSum += v; }
+                }
+            scores[t] = area > 0 ? confSum / area : 0;
+        }
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int best = 0; double bestV = -1;
+                for (int t = 0; t < numText; t++) { double v = textProbs[t][y * w + x]; if (v > bestV) { bestV = v; best = t; } }
+                semanticMap[y, x] = NumOps.FromDouble(best);
+            }
+        return new OpenVocabSegmentationResult<T> { Masks = masks, ClassNames = classNames.ToArray(), Scores = scores, SemanticMap = semanticMap };
+    }
+
+    OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithPrompt(Tensor<T> image, string prompt)
+        => ((IOpenVocabSegmentation<T>)this).SegmentWithText(image, new[] { prompt });
+    #endregion
+}

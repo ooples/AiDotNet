@@ -1,0 +1,645 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.ReinforcementLearning.ReplayBuffers;
+
+namespace AiDotNet.ReinforcementLearning.Agents.TD3;
+
+/// <summary>
+/// Twin Delayed Deep Deterministic Policy Gradient (TD3) agent for continuous control.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// TD3 improves upon DDPG with three key innovations:
+/// 1. Twin Q-Networks: Uses two Q-functions to reduce overestimation bias
+/// 2. Delayed Policy Updates: Updates policy less frequently than Q-networks
+/// 3. Target Policy Smoothing: Adds noise to target actions for robustness
+/// </para>
+/// <para><b>For Beginners:</b>
+/// TD3 is one of the best algorithms for continuous control tasks (like robot movement).
+/// It's more stable and robust than DDPG.
+///
+/// Key innovations:
+/// - **Twin Critics**: Uses two Q-networks and takes the minimum to avoid overoptimism
+/// - **Delayed Updates**: Waits before updating the policy to let Q-values stabilize
+/// - **Target Smoothing**: Adds noise to target actions to prevent exploitation of errors
+///
+/// Think of it like getting a second opinion before making decisions, and taking time
+/// to verify information before acting on it.
+///
+/// Used by: Robotic control, autonomous systems, continuous optimization
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a TD3 agent for stable continuous control
+/// var options = new TD3Options&lt;double&gt; { StateSize = 4, ActionSize = 2, PolicyDelay = 2 };
+/// var agent = new TD3Agent&lt;double&gt;(options);
+///
+/// // Select a continuous action with target policy smoothing
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Addressing Function Approximation Error in Actor-Critic Methods",
+    "https://arxiv.org/abs/1802.09477",
+    Year = 2018,
+    Authors = "Fujimoto, S., van Hoof, H., & Meger, D.")]
+public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
+{
+    private TD3Options<T> _options;
+
+    // Actor-update hyperparameters (named rather than magic literals). ActorPolicyGradientStep is the
+    // deterministic-policy-gradient ascent step on the action; FiniteDifferenceEpsilon is the central
+    // finite-difference interval used to estimate ∇a Q1 (the critic exposes no analytic input
+    // gradient). Distinct from the actor NETWORK optimizer's learning rate.
+    private const double ActorPolicyGradientStep = 0.05;
+    private const double FiniteDifferenceEpsilon = 1e-3;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+    private readonly INumericOperations<T> _numOps;
+
+    private INeuralNetwork<T> _actorNetwork;
+    private INeuralNetwork<T> _targetActorNetwork;
+    private INeuralNetwork<T> _critic1Network;
+    private INeuralNetwork<T> _critic2Network;
+    private INeuralNetwork<T> _targetCritic1Network;
+    private INeuralNetwork<T> _targetCritic2Network;
+
+    private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
+    private Random _random;
+    private int _stepCount;
+    private int _updateCount;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public TD3Agent()
+        : this(new TD3Options<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
+    public TD3Agent(TD3Options<T> options) : base(CreateBaseOptions(options))
+    {
+        _options = options;
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        _stepCount = 0;
+        _updateCount = 0;
+
+        // Initialize networks directly in constructor
+        // Actor network: state -> action
+        _actorNetwork = CreateActorNetwork();
+        _targetActorNetwork = CreateActorNetwork();
+        CopyNetworkWeights(_actorNetwork, _targetActorNetwork);
+
+        // Twin Critic networks: (state, action) -> Q-value
+        _critic1Network = CreateCriticNetwork();
+        _critic2Network = CreateCriticNetwork();
+        _targetCritic1Network = CreateCriticNetwork();
+        _targetCritic2Network = CreateCriticNetwork();
+
+        CopyNetworkWeights(_critic1Network, _targetCritic1Network);
+        CopyNetworkWeights(_critic2Network, _targetCritic2Network);
+
+        // Initialize replay buffer
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, _options.Seed);
+    }
+
+    private static ReinforcementLearningOptions<T> CreateBaseOptions(TD3Options<T> options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ReinforcementLearningOptions<T>
+        {
+            LearningRate = options.ActorLearningRate,
+            DiscountFactor = options.DiscountFactor,
+            LossFunction = new MeanSquaredErrorLoss<T>(),
+            Seed = options.Seed,
+            BatchSize = options.BatchSize,
+            ReplayBufferSize = options.ReplayBufferSize,
+            WarmupSteps = options.WarmupSteps
+        };
+    }
+
+    private NeuralNetwork<T> CreateActorNetwork()
+    {
+        var layers = new List<ILayer<T>>();
+        int prevSize = _options.StateSize;
+
+        foreach (var hiddenSize in _options.ActorHiddenLayers)
+        {
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            prevSize = hiddenSize;
+        }
+
+        // Output layer with tanh activation to bound actions to [-1, 1]
+        layers.Add(new DenseLayer<T>(_options.ActionSize, (IActivationFunction<T>)new TanhActivation<T>()));
+
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: _options.ActionSize,
+            layers: layers
+        );
+
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+    }
+
+    private NeuralNetwork<T> CreateCriticNetwork()
+    {
+        var layers = new List<ILayer<T>>();
+        int inputSize = _options.StateSize + _options.ActionSize;
+        int prevSize = inputSize;
+
+        foreach (var hiddenSize in _options.CriticHiddenLayers)
+        {
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            prevSize = hiddenSize;
+        }
+
+        // Output single Q-value
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
+
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: 1,
+            layers: layers
+        );
+
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+    }
+
+    public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+    {
+        var stateTensor = Tensor<T>.FromVector(state);
+        var actionTensor = _actorNetwork.Predict(stateTensor);
+        var action = actionTensor.ToVector();
+
+        if (training)
+        {
+            // Add exploration noise during training
+            for (int i = 0; i < action.Length; i++)
+            {
+                var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.ExplorationNoise));
+                action[i] = _numOps.Add(action[i], noise);
+                action[i] = MathHelper.Clamp<T>(action[i], _numOps.FromDouble(-1), _numOps.FromDouble(1));
+            }
+        }
+
+        return action;
+    }
+
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+    {
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
+        _stepCount++;
+    }
+
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// The shared base adapter decodes <paramref name="target"/> into a discrete one-hot action sized
+    /// to the target length, which is incompatible with TD3's continuous critic input
+    /// (StateSize + ActionSize). We act in the state to obtain an action of the agent's own ActionSize,
+    /// derive a bounded scalar reward from the supervised target, store the transition, and run a TD3
+    /// update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        var action = SelectAction(state, training: true);
+
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        // Treat this one-shot supervised transition as terminal: nextState is fabricated as `state`, so
+        // done: false would add a TD3 bootstrap term from the target critics and optimize against an
+        // invented transition. done: true makes the critic target just the supplied reward.
+        StoreExperience(state, action, reward, state, done: true);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
+    public override T Train()
+    {
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _replayBuffer.Count < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || _replayBuffer.Count < effectiveBatchSize)
+        {
+            return _numOps.Zero;
+        }
+
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
+        int n = batch.Count;
+        if (n == 0) return _numOps.Zero;
+
+        int stateDim = _options.StateSize;
+        int actionDim = _options.ActionSize;
+        int saDim = stateDim + actionDim;
+        T gamma = DiscountFactor;
+
+        // --- Critic update (Fujimoto et al. 2018) ---
+        // Target action with policy smoothing: a' = clip(mu'(s') + clip(N(0,sigma), -c, c), -1, 1).
+        // Clipped double-Q target: y = r + gamma*(1-done)*min(Q'1(s',a'), Q'2(s',a')). Regress both
+        // critics toward y.
+        var saInputs = new Tensor<T>([n, saDim]);
+        var yTargets = new Tensor<T>([n, 1]);
+        for (int i = 0; i < n; i++)
+        {
+            var exp = batch[i];
+            // Validate replay-sample shapes before any tensor write/index: a malformed transition
+            // (wrong State/Action/NextState length) would otherwise crash tensor construction or
+            // train the twin critics on corrupted inputs.
+            if (exp.State.Length != stateDim || exp.NextState.Length != stateDim || exp.Action.Length != actionDim)
+            {
+                throw new InvalidOperationException(
+                    $"TD3 replay experience has wrong dimensions; expected State={stateDim}, " +
+                    $"NextState={stateDim}, Action={actionDim} but got State={exp.State.Length}, " +
+                    $"NextState={exp.NextState.Length}, Action={exp.Action.Length}.");
+            }
+            var nextA = _targetActorNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
+            for (int k = 0; k < actionDim; k++)
+            {
+                T noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.TargetPolicyNoise));
+                noise = MathHelper.Clamp<T>(noise,
+                    _numOps.FromDouble(-_options.TargetNoiseClip), _numOps.FromDouble(_options.TargetNoiseClip));
+                nextA[k] = MathHelper.Clamp<T>(_numOps.Add(nextA[k], noise),
+                    _numOps.FromDouble(-1), _numOps.FromDouble(1));
+            }
+            var nextSA = Tensor<T>.FromVector(ConcatenateStateAction(exp.NextState, nextA));
+            T q1n = _targetCritic1Network.Predict(nextSA).ToVector()[0];
+            T q2n = _targetCritic2Network.Predict(nextSA).ToVector()[0];
+            T minN = _numOps.LessThan(q1n, q2n) ? q1n : q2n;
+
+            T y = exp.Reward;
+            if (!exp.Done) y = _numOps.Add(y, _numOps.Multiply(gamma, minN));
+
+            var saVec = ConcatenateStateAction(exp.State, exp.Action);
+            for (int j = 0; j < saDim; j++) saInputs[i, j] = saVec[j];
+            yTargets[i, 0] = y;
+        }
+        _critic1Network.Train(saInputs, yTargets);
+        _critic2Network.Train(saInputs, yTargets);
+        T criticLoss = _numOps.Divide(
+            _numOps.Add(_critic1Network.GetLastLoss(), _critic2Network.GetLastLoss()), _numOps.FromDouble(2));
+
+        // --- Delayed actor update via the deterministic policy gradient ---
+        // The DPG is ∇θ J = E[∇a Q1(s,a)|a=mu(s) · ∇θ mu(s)]. We obtain ∇a Q1 by central finite
+        // differences (the critic exposes no analytic input gradient) and realise the chain rule
+        // through the network's MSE Train: regressing the actor toward the Q-ascending target
+        // a + step·∇a Q1 makes its parameters move along ∇θ mu in the gradient-ascent direction.
+        if (_updateCount % _options.PolicyUpdateFrequency == 0)
+        {
+            var actorInputs = new Tensor<T>([n, stateDim]);
+            var actorTargets = new Tensor<T>([n, actionDim]);
+            T step = _numOps.FromDouble(ActorPolicyGradientStep);
+            for (int i = 0; i < n; i++)
+            {
+                var s = batch[i].State;
+                var a = _actorNetwork.Predict(Tensor<T>.FromVector(s)).ToVector();
+                var g = FiniteDiffActionGradient(_critic1Network, s, a);
+                for (int j = 0; j < stateDim; j++) actorInputs[i, j] = s[j];
+                for (int k = 0; k < actionDim; k++)
+                    actorTargets[i, k] = MathHelper.Clamp<T>(
+                        _numOps.Add(a[k], _numOps.Multiply(step, g[k])),
+                        _numOps.FromDouble(-1), _numOps.FromDouble(1));
+            }
+            _actorNetwork.Train(actorInputs, actorTargets);
+
+            // Update target networks with soft updates (delayed, with the policy)
+            SoftUpdateTargetNetworks();
+        }
+
+        _updateCount++;
+
+        return criticLoss;
+    }
+
+    /// <summary>
+    /// Central finite-difference estimate of ∇a Q(s, a) — the action-gradient at the heart of the
+    /// deterministic policy gradient (Silver et al. 2014; Lillicrap et al. 2015). Used because the
+    /// critic network does not expose an analytic gradient w.r.t. its input.
+    /// </summary>
+    private Vector<T> FiniteDiffActionGradient(INeuralNetwork<T> critic, Vector<T> state, Vector<T> action)
+    {
+        var grad = new Vector<T>(action.Length);
+        T eps = _numOps.FromDouble(FiniteDifferenceEpsilon);
+        T twoEps = _numOps.FromDouble(2.0 * FiniteDifferenceEpsilon);
+        for (int i = 0; i < action.Length; i++)
+        {
+            var aPlus = action.Clone();
+            var aMinus = action.Clone();
+            aPlus[i] = _numOps.Add(action[i], eps);
+            aMinus[i] = _numOps.Subtract(action[i], eps);
+            T qPlus = critic.Predict(Tensor<T>.FromVector(ConcatenateStateAction(state, aPlus))).ToVector()[0];
+            T qMinus = critic.Predict(Tensor<T>.FromVector(ConcatenateStateAction(state, aMinus))).ToVector()[0];
+            grad[i] = _numOps.Divide(_numOps.Subtract(qPlus, qMinus), twoEps);
+        }
+        return grad;
+    }
+
+    private void SoftUpdateTargetNetworks()
+    {
+        SoftUpdateNetwork(_actorNetwork, _targetActorNetwork);
+        SoftUpdateNetwork(_critic1Network, _targetCritic1Network);
+        SoftUpdateNetwork(_critic2Network, _targetCritic2Network);
+    }
+
+    private void SoftUpdateNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)
+    {
+        var sourceParams = source.GetParameters();
+        var targetParams = target.GetParameters();
+
+        var tau = _options.TargetUpdateTau;
+        var oneMinusTau = _numOps.Subtract(_numOps.One, tau);
+
+        for (int i = 0; i < targetParams.Length; i++)
+        {
+            targetParams[i] = _numOps.Add(
+                _numOps.Multiply(tau, sourceParams[i]),
+                _numOps.Multiply(oneMinusTau, targetParams[i])
+            );
+        }
+
+        target.UpdateParameters(targetParams);
+    }
+
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
+    {
+        var sourceParams = source.GetParameters();
+        target.UpdateParameters(sourceParams);
+    }
+
+
+    private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
+    {
+        var result = new Vector<T>(state.Length + action.Length);
+        for (int i = 0; i < state.Length; i++)
+        {
+            result[i] = state[i];
+        }
+        for (int i = 0; i < action.Length; i++)
+        {
+            result[state.Length + i] = action[i];
+        }
+        return result;
+    }
+
+    public override Dictionary<string, T> GetMetrics()
+    {
+        return new Dictionary<string, T>
+        {
+            ["steps"] = _numOps.FromDouble(_stepCount),
+            ["updates"] = _numOps.FromDouble(_updateCount),
+            ["buffer_size"] = _numOps.FromDouble(_replayBuffer.Count)
+        };
+    }
+
+    public override void ResetEpisode()
+    {
+        // TD3 doesn't need per-episode reset
+    }
+
+    public override Vector<T> Predict(Vector<T> input)
+    {
+        return SelectAction(input, training: false);
+    }
+
+    public Task<Vector<T>> PredictAsync(Vector<T> input)
+    {
+        return Task.FromResult(Predict(input));
+    }
+
+    public Task TrainAsync()
+    {
+        Train();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public override int FeatureCount => _options.StateSize;
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            FeatureCount = _options.StateSize,
+            Complexity = ParameterCount,
+        };
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var actorParams = _actorNetwork.GetParameters();
+        var targetActorParams = _targetActorNetwork.GetParameters();
+        var critic1Params = _critic1Network.GetParameters();
+        var critic2Params = _critic2Network.GetParameters();
+        var targetCritic1Params = _targetCritic1Network.GetParameters();
+        var targetCritic2Params = _targetCritic2Network.GetParameters();
+
+        var total = actorParams.Length + targetActorParams.Length + critic1Params.Length +
+                    critic2Params.Length + targetCritic1Params.Length + targetCritic2Params.Length;
+        var vector = new Vector<T>(total);
+
+        int idx = 0;
+        foreach (var p in actorParams) vector[idx++] = p;
+        foreach (var p in targetActorParams) vector[idx++] = p;
+        foreach (var p in critic1Params) vector[idx++] = p;
+        foreach (var p in critic2Params) vector[idx++] = p;
+        foreach (var p in targetCritic1Params) vector[idx++] = p;
+        foreach (var p in targetCritic2Params) vector[idx++] = p;
+
+        return vector;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var actorParams = _actorNetwork.GetParameters();
+        var targetActorParams = _targetActorNetwork.GetParameters();
+        var critic1Params = _critic1Network.GetParameters();
+        var critic2Params = _critic2Network.GetParameters();
+        var targetCritic1Params = _targetCritic1Network.GetParameters();
+        var targetCritic2Params = _targetCritic2Network.GetParameters();
+
+        int idx = 0;
+        var actorVec = new Vector<T>(actorParams.Length);
+        var targetActorVec = new Vector<T>(targetActorParams.Length);
+        var critic1Vec = new Vector<T>(critic1Params.Length);
+        var critic2Vec = new Vector<T>(critic2Params.Length);
+        var targetCritic1Vec = new Vector<T>(targetCritic1Params.Length);
+        var targetCritic2Vec = new Vector<T>(targetCritic2Params.Length);
+
+        for (int i = 0; i < actorParams.Length; i++) actorVec[i] = parameters[idx++];
+        for (int i = 0; i < targetActorParams.Length; i++) targetActorVec[i] = parameters[idx++];
+        for (int i = 0; i < critic1Params.Length; i++) critic1Vec[i] = parameters[idx++];
+        for (int i = 0; i < critic2Params.Length; i++) critic2Vec[i] = parameters[idx++];
+        for (int i = 0; i < targetCritic1Params.Length; i++) targetCritic1Vec[i] = parameters[idx++];
+        for (int i = 0; i < targetCritic2Params.Length; i++) targetCritic2Vec[i] = parameters[idx++];
+
+        _actorNetwork.UpdateParameters(actorVec);
+        _targetActorNetwork.UpdateParameters(targetActorVec);
+        _critic1Network.UpdateParameters(critic1Vec);
+        _critic2Network.UpdateParameters(critic2Vec);
+        _targetCritic1Network.UpdateParameters(targetCritic1Vec);
+        _targetCritic2Network.UpdateParameters(targetCritic2Vec);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new TD3Agent<T>(_options);
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> ComputeGradients(
+        Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        throw new NotSupportedException(
+            "TD3 uses actor-critic training via Train() method. " +
+            "Direct gradient computation through this interface is not applicable.");
+    }
+
+    /// <inheritdoc/>
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        // TD3 uses direct network updates during training, not manual gradient application
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        writer.Write(_options.StateSize);
+        writer.Write(_options.ActionSize);
+        writer.Write(_stepCount);
+        writer.Write(_updateCount);
+
+        var actorBytes = _actorNetwork.Serialize();
+        writer.Write(actorBytes.Length);
+        writer.Write(actorBytes);
+
+        var targetActorBytes = _targetActorNetwork.Serialize();
+        writer.Write(targetActorBytes.Length);
+        writer.Write(targetActorBytes);
+
+        var critic1Bytes = _critic1Network.Serialize();
+        writer.Write(critic1Bytes.Length);
+        writer.Write(critic1Bytes);
+
+        var critic2Bytes = _critic2Network.Serialize();
+        writer.Write(critic2Bytes.Length);
+        writer.Write(critic2Bytes);
+
+        var targetCritic1Bytes = _targetCritic1Network.Serialize();
+        writer.Write(targetCritic1Bytes.Length);
+        writer.Write(targetCritic1Bytes);
+
+        var targetCritic2Bytes = _targetCritic2Network.Serialize();
+        writer.Write(targetCritic2Bytes.Length);
+        writer.Write(targetCritic2Bytes);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        reader.ReadInt32(); // stateSize
+        reader.ReadInt32(); // actionSize
+        _stepCount = reader.ReadInt32();
+        _updateCount = reader.ReadInt32();
+
+        var actorLength = reader.ReadInt32();
+        var actorBytes = reader.ReadBytes(actorLength);
+        _actorNetwork.Deserialize(actorBytes);
+
+        var targetActorLength = reader.ReadInt32();
+        var targetActorBytes = reader.ReadBytes(targetActorLength);
+        _targetActorNetwork.Deserialize(targetActorBytes);
+
+        var critic1Length = reader.ReadInt32();
+        var critic1Bytes = reader.ReadBytes(critic1Length);
+        _critic1Network.Deserialize(critic1Bytes);
+
+        var critic2Length = reader.ReadInt32();
+        var critic2Bytes = reader.ReadBytes(critic2Length);
+        _critic2Network.Deserialize(critic2Bytes);
+
+        var targetCritic1Length = reader.ReadInt32();
+        var targetCritic1Bytes = reader.ReadBytes(targetCritic1Length);
+        _targetCritic1Network.Deserialize(targetCritic1Bytes);
+
+        var targetCritic2Length = reader.ReadInt32();
+        var targetCritic2Bytes = reader.ReadBytes(targetCritic2Length);
+        _targetCritic2Network.Deserialize(targetCritic2Bytes);
+    }
+
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
+}

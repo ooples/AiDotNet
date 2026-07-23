@@ -1,0 +1,850 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a Gated Linear Unit (GLU) layer in a neural network that combines linear transformation with multiplicative gating.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A Gated Linear Unit (GLU) is a neural network layer that combines linear transformations with a gating mechanism.
+/// It applies two parallel linear transformations to the input: one produces a linear output, and the other produces
+/// a gate that controls how much of the linear output passes through. The final output is the element-wise product
+/// of the linear output and the activated gate. GLUs were introduced to help with vanishing gradient problems in
+/// deep networks and have been particularly effective in natural language processing and sequence modeling tasks.
+/// </para>
+/// <para><b>For Beginners:</b> A Gated Linear Unit is like a smart filter that controls how much information flows through.
+/// 
+/// Imagine water flowing through a pipe with an adjustable valve:
+/// - The water is the input data
+/// - One part of the layer (linear part) processes the water
+/// - Another part (gate) controls how much processed water flows through
+/// - Together they decide "what information is important to keep"
+/// 
+/// For example, in language processing:
+/// - The linear transformation might extract features from words
+/// - The gate might decide which features are relevant to the current context
+/// - Their combination helps the network focus on important information
+/// 
+/// GLUs are particularly good at:
+/// - Controlling information flow through the network
+/// - Helping gradients flow during training (preventing vanishing gradients)
+/// - Allowing the network to selectively use information
+/// 
+/// This selectivity is valuable in many tasks, especially those involving sequences
+/// like text or time-series data.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Gating)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+public partial class GatedLinearUnitLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// The weight tensor for the linear transformation path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the learnable weights for the linear transformation part of the GLU.
+    /// The shape is [outputDimension, inputDimension], where each row represents the weights
+    /// for one output neuron in the linear path.
+    /// </para>
+    /// <para><b>For Beginners:</b> These weights determine how input data is transformed before gating.
+    ///
+    /// The linear weights work like in a standard neural network layer:
+    /// - They transform the input data into a new representation
+    /// - Each output value is a weighted sum of all inputs
+    /// - During training, these weights adjust to extract useful features
+    ///
+    /// These weights focus on transforming the data without considering
+    /// which parts are important to keep or filter out (that's the gate's job).
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _linearWeights;
+
+    /// <summary>
+    /// The weight tensor for the gating path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the learnable weights for the gating transformation part of the GLU.
+    /// The shape is [outputDimension, inputDimension], where each row represents the weights
+    /// for one output neuron in the gating path.
+    /// </para>
+    /// <para><b>For Beginners:</b> These weights determine how each input influences the gates.
+    ///
+    /// The gate weights control what information is important:
+    /// - They transform input data into control signals (gates)
+    /// - These gates will determine how much information passes through
+    /// - During training, these weights learn to recognize important patterns
+    ///
+    /// Think of these weights as learning when to open or close the valve
+    /// for different types of input information.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> _gateWeights;
+
+    /// <summary>
+    /// The bias tensor for the linear transformation path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the learnable bias terms for the linear transformation part of the GLU.
+    /// The biases are added to the weighted sum of inputs in the linear path before being gated.
+    /// </para>
+    /// <para><b>For Beginners:</b> These biases are default or starting values for the linear path.
+    ///
+    /// Linear biases work like in a standard neural network layer:
+    /// - They provide an adjustable baseline for each output
+    /// - They're added after the weighted sum but before gating
+    /// - During training, they adjust to help produce better features
+    ///
+    /// Each output neuron in the linear path has its own bias value.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _linearBias;
+
+    /// <summary>
+    /// The bias tensor for the gating path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the learnable bias terms for the gating part of the GLU.
+    /// The biases are added to the weighted sum of inputs in the gating path before
+    /// applying the activation function.
+    /// </para>
+    /// <para><b>For Beginners:</b> These biases affect how open or closed the gates are by default.
+    ///
+    /// Gate biases control the default state of each gate:
+    /// - Positive values make gates tend to be more open
+    /// - Negative values make gates tend to be more closed
+    /// - They're adjusted during training to find optimal default settings
+    ///
+    /// For example, with sigmoid activation:
+    /// - A large negative bias makes the gate mostly closed by default
+    /// - A large positive bias makes the gate mostly open by default
+    /// - A bias near zero lets the gate be more responsive to the input
+    /// </para>
+    /// </remarks>
+    private Tensor<T> _gateBias;
+
+    /// <summary>
+    /// The input tensor from the last forward pass, saved for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the input received during the last forward pass. It is necessary for computing
+    /// gradients during the backward pass (backpropagation).
+    /// </para>
+    /// <para><b>For Beginners:</b> This remembers what input data was processed most recently.
+    /// 
+    /// During training:
+    /// - The layer needs to remember what input values it processed
+    /// - This helps when calculating how to improve the weights and biases
+    /// - It's like keeping your work when solving a math problem
+    /// 
+    /// This value is automatically cleared between training batches to save memory.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// The output tensor from the linear path of the last forward pass, saved for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the output from the linear transformation (before gating) during the last forward pass.
+    /// It is used during backpropagation to compute gradients for the gating path.
+    /// </para>
+    /// <para><b>For Beginners:</b> This remembers the values produced by the linear path before gating.
+    /// 
+    /// During training:
+    /// - The layer needs to know what values were being gated
+    /// - This helps calculate how the gate affected the final output
+    /// - It's essential for computing how to improve both paths
+    /// 
+    /// This intermediate result is saved because it's needed when computing
+    /// gradients during the backward pass.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastLinearOutput;
+
+    /// <summary>
+    /// The output tensor from the gating path of the last forward pass, saved for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the output from the gating path (after activation) during the last forward pass.
+    /// It is used during backpropagation to compute gradients for the linear path and the gate activation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This remembers how open or closed each gate was in the latest calculation.
+    /// 
+    /// During training:
+    /// - The layer needs to know what gate values were applied
+    /// - This helps calculate how the gates affected the output
+    /// - It's needed for computing gradients for both paths
+    /// 
+    /// These gate values (typically between 0 and 1) determined how much
+    /// of each linear output value passed through to the final output.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastGateOutput;
+
+    // GPU cached tensors for backward pass
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuLinearOutput;
+    private Tensor<T>? _gpuGateOutput;
+
+    /// <summary>
+    /// The gradients for the linear weights, computed during backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the gradients of the loss with respect to each linear weight.
+    /// These gradients are used to update the linear weights during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores information about how to adjust each linear weight value.
+    ///
+    /// During training:
+    /// - The network calculates how each linear weight contributed to errors
+    /// - Gradients show both direction and amount to change each weight
+    /// - Larger gradients mean bigger adjustments are needed
+    ///
+    /// These gradients help the linear path learn to produce better features
+    /// that, when gated appropriately, lead to better final outputs.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _linearWeightsGradient;
+
+    /// <summary>
+    /// The gradients for the gate weights, computed during backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the gradients of the loss with respect to each gate weight.
+    /// These gradients are used to update the gate weights during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores information about how to adjust each gate weight value.
+    ///
+    /// During training:
+    /// - The network calculates how each gate weight contributed to errors
+    /// - Gradients show how to change weights to make gates work better
+    /// - They help the gates learn to identify important information
+    ///
+    /// These gradients help the gating mechanism learn when to allow
+    /// information through and when to block it for better results.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _gateWeightsGradient;
+
+    /// <summary>
+    /// The gradients for the linear biases, computed during backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the gradients of the loss with respect to each linear bias.
+    /// These gradients are used to update the linear biases during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores information about how to adjust each linear bias value.
+    ///
+    /// During training:
+    /// - The network calculates how each linear bias contributed to errors
+    /// - Gradients guide adjustments to improve performance
+    /// - They help fine-tune the baseline of each feature
+    ///
+    /// These gradients help the linear path produce better default values
+    /// before gating is applied.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _linearBiasGradient;
+
+    /// <summary>
+    /// The gradients for the gate biases, computed during backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the gradients of the loss with respect to each gate bias.
+    /// These gradients are used to update the gate biases during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores information about how to adjust each gate bias value.
+    ///
+    /// During training:
+    /// - The network calculates how each gate bias contributed to errors
+    /// - Gradients guide adjustments to improve gating behavior
+    /// - They help fine-tune the default openness of each gate
+    ///
+    /// These gradients help the gates learn optimal default settings
+    /// for controlling information flow.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _gateBiasGradient;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because GLU layers have trainable parameters (weights and biases for both paths).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that the GLU layer supports training through backpropagation.
+    /// The layer has trainable parameters (weights and biases for both linear and gating paths)
+    /// that are updated during the training process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
+    ///
+    /// A value of true means:
+    /// - The layer adjusts its weights and biases during training
+    /// - It improves its performance as it sees more data
+    /// - It has parameters for both the linear and gating paths that adapt
+    ///
+    /// GLU layers are powerful learning components because they can learn
+    /// both what features to extract and which ones are important in context.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The sum of elements in all weight and bias tensors (linear weights, gate weights, linear bias, gate bias).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property returns the total count of learnable parameters across all four parameter tensors:
+    /// linear weights, gate weights, linear biases, and gate biases.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many numbers the layer can adjust during training.
+    /// For a GLU layer with 100 inputs and 50 outputs, you would have:
+    /// - 5,000 linear weights (100 x 50)
+    /// - 5,000 gate weights (100 x 50)
+    /// - 50 linear biases
+    /// - 50 gate biases
+    /// - Total: 10,100 parameters
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount =>
+        _linearWeights.Length + _gateWeights.Length + _linearBias.Length + _gateBias.Length;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GatedLinearUnitLayer{T}"/> class with a scalar activation function.
+    /// </summary>
+    /// <param name="inputDimension">The number of input features.</param>
+    /// <param name="outputDimension">The number of output features.</param>
+    /// <param name="gateActivation">The activation function to apply to the gating mechanism. Defaults to Sigmoid if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new GLU layer with the specified input and output dimensions and
+    /// gate activation function. The weights for both paths are initialized with small random values,
+    /// and the biases are initialized to zero. The activation function operates on individual scalar values
+    /// in the gate output tensor. The default gate activation is sigmoid, which produces values between 0 and 1
+    /// that act as gates controlling how much of the linear output passes through.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up the GLU layer with the dimensions you need and the activation for the gate.
+    /// 
+    /// When creating a GLU layer, you need to specify:
+    /// - Input dimension: How many values are coming into the layer
+    /// - Output dimension: How many values you want the layer to produce
+    /// - Gate activation: What function controls the gate values (default: sigmoid)
+    /// 
+    /// For example:
+    /// ```csharp
+    /// // Create a GLU layer with 512 inputs, 256 outputs, and sigmoid gating
+    /// var gluLayer = new GatedLinearUnitLayer<float>(512, 256);
+    /// 
+    /// // Create a GLU layer with custom activation for the gate
+    /// var customGluLayer = new GatedLinearUnitLayer<float>(100, 50, new TanhActivation<float>());
+    /// ```
+    /// 
+    /// The sigmoid activation (default) produces gates between 0 and 1, where:
+    /// - 0 means "block this completely"
+    /// - 1 means "let this pass completely"
+    /// - Values between allow partial information flow
+    /// 
+    /// Other activations can be used for specialized gating behavior.
+    /// </para>
+    /// </remarks>
+    public GatedLinearUnitLayer(int outputDimension, IActivationFunction<T>? gateActivation = null)
+        : base(new[] { -1 }, new[] { outputDimension }, gateActivation ?? new SigmoidActivation<T>())
+    {
+        if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));
+        _outputDimension = outputDimension;
+        _linearWeights = new Tensor<T>([0, 0]);
+        _gateWeights = new Tensor<T>([0, 0]);
+        _linearBias = new Tensor<T>([outputDimension]);
+        _gateBias = new Tensor<T>([outputDimension]);
+    }
+
+    private int _outputDimension;
+
+    /// <summary>
+    /// Resolves input dimension on first forward and allocates linear/gate weight matrices.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"GatedLinearUnitLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputDimension = input.Shape[rank - 1];
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_linearWeights, _outputDimension, inputDimension))
+        {
+            _linearWeights = AllocateLazyWeight([_outputDimension, inputDimension]);
+            _gateWeights = AllocateLazyWeight([_outputDimension, inputDimension]);
+            InitializeParameters();
+            RegisterTrainableParameter(_linearWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_linearBias, PersistentTensorRole.Biases);
+            RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
+        }
+
+        ResolveShapes(new[] { inputDimension }, new[] { _outputDimension });
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GatedLinearUnitLayer{T}"/> class with a vector activation function.
+    /// </summary>
+    /// <param name="inputDimension">The number of input features.</param>
+    /// <param name="outputDimension">The number of output features.</param>
+    /// <param name="gateActivation">The vector activation function to apply to the gating mechanism. Defaults to Sigmoid if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new GLU layer with the specified input and output dimensions and
+    /// vector gate activation function. The weights for both paths are initialized with small random values,
+    /// and the biases are initialized to zero. Unlike the other constructor, this one accepts a vector activation
+    /// function that operates on entire vectors rather than individual scalar values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is an alternative setup that uses a different kind of activation function for the gate.
+    /// 
+    /// This constructor is almost identical to the first one, but with one key difference:
+    /// - Regular activation: processes each gate value separately
+    /// - Vector activation: processes the entire gate vector together
+    /// 
+    /// Vector activations might be useful for specialized gating where
+    /// gate values should influence each other. For most common use cases,
+    /// the standard constructor with sigmoid activation works well.
+    /// 
+    /// The default is still sigmoid activation, which is usually the best
+    /// choice for GLU layers because its 0-1 range makes it ideal for gating.
+    /// </para>
+    /// </remarks>
+    public GatedLinearUnitLayer(int outputDimension, IVectorActivationFunction<T> gateActivation)
+        : base(new[] { -1 }, new[] { outputDimension }, gateActivation ?? new SigmoidActivation<T>())
+    {
+        if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));
+        _outputDimension = outputDimension;
+        _linearWeights = new Tensor<T>([0, 0]);
+        _gateWeights = new Tensor<T>([0, 0]);
+        _linearBias = new Tensor<T>([outputDimension]);
+        _gateBias = new Tensor<T>([outputDimension]);
+    }
+
+    /// <summary>
+    /// Initializes the weights and biases with appropriate values for effective training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method initializes the weights for both the linear and gating paths using a scaling factor
+    /// based on the dimensions of the weight matrices. This helps with training convergence by setting
+    /// initial values to an appropriate scale. All biases are initialized to zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up the initial values for weights and biases before training.
+    /// 
+    /// For good training:
+    /// - Weights need to start with small random values
+    /// - These values are carefully scaled based on layer size
+    /// - Too large or too small values can make training difficult
+    /// 
+    /// The method:
+    /// - Calculates an appropriate scale for the random values
+    /// - Initializes both linear and gate weights with this scale
+    /// - Sets all biases to zero as a starting point
+    /// 
+    /// Good initialization helps the network start training effectively.
+    /// </para>
+    /// </remarks>
+    private void InitializeParameters()
+    {
+        int outputDimension = _linearWeights.Shape[0];
+        int inputDimension = _linearWeights.Shape[1];
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (outputDimension + inputDimension)));
+
+        // Copy initialization data into the EXISTING lazy-allocated
+        // tensors in place — replacing them would discard the
+        // AllocateLazyWeight registration. Closes #1271.7Bob.
+        var linearInit = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_linearWeights._shape, Vector<T>.CreateRandom(_linearWeights.Length, -0.5, 0.5)),
+            scale);
+        linearInit.AsSpan().CopyTo(_linearWeights.AsWritableSpan());
+
+        var gateInit = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_gateWeights._shape, Vector<T>.CreateRandom(_gateWeights.Length, -0.5, 0.5)),
+            scale);
+        gateInit.AsSpan().CopyTo(_gateWeights.AsWritableSpan());
+
+        _linearBias.Fill(NumOps.Zero);
+        _gateBias.Fill(NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the GLU layer.
+    /// </summary>
+    /// <param name="input">The input tensor to process. Shape: [batchSize, inputDimension].</param>
+    /// <returns>The output tensor after gated linear transformation. Shape: [batchSize, outputDimension].</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the GLU layer. It performs two parallel linear transformations
+    /// on the input: one for the linear path and one for the gating path. The gating path output is passed through
+    /// an activation function (typically sigmoid), and then the two outputs are multiplied element-wise. This gating
+    /// mechanism allows the layer to selectively pass information through.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where the layer processes input data through both paths.
+    /// 
+    /// The forward pass works in these steps:
+    /// 1. Linear Path: Transform the input using linear weights and biases
+    ///    - This creates features that might be useful
+    /// 2. Gate Path: Transform the input using gate weights and biases
+    ///    - This determines how important each feature is
+    /// 3. Apply activation to the gate values (typically sigmoid)
+    ///    - Converts gate values to be between 0 and 1
+    /// 4. Multiply the linear output by the activated gate values
+    ///    - This lets important features pass through and blocks others
+    /// 
+    /// The result is that the layer can learn both:
+    /// - What features to extract (linear path)
+    /// - Which features are important in each context (gate path)
+    /// 
+    /// This selective focus helps the network learn more effectively.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        EnsureInitializedFromInput(input);
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+
+        // Linear path: linear = input @ weights^T + bias
+        var linearWeightsT = Engine.TensorPermute(_linearWeights, [1, 0]);
+        var linearOutput = input.MatrixMultiply(linearWeightsT);
+        linearOutput = Engine.TensorBroadcastAdd(linearOutput, _linearBias); // Broadcasting
+
+        // Gate path: gate = sigmoid(input @ weights^T + bias)
+        var gateWeightsT = Engine.TensorPermute(_gateWeights, [1, 0]);
+        var gateOutput = input.MatrixMultiply(gateWeightsT);
+        gateOutput = Engine.TensorBroadcastAdd(gateOutput, _gateBias); // Broadcasting
+
+        // #1668: cache the linear/gate activations for backward only; forward uses locals.
+        var linOut = linearOutput;
+        var gateOut = ApplyActivation(gateOutput);
+        _lastLinearOutput = ShouldCacheForBackward ? linOut : null;
+        _lastGateOutput = ShouldCacheForBackward ? gateOut : null;
+
+        // GLU output: output = linear * gate
+        var output = Engine.TensorMultiply(linOut, gateOut);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Performs the forward pass on GPU using FusedLinearGpu for efficient computation.
+    /// </summary>
+    /// <param name="inputs">The GPU input tensors.</param>
+    /// <returns>The GPU output tensor.</returns>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // GLU weights are stored as [outputDim, inputDim], but FusedLinearGpu expects [inputDim, outputDim]
+        // Transpose the weights
+        var linearWeightsT = Engine.TensorTranspose(_linearWeights);
+        var gateWeightsT = Engine.TensorTranspose(_gateWeights);
+
+        // Linear path: linear = input @ linearWeights^T + linearBias (no activation)
+        var linearOutput = gpuEngine.FusedLinearGpu(input, linearWeightsT, _linearBias, FusedActivationType.None);
+
+        // Gate path: gate = sigmoid(input @ gateWeights^T + gateBias)
+        var gateOutput = gpuEngine.FusedLinearGpu(input, gateWeightsT, _gateBias, FusedActivationType.Sigmoid);
+
+        // GLU output: output = linear * gate
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        int size = linearOutput.Length;
+        var outputBuffer = backend.AllocateBuffer(size);
+
+        // Element-wise multiply on GPU
+        backend.Multiply(linearOutput.Buffer, gateOutput.Buffer, outputBuffer, size);
+
+        // Cache state for backward pass only when an eager Backward will read it (#1668:
+        // ShouldCacheForBackward is false under tape / inference scope / eval).
+        if (ShouldCacheForBackward)
+        {
+            // Cache GPU tensors for GPU-resident backward pass
+            _gpuInput = input;
+            _gpuLinearOutput = linearOutput;
+            _gpuGateOutput = gateOutput;
+
+            // Also cache CPU tensors for fallback backward pass
+            _lastInput = input;
+            _lastLinearOutput = linearOutput;
+            _lastGateOutput = gateOutput;
+        }
+
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, linearOutput._shape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// Updates the weights and biases for both paths using the calculated gradients and the specified learning rate.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <exception cref="InvalidOperationException">Thrown when update is called before backward.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates all trainable parameters of the GLU layer based on the gradients calculated during
+    /// the backward pass. The parameters include weights and biases for both the linear and gating paths.
+    /// The learning rate determines the size of the parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method changes the weights and biases to improve future predictions.
+    /// 
+    /// After calculating how each parameter should change:
+    /// - All parameters are adjusted in the direction that reduces errors
+    /// - The learning rate controls how big these adjustments are
+    /// 
+    /// The updates apply to all four sets of parameters:
+    /// 1. Linear weights: For better feature extraction
+    /// 2. Gate weights: For better selection of important features
+    /// 3. Linear biases: For better baseline feature values
+    /// 4. Gate biases: For better default gate openness
+    /// 
+    /// Each parameter moves a small step in the direction that improves performance.
+    /// The minus sign means we move in the opposite direction of the gradient
+    /// to minimize error.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_linearWeightsGradient == null || _gateWeightsGradient == null ||
+            _linearBiasGradient == null || _gateBiasGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        // Use Engine operations for parameter updates
+        var scaledLinearWeightsGrad = Engine.TensorMultiplyScalar(_linearWeightsGradient, learningRate);
+        var scaledGateWeightsGrad = Engine.TensorMultiplyScalar(_gateWeightsGradient, learningRate);
+        var scaledLinearBiasGrad = Engine.TensorMultiplyScalar(_linearBiasGradient, learningRate);
+        var scaledGateBiasGrad = Engine.TensorMultiplyScalar(_gateBiasGradient, learningRate);
+
+        // Update in-place to preserve GPU-registered tensor references
+        var updLW = Engine.TensorSubtract(_linearWeights, scaledLinearWeightsGrad);
+        var updGW = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
+        var updLB = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
+        var updGB = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+        for (int i = 0; i < _linearWeights.Length; i++) _linearWeights[i] = updLW[i];
+        for (int i = 0; i < _gateWeights.Length; i++) _gateWeights[i] = updGW[i];
+        for (int i = 0; i < _linearBias.Length; i++) _linearBias[i] = updLB[i];
+        for (int i = 0; i < _gateBias.Length; i++) _gateBias[i] = updGB[i];
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_linearWeights);
+        Engine.InvalidatePersistentTensor(_gateWeights);
+        Engine.InvalidatePersistentTensor(_linearBias);
+        Engine.InvalidatePersistentTensor(_gateBias);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters of the GLU layer as a single vector. The parameters
+    /// include weights and biases for both the linear and gating paths. The order is: linear weights, gate weights,
+    /// linear biases, gate biases.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
+    /// 
+    /// The parameters include four sets of values:
+    /// 1. Linear weights: Main transformation parameters
+    /// 2. Gate weights: Selection mechanism parameters
+    /// 3. Linear biases: Baseline adjustments for features
+    /// 4. Gate biases: Default settings for gates
+    /// 
+    /// All these values are collected in a specific order into a single vector.
+    /// This combined list is useful for:
+    /// - Saving a trained model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques
+    /// 
+    /// For a layer with 100 inputs and 50 outputs, this would return:
+    /// - 5,000 linear weight parameters (100 × 50)
+    /// - 5,000 gate weight parameters (100 × 50)
+    /// - 50 linear bias parameters
+    /// - 50 gate bias parameters
+    /// - Totaling 10,100 parameters
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        return Vector<T>.Concatenate(
+            new Vector<T>(_linearWeights.ToArray()),
+            new Vector<T>(_gateWeights.ToArray()),
+            new Vector<T>(_linearBias.ToArray()),
+            new Vector<T>(_gateBias.ToArray()));
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the layer from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets all trainable parameters of the GLU layer from a single vector. The parameters
+    /// should be in the same order as produced by GetParameters: linear weights, gate weights,
+    /// linear biases, gate biases.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the layer's learnable values from a provided list.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with the exact right length
+    /// - The values are distributed to the correct parameters in order
+    /// - They must follow the same order used in GetParameters
+    /// 
+    /// This method is useful for:
+    /// - Restoring a saved model
+    /// - Loading pre-trained parameters
+    /// - Testing specific parameter configurations
+    /// 
+    /// The method verifies that the vector contains exactly the right number
+    /// of parameters before applying them.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Lazy ctor: if shape isn't resolved, infer inputDim from param
+        // vector. Layout: 2*[outDim, inDim] weights + 2*[outDim] biases
+        // = 2*outDim*(inDim + 1) → inDim = total/(2*outDim) - 1.
+        if (!IsShapeResolved && _outputDimension > 0)
+        {
+            int divisor = 2 * _outputDimension;
+            if (parameters.Length % divisor == 0)
+            {
+                int candidateInput = parameters.Length / divisor - 1;
+                if (candidateInput > 0)
+                {
+                    ResolveFromShape(new[] { candidateInput });
+                }
+            }
+        }
+
+        int linearWeightsSize = _linearWeights.Shape[0] * _linearWeights.Shape[1];
+        int gateWeightsSize = _gateWeights.Shape[0] * _gateWeights.Shape[1];
+        int expectedLength = linearWeightsSize + gateWeightsSize +
+                             _linearBias.Length + _gateBias.Length;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
+        }
+
+        int index = 0;
+        _linearWeights = new Tensor<T>(_linearWeights._shape, parameters.Slice(index, linearWeightsSize));
+        index += linearWeightsSize;
+        _gateWeights = new Tensor<T>(_gateWeights._shape, parameters.Slice(index, gateWeightsSize));
+        index += gateWeightsSize;
+        _linearBias = new Tensor<T>(_linearBias._shape, parameters.Slice(index, _linearBias.Length));
+        index += _linearBias.Length;
+        _gateBias = new Tensor<T>(_gateBias._shape, parameters.Slice(index, _gateBias.Length));
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_linearWeights);
+        Engine.InvalidatePersistentTensor(_gateWeights);
+        Engine.InvalidatePersistentTensor(_linearBias);
+        Engine.InvalidatePersistentTensor(_gateBias);
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the GLU layer by clearing all cached values from forward
+    /// and backward passes. This includes inputs, intermediate outputs, and gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - The saved input is cleared
+    /// - The saved linear and gate outputs are cleared
+    /// - All calculated gradients are cleared
+    /// - The layer forgets previous calculations it performed
+    /// 
+    /// This is typically called:
+    /// - Between training batches to free up memory
+    /// - When switching from training to evaluation mode
+    /// - When starting to process completely new data
+    /// 
+    /// It's like wiping a whiteboard clean before starting a new calculation.
+    /// Note that this doesn't affect the learned weights and biases, just the
+    /// temporary working data.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_linearWeightsGradient == null || _gateWeightsGradient == null ||
+            _linearBiasGradient == null || _gateBiasGradient == null)
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        return Vector<T>.Concatenate(
+            new Vector<T>(_linearWeightsGradient.ToArray()),
+            new Vector<T>(_gateWeightsGradient.ToArray()),
+            new Vector<T>(_linearBiasGradient.ToArray()),
+            new Vector<T>(_gateBiasGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _linearWeightsGradient = null; _gateWeightsGradient = null;
+        _linearBiasGradient = null; _gateBiasGradient = null;
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastLinearOutput = null;
+        _lastGateOutput = null;
+        _linearWeightsGradient = null;
+        _gateWeightsGradient = null;
+        _linearBiasGradient = null;
+        _gateBiasGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuLinearOutput = null;
+        _gpuGateOutput = null;
+    }
+}

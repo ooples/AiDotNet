@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>AiDotNet.Tools.ResNetPerfHarness</RootNamespace>
+    <NoWarn>$(NoWarn);AIDN001;AIDN010;AIDN011;AIDN012;AIDN040;AIDN041;AIDN042;AIDN043;AIDN044;AIDN050;AIDN051;AIDN052</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+  </ItemGroup>
+</Project>

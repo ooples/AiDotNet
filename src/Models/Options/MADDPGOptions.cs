@@ -1,0 +1,138 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.ReinforcementLearning.Agents;
+
+namespace AiDotNet.Models.Options;
+
+/// <summary>
+/// Configuration options for Multi-Agent DDPG (MADDPG) agents.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// MADDPG extends DDPG to multi-agent settings with centralized training and
+/// decentralized execution. Critics observe all agents during training.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// MADDPG allows multiple agents to learn together in shared environments.
+/// During training, agents can "see" what others are doing (centralized critics),
+/// but during execution, each agent acts independently (decentralized actors).
+///
+/// Key features:
+/// - **Centralized Training**: Critics see all agents' observations and actions
+/// - **Decentralized Execution**: Actors only use their own observations
+/// - **Continuous Actions**: Based on DDPG for continuous control
+/// - **Cooperative or Competitive**: Works for both settings
+///
+/// Think of it like: Team sports where players practice together (centralized)
+/// but during the game each player makes their own decisions (decentralized).
+///
+/// Examples: Robot coordination, traffic control, multi-player games
+/// </para>
+/// </remarks>
+public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
+{
+    /// <summary>The number of agents trained jointly.</summary>
+    /// <value>Default: 2.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Increase this when your environment has more decision-makers.</para>
+    /// </remarks>
+    public int NumAgents { get; init; } = 2;
+
+    /// <summary>The per-agent observation vector size.</summary>
+    /// <value>Default: 4.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is how many input features each agent sees at every step.</para>
+    /// </remarks>
+    public int StateSize { get; init; } = 4;
+
+    /// <summary>The per-agent action vector size.</summary>
+    /// <value>Default: 2.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is how many continuous action values each agent outputs per step.</para>
+    /// </remarks>
+    public int ActionSize { get; init; } = 2;
+
+    /// <summary>Learning rate for actor network updates.</summary>
+    /// <value>Default: 0.0001.</value>
+    public T ActorLearningRate { get; init; }
+
+    /// <summary>Learning rate for critic network updates.</summary>
+    /// <value>Default: 0.001.</value>
+    public T CriticLearningRate { get; init; }
+
+    /// <summary>Soft update coefficient for target networks.</summary>
+    /// <value>Default: 0.001.</value>
+    public T TargetUpdateTau { get; init; }
+
+    /// <summary>Standard deviation of Gaussian noise added for exploration.</summary>
+    /// <value>Default: 0.1.</value>
+    public double ExplorationNoise { get; init; } = 0.1;
+
+    /// <summary>Hidden layer sizes for each agent's actor network.</summary>
+    public List<int> ActorHiddenLayers { get; init; } = new List<int> { 128, 128 };
+
+    /// <summary>Hidden layer sizes for each agent's critic network.</summary>
+    public List<int> CriticHiddenLayers { get; init; } = new List<int> { 128, 128 };
+
+    /// <summary>
+    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// </summary>
+    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public MADDPGOptions()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        ActorLearningRate = numOps.FromDouble(0.0001);
+        CriticLearningRate = numOps.FromDouble(0.001);
+        TargetUpdateTau = numOps.FromDouble(0.001);
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying values from another instance.
+    /// </summary>
+    /// <param name="other">The options to copy from.</param>
+    public MADDPGOptions(MADDPGOptions<T> other) : this()
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        // Copy base class properties
+        LearningRate = other.LearningRate;
+        DiscountFactor = other.DiscountFactor;
+        LossFunction = other.LossFunction;
+        BatchSize = other.BatchSize;
+        ReplayBufferSize = other.ReplayBufferSize;
+        TargetUpdateFrequency = other.TargetUpdateFrequency;
+        UsePrioritizedReplay = other.UsePrioritizedReplay;
+        EpsilonStart = other.EpsilonStart;
+        EpsilonEnd = other.EpsilonEnd;
+
+        // Copy MADDPG-specific properties
+        NumAgents = other.NumAgents;
+        StateSize = other.StateSize;
+        ActionSize = other.ActionSize;
+        ActorLearningRate = other.ActorLearningRate;
+        CriticLearningRate = other.CriticLearningRate;
+        TargetUpdateTau = other.TargetUpdateTau;
+        ExplorationNoise = other.ExplorationNoise;
+        ActorHiddenLayers = other.ActorHiddenLayers;
+        CriticHiddenLayers = other.CriticHiddenLayers;
+        Optimizer = other.Optimizer;
+    }
+
+    /// <summary>
+    /// Validates that required properties are set.
+    /// </summary>
+    public void Validate()
+    {
+        if (NumAgents <= 0)
+            throw new ArgumentException("NumAgents must be greater than 0", nameof(NumAgents));
+        if (StateSize <= 0)
+            throw new ArgumentException("StateSize must be greater than 0", nameof(StateSize));
+        if (ActionSize <= 0)
+            throw new ArgumentException("ActionSize must be greater than 0", nameof(ActionSize));
+    }
+}

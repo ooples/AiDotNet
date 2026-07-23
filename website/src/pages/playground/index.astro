@@ -1,0 +1,475 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const categories = [
+  {
+    name: 'Getting Started',
+    icon: '🚀',
+    examples: [
+      {
+        name: 'Simple Regression',
+        difficulty: 'Beginner',
+        tags: ['regression', 'linear', 'basics'],
+        description: 'Train a simple linear regression model using AiModelBuilder.',
+        code: `using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+
+// Training data
+var features = new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 } };
+var labels = new double[] { 2.1, 4.0, 5.9, 8.1, 10.0 };
+
+// Build using AiModelBuilder facade pattern
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new SimpleRegression<double>())
+    .BuildAsync();
+
+// Make predictions
+var prediction = result.Predict(testData);
+Console.WriteLine($"Prediction for x=6: {prediction[0]:F2}");`
+      },
+      {
+        name: 'Binary Classification',
+        difficulty: 'Beginner',
+        tags: ['classification', 'SVM', 'basics'],
+        description: 'Classify data points using Support Vector Machine.',
+        code: `using AiDotNet;
+using AiDotNet.Classification;
+
+// Build and train an SVM classifier
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new SupportVectorMachine<double>(
+        kernel: new RBFKernel<double>(gamma: 0.5)))
+    .ConfigurePreprocessing(p => p.Add(new StandardScaler<double>()))
+    .BuildAsync();
+
+var prediction = result.Predict(newSample);
+Console.WriteLine($"Predicted class: {prediction[0]}");`
+      },
+    ]
+  },
+  {
+    name: 'Neural Networks',
+    icon: '🧠',
+    examples: [
+      {
+        name: 'Image Classification',
+        difficulty: 'Intermediate',
+        tags: ['CNN', 'classification', 'deep learning'],
+        description: 'Train a convolutional neural network for image classification.',
+        code: `using AiDotNet;
+using AiDotNet.NeuralNetworks;
+
+// Build a CNN classifier
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        new NeuralNetworkArchitecture<float>(
+            inputFeatures: 784,
+            numClasses: 10,
+            complexity: NetworkComplexity.Medium)))
+    .ConfigureOptimizer(new AdamOptimizer<float>(
+        learningRate: 1e-3f))
+    .ConfigurePreprocessing()
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(newImage);`
+      },
+      {
+        name: 'Transformer Model',
+        difficulty: 'Advanced',
+        tags: ['transformer', 'attention', 'NLP'],
+        description: 'Build a transformer model with multi-head self-attention.',
+        code: `using AiDotNet;
+using AiDotNet.NeuralNetworks;
+
+// Build a transformer model
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new Transformer<float>(
+        dModel: 512, nHeads: 8, nLayers: 6,
+        dFeedForward: 2048, vocabSize: 30000,
+        maxSeqLength: 512))
+    .ConfigureOptimizer(new AdamWOptimizer<float>(
+        learningRate: 1e-4f, weightDecay: 0.01f))
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(tokenizedInput);`
+      },
+    ]
+  },
+  {
+    name: 'Computer Vision',
+    icon: '👁',
+    examples: [
+      {
+        name: 'Object Detection (YOLO)',
+        difficulty: 'Intermediate',
+        tags: ['YOLO', 'detection', 'real-time'],
+        description: 'Detect objects in images using YOLOv11.',
+        code: `using AiDotNet;
+using AiDotNet.ComputerVision;
+
+// Object detection with YOLOv11
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new YoloV11<float>(
+        variant: YoloVariant.Medium,
+        numClasses: 80))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(images, boundingBoxes);
+
+var detections = result.Predict(newImage);`
+      },
+      {
+        name: 'Image Segmentation',
+        difficulty: 'Intermediate',
+        tags: ['segmentation', 'SAM', 'masks'],
+        description: 'Segment objects in images using Segment Anything Model.',
+        code: `using AiDotNet;
+using AiDotNet.ComputerVision;
+
+// Segment Anything Model
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new SAM2<float>("sam2-base"))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(images, masks);
+
+var segmentation = result.Predict(newImage);`
+      },
+    ]
+  },
+  {
+    name: 'Time Series',
+    icon: '📈',
+    examples: [
+      {
+        name: 'Stock Price Forecasting',
+        difficulty: 'Intermediate',
+        tags: ['forecasting', 'Chronos', 'finance'],
+        description: 'Forecast stock prices using the Chronos foundation model.',
+        code: `using AiDotNet;
+using AiDotNet.TimeSeries;
+
+// Time series forecasting with Chronos
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new Chronos<float>("chronos-t5-large"))
+    .ConfigurePreprocessing()
+    .BuildAsync(historicalPrices, futureValues);
+
+// Forecast next 30 days
+var forecast = result.Predict(recentPrices);`
+      },
+    ]
+  },
+  {
+    name: 'NLP & Text Processing',
+    icon: '📝',
+    examples: [
+      {
+        name: 'Sentiment Analysis',
+        difficulty: 'Intermediate',
+        tags: ['NLP', 'BERT', 'sentiment'],
+        description: 'Analyze text sentiment using FinBERT.',
+        code: `using AiDotNet;
+using AiDotNet.NLP;
+
+// Financial sentiment analysis
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new FinBERT<float>())
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(financialTexts, sentimentLabels);
+
+var sentiment = result.Predict(earningsCallText);`
+      },
+      {
+        name: 'Named Entity Recognition',
+        difficulty: 'Intermediate',
+        tags: ['NER', 'BERT', 'entities'],
+        description: 'Extract named entities from clinical text.',
+        code: `using AiDotNet;
+using AiDotNet.NLP;
+
+// Clinical NER with ClinicalBERT
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new ClinicalBERT<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(clinicalNotes, entityLabels);
+
+var entities = result.Predict(newClinicalNote);
+// [Diagnosis: "pneumonia", Medication: "amoxicillin"]`
+      },
+    ]
+  },
+  {
+    name: 'Audio Processing',
+    icon: '🎵',
+    examples: [
+      {
+        name: 'Speech Recognition',
+        difficulty: 'Intermediate',
+        tags: ['ASR', 'Whisper', 'transcription'],
+        description: 'Transcribe audio using Whisper.',
+        code: `using AiDotNet;
+using AiDotNet.Audio;
+
+// Speech recognition with Whisper
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new Whisper<float>("whisper-large-v3"))
+    .ConfigurePreprocessing()
+    .BuildAsync(audioSamples, transcriptions);
+
+var transcript = result.Predict(newAudio);`
+      },
+    ]
+  },
+  {
+    name: 'Reinforcement Learning',
+    icon: '🎮',
+    examples: [
+      {
+        name: 'PPO Agent',
+        difficulty: 'Advanced',
+        tags: ['RL', 'PPO', 'policy gradient'],
+        description: 'Train a PPO agent for continuous control.',
+        code: `using AiDotNet;
+using AiDotNet.ReinforcementLearning;
+
+// Train PPO agent
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 24, hiddenSize: 64, outputSize: 4))
+    .ConfigureReinforcementLearning(new PPOOptions(
+        clipEpsilon: 0.2f, entropyCoeff: 0.01f,
+        numEpochs: 10, batchSize: 64))
+    .ConfigureOptimizer(new AdamOptimizer<float>(lr: 3e-4f))
+    .BuildAsync(features, labels);
+
+var action = result.Predict(stateObservation);`
+      },
+    ]
+  },
+  {
+    name: 'LoRA & Fine-Tuning',
+    icon: '🔧',
+    examples: [
+      {
+        name: 'QLoRA Fine-Tuning',
+        difficulty: 'Advanced',
+        tags: ['LoRA', 'QLoRA', 'PEFT'],
+        description: 'Fine-tune a model with 4-bit quantized LoRA.',
+        code: `using AiDotNet;
+
+// QLoRA fine-tuning with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 768, hiddenSize: 256, outputSize: 10))
+    .ConfigureLoRA(new QLoRAConfig(
+        rank: 16, alpha: 32, quantBits: 4))
+    .ConfigureOptimizer(new AdamOptimizer<float>(lr: 2e-4f))
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(newSample);`
+      },
+    ]
+  },
+  {
+    name: 'Clustering',
+    icon: '🔮',
+    examples: [
+      {
+        name: 'K-Means Clustering',
+        difficulty: 'Beginner',
+        tags: ['clustering', 'K-Means', 'unsupervised'],
+        description: 'Group data points into clusters using K-Means.',
+        code: `using AiDotNet;
+using AiDotNet.Clustering;
+
+// K-Means clustering
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new KMeans<double>(numClusters: 3))
+    .BuildAsync();
+
+var clusterAssignment = result.Predict(newDataPoint);
+Console.WriteLine($"Cluster: {clusterAssignment[0]}");`
+      },
+    ]
+  },
+  {
+    name: 'Federated Learning',
+    icon: '🌐',
+    examples: [
+      {
+        name: 'Privacy-Preserving Training',
+        difficulty: 'Advanced',
+        tags: ['federated', 'privacy', 'distributed'],
+        description: 'Train models across institutions without sharing data.',
+        code: `using AiDotNet;
+
+// Federated learning with differential privacy
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 784, hiddenSize: 128, outputSize: 10))
+    .ConfigureFederatedLearning(new FederatedOptions(
+        strategy: new FedAvg<float>(),
+        rounds: 50, minClients: 2,
+        privacyBudget: new DifferentialPrivacy(epsilon: 1.0)))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(newSample);`
+      },
+    ]
+  },
+];
+
+const difficultyColors: Record<string, string> = {
+  Beginner: 'bg-green-500/20 text-green-400',
+  Intermediate: 'bg-yellow-500/20 text-yellow-400',
+  Advanced: 'bg-red-500/20 text-red-400',
+};
+---
+
+<BaseLayout title="Playground - AiDotNet" description="Interactive code examples for AiDotNet. Explore neural networks, computer vision, NLP, and more with ready-to-run C# code.">
+  <main class="min-h-screen bg-slate-950">
+    <!-- Hero -->
+    <section class="relative py-16 overflow-hidden">
+      <div class="absolute inset-0 bg-gradient-to-br from-indigo-950 via-slate-950 to-purple-950"></div>
+      <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mb-6">
+          INTERACTIVE PLAYGROUND
+        </span>
+        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">
+          Code <span class="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Examples</span>
+        </h1>
+        <p class="text-lg text-slate-400 max-w-2xl mx-auto mb-8">
+          Explore AiDotNet capabilities through curated code examples. Every example uses the AiModelBuilder facade pattern for consistent, production-ready code.
+        </p>
+        <div class="flex flex-wrap justify-center gap-4">
+          <a href={`${import.meta.env.BASE_URL}docs/getting-started/`} class="inline-flex items-center px-6 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors">
+            Get Started
+          </a>
+          <a href="https://github.com/ooples/AiDotNet" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-6 py-3 rounded-lg bg-white/5 hover:bg-white/10 text-white border border-white/10 font-medium transition-colors">
+            View on GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick Reference -->
+    <section class="py-12 border-b border-slate-800">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h2 class="text-2xl font-bold text-white mb-6">Quick Reference: AiModelBuilder Pattern</h2>
+        <div class="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-3 bg-slate-800/50 border-b border-slate-700">
+            <span class="text-sm text-slate-400 font-mono">Program.cs</span>
+          </div>
+          <pre class="p-6 text-sm leading-relaxed overflow-x-auto"><code class="text-slate-300"><span class="text-blue-400">using</span> AiDotNet;
+
+<span class="text-slate-500">// Every AiDotNet workflow follows this pattern:</span>
+<span class="text-blue-400">var</span> result = <span class="text-blue-400">await new</span> <span class="text-green-400">AiModelBuilder</span>&lt;<span class="text-yellow-400">double</span>, <span class="text-yellow-400">double</span>[], <span class="text-yellow-400">double</span>&gt;()
+    .<span class="text-purple-400">ConfigureModel</span>(<span class="text-blue-400">new</span> <span class="text-green-400">SomeModel</span>&lt;<span class="text-yellow-400">double</span>&gt;(...))       <span class="text-slate-500">// Set the model</span>
+    .<span class="text-purple-400">ConfigureOptimizer</span>(<span class="text-blue-400">new</span> <span class="text-green-400">AdamOptimizer</span>&lt;<span class="text-yellow-400">double</span>&gt;()) <span class="text-slate-500">// Set optimizer</span>
+    .<span class="text-purple-400">ConfigurePreprocessing</span>()                       <span class="text-slate-500">// Auto StandardScaler</span>
+    .<span class="text-purple-400">BuildAsync</span>(features, labels);                   <span class="text-slate-500">// Train</span>
+
+<span class="text-blue-400">var</span> prediction = result.<span class="text-purple-400">Predict</span>(newData);            <span class="text-slate-500">// Inference</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Examples Gallery -->
+    <section class="py-16">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold text-white mb-4">Code Examples by Category</h2>
+          <p class="text-slate-400">165+ examples available in the full playground. Here's a curated selection.</p>
+        </div>
+
+        <div class="space-y-12">
+          {categories.map((category) => (
+            <div class="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
+              <div class="px-6 py-4 border-b border-slate-800 flex items-center gap-3">
+                <span class="text-2xl">{category.icon}</span>
+                <h3 class="text-xl font-bold text-white">{category.name}</h3>
+                <span class="text-sm text-slate-500">({category.examples.length} examples)</span>
+              </div>
+              <div class="grid md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+                {category.examples.map((example) => (
+                  <div class="p-6">
+                    <div class="flex items-start justify-between mb-3">
+                      <h4 class="text-lg font-semibold text-white">{example.name}</h4>
+                      <span class={`px-2.5 py-0.5 rounded-full text-xs font-medium ${difficultyColors[example.difficulty]}`}>
+                        {example.difficulty}
+                      </span>
+                    </div>
+                    <p class="text-sm text-slate-400 mb-4">{example.description}</p>
+                    <div class="flex flex-wrap gap-1.5 mb-4">
+                      {example.tags.map((tag: string) => (
+                        <span class="px-2 py-0.5 rounded text-xs bg-indigo-500/10 text-indigo-400">{tag}</span>
+                      ))}
+                    </div>
+                    <div class="bg-slate-950 rounded-lg border border-slate-700 overflow-hidden">
+                      <pre class="p-4 text-xs leading-relaxed overflow-x-auto"><code class="text-slate-300">{example.code}</code></pre>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- API Reference Section -->
+    <section class="py-16 border-t border-slate-800">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold text-white mb-4">API Reference</h2>
+          <p class="text-slate-400">Key namespaces in the AiDotNet framework.</p>
+        </div>
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { ns: 'AiDotNet', desc: 'Core interfaces and the AiModelBuilder facade.' },
+            { ns: 'AiDotNet.NeuralNetworks', desc: '100+ neural network architectures: CNN, RNN, Transformer, GAN, VAE, GNN.' },
+            { ns: 'AiDotNet.Classification', desc: '50 classification algorithms: SVM, Random Forest, Gradient Boosting.' },
+            { ns: 'AiDotNet.Regression', desc: '57 regression algorithms: Linear, Ridge, Lasso, ElasticNet, SVR.' },
+            { ns: 'AiDotNet.ComputerVision', desc: '115+ vision models: YOLO, DETR, Faster R-CNN, SAM, OCR.' },
+            { ns: 'AiDotNet.Audio', desc: '250+ audio models: Whisper, Wav2Vec2, TTS, Speech Enhancement.' },
+            { ns: 'AiDotNet.ReinforcementLearning', desc: '50+ RL agents: DQN, PPO, SAC, DDPG, MCTS.' },
+            { ns: 'AiDotNet.LoRA', desc: '50+ PEFT adapters: QLoRA, DoRA, AdaLoRA, VeRA, GaLore.' },
+          ].map((item) => (
+            <div class="bg-slate-900 rounded-xl border border-slate-800 p-5 hover:border-indigo-500/50 transition-colors">
+              <h3 class="text-indigo-400 font-mono text-sm font-medium mb-2">{item.ns}</h3>
+              <p class="text-slate-400 text-sm leading-relaxed">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="py-16 border-t border-slate-800">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h2 class="text-2xl font-bold text-white mb-4">Ready to build?</h2>
+        <p class="text-slate-400 mb-8">Install AiDotNet and start building AI applications in pure .NET.</p>
+        <div class="bg-slate-900 rounded-lg border border-slate-700 p-4 mb-8 font-mono text-sm text-slate-300">
+          dotnet add package AiDotNet
+        </div>
+        <div class="flex flex-wrap justify-center gap-4">
+          <a href={`${import.meta.env.BASE_URL}docs/getting-started/`} class="inline-flex items-center px-6 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors">
+            Read the Docs
+          </a>
+          <a href={`${import.meta.env.BASE_URL}features/`} class="inline-flex items-center px-6 py-3 rounded-lg bg-white/5 hover:bg-white/10 text-white border border-white/10 font-medium transition-colors">
+            Browse Features
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

@@ -1,0 +1,153 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Inputs;
+using AiDotNet.Optimizers;
+
+namespace AiDotNet.DistributedTraining;
+
+/// <summary>
+/// Implements Tensor Parallel optimizer - coordinates updates for tensor-parallel layers.
+/// </summary>
+/// <remarks>
+/// <para><b>Strategy Overview:</b>
+/// Tensor parallel optimizer coordinates optimization for models using tensor parallelism.
+/// Different parts of each layer are distributed across processes, requiring careful
+/// synchronization. For column-parallel layers, an AllReduce is needed after computation.
+/// For row-parallel layers, synchronization happens before computation. The optimizer
+/// ensures proper gradient flow and parameter updates across the tensor-parallel group.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// This optimizer works with tensor parallel models where individual layers are split.
+/// Since each process only has part of each layer, we need to carefully coordinate
+/// gradient synchronization. Different layer types require different synchronization
+/// patterns (before or after the computation).
+/// </para>
+/// <para><b>Use Cases:</b>
+/// - Works with TensorParallelModel
+/// - Transformer models with large layers
+/// - Very wide models
+/// </para>
+/// <para><b>Trade-offs:</b>
+/// - Memory: Excellent for wide layers
+/// - Communication: High - frequent synchronization within layers
+/// - Complexity: Very High - layer-specific patterns
+/// - Best for: Large transformers, fast interconnects
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type</typeparam>
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class TensorParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, TOutput>
+{
+    public TensorParallelOptimizer(
+        IOptimizer<T, TInput, TOutput> wrappedOptimizer,
+        IShardingConfiguration<T> config)
+        : base(wrappedOptimizer, config)
+    {
+    }
+
+    /// <inheritdoc/>
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        Config.CommunicationBackend.Barrier();
+
+        // The closing barrier is a collective: every rank MUST reach it, or ranks that
+        // succeeded will block forever waiting on a rank that threw in the post-step work
+        // (validation, wrapped step, parameter sync, or offload). Run the whole body — INCLUDING
+        // the null validation — under try/finally so the barrier executes unconditionally and a
+        // rank that receives null cannot strand its peers.
+        try
+        {
+            if (inputData == null)
+                throw new ArgumentNullException(nameof(inputData));
+
+            // Optimize on local tensor-parallel shard. RunWrappedOptimizerStep
+            // engages IShardingConfiguration.CpuOffloadOptimizer: Adam m/v state
+            // + step run on CpuEngine.
+            var result = RunWrappedOptimizerStep(inputData);
+
+            // AUDIT (no double-reduce): this optimizer is the black-box PARAMETER-REPLICATION fallback for
+            // models that cannot be layer-partitioned. It averages PARAMETERS across the tensor-parallel
+            // group — it does NOT reduce gradients — so it cannot double-count against the real Megatron-LM
+            // gradient reduction, which lives at the LAYER level (the f/ḡ conjugate all-reduce inside
+            // ColumnParallelLinear/RowParallelLinear, exercised end-to-end and guarded against a duplicate
+            // reduce by the MegatronMLP_TwoRank == NonParallel invariant). A model built from those layer
+            // primitives already produces correct gradients on the tape and does not need this wrapper;
+            // wrapping it anyway is redundant (averaging already-identical replicas) but not incorrect.
+            if (Config.AutoSyncGradients && result.BestSolution != null)
+            {
+                SynchronizeParameters(result.BestSolution);
+            }
+
+            OffloadParamsToCpu(result.BestSolution);
+            return result;
+        }
+        finally
+        {
+            Config.CommunicationBackend.Barrier();
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void SynchronizeOptimizerState()
+    {
+        // In tensor parallelism, each process owns a slice of each layer
+        // Optimizer states are partitioned similarly
+        // Synchronization happens at the parameter level during forward/backward
+        // rather than at optimizer state level
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize sharding configuration info
+        writer.Write(WorldSize);
+        writer.Write(Rank);
+        writer.Write(Config.AutoSyncGradients);
+        writer.Write(Config.MinimumParameterGroupSize);
+        writer.Write(Config.EnableGradientCompression);
+
+        // Serialize wrapped optimizer
+        var optimizerData = WrappedOptimizer.Serialize();
+        writer.Write(optimizerData.Length);
+        writer.Write(optimizerData);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read sharding configuration (for validation)
+        int savedWorldSize = reader.ReadInt32();
+        int savedRank = reader.ReadInt32();
+        reader.ReadBoolean(); // AutoSyncGradients
+        reader.ReadInt32(); // MinimumParameterGroupSize
+        reader.ReadBoolean(); // EnableGradientCompression
+
+        if (savedWorldSize != WorldSize)
+        {
+            throw new InvalidOperationException(
+                $"World size mismatch. Optimizer was saved with {savedWorldSize} processes, " +
+                $"but current configuration has {WorldSize} processes.");
+        }
+
+        if (savedRank != Rank)
+        {
+            throw new InvalidOperationException(
+                $"Rank mismatch. Optimizer was saved on rank {savedRank}, " +
+                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
+        }
+
+        // Read wrapped optimizer
+        int optimizerDataLength = reader.ReadInt32();
+        byte[] optimizerData = reader.ReadBytes(optimizerDataLength);
+        WrappedOptimizer.Deserialize(optimizerData);
+    }
+}

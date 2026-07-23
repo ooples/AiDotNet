@@ -1,0 +1,573 @@
+﻿using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
+
+/// <summary>
+/// ODISE: Open-vocabulary DIffusion-based panoptic SEgmentation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Open-vocabulary panoptic segmentation. Segmenting novel categories not seen during training.
+///
+/// Common use cases:
+/// - Open-vocabulary panoptic segmentation
+/// - Segmenting novel categories not seen during training
+/// - Creative content understanding
+/// - Cross-domain scene parsing
+/// </para>
+/// <para>
+/// <b>Technical Details:</b>
+/// - Leverages Stable Diffusion internal representations for segmentation
+/// - Text-image discriminative model (CLIP) for category assignment
+/// - Mask generator trained on diffusion features
+/// - Zero-shot panoptic segmentation capability
+/// </para>
+/// <para>
+/// <b>Reference:</b> Xu et al., "Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", CVPR 2023.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an ODISE model for open-vocabulary panoptic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
+/// var model = new ODISE&lt;double&gt;(architecture, numClasses: 133);
+///
+/// // Or load a pre-trained ONNX model for diffusion-based segmentation
+/// var onnxModel = new ODISE&lt;double&gt;(architecture, "odise.onnx", numClasses: 133);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", "https://arxiv.org/abs/2303.04803", Year = 2023, Authors = "Xu et al.")]
+public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
+{
+    private readonly ODISEOptions _options;
+    public override ModelOptions GetOptions() => _options;
+
+    #region Fields
+    private readonly int _height, _width, _channels, _numClasses;
+    private readonly ODISEModelSize _modelSize;
+    private readonly int[] _channelDims;
+    private readonly int _decoderDim;
+    private readonly int[] _depths;
+    private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    // True when the constructor caller supplied an explicit optimizer, so tape
+    // training honors it instead of the built-in LR-warmup Adam default.
+    private readonly bool _hasUserSuppliedOptimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
+
+    // Per-encoder-stage layer counts, used by Forward to tap each stage's output for
+    // the U-Net skip connections. Null when layers come from a pre-supplied
+    // Architecture (Forward then falls back to a plain sequential pass).
+    private int[]? _encoderStageLayerCounts;
+
+    // Each decoder upsampling stage is Deconv + GroupNorm + SiLU + ResidualBlock +
+    // GroupNorm (see LayerHelper.CreateODISEDecoderLayers). Forward consumes exactly
+    // this many layers per stage before inserting the skip-concat. Aliases the single
+    // source of truth in LayerHelper so the builder and this consumer can't drift apart.
+    private const int DecoderStageLayerCount = LayerHelper<T>.ODISEDecoderStageLayerCount;
+    #endregion
+
+    #region Properties
+    /// <summary>
+    /// Gets whether this ODISE instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
+    internal bool UseNativeMode => _useNativeMode;
+    internal ODISEModelSize ModelSize => _modelSize;
+    internal int NumClasses => _numClasses;
+    #endregion
+
+    #region Constructors
+    /// <summary>
+    /// Initializes ODISE in native (trainable) mode.
+    /// </summary>
+    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
+    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
+    /// <param name="modelSize">Model size variant (default: Base).</param>
+    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
+    /// <param name="options">Optional model options.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Creates a trainable ODISE model.
+    /// </para>
+    /// </remarks>
+    public ODISE(NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null, int numClasses = 133,
+        ODISEModelSize modelSize = ODISEModelSize.Base, double dropRate = 0.1,
+        ODISEOptions? options = null)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+    {
+        _options = options ?? new ODISEOptions(); Options = _options;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        _hasUserSuppliedOptimizer = optimizer is not null;
+        _optimizer = optimizer;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Initializes ODISE in ONNX (inference-only) mode.
+    /// </summary>
+    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
+    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
+    /// <param name="modelSize">Model size for metadata (default: Base).</param>
+    /// <param name="options">Optional model options.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Loads a pre-trained ODISE from ONNX for inference.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
+    public ODISE(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
+        int numClasses = 133, ODISEModelSize modelSize = ODISEModelSize.Base,
+        ODISEOptions? options = null)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+    {
+        _options = options ?? new ODISEOptions(); Options = _options;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"ODISE ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.1;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load ODISE ONNX model: {ex.Message}", ex); }
+        InitializeLayers();
+    }
+    #endregion
+
+    #region Public Methods
+    /// <summary>
+    /// Runs a forward pass to produce per-pixel class probabilities.
+    /// </summary>
+    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
+    /// <returns>Probability tensor in [0, 1] with the same spatial layout as input.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Pass an image to get a per-pixel class probability map.
+    /// </para>
+    /// <para>
+    /// Inference applies softmax along the class dimension so the output is a
+    /// probability distribution per pixel, matching the paper-canonical inference
+    /// formulation (Xu et al. 2023 §3 outputs per-pixel class probabilities; CE
+    /// loss applies log-softmax internally during training, so the training path
+    /// continues to consume raw logits via <see cref="Forward"/>).
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        // Both modes must return the same semantics — per-pixel class
+        // probabilities along the class dim (Xu et al. 2023 §3 paper
+        // formulation). The ONNX path used to return raw output, making
+        // Predict() behave differently between native and ONNX modes and
+        // breaking SegmentPanoptic's confidence math (which assumes values
+        // in [0, 1]). Apply the same softmax in both paths so the public
+        // contract is consistent.
+        var logits = _useNativeMode ? Forward(input) : PredictOnnx(input);
+        return Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
+    }
+
+    /// <summary>
+    /// Performs one training step.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Trains the model. Only available in native mode.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
+    /// <summary>
+    /// ODISE trains the dense per-pixel segmentation head through a deep convolutional
+    /// encoder/decoder. Its Stable-Diffusion U-Net encoder (SiLU + GroupNorm residual
+    /// stack, per Xu et al. 2023 §3) is randomly initialised at test time, so the very
+    /// first optimizer steps see large, poorly-conditioned gradients: at a fixed 1e-2 the
+    /// per-pixel cross-entropy overshoots on step 1-2 and then DIVERGES (CE 2.35 → 5.5),
+    /// while a fixed 1e-4 is too slow to memorise within the probe's 100 iterations.
+    ///
+    /// The standard remedy for this exact failure mode — and the regime diffusion U-Net
+    /// training itself uses — is a linear learning-rate WARMUP: ramp the rate from ~0 up
+    /// to the target over the first few steps so Adam's moment estimates stabilise on the
+    /// ill-conditioned initial geometry before the full step size is applied, then hold it
+    /// constant. This restores a monotonic decrease without weakening any test tolerance or
+    /// touching the architecture.
+    ///
+    /// NOTE: the scheduler must be stepped PER BATCH (<see cref="SchedulerStepMode.StepPerBatch"/>)
+    /// — the tape training path advances the scheduler via OnBatchEnd once per Train() call,
+    /// and the default StepPerEpoch mode would leave the warmup pinned at its initial rate.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        // Honor a constructor-supplied optimizer (public contract). Only fall back to
+        // the built-in LR-warmup Adam — which the from-scratch SD-U-Net needs for a
+        // stable descent — when the caller did not provide one.
+        if (_hasUserSuppliedOptimizer && _optimizer is not null)
+            return _optimizer;
+
+        // Adam at 1e-3 (the standard deep-net rate), NOT 1e-2. A loss-trajectory probe on the
+        // from-scratch SD-U-Net showed 1e-2 OVERSHOOTS: the CE loss descends to ~1.49 through the
+        // low-LR warmup, then climbs monotonically (->1.82 by step 30) once the LR reaches the full
+        // 1e-2 — the deep encoder-decoder can't take 1e-2 Adam steps stably, so Training_ShouldReduceLoss
+        // / MemorizationTask / MoreData all saw the loss rise. 1e-3 with the same warmup gives a stable
+        // monotonic descent.
+        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = false,
+                InitialLearningRate = 0.001,
+                SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                LearningRateScheduler = new LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: 0.001,
+                    warmupSteps: 10,
+                    totalSteps: 0,          // 0 => no decay phase; hold at baseLearningRate after warmup
+                    warmupInitLr: 0.0001)   // start small but NONZERO so the very first step still trains
+            });
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+    #endregion
+
+    #region Private Methods
+    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(ODISEModelSize modelSize) => modelSize switch
+    {
+        ODISEModelSize.Base => ([64, 128, 320, 512], [2, 2, 4, 2], 256),
+        ODISEModelSize.Large => ([96, 192, 384, 768], [2, 4, 8, 2], 256),
+        _ => ([64, 128, 320, 512], [2, 2, 4, 2], 256)
+    };
+
+    /// <summary>
+    /// Forward pass with Stable Diffusion U-Net skip connections (Xu et al. 2023 §3).
+    /// The encoder is run stage-by-stage and each stage's output is tapped; the decoder
+    /// then upsamples the bottleneck and concatenates the matching-resolution encoder
+    /// tap before each successive upsampling stage. The skips inject the encoder's
+    /// high-resolution (spatially-detailed) features into the decoder so the dense
+    /// per-pixel head is conditioned on per-pixel input — without them the 32x
+    /// downsample collapses a small input to a 1x1 bottleneck and the output is
+    /// spatially uniform.
+    /// </summary>
+    private Tensor<T> Forward(Tensor<T> input)
+    {
+        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+
+        // When the layers come from a pre-supplied Architecture (no generated
+        // encoder/decoder split), fall back to a plain sequential pass.
+        if (_encoderStageLayerCounts is null)
+        {
+            var seq = input;
+            for (int i = 0; i < Layers.Count; i++) seq = Layers[i].Forward(seq);
+            if (!hasBatch) seq = RemoveBatchDimension(seq); return seq;
+        }
+
+        var features = input;
+        int li = 0;
+        int n = _encoderStageLayerCounts.Length;
+
+        // Encoder: run each stage and tap its output (taps[n-1] is the bottleneck).
+        var taps = new Tensor<T>[n];
+        for (int s = 0; s < n; s++)
+        {
+            int stageLayers = _encoderStageLayerCounts[s];
+            for (int k = 0; k < stageLayers; k++) features = Layers[li++].Forward(features);
+            taps[s] = features;
+        }
+
+        // Decoder: n-1 transposed-conv upsampling stages (3 layers each). After each
+        // upsample, concat the encoder tap at the now-matching resolution (the stage
+        // whose output shares that resolution): ds=0 -> taps[n-2], ds=1 -> taps[n-3], ...
+        for (int ds = 0; ds < n - 1; ds++)
+        {
+            for (int k = 0; k < DecoderStageLayerCount; k++) features = Layers[li++].Forward(features);
+            features = Engine.TensorConcatenate(new[] { features, taps[n - 2 - ds] }, axis: 1);
+        }
+
+        // Stem-reversal upsample stage + dense head — no skip (encoder has no feature
+        // map above the stem resolution). Run all remaining layers sequentially.
+        while (li < Layers.Count) features = Layers[li++].Forward(features);
+
+        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+    }
+
+    /// <summary>
+    /// Training forward MUST use the same skip-connection path as inference so the lazy
+    /// decoder convolutions resolve their input channel counts against the CONCATENATED
+    /// feature maps. A plain sequential pass would resolve them against non-concatenated
+    /// inputs and then mismatch at the first real (skip) forward.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    private Tensor<T> PredictOnnx(Tensor<T> input)
+    {
+        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
+        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        var inputData = new float[input.Length];
+        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
+        string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
+        using var results = _onnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+        var outputData = new T[outputTensor.Length];
+        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
+        if (!hasBatch) result = RemoveBatchDimension(result); return result;
+    }
+
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    #endregion
+
+    #region Abstract Implementation
+    /// <summary>
+    /// Initializes the encoder and decoder layers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In native mode, builds the neural network layers.
+    /// In ONNX mode, no layers are created.
+    /// </para>
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) { ClearLayers(); return; }
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
+        else
+        {
+            var encoderLayers = LayerHelper<T>.CreateODISEEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
+            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
+            // Layers per encoder stage (mirrors CreateODISEEncoderLayers): a strided
+            // downsample Conv + GroupNorm + SiLU, then (depth-1) residual blocks each
+            // wrapped as ResidualLayer + GroupNorm.
+            _encoderStageLayerCounts = new int[_depths.Length];
+            for (int s = 0; s < _depths.Length; s++) _encoderStageLayerCounts[s] = 3 + (_depths[s] - 1) * 2;
+            var decoderLayers = LayerHelper<T>.CreateODISEDecoderLayers(_channelDims, _decoderDim, _numClasses);
+            Layers.AddRange(decoderLayers);
+        }
+    }
+
+    private bool _lazyShapesResolved;
+
+    /// <summary>
+    /// Resolves every lazy encoder/decoder layer's input/output shape by running
+    /// ONE real forward through ODISE's actual skip-connection topology.
+    /// </summary>
+    /// <remarks>
+    /// ODISE's decoder is the Stable-Diffusion U-Net decoder: <see cref="Forward"/>
+    /// CONCATENATES each encoder tap onto the upsampled feature map before the next
+    /// transposed-conv stage (Xu et al. 2023 §3), so a post-concat deconv's true
+    /// input channel count is DOUBLE its sequential predecessor's (e.g. 320 + 320 =
+    /// 640). The base class's sequential shape-walk cannot model the concats — it
+    /// would resolve that deconv against its non-concatenated predecessor (320),
+    /// pin the lazy kernel to the wrong inChannels, and crash the first real
+    /// (skip-path) forward with "Input inChannels (640) must match kernel inChannels
+    /// (320)". Resolving through the real forward fixes the channel counts AND keeps
+    /// <see cref="NeuralNetworkBase{T}.ParameterCount"/> non-zero before the first
+    /// user forward (the contract the base method upholds for ModelFamily's
+    /// pre-forward Parameters_ShouldBeNonEmpty invariant).
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesResolved) return;
+        // Called during base construction before InitializeLayers has run (Layers still
+        // empty, _useNativeMode not yet assigned): nothing to resolve and nothing to
+        // latch — the post-construction call does the real work. Check this BEFORE the
+        // native-mode guard so a base-ctor call can't prematurely mark shapes resolved.
+        if (Layers is null || Layers.Count == 0) return;
+        // ONNX mode has no native layers to resolve.
+        if (!_useNativeMode) { _lazyShapesResolved = true; return; }
+        // A single inference-mode forward through the real skip topology
+        // materializes every lazy layer with its correct (concatenated) channels.
+        using (InferenceMode.Enter())
+        {
+            Forward(new Tensor<T>([1, _channels, _height, _width]));
+        }
+        _lazyShapesResolved = true;
+    }
+
+    /// <summary>
+    /// Updates all trainable parameters from a flat parameter vector.
+    /// </summary>
+    /// <param name="parameters">Flat vector of all model parameters.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Replaces all model weights with new values.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+
+    /// <summary>
+    /// Collects metadata describing this model's configuration.
+    /// </summary>
+    /// <returns>Model metadata.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns a summary for saving or display.
+    /// </para>
+    /// </remarks>
+    public override ModelMetadata<T> GetModelMetadata() => new()
+    {
+        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "ODISE" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
+        ModelData = SerializeForMetadata()
+    };
+
+    /// <summary>
+    /// Writes configuration to a binary stream.
+    /// </summary>
+    /// <param name="writer">The binary writer.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write((int)_modelSize); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
+
+    /// <summary>
+    /// Reads configuration from a binary stream.
+    /// </summary>
+    /// <param name="reader">The binary reader.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
+
+    /// <summary>
+    /// Creates a new instance with the same configuration but fresh weights.
+    /// </summary>
+    /// <returns>A new model instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
+        ? new ODISE<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
+        : new ODISE<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region IPanopticSegmentation Implementation
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IPanopticSegmentation<T>.NumStuffClasses => Math.Max(1, _numClasses / 3);
+    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
+    PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
+    {
+        // Predict() returns per-pixel softmax probabilities (paper-faithful
+        // inference output per Xu et al. 2023 §3), so the probability map and
+        // argmax-derived class map both come directly from that — applying
+        // SoftmaxAlongClassDim again would double-softmax. Argmax is invariant
+        // under softmax so the semanticMap is unchanged.
+        var probMap = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
+        var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(probMap);
+        int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
+        int numStuff = Math.Max(1, _numClasses / 3);
+        var instanceMap = new Tensor<T>([h, w]);
+        var panopticMap = new Tensor<T>([h, w]);
+        var segments = new List<PanopticSegment<T>>();
+        int nextInstId = 1;
+        for (int cls = 0; cls < numStuff; cls++)
+        {
+            int area = 0; double sumConf = 0;
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w; col++)
+                    if (NumOps.Compare(semanticMap[row, col], NumOps.FromDouble(cls)) == 0)
+                    { panopticMap[row, col] = NumOps.FromDouble(cls * 1000); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
+            if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = cls, ClassId = cls, IsThing = false, Confidence = sumConf / area, Area = area });
+        }
+        for (int cls = numStuff; cls < _numClasses; cls++)
+        {
+            var (labelMap, count) = Common.SegmentationTensorOps.LabelConnectedComponents(semanticMap, cls);
+            for (int comp = 1; comp <= count; comp++)
+            {
+                int instId = nextInstId++;
+                int area = 0; double sumConf = 0; var compMask = new Tensor<T>([h, w]);
+                for (int row = 0; row < h; row++)
+                    for (int col = 0; col < w; col++)
+                        if (NumOps.Compare(labelMap[row, col], NumOps.FromDouble(comp)) == 0)
+                        { instanceMap[row, col] = NumOps.FromDouble(instId); panopticMap[row, col] = NumOps.FromDouble(cls * 1000 + instId); compMask[row, col] = NumOps.FromDouble(1.0); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
+                if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = instId, ClassId = cls, IsThing = true, Confidence = sumConf / area, Area = area, Mask = compMask });
+            }
+        }
+        return new PanopticSegmentationResult<T> { SemanticMap = semanticMap, InstanceMap = instanceMap, PanopticMap = panopticMap, Segments = segments };
+    }
+    #endregion
+}

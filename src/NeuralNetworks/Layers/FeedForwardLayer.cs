@@ -1,0 +1,938 @@
+using AiDotNet.Helpers;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a fully connected (dense) feed-forward layer in a neural network.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A feed-forward layer, also known as a fully connected or dense layer, is one of the most common
+/// types of neural network layers. It connects every input neuron to every output neuron with
+/// learnable weights. Each output neuron also has a learnable bias term. The layer applies a linear
+/// transformation followed by an activation function to produce its output.
+/// </para>
+/// <para><b>For Beginners:</b> A feed-forward layer is like a voting system where every input gets to vote on every output.
+/// 
+/// Imagine you have 3 inputs and 2 outputs:
+/// - Each input has a different level of influence (weight) on each output
+/// - Each output has its own starting value (bias)
+/// - The layer calculates each output by combining all input influences plus the bias
+/// - Finally, an activation function adds non-linearity (like setting a threshold)
+/// 
+/// For example:
+/// - Input: [0.2, 0.5, 0.1] (representing features from previous layer)
+/// - Weights: [[0.1, 0.8], [0.4, 0.3], [0.7, 0.2]] (each input's influence on each output)
+/// - Biases: [0.1, -0.2] (starting values for each output)
+/// - Output before activation: [0.2×0.1 + 0.5×0.4 + 0.1×0.7 + 0.1, 0.2×0.8 + 0.5×0.3 + 0.1×0.2 - 0.2]
+///                           = [0.39, 0.33]
+/// - After activation (e.g., ReLU): [0.39, 0.33] (since both are already positive)
+/// 
+/// Feed-forward layers are the building blocks of many neural networks. Multiple
+/// feed-forward layers stacked together form a "deep" neural network that can
+/// learn increasingly complex patterns.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.FeedForward)]
+[LayerTask(LayerTask.Projection)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
+public partial class FeedForwardLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// The weight matrix connecting input neurons to output neurons.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the learnable weights for the connections between each input neuron and each output neuron.
+    /// The shape is [inputSize, outputSize], where each element represents the strength of the connection
+    /// between an input neuron and an output neuron.
+    /// </para>
+    /// <para><b>For Beginners:</b> These weights determine how strongly each input affects each output.
+    /// 
+    /// Think of weights like importance factors:
+    /// - Positive weights mean "if this input increases, increase the output"
+    /// - Negative weights mean "if this input increases, decrease the output"
+    /// - Larger values (positive or negative) mean stronger influence
+    /// - Values near zero mean weak influence
+    /// 
+    /// During training:
+    /// - The network adjusts these weights to find the best relationships
+    /// - Strong patterns get higher weights
+    /// - Irrelevant connections get weights closer to zero
+    /// 
+    /// For example, in an image recognition task, weights might connect pixel brightness values
+    /// to features like "contains an edge" or "contains a curved line."
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _weights;
+
+    /// <summary>
+    /// The bias values for each output neuron.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the learnable bias terms for each output neuron. The shape is [1, outputSize].
+    /// The bias is added to the weighted sum of inputs before applying the activation function.
+    /// </para>
+    /// <para><b>For Beginners:</b> Biases are like default or starting values for each output.
+    ///
+    /// Biases serve several important purposes:
+    /// - They allow outputs to be activated even when all inputs are zero
+    /// - They act like an adjustable threshold for each neuron
+    /// - They give the network more flexibility in learning
+    ///
+    /// For example:
+    /// - A neuron with a large negative bias is "reluctant" to activate
+    /// - A neuron with a large positive bias "wants" to activate
+    /// - During training, biases adjust to find the optimal activation threshold
+    ///
+    /// Without biases, all outputs would be zero when all inputs are zero,
+    /// which would limit what the network can learn.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    private Tensor<T> _biases;
+
+    /// <summary>
+    /// Reusable per-layer scratch for the fused-linear OUTPUT ([batch, outputSize]),
+    /// used only on the #1672 <see cref="ForwardScratchGate"/> inference path
+    /// (<c>ForwardScratchGate.FusedLinear</c>) for rank-2 input. Reusing this buffer across
+    /// denoising steps of the same shape removes the FFN's per-call output allocation from
+    /// the per-step churn. Reallocated whenever the required shape changes. Never aliased by
+    /// any other live tensor: <c>Engine.FusedLinearInto</c> fully overwrites every element
+    /// each call and the result is consumed before the next call to this same layer instance.
+    /// NOT used while a gradient tape is active or in training.
+    /// </summary>
+    private Tensor<T>? _fusedLinearScratch;
+
+    /// <summary>
+    /// Whether the weight and bias tensors have been allocated and initialized.
+    /// Lazy initialization defers the expensive allocation (potentially millions of
+    /// parameters) from construction time to first Forward() call, reducing model
+    /// construction time from minutes to milliseconds for large architectures.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <summary>
+    /// Gets whether this layer's parameters have been allocated and initialized.
+    /// </summary>
+    public override bool IsInitialized => _isInitialized;
+
+    /// <summary>
+    /// Stored input dimension for lazy initialization.
+    /// </summary>
+    private int _inputSize;
+
+    /// <summary>
+    /// Stored output dimension for lazy initialization.
+    /// </summary>
+    private readonly int _outputSize;
+
+    /// <summary>
+    /// The input tensor from the last forward pass, saved for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the input received during the last forward pass. It is necessary for computing
+    /// gradients during the backward pass (backpropagation).
+    /// </para>
+    /// <para><b>For Beginners:</b> This remembers what input data was processed most recently.
+    /// 
+    /// During training:
+    /// - The layer needs to remember what input values it processed
+    /// - This helps when calculating how to improve the weights and biases
+    /// - It's like keeping your work when solving a math problem
+    /// 
+    /// This value is automatically cleared between training batches to save memory.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> Input { get; set; }
+
+    /// <summary>
+    /// The output tensor from the last forward pass, saved for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the output produced during the last forward pass. It is used during
+    /// backpropagation to compute certain gradients, particularly for activation functions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores what the layer output after its most recent calculation.
+    /// 
+    /// During training:
+    /// - The network needs to remember what predictions it made
+    /// - This helps calculate how to improve the weights and biases
+    /// - The output values are used when computing how to adjust parameters
+    /// 
+    /// This is also cleared after each training batch to save memory.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> Output { get; set; }
+
+    /// <summary>
+    /// Cached pre-activation output (after linear transform, before activation function).
+    /// Required for correct activation derivative computation — GELU and other activations
+    /// need the pre-activation input, not the post-activation output.
+    /// </summary>
+    private Tensor<T>? PreActivationOutput { get; set; }
+
+    /// <summary>
+    /// The gradients for the weights, computed during backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the gradients of the loss with respect to each weight. These gradients are
+    /// used to update the weights during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores information about how to adjust each weight value.
+    /// 
+    /// During training:
+    /// - The network calculates how each weight contributed to errors
+    /// - Gradients show both direction and amount to change each weight
+    /// - Larger gradients mean bigger adjustments are needed
+    /// 
+    /// For example:
+    /// - A positive gradient means "decrease this weight to reduce error"
+    /// - A negative gradient means "increase this weight to reduce error"
+    /// - The magnitude indicates how strongly the weight should change
+    /// 
+    /// These gradients are used in the UpdateParameters method to actually
+    /// modify the weights.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _weightsGradient;
+
+    /// <summary>
+    /// The gradients for the biases, computed during backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the gradients of the loss with respect to each bias. These gradients are
+    /// used to update the biases during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores information about how to adjust each bias value.
+    /// 
+    /// During training:
+    /// - The network calculates how each bias contributed to errors
+    /// - These gradients show how to adjust the "threshold" of each neuron
+    /// - They work just like weight gradients, but for bias values
+    /// 
+    /// For example:
+    /// - If a neuron activates too easily, its bias gradient will be positive
+    ///   (suggesting to decrease the bias)
+    /// - If a neuron doesn't activate enough, its bias gradient will be negative
+    ///   (suggesting to increase the bias)
+    /// 
+    /// Bias gradients are often simpler to calculate than weight gradients because
+    /// each bias affects only one output directly.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _biasesGradient;
+
+    // GPU cached tensors for backward pass
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuOutput;
+    private int[] _gpuInputShape = [];
+
+    /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because feed-forward layers have trainable parameters (weights and biases).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that the feed-forward layer supports training through backpropagation.
+    /// The layer has trainable parameters (weights and biases) that are updated during the training process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
+    /// 
+    /// A value of true means:
+    /// - The layer can adjust its weights and biases during training
+    /// - It will improve its performance as it sees more data
+    /// - It has parameters that are updated to make better predictions
+    /// 
+    /// Feed-forward layers are the primary learning components in many neural networks,
+    /// as they contain most of the trainable parameters.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <remarks>
+    /// This includes all weights (inputSize × outputSize) and all biases (outputSize).
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            if (_isInitialized) return _weights.Length + _biases.Length;
+            // Compute in long to detect overflow for very large layers; int arithmetic
+            // on (_inputSize * _outputSize) + _outputSize can silently wrap to a
+            // negative value and break parameter-shape validation downstream.
+            long count = (long)_inputSize * _outputSize + _outputSize;
+            if (count > int.MaxValue)
+                throw new OverflowException(
+                    $"FeedForwardLayer parameter count {count} exceeds int.MaxValue " +
+                    $"(inputSize={_inputSize}, outputSize={_outputSize}).");
+            return (int)count;
+        }
+    }
+    // Note: the source generator (TrainableParameterGenerator) auto-emits
+    // GetTrainableParameters() with an EnsureInitialized() trampoline, so
+    // tape-based training that calls CollectParameters before the first Forward()
+    // correctly triggers our lazy weight allocation. No manual override needed.
+
+    /// <summary>
+    /// Allocates and initializes weight and bias tensors on first use.
+    /// Uses Xavier/Glorot initialization for weights and zero for biases.
+    /// Thread-safe via double-checked locking.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+
+            // Use SimdRandom for vectorized weight initialization (4x faster than
+            // Tensor.CreateRandom which uses LockedRandom with per-element locking).
+            // SimdRandom uses AVX2 xoshiro256** to produce 4 doubles per iteration.
+            // Streaming-aware allocation: PaLM-E's FFN layers are the
+            // second-largest memory consumer after MHA (4× hidden_size
+            // expansion). Routing through AllocateLazyWeight lets the
+            // pool pre-evict before the new GC byte[] lands.
+            _weights = AllocateLazyWeight([_inputSize, _outputSize]);
+            // Closes #1383: honor the layer-level RandomSeed so consecutive
+            // FeedForwardLayer constructions at the same architecture seed
+            // produce bit-identical weight init. Previously this used the
+            // parameterless `new SimdRandom()` which consumes the
+            // process-static counter and gives a different seed on each
+            // construction within the same process.
+            var rng = RandomSeed.HasValue
+                ? new SimdRandom(RandomSeed.Value)
+                : new SimdRandom();
+            var wSpan = _weights.Data.Span;
+            int total = wSpan.Length;
+
+            // Xavier/Glorot uniform initialization: U(-a, a) where a = sqrt(6 / (fan_in + fan_out)).
+            // SimdRandom produces uniform [0, 1); we shift to [-0.5, 0.5] and scale by 2*a to
+            // get the Xavier range. Previously the raw [0, 1) values were written as-is,
+            // making the docstring misleading AND degrading convergence significantly
+            // (zero-mean assumption for SGD, gradient-variance balance for deep nets).
+            //
+            // Use a temp array + array-level reinterpret so the SIMD-batched xoshiro256** fill
+            // path still applies across our two frameworks. Span<T> can't be reinterpreted
+            // across generic T (see MultiHeadAttentionLayer for the full rationale), but
+            // arrays are reference types so Unsafe.As<double[], T[]> is unconstrained and
+            // safe when T == double/float at runtime. Guard total == 0 around the fill loops:
+            // an empty weight tensor would have no data to fill, but we still need to continue
+            // through bias init and RegisterTrainableParameter below.
+            double xavierBound = Math.Sqrt(6.0 / (_inputSize + _outputSize));
+            if (total > 0)
+            {
+                if (typeof(T) == typeof(double))
+                {
+                    var buffer = new double[total];
+                    rng.NextDoubles(buffer.AsSpan());
+                    for (int i = 0; i < total; i++)
+                        buffer[i] = (buffer[i] - 0.5) * 2.0 * xavierBound;
+                    var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<double[], T[]>(ref buffer);
+                    reinterpreted.AsSpan(0, total).CopyTo(wSpan);
+                }
+                else if (typeof(T) == typeof(float))
+                {
+                    var buffer = new float[total];
+                    rng.NextFloats(buffer.AsSpan());
+                    float xavierBoundF = (float)xavierBound;
+                    for (int i = 0; i < total; i++)
+                        buffer[i] = (buffer[i] - 0.5f) * 2f * xavierBoundF;
+                    var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<float[], T[]>(ref buffer);
+                    reinterpreted.AsSpan(0, total).CopyTo(wSpan);
+                }
+                else
+                {
+                    const int batchSize = 4096;
+                    var tempBuf = new double[Math.Min(total, batchSize)];
+                    int offset = 0;
+                    while (offset < total)
+                    {
+                        int chunk = Math.Min(batchSize, total - offset);
+                        rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+                        for (int j = 0; j < chunk; j++)
+                            wSpan[offset + j] = NumOps.FromDouble((tempBuf[j] - 0.5) * 2.0 * xavierBound);
+                        offset += chunk;
+                    }
+                }
+            }
+
+            _biases = Tensor<T>.CreateDefault([1, _outputSize], NumOps.Zero);
+
+            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
+        }
+    }
+
+    /// <summary>
+    /// Gets the weight tensor for JIT compilation and graph composition.
+    /// </summary>
+    public Tensor<T> GetWeightsTensor() => _weights;
+
+    /// <summary>
+    /// Gets the bias tensor for JIT compilation and graph composition.
+    /// </summary>
+    public Tensor<T> GetBiasesTensor() => _biases;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FeedForwardLayer{T}"/> class with a scalar activation function.
+    /// </summary>
+    /// <param name="inputSize">The number of input neurons.</param>
+    /// <param name="outputSize">The number of output neurons.</param>
+    /// <param name="activationFunction">The activation function to apply after the linear transformation.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new feed-forward layer with the specified input size, output size, and
+    /// activation function. The weights are initialized with small random values, and the biases are
+    /// initialized to zero. The activation function operates on individual scalar values in the output tensor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets up the feed-forward layer with the specific number of inputs and outputs you need.
+    /// 
+    /// When creating a feed-forward layer, you need to specify:
+    /// - Input size: How many values are coming into the layer
+    /// - Output size: How many values you want the layer to produce
+    /// - Activation function: How to introduce non-linearity (like ReLU or Sigmoid)
+    /// 
+    /// For example:
+    /// ```csharp
+    /// // Create a layer with 784 inputs (e.g., from a 28×28 image), 
+    /// // 128 outputs, and ReLU activation
+    /// var hiddenLayer = new FeedForwardLayer<float>(128, new ReLUActivation<float>());
+    /// 
+    /// // Create an output layer with 128 inputs (from previous layer),
+    /// // 10 outputs (e.g., for 10 classes), and Softmax activation
+    /// var outputLayer = new FeedForwardLayer<float>(10, new SoftmaxActivation<float>());
+    /// ```
+    /// 
+    /// The constructor automatically initializes weights and biases with appropriate
+    /// starting values to begin training.
+    /// </para>
+    /// </remarks>
+    public FeedForwardLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+    {
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
+
+        _inputSize = -1;
+        _outputSize = outputSize;
+
+        // Always lazy: weights allocated on first forward.
+        _weights = Tensor<T>.Empty();
+        _biases = Tensor<T>.Empty();
+        _weightsGradient = Tensor<T>.Empty();
+        _biasesGradient = Tensor<T>.Empty();
+        Input = Tensor<T>.Empty();
+        Output = Tensor<T>.Empty();
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Resolves input feature size from input.Shape[^1] on first forward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"FeedForwardLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+        int inputSize = input.Shape[rank - 1];
+        _inputSize = inputSize;
+        ResolveShapes(new[] { inputSize }, new[] { _outputSize });
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FeedForwardLayer{T}"/> class with a vector activation function.
+    /// </summary>
+    /// <param name="inputSize">The number of input neurons.</param>
+    /// <param name="outputSize">The number of output neurons.</param>
+    /// <param name="activationFunction">The vector activation function to apply after the linear transformation.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new feed-forward layer with the specified input size, output size, and
+    /// vector activation function. The weights are initialized with small random values, and the biases are
+    /// initialized to zero. Unlike the other constructor, this one accepts a vector activation function that operates on
+    /// entire vectors rather than individual scalar values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is an alternative setup that uses a different kind of activation function.
+    /// 
+    /// This constructor is almost identical to the first one, but with one key difference:
+    /// - Regular activation: processes each output value separately
+    /// - Vector activation: processes the entire output vector together
+    /// 
+    /// Vector activation functions like Softmax are useful for:
+    /// - Classification problems (choosing between multiple categories)
+    /// - Problems where outputs need to sum to 1 (like probabilities)
+    /// - Cases where output values should influence each other
+    /// 
+    /// For example, Softmax makes sure that increasing one output decreases all others,
+    /// which is perfect for classification tasks.
+    /// </para>
+    /// </remarks>
+    public FeedForwardLayer(int outputSize, IVectorActivationFunction<T> activationFunction)
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+    {
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
+
+        _inputSize = -1;
+        _outputSize = outputSize;
+
+        _weights = Tensor<T>.Empty();
+        _biases = Tensor<T>.Empty();
+        _weightsGradient = Tensor<T>.Empty();
+        _biasesGradient = Tensor<T>.Empty();
+        Input = Tensor<T>.Empty();
+        Output = Tensor<T>.Empty();
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the feed-forward layer.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after the linear transformation and activation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the feed-forward layer. It performs a matrix multiplication
+    /// between the input and the weights, adds the biases, and applies the activation function to produce
+    /// the final output. The input and output are cached for use during the backward pass.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where the layer processes input data to produce predictions.
+    /// 
+    /// The forward pass works in three steps:
+    /// 1. Linear transformation: Multiply inputs by weights and add biases
+    ///    - Each output is a weighted sum of all inputs plus a bias term
+    /// 2. Apply activation function: Add non-linearity
+    ///    - This enables the network to learn complex patterns
+    /// 3. Store inputs and outputs for later use in training
+    ///    - This information is needed when updating weights and biases
+    /// 
+    /// This simple operation (multiply by weights, add bias, apply activation)
+    /// is the core of how neural networks transform data.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // EnsureInitializedFromInput resolves lazy shapes via
+        // OnFirstForward and then internally calls EnsureInitialized;
+        // the redundant second EnsureInitialized was a no-op but
+        // misleading.
+        EnsureInitializedFromInput(input);
+
+        // #1624: skip the manual-backward activation caches under tape autodiff.
+        // Input/PreActivationOutput/Output are never read here (no Backward method
+        // reads them) — under a recording GradientTape the tape already holds each
+        // op's state, so these fields only pin a second reference to every
+        // activation and block release of the deep model's activation set. Caching
+        // still happens when no tape is active (a manual-backward consumer may read
+        // it) or when the safety hatch forces it.
+        bool cacheForManualBackward = ShouldCacheActivationsForManualBackward;
+        if (cacheForManualBackward)
+            Input = input;
+
+        // Mirror DenseLayer: dynamically resize the weight matrix when the caller's
+        // input last-dim doesn't match the baked-in inputSize. Several Finance
+        // foundation models (LagLlama, MOIRAI, UniTS, TimeGPT, TimeLLM, Timer,
+        // Chronos, etc.) construct FeedForwardLayer with a hidden dim derived from
+        // options that differs from the actual feature width at Forward time
+        // (e.g. layer expects last-dim=8 but smoke-test input arrives with
+        // last-dim=1). Without this adaptation the matmul rejects the pair with
+        // "Matrix dimensions incompatible for batched matmul: last dim of a is 1,
+        // first dim of b is 8" — exactly the DenseLayer already-solved problem.
+        int actualInputSize = input.Shape[^1];
+        if (_weights.Shape[0] != actualInputSize)
+            EnsureWeightShapeForInput(actualInputSize);
+
+        // Fuse MatMul + BiasAdd + Activation into a single FusedLinear call when the
+        // activation is one the engine's fused kernel supports (ReLU, GELU, Tanh,
+        // Sigmoid, Swish/SiLU, LeakyReLU). Saves 3 kernel launches per layer.
+        var fusedActivation = GetFusedActivationType();
+
+        if (fusedActivation != FusedActivationType.None && !IsTrainingMode)
+        {
+            // #1672 destination-buffer fast path: when the scratch gate is ON, input is
+            // rank-2, and we are NOT recording a gradient tape, compute the fused linear
+            // straight into a reused per-layer buffer instead of allocating [batch, outputSize]
+            // each call. Bit-identical math; the scratch is per-INSTANCE, fully overwritten,
+            // and consumed before the next call to this same layer. ND input keeps the
+            // original allocating path (FusedLinearInto's fast path is rank-2 only; routing ND
+            // through it would allocate AND copy).
+            bool ffTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+                && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+            if (ForwardScratchGate.FusedLinear && !ffTapeActive && input.Rank == 2)
+            {
+                int batchDim = input.Shape[0];
+                int outputSize = _weights.Shape[1];
+                if (_fusedLinearScratch == null
+                    || _fusedLinearScratch.Shape.Length != 2
+                    || _fusedLinearScratch.Shape[0] != batchDim
+                    || _fusedLinearScratch.Shape[1] != outputSize)
+                {
+                    _fusedLinearScratch = new Tensor<T>([batchDim, outputSize]);
+                }
+                Engine.FusedLinearInto(_fusedLinearScratch, input, _weights, _biases, fusedActivation);
+                if (cacheForManualBackward)
+                    Output = _fusedLinearScratch;
+                return _fusedLinearScratch;
+            }
+
+            // Pure-inference fast path — no activation-gradient cache needed.
+            var fusedOut = Engine.FusedLinear(input, _weights, _biases, fusedActivation);
+            if (cacheForManualBackward)
+                Output = fusedOut;
+            return fusedOut;
+        }
+
+        // Training or non-fusable activation: emit the linear pre-activation in one
+        // fused call, then apply activation separately so the tape records a single
+        // FusedLinear entry (calling FusedLinear twice per forward corrupts tape
+        // accounting via RemoveLastNTapeEntries).
+        var linearOutput = Engine.FusedLinear(input, _weights, _biases, FusedActivationType.None);
+        var activated = ApplyActivation(linearOutput);
+        if (cacheForManualBackward)
+        {
+            PreActivationOutput = linearOutput;
+            Output = activated;
+        }
+
+        return activated;
+    }
+
+    /// <summary>
+    /// Rebuilds the weight matrix around a new input-feature width, preserving the
+    /// overlapping slice of pretrained weights and Xavier-initializing the new rows.
+    /// Mirrors <c>DenseLayer&lt;T&gt;.EnsureWeightShapeForInput</c>.
+    /// </summary>
+    private void EnsureWeightShapeForInput(int actualInputSize)
+    {
+        int existingInputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+        var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
+
+        int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
+        for (int i = 0; i < sharedInputSize; i++)
+        {
+            for (int o = 0; o < outputSize; o++)
+            {
+                resizedWeights[i, o] = _weights[i, o];
+            }
+        }
+
+        if (actualInputSize > sharedInputSize)
+        {
+            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
+            var random = RandomHelper.CreateSecureRandom();
+            for (int i = sharedInputSize; i < actualInputSize; i++)
+            {
+                for (int o = 0; o < outputSize; o++)
+                {
+                    resizedWeights[i, o] = NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1));
+                }
+            }
+        }
+
+        _weights = resizedWeights;
+        _weightsGradient = new Tensor<T>([actualInputSize, outputSize]);
+        _inputSize = actualInputSize;
+        UpdateInputShape([actualInputSize]);
+    }
+
+    /// <summary>
+    /// Performs the forward pass using GPU-resident tensors.
+    /// </summary>
+    /// <param name="input">The GPU-resident input tensor.</param>
+    /// <returns>A GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs the feed-forward computation (matmul + bias + activation) entirely on GPU
+    /// without downloading intermediate results to CPU.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var input = inputs[0];
+
+        // Lazy-shape resolution must happen BEFORE EnsureInitialized:
+        // a lazily-constructed FeedForwardLayer holds the -1 sentinel
+        // for input feature size and EnsureInitialized() would overflow
+        // on TensorAllocator.Rent. EnsureInitializedFromInput resolves
+        // shapes via OnFirstForward (no-op once resolved) then defers
+        // to EnsureInitialized for actual weight allocation.
+        EnsureInitializedFromInput(input);
+
+        // MatMul: input @ _weights
+        var matmul = gpuEngine.BatchedMatMulGpu(input, _weights);
+
+        // Add biases
+        var biased = gpuEngine.AddBiasGpu(matmul, _biases);
+
+        // Apply activation
+        Tensor<T> output;
+        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var fusedType = MapActivationToFused();
+            output = gpuEngine.ActivationGpu<T>(biased, fusedType);
+        }
+        else
+        {
+            output = biased;
+        }
+
+        // Cache state for backward pass only during training
+        // Skip this expensive download during inference (50% overhead reduction)
+        if (IsTrainingMode)
+        {
+            // Cache GPU tensors for GPU-resident backward pass
+            _gpuInput = input;
+            _gpuOutput = output;
+            _gpuInputShape = input._shape;
+
+            // Also cache CPU tensors for fallback backward pass
+            Input = input;
+            Output = output;
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Updates the weights and biases using the calculated gradients and the specified learning rate.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method updates the weights and biases based on the gradients calculated during the backward pass.
+    /// The learning rate determines the size of the parameter updates. Smaller learning rates lead to more
+    /// stable but slower training, while larger learning rates can lead to faster but potentially unstable training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method actually changes the weights and biases to improve future predictions.
+    /// 
+    /// After figuring out how each parameter should change:
+    /// - Each weight and bias is adjusted in the direction that reduces errors
+    /// - The learning rate controls how big these adjustments are
+    /// 
+    /// Think of it like adjusting a recipe after tasting:
+    /// - Too salty? Reduce salt next time (adjust weights/biases)
+    /// - But make small adjustments (learning rate), not drastic ones
+    /// 
+    /// For example, with a learning rate of 0.01:
+    /// - A gradient of 0.5 would change the parameter by -0.005
+    /// - A gradient of -2.0 would change the parameter by +0.02
+    /// 
+    /// The minus sign in the code is because we want to go in the opposite
+    /// direction of the gradient to minimize error.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        EnsureInitialized();
+        if (_weightsGradient == null || _biasesGradient == null ||
+            _weightsGradient.Length == 0 || _biasesGradient.Length == 0)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
+        _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters (weights and biases) of the layer as a single vector.
+    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
+    /// and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
+    /// 
+    /// The parameters include:
+    /// - All the weight values (the majority of the parameters)
+    /// - All the bias values (one per output neuron)
+    /// 
+    /// This combined list is useful for:
+    /// - Saving a trained model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques that need all parameters together
+    /// 
+    /// For example, a layer with 100 inputs and 10 outputs would have:
+    /// - 1,000 weight parameters (100 × 10)
+    /// - 10 bias parameters (one per output)
+    /// - Totaling 1,010 parameters in the returned vector
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Deferred-shape lazy layer — return empty vector so Clone /
+        // SetParameters / ParameterCount roundtrip on uninitialised
+        // layers (real params materialise on first Forward and the
+        // next Collect picks them up).
+        if (!IsShapeResolved) return new Vector<T>(0);
+
+        EnsureInitialized();
+        // Bulk copy from contiguous tensor storage — replaces nested scalar loops
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(_weights.Data),
+            Vector<T>.FromMemory(_biases.Data));
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the layer from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets all trainable parameters (weights and biases) of the layer from a single vector.
+    /// This is useful for loading saved model weights or for implementing optimization algorithms
+    /// that operate on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the layer's learnable values from a provided list.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with the exact right length
+    /// - The values are distributed back to the weights and biases
+    /// - This allows loading previously trained weights
+    /// 
+    /// Use cases include:
+    /// - Restoring a saved model
+    /// - Using pre-trained weights
+    /// - Testing specific weight configurations
+    /// 
+    /// The method throws an error if the provided vector doesn't contain exactly the right number of values.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Round-trip from saved parameters: derive inputSize from vector
+        // length + known outputSize. Fixes #1221 serialize/deserialize drop.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int outputSize = OutputShape[0];
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on a deferred-shape FeedForwardLayer before outputSize is known.");
+            int candidateInput = (parameters.Length - outputSize) / outputSize;
+            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputSize for FeedForwardLayer from {parameters.Length} parameters " +
+                    $"and outputSize={outputSize}.");
+            ResolveFromShape(new[] { candidateInput });
+        }
+
+        EnsureInitialized();
+        int weightLen = _weights.Length;
+        int biasLen = _biases.Length;
+        if (parameters.Length != weightLen + biasLen)
+        {
+            throw new ArgumentException($"Expected {weightLen + biasLen} parameters, but got {parameters.Length}");
+        }
+
+        // Bulk copy into contiguous tensor storage in-place — replaces nested scalar loops
+        var src = parameters.AsSpan();
+        src.Slice(0, weightLen).CopyTo(_weights.Data.Span);
+        src.Slice(weightLen, biasLen).CopyTo(_biases.Data.Span);
+
+        // Notify engine that parameters have changed (for GPU cache invalidation)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the layer by clearing all cached values from forward
+    /// and backward passes. This is useful when starting to process a new batch of data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - The saved input and output are cleared
+    /// - The calculated gradients are cleared
+    /// - The layer forgets previous calculations it performed
+    /// 
+    /// This is typically called:
+    /// - Between training batches to free up memory
+    /// - When switching from training to evaluation mode
+    /// - When starting to process completely new data
+    /// 
+    /// It's like wiping a whiteboard clean before starting a new calculation.
+    /// Note that this doesn't affect the learned weights and biases, just the
+    /// temporary working data.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightsGradient == null || _biasesGradient == null || _weightsGradient.Length == 0 || _biasesGradient.Length == 0)
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // Bulk copy from contiguous tensor storage — replaces per-element scalar loops
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(_weightsGradient.Data),
+            Vector<T>.FromMemory(_biasesGradient.Data));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = Tensor<T>.Empty();
+        _biasesGradient = Tensor<T>.Empty();
+    }
+
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        Input = Tensor<T>.Empty();
+        Output = Tensor<T>.Empty();
+        _weightsGradient = Tensor<T>.Empty();
+        _biasesGradient = Tensor<T>.Empty();
+
+        // Clear GPU cached tensors
+        _gpuInput = null;
+        _gpuOutput = null;
+        _gpuInputShape = [];
+    }
+}

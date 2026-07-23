@@ -1,0 +1,906 @@
+﻿using System;
+using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a deconvolutional layer (also known as transposed convolution) in a neural network.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A deconvolutional layer performs the opposite operation of a convolutional layer. While convolution
+/// reduces spatial dimensions by applying filters, deconvolution expands spatial dimensions by applying
+/// learnable filters to upsample the input. This is particularly useful in generative models and
+/// image segmentation networks where upsampling is required.
+/// </para>
+/// <para><b>For Beginners:</b> A deconvolutional layer is like zooming in on an image in a smart way.
+/// 
+/// Think of it like the reverse of a convolutional layer:
+/// - A convolutional layer summarizes information (making images smaller)
+/// - A deconvolutional layer expands information (making images larger)
+/// 
+/// For example, if you have a small feature map representing "cat features," a deconvolutional layer
+/// could expand it back to a cat-shaped image.
+/// 
+/// This is particularly useful for:
+/// - Generating images from small encoded representations
+/// - Increasing the resolution of feature maps
+/// - Creating detailed outputs from simplified inputs
+/// 
+/// Applications include image generation, super-resolution, and segmentation tasks where
+/// you need to expand the spatial dimensions of your data.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Upsampling)]
+[LayerTask(LayerTask.UpSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+public partial class DeconvolutionalLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// The collection of filter kernels used for the deconvolution operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the weight values for all kernels used in the layer. It has dimensions
+    /// [InputDepth, OutputDepth, KernelSize, KernelSize], where each kernel is a set of weights
+    /// that define a specific pattern to generate.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are the "pattern generators" that the layer uses.
+    /// 
+    /// Each kernel:
+    /// - Is a grid of numbers (weights)
+    /// - Creates a specific pattern in the output
+    /// - Is learned during training
+    /// 
+    /// The layer has multiple kernels to generate different patterns, and these kernels
+    /// are what actually get updated when the network learns.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _kernels;
+
+    /// <summary>
+    /// The bias values added to the deconvolution results for each output channel.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector stores the bias values for each output channel. Biases are constants that are
+    /// added to the deconvolution results before applying the activation function.
+    /// </para>
+    /// <para><b>For Beginners:</b> Biases are like "base values" for each generated pattern.
+    /// 
+    /// Think of biases as:
+    /// - A starting point or baseline value
+    /// - Added to the result after applying the pattern generator
+    /// - Helping the network be more flexible in what it can create
+    /// 
+    /// For example, biases help the network generate patterns with different intensities
+    /// or brightness levels.
+    /// </para>
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _biases;
+
+    /// <summary>
+    /// Stored input data from the most recent forward pass, used for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// During the backward pass (training), the layer needs access to the input data from the forward
+    /// pass to calculate the gradients for the kernels. This tensor stores that input data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like the network's "short-term memory" of what it just saw.
+    /// 
+    /// The layer remembers:
+    /// - The last data it processed
+    /// - So it can figure out how to improve when learning
+    /// 
+    /// This is similar to remembering what ingredients you used in a recipe,
+    /// so you can adjust them if the dish didn't turn out perfectly.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stored output data from the most recent forward pass, used for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// During the backward pass (training), the layer needs access to the output data from the forward
+    /// pass to calculate the gradients for the activation function. This tensor stores that output data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the network's memory of what result it produced.
+    /// 
+    /// The layer remembers:
+    /// - What output it generated for the last input
+    /// - So it can calculate how to improve
+    /// 
+    /// This allows the network to compare what it created with the expected result
+    /// and adjust its internal values to make better outputs next time.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// Calculated gradients for the kernels during the backward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the calculated gradients for the kernels during backpropagation.
+    /// These gradients indicate how the kernels should be adjusted to reduce the loss.
+    /// </para>
+    /// <para><b>For Beginners:</b> This contains the "improvement directions" for each pattern generator.
+    /// 
+    /// During training:
+    /// - The layer calculates how each kernel weight should change
+    /// - These changes are stored here temporarily
+    /// - They're later applied to the actual kernels
+    /// 
+    /// Think of it like a set of instructions for how to adjust each knob
+    /// to make the output better next time.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _kernelsGradient;
+
+    /// <summary>
+    /// Calculated gradients for the biases during the backward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This vector stores the calculated gradients for the biases during backpropagation.
+    /// These gradients indicate how the biases should be adjusted to reduce the loss.
+    /// </para>
+    /// <para><b>For Beginners:</b> This contains the "improvement directions" for each bias value.
+    /// 
+    /// During training:
+    /// - The layer calculates how each bias should change
+    /// - These changes are stored here temporarily
+    /// - They're later applied to the actual biases
+    /// 
+    /// Think of it like instructions for how to adjust each baseline value
+    /// to make the output better next time.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _biasesGradient;
+
+    // GPU cached tensors for backward pass
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuOutput;
+    private int[]? _gpuInputShape4D;
+    private bool _gpuAddedBatchDimension;
+
+    /// <summary>
+    /// Gets the depth (number of channels) of the input data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The input depth represents the number of feature channels in the input data. In a neural
+    /// network, this typically corresponds to the number of features or patterns detected by
+    /// previous layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> Input depth is the number of different features in your input data.
+    /// 
+    /// Think of it like:
+    /// - The number of different patterns the previous layer detected
+    /// - The number of "aspects" of the data you're working with
+    /// 
+    /// For example, in a deep network, the input depth might be 64 or 128,
+    /// representing many different detected features.
+    /// </para>
+    /// </remarks>
+    public int InputDepth { get; private set; }
+
+    /// <summary>
+    /// Gets the depth (number of channels) of the output data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The output depth represents the number of feature channels that will be generated in the output.
+    /// Each output channel is produced by a different set of kernels and captures different aspects
+    /// of the upsampled data.
+    /// </para>
+    /// <para><b>For Beginners:</b> Output depth is how many different types of patterns this layer will create.
+    /// 
+    /// For example:
+    /// - If output depth is 3, the layer might generate RGB color channels
+    /// - If output depth is 32, the layer creates 32 different feature maps
+    /// 
+    /// A higher number usually means more detailed or varied outputs, but
+    /// also requires more processing power.
+    /// </para>
+    /// </remarks>
+    public int OutputDepth { get; }
+
+    /// <summary>
+    /// Gets the size of each filter (kernel) used in the deconvolution operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The kernel size determines the area of the output that is influenced by each input value.
+    /// A larger kernel size means each input value affects a larger area of the output, potentially
+    /// creating more detailed or smooth upsampling.
+    /// </para>
+    /// <para><b>For Beginners:</b> Kernel size is how big each "pattern generator" is.
+    /// 
+    /// For example:
+    /// - A kernel size of 3 means a 3×3 grid (9 weights)
+    /// - A kernel size of 5 means a 5×5 grid (25 weights)
+    /// 
+    /// Larger kernels:
+    /// - Can create more complex patterns
+    /// - Affect larger areas of the output
+    /// - But require more computation
+    /// </para>
+    /// </remarks>
+    public int KernelSize { get; }
+
+    /// <summary>
+    /// Gets the step size for positioning the kernel across the output data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In deconvolution, the stride determines how much the output size increases relative to the input.
+    /// A stride of 2 typically doubles the spatial dimensions, while a stride of 1 increases them by a smaller amount.
+    /// </para>
+    /// <para><b>For Beginners:</b> Stride controls how much upsampling (enlargement) happens.
+    /// 
+    /// Think of it like:
+    /// - Stride of 1: Minimal enlargement
+    /// - Stride of 2: Roughly doubles the size
+    /// - Stride of 4: Roughly quadruples the size
+    /// 
+    /// For example, if your input is 16×16 pixels and you use a stride of 2,
+    /// the output might be around 32×32 pixels (the exact size depends on other factors too).
+    /// </para>
+    /// </remarks>
+    public int Stride { get; }
+
+    /// <summary>
+    /// Gets the amount of padding applied during the deconvolution operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In deconvolution, padding actually reduces the output size. This might seem counterintuitive,
+    /// but it allows for more control over the exact output dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b> Padding in deconvolution works differently than in convolution.
+    /// 
+    /// In deconvolution:
+    /// - More padding makes the output smaller
+    /// - Zero padding means maximum enlargement
+    /// - It helps control the exact output size
+    /// 
+    /// This is the opposite of regular convolution, where padding makes outputs larger.
+    /// </para>
+    /// </remarks>
+    public int Padding { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training through backpropagation.
+    /// </summary>
+    /// <value>
+    /// Always returns <c>true</c> for deconvolutional layers, as they contain trainable parameters.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer can be trained through backpropagation. Deconvolutional
+    /// layers have trainable parameters (kernel weights and biases), so they support training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
+    /// 
+    /// For deconvolutional layers:
+    /// - The value is always true
+    /// - This means the layer can adjust its pattern generators (filters) during training
+    /// - It will improve its upsampling abilities as it processes more data
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount => _kernels.Length > 0
+        ? _kernels.Length + _biases.Length
+        // Deferred-shape mode: weights aren't materialised yet (e.g. resolved via
+        // ResolveShapesOnly so a parent can read ParameterCount without allocating
+        // the kernel). Once the shape is resolved InputDepth is known, so report the
+        // exact count from dims — kernel layout is [InputDepth, OutputDepth,
+        // KernelSize, KernelSize] plus an OutputDepth-length bias. This equals the
+        // materialised _kernels.Length + _biases.Length, so ParameterCount stays
+        // consistent with GetParameters().Length. Returns 0 only while InputDepth is
+        // still the unresolved -1 sentinel.
+        : InputDepth > 0
+            ? (long)InputDepth * OutputDepth * KernelSize * KernelSize + OutputDepth
+            : 0;
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports GPU execution.
+    /// </summary>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DeconvolutionalLayer{T}"/> class with the specified
+    /// parameters and a scalar activation function.
+    /// </summary>
+    /// <param name="inputShape">The shape of the input data.</param>
+    /// <param name="outputDepth">The number of output channels to create.</param>
+    /// <param name="kernelSize">The size of each filter kernel (width and height).</param>
+    /// <param name="stride">The step size for positioning the kernel. Defaults to 1.</param>
+    /// <param name="padding">The amount of padding to apply. Defaults to 0.</param>
+    /// <param name="activationFunction">The activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a deconvolutional layer with the specified configuration. The output shape is
+    /// calculated based on the input shape, kernel size, stride, and padding. The kernels and biases are
+    /// initialized with scaled random values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setup method creates a new deconvolutional layer with specific settings.
+    /// 
+    /// When creating the layer, you specify:
+    /// - Input details: The shape of your data
+    /// - How many output channels to create (outputDepth)
+    /// - How big each pattern generator is (kernelSize)
+    /// - How much enlargement to apply (stride)
+    /// - How to adjust the exact output size (padding)
+    /// - What mathematical function to apply to the results (activation)
+    /// 
+    /// The layer then creates all the necessary pattern generators with random starting values
+    /// that will be improved during training.
+    /// </para>
+    /// </remarks>
+    public DeconvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0,
+                                IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
+               activationFunction ?? new ReLUActivation<T>())
+    {
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
+
+        InputDepth = -1;
+        OutputDepth = outputDepth;
+        KernelSize = kernelSize;
+        Stride = stride;
+        Padding = padding;
+
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Resolves input shape on first forward (PyTorch ConvTranspose2d-style).
+    /// Output spatial dim per axis: (input - 1) * stride - 2 * padding + kernelSize.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int c, h, w;
+        if (rank == 4) { c = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
+        else if (rank == 3) { c = input.Shape[0]; h = input.Shape[1]; w = input.Shape[2]; }
+        else throw new ArgumentException(
+            $"DeconvolutionalLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {rank}.",
+            nameof(input));
+
+        InputDepth = c;
+        int outH = (h - 1) * Stride - 2 * Padding + KernelSize;
+        int outW = (w - 1) * Stride - 2 * Padding + KernelSize;
+
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_kernels, c, OutputDepth, KernelSize, KernelSize))
+        {
+            _kernels = AllocateLazyWeight([c, OutputDepth, KernelSize, KernelSize]);
+            _biases = AllocateLazyWeight([OutputDepth]);
+            InitializeParameters();
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
+
+        ResolveShapes(new[] { c, h, w }, new[] { OutputDepth, outH, outW });
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DeconvolutionalLayer{T}"/> class with the specified
+    /// parameters and a vector activation function.
+    /// </summary>
+    /// <param name="inputShape">The shape of the input data.</param>
+    /// <param name="outputDepth">The number of output channels to create.</param>
+    /// <param name="kernelSize">The size of each filter kernel (width and height).</param>
+    /// <param name="stride">The step size for positioning the kernel. Defaults to 1.</param>
+    /// <param name="padding">The amount of padding to apply. Defaults to 0.</param>
+    /// <param name="vectorActivationFunction">The vector activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a deconvolutional layer with the specified configuration and a vector activation function,
+    /// which operates on entire vectors rather than individual elements. This can be useful when applying more complex
+    /// activation functions or when performance is a concern.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setup method is similar to the previous one, but uses a different type of
+    /// activation function.
+    /// 
+    /// A vector activation function:
+    /// - Works on entire groups of numbers at once
+    /// - Can be more efficient for certain types of calculations
+    /// - Otherwise works the same as the regular activation function
+    /// 
+    /// You would choose this option if you have a specific mathematical operation that
+    /// needs to be applied to groups of outputs rather than individual values.
+    /// </para>
+    /// </remarks>
+    public DeconvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
+                                IVectorActivationFunction<T> vectorActivationFunction)
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
+               vectorActivationFunction ?? new ReLUActivation<T>())
+    {
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
+
+        InputDepth = -1;
+        OutputDepth = outputDepth;
+        KernelSize = kernelSize;
+        Stride = stride;
+        Padding = padding;
+
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Initializes the kernel weights and biases with appropriate random values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method initializes the kernel weights using the Xavier/Glorot initialization method,
+    /// which scales the random values based on the number of input and output connections.
+    /// This helps improve training convergence. The biases are initialized to zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets up the starting values for the pattern generators.
+    /// 
+    /// When initializing weights:
+    /// - Random values are created for each pattern generator
+    /// - The values are carefully scaled to work well for training
+    /// - Biases start at zero
+    /// 
+    /// Good initialization is important because:
+    /// - It helps the network learn faster
+    /// - It prevents certain mathematical problems during training
+    /// - It gives each pattern generator a different starting point
+    /// 
+    /// This uses a technique called "Xavier/Glorot initialization" which works well
+    /// with many neural networks.
+    /// </para>
+    /// </remarks>
+    private void InitializeParameters()
+    {
+        InitializeLayerWeights(_kernels, InputDepth, OutputDepth);
+        InitializeLayerBiases(_biases);
+    }
+
+    /// <summary>
+    /// Processes the input data through the deconvolutional layer.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after deconvolution and activation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs the forward pass of the deconvolutional layer. For each position in the output,
+    /// it computes the contribution from all relevant input positions, multiplied by the appropriate kernel weights.
+    /// The results are summed, the bias is added, and the activation function is applied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method enlarges the input data using learned patterns.
+    /// 
+    /// During the forward pass:
+    /// - Each value in the input helps create a region in the output
+    /// - The pattern generators (kernels) determine what that region looks like
+    /// - The layer combines all these regions to form a larger, detailed output
+    /// - The activation function then adjusts these values
+    /// 
+    /// Think of it like painting a mural by stamping many small patterns next to each other,
+    /// where each stamp design comes from your pattern generators (kernels).
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Shape-inference mode: resolve dims + return a placeholder, no kernel allocation.
+        if (IsInferringShapes) return ShapeInferenceOutput(input);
+
+        EnsureInitializedFromInput(input);
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+
+        // Get the fused activation type for optimal GPU/CPU performance
+        var fusedActivation = GetFusedActivationType();
+
+        Tensor<T> result;
+
+        if (fusedActivation != FusedActivationType.None)
+        {
+            // Use FusedConvTranspose2D for optimal GPU kernel fusion (conv transpose + bias + activation)
+            result = Engine.FusedConvTranspose2D(
+                input, _kernels, _biases,
+                Stride, Stride,
+                Padding, Padding,
+                0, 0,  // output padding
+                fusedActivation);
+        }
+        else
+        {
+            // Fallback for unsupported activations: use separate operations
+            var stride = new int[] { Stride, Stride };
+            var padding = new int[] { Padding, Padding };
+            var outputPadding = new int[] { 0, 0 };
+
+            var output = Engine.ConvTranspose2D(input, _kernels, stride, padding, outputPadding);
+
+            // Add bias using broadcast: reshape [OutputDepth] to [1, OutputDepth, 1, 1] for NCHW format.
+            // Reshape via Engine.Reshape every call so the gradient tape records a
+            // fresh GradFn chain back to _biases on each training step. Caching the
+            // reshape across calls would reuse a handle primed during inference
+            // (no GradFn), causing backward to dead-end before reaching _biases.
+            var biasReshaped = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
+            var biasedOutput = Engine.TensorBroadcastAdd(output, biasReshaped);
+
+            result = ApplyActivation(biasedOutput);
+        }
+
+        // Only store for backward pass during training - skip during inference
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Performs a GPU-resident forward pass using fused ConvTranspose2D + Bias + Activation.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensor.</param>
+    /// <returns>GPU-resident output tensor.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+        {
+            throw new InvalidOperationException(
+                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
+        }
+
+        var input = inputs[0];
+
+        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        if (input.Shape.Length < 3)
+        {
+            throw new ArgumentException(
+                $"ConvTranspose2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
+        }
+
+        var originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+        bool addedBatchDimension = false;
+
+        // Reshape input to 4D [B, C, H, W] for transposed convolution
+        Tensor<T> input4D;
+        if (rank == 3)
+        {
+            // 3D [C, H, W] -> 4D [1, C, H, W]
+            addedBatchDimension = true;
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        }
+        else if (rank == 4)
+        {
+            // 4D [B, C, H, W] - no reshaping needed
+            input4D = input;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+            {
+                flatBatch *= input.Shape[d];
+            }
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+
+        // Validate input channels
+        int actualInputChannels = input4D.Shape[1];
+        if (actualInputChannels != InputDepth)
+        {
+            throw new ArgumentException(
+                $"Expected input depth {InputDepth}, but got {actualInputChannels}.");
+        }
+
+        // Map activation function to FusedActivationType
+        var fusedActivation = GetFusedActivationType();
+
+        // Execute GPU-fused ConvTranspose2D + Bias + Activation
+        var result = gpuEngine.FusedConvTranspose2DGpu(
+            input4D,
+            _kernels,
+            _biases,
+            Stride, Stride,      // strideH, strideW
+            Padding, Padding,    // padH, padW
+            0, 0,                // outputPadH, outputPadW
+            fusedActivation);
+
+        // Cache input and output for backward pass during training
+        if (IsTrainingMode)
+        {
+            _gpuInput?.Dispose();
+            _gpuOutput?.Dispose();
+            _gpuInput = input4D;
+            _gpuOutput = result;
+            _gpuInputShape4D = input4D._shape;
+            _gpuAddedBatchDimension = addedBatchDimension;
+        }
+
+        // Restore original shape if needed
+        if (originalInputShape.Length > 4)
+        {
+            // Restore original batch dimensions for higher-rank input
+            var outputShape = new int[originalInputShape.Length];
+            for (int d = 0; d < originalInputShape.Length - 3; d++)
+            {
+                outputShape[d] = originalInputShape[d];
+            }
+            outputShape[originalInputShape.Length - 3] = OutputDepth;
+            outputShape[originalInputShape.Length - 2] = result.Shape[2];
+            outputShape[originalInputShape.Length - 1] = result.Shape[3];
+            return result.Reshape(outputShape);
+        }
+
+        if (addedBatchDimension)
+        {
+            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
+            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
+        }
+
+        return result;
+    }
+
+    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation == null)
+            return input;
+
+        // Use generic activation support - works for ALL 39 built-in activations
+        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
+    }
+
+
+    /// <summary>
+    /// Fallback activation gradient computation for unsupported GPU activation types.
+    /// </summary>
+    private Tensor<T> ComputeActivationGradientGpuFallback(DirectGpuTensorEngine gpuEngine, Tensor<T> output, Tensor<T> gradOutput)
+    {
+        // Fallback: download, compute on CPU, upload
+        var outputData = output;
+        var gradOutputData = gradOutput;
+        var activationGradient = ApplyActivationDerivative(outputData, gradOutputData);
+
+        return gpuEngine.UploadToGpu(activationGradient, GpuTensorRole.Intermediate);
+    }
+
+    /// <summary>
+    /// Updates the layer's parameters (kernel weights and biases) using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the update.</param>
+    /// <exception cref="InvalidOperationException">Thrown when update is called before backward.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates the layer's parameters (kernel weights and biases) based on the gradients
+    /// calculated during the backward pass. The learning rate controls the step size of the update.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies the lessons learned during training.
+    /// 
+    /// When updating parameters:
+    /// - The learning rate controls how big each adjustment is
+    /// - Small learning rate = small, careful changes
+    /// - Large learning rate = big, faster changes (but might overshoot)
+    /// 
+    /// The layer takes the gradients calculated during backward pass and uses them to 
+    /// update all its kernels and biases, making them slightly better for next time.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_kernelsGradient == null || _biasesGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        // Compute updated values and copy back in-place to preserve GPU-registered tensor references
+        var updatedKernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
+        var updatedBiases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+        for (int i = 0; i < _kernels.Length; i++)
+            _kernels[i] = updatedKernels[i];
+        for (int i = 0; i < _biases.Length; i++)
+            _biases[i] = updatedBiases[i];
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all kernel weights and biases.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method extracts all trainable parameters (kernel weights and biases) from the layer
+    /// and returns them as a single vector. This is useful for optimization algorithms that operate
+    /// on all parameters at once, or for saving and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method gathers all the learned values from the layer.
+    /// 
+    /// The parameters include:
+    /// - All values from all pattern generators (kernels)
+    /// - All bias values
+    /// 
+    /// These are combined into a single long list (vector), which can be used for:
+    /// - Saving the model
+    /// - Sharing parameters between layers
+    /// - Advanced optimization techniques
+    /// 
+    /// This provides access to all the "knowledge" the layer has learned.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Deferred-shape layer cloned before its first Forward has empty
+        // _kernels/_biases placeholders. Return an empty vector so Clone
+        // can roundtrip via SetParameters; the cloned layer materialises
+        // its real weights when its first Forward fires.
+        if (!IsShapeResolved) return new Vector<T>(0);
+        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
+    }
+
+    /// <summary>
+    /// Sets all trainable parameters of the layer from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets all trainable parameters (kernel weights and biases) of the layer from a single
+    /// vector. The vector must have the exact length required for all parameters of the layer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the layer's learned values at once.
+    /// 
+    /// When setting parameters:
+    /// - The vector must have exactly the right number of values
+    /// - The values are assigned to the kernels and biases in a specific order
+    /// 
+    /// This is useful for:
+    /// - Loading a previously saved model
+    /// - Copying parameters from another model
+    /// - Setting parameters that were optimized externally
+    /// 
+    /// It's like replacing all the "knowledge" in the layer with new information.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var kGrad = _kernelsGradient != null ? new Vector<T>(_kernelsGradient.ToArray()) : new Vector<T>(_kernels.Length);
+        var bGrad = _biasesGradient != null ? new Vector<T>(_biasesGradient.ToArray()) : new Vector<T>(_biases.Length);
+        return Vector<T>.Concatenate(kGrad, bGrad);
+    }
+
+    public override void ClearGradients()
+    {
+        _kernelsGradient = null;
+        _biasesGradient = null;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Round-trip from saved parameters: derive inputDepth from vector length.
+        // Layout: kernels [inputDepth, outputDepth, K, K] + biases [outputDepth].
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int kernelArea = OutputDepth * KernelSize * KernelSize;
+            if (OutputDepth <= 0 || kernelArea <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape DeconvolutionalLayer before OutputDepth/KernelSize are known.");
+            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for DeconvolutionalLayer from {parameters.Length} parameters.");
+            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
+        }
+
+        int expectedLength = _kernels.Length + _biases.Length;
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
+        }
+
+        var kernelVec = parameters.Slice(0, _kernels.Length);
+        var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
+
+        _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize], kernelVec);
+        _biases = new Tensor<T>([OutputDepth], biasVec);
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    /// <summary>
+    /// Resets the internal state of the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clears the cached input and output values from the most recent forward pass,
+    /// as well as the gradients calculated during the backward pass. This is useful when starting
+    /// to process a new batch or when implementing stateful recurrent networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - The layer forgets the last input it processed
+    /// - It forgets the last output it produced
+    /// - It clears any calculated gradients
+    /// 
+    /// This is useful for:
+    /// - Processing a new, unrelated set of data
+    /// - Preventing information from one batch affecting another
+    /// - Starting a new training episode
+    /// 
+    /// Think of it like wiping a whiteboard clean before starting a new calculation.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _kernelsGradient = null;
+        _biasesGradient = null;
+
+        // Clear GPU cached tensors
+        _gpuInput?.Dispose();
+        _gpuOutput?.Dispose();
+        _gpuInput = null;
+        _gpuOutput = null;
+        _gpuInputShape4D = null;
+        _gpuAddedBatchDimension = false;
+    }
+
+    /// <summary>
+    /// Returns layer-specific metadata for serialization. Required so that
+    /// post-deserialize SetParameters sees the same KernelSize / Stride /
+    /// Padding the original layer used — without these keys the deserializer
+    /// at <see cref="AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType{T}(string, int[], int[], System.Collections.Generic.Dictionary{string, object})"/>
+    /// falls back to its defaults (kernel=3, stride=1, padding=0) and the
+    /// reconstructed kernel tensor has a different element count than the
+    /// saved weight blob, which surfaces as "Expected N parameters, but got M"
+    /// in <see cref="SetParameters"/>. <see cref="ConvolutionalLayer{T}"/>
+    /// has had this metadata override since its first commit; the missing
+    /// counterpart here was a real bug exposed by the RAPIDFlow pyramid
+    /// architecture (which is the first model in the repo to put a
+    /// non-default-shape DeconvolutionalLayer in a Clone path).
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["KernelSize"] = KernelSize.ToString();
+        metadata["Stride"] = Stride.ToString();
+        metadata["Padding"] = Padding.ToString();
+        return metadata;
+    }
+}

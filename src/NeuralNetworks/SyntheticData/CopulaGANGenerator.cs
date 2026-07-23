@@ -1,0 +1,1725 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.SyntheticData;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
+
+namespace AiDotNet.NeuralNetworks.SyntheticData;
+
+/// <summary>
+/// CopulaGAN generator for synthetic tabular data, combining Gaussian copula transformations
+/// with the CTGAN training pipeline for improved continuous column modeling.
+/// </summary>
+/// <remarks>
+/// <para>
+/// CopulaGAN applies a two-stage preprocessing to continuous columns:
+/// 1. <b>Gaussian copula transform</b>: CDF then quantile then standard normal
+/// 2. <b>VGM normalization</b>: Standard CTGAN mode-specific normalization
+///
+/// This implementation follows the standard neural network architecture pattern with:
+/// - Proper inheritance from NeuralNetworkBase
+/// - Layer-based architecture using ILayer components
+/// - Engine-based tensor operations for CPU/GPU acceleration
+/// - Full autodiff and JIT compilation support
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> CopulaGAN is CTGAN with an extra "normalizing" step:
+///
+/// <b>Training:</b>
+/// <code>
+/// Raw data -> [Copula: reshape to bell curve] -> [VGM: CTGAN preprocessing] -> [CTGAN training]
+/// </code>
+///
+/// <b>Generation:</b>
+/// <code>
+/// Random noise -> [Generator] -> [Inverse VGM] -> [Inverse Copula] -> Synthetic data
+/// </code>
+///
+/// If you provide custom layers in the architecture, those will be used directly
+/// for the generator network. If not, the network creates industry-standard
+/// CopulaGAN layers based on the original research paper specifications.
+///
+/// Example usage:
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputFeatures: 10,
+///     outputSize: 10
+/// );
+/// var options = new CopulaGANOptions&lt;double&gt;
+/// {
+///     EmbeddingDimension = 128,
+///     GeneratorDimensions = new[] { 256, 256 },
+///     BatchSize = 500,
+///     Epochs = 300
+/// };
+/// var generator = new CopulaGANGenerator&lt;double&gt;(architecture, options);
+/// generator.Fit(data, columns, epochs: 300);
+/// var synthetic = generator.Generate(1000);
+/// </code>
+/// </para>
+/// <para>
+/// Reference: "Synthesizing Tabular Data using Copulas" (2020)
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.SyntheticDataGenerator)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Modeling Tabular Data using Conditional GAN",
+    "https://arxiv.org/abs/1907.00503",
+    Year = 2019,
+    Authors = "Lei Xu, Maria Skoularidou, Alfredo Cuesta-Infante, Kalyan Veeramachaneni")]
+public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+{
+    private readonly CopulaGANOptions<T> _options;
+    // Separate generator/discriminator optimizers — see CTGANGenerator for the
+    // full rationale: AdamOptimizer keeps one flat (_m,_v) moment buffer sized to
+    // the parameter count and resets the timestep when that count changes, so a
+    // single optimizer shared across G and D (different param counts) wiped the
+    // moments every alternating Step and diverged worse with more epochs.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
+    private ILossFunction<T> _lossFunction;
+
+    // Synthetic tabular data infrastructure
+    private TabularDataTransformer<T>? _transformer;
+    private CTGANDataSampler<T>? _sampler;
+    private List<ColumnMetadata> _columns = new();
+    private int _dataWidth;
+    private int _condWidth;
+    private int _packedInputDim;
+    private Random _random;
+
+    // Generator batch normalization layers (auxiliary, always created to match Layers)
+    private readonly List<BatchNormalizationLayer<T>> _genBNLayers = new();
+
+    // Discriminator layers (auxiliary, not user-overridable)
+    private readonly List<ILayer<T>> _discLayers = new();
+    private readonly List<DropoutLayer<T>> _discDropoutLayers = new();
+    private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
+
+    // Copula transform state: sorted values and empirical CDF per continuous column
+    private readonly List<double[]> _sortedValues = new();
+    private readonly List<int> _continuousColumnIndices = new();
+
+    // Cached pre-activations for proper backward passes
+    private readonly List<Tensor<T>> _genPreActivations = new();
+    private readonly List<Tensor<T>> _discPreActivations = new();
+
+    // Whether custom layers are being used (disables residual connection logic)
+    private bool _usingCustomLayers;
+
+    // Pre-allocated training buffers to eliminate per-row GC pressure
+    private Tensor<T>? _oneGrad;
+    private Tensor<T>? _negOneGrad;
+    private Vector<T>? _packedRealBuf;
+    private Vector<T>? _packedFakeBuf;
+    private Vector<T>? _noiseBuf;
+    private Vector<T>? _genInputBuf;
+    private Vector<T>? _realSingleBuf;
+    private Vector<T>? _fakeSingleBuf;
+    private Vector<T>? _realRowBuf;
+    private Vector<T>? _fakeRowBuf;
+    private Vector<T>? _interpolatedBuf;
+    private Tensor<T>? _sampleGradBuf;
+
+    /// <summary>
+    /// Gets the CopulaGAN-specific options.
+    /// </summary>
+    public new CopulaGANOptions<T> Options => _options;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ColumnMetadata> Columns => _columns.AsReadOnly();
+
+    /// <inheritdoc />
+    public bool IsFitted { get; private set; }
+
+    /// <summary>
+    /// Initializes a new CopulaGAN generator with the specified architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture defining input/output dimensions and optional custom layers.</param>
+    /// <param name="options">CopulaGAN-specific options for generator and discriminator configuration.</param>
+    /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
+    /// <param name="lossFunction">Loss function (defaults based on task type).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor creates a CopulaGAN network based on the architecture you provide.
+    ///
+    /// If you provide custom layers in the architecture, those will be used directly
+    /// for the generator network. If not, the network will create industry-standard
+    /// CopulaGAN generator layers based on the original research paper specifications.
+    ///
+    /// Example usage:
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     inputFeatures: 10,
+    ///     outputSize: 10
+    /// );
+    /// var options = new CopulaGANOptions&lt;double&gt; { EmbeddingDimension = 128 };
+    /// var generator = new CopulaGANGenerator&lt;double&gt;(architecture, options);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public CopulaGANGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
+    public CopulaGANGenerator(
+        NeuralNetworkArchitecture<T> architecture,
+        CopulaGANOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 5.0)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+    {
+        _options = options ?? new CopulaGANOptions<T>();
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _generatorOptimizer = optimizer ?? MakeAdam();
+        _discriminatorOptimizer = MakeAdam();
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
+
+        InitializeLayers();
+    }
+
+    #region Layer Initialization (GANDALF Pattern)
+
+    /// <summary>
+    /// Initializes the layers of the CopulaGAN network based on the provided architecture.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method either uses custom layers provided in the architecture or creates
+    /// default CopulaGAN generator layers following the original paper specifications.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method sets up the generator network structure:
+    /// - If you provided custom layers, those are used for the generator
+    /// - Otherwise, it creates the standard CopulaGAN generator architecture:
+    ///   Dense layers with batch normalization and residual connections
+    ///
+    /// The discriminator is always created internally and is not user-overridable.
+    /// </para>
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            // Use the layers provided by the user for the generator
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+            _usingCustomLayers = true;
+        }
+        else
+        {
+            // Create default generator layers
+            // Input = EmbeddingDimension (noise) + estimated conditional width
+            int inputDim = _options.EmbeddingDimension + Architecture.CalculatedInputSize;
+            int outputDim = Architecture.OutputSize;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultCopulaGANGeneratorLayers(
+                inputDim, outputDim, _options.GeneratorDimensions));
+
+            // Create matching batch normalization layers (one per hidden layer)
+            _genBNLayers.Clear();
+            foreach (int dim in _options.GeneratorDimensions)
+            {
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
+            }
+            _usingCustomLayers = false;
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds the default generator and discriminator layers with actual data dimensions
+    /// discovered during Fit(). Only called when not using custom layers.
+    /// </summary>
+    /// <param name="genInputDim">Actual generator input dimension (embedding + conditional width).</param>
+    /// <param name="genOutputDim">Actual generator output dimension (transformed data width).</param>
+    /// <param name="discInputDim">Actual discriminator input dimension (packed data).</param>
+    private void RebuildLayersWithActualDimensions(int genInputDim, int genOutputDim, int discInputDim)
+    {
+        if (!_usingCustomLayers)
+        {
+            Layers.Clear();
+            Layers.AddRange(LayerHelper<T>.CreateDefaultCopulaGANGeneratorLayers(
+                genInputDim, genOutputDim, _options.GeneratorDimensions));
+
+            _genBNLayers.Clear();
+            foreach (int dim in _options.GeneratorDimensions)
+            {
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
+            }
+        }
+
+        // Discriminator is always rebuilt with actual dimensions
+        _discLayers.Clear();
+        _discDropoutLayers.Clear();
+        _discLayerDims.Clear();
+        _discLayers.AddRange(LayerHelper<T>.CreateDefaultCopulaGANDiscriminatorLayers(
+            discInputDim, _options.DiscriminatorDimensions, _options.DiscriminatorDropout));
+
+        // Build dimension map for manual gradient computation
+        BuildDiscriminatorDimensionMap(discInputDim);
+    }
+
+    /// <summary>
+    /// Builds a dimension map for the discriminator layers to support manual backward pass.
+    /// </summary>
+    private void BuildDiscriminatorDimensionMap(int inputDim)
+    {
+        _discLayerDims.Clear();
+        _discDropoutLayers.Clear();
+
+        int prevDim = inputDim;
+        var discDims = _options.DiscriminatorDimensions;
+
+        for (int i = 0; i < discDims.Length; i++)
+        {
+            _discLayerDims.Add((prevDim, discDims[i]));
+            _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
+            prevDim = discDims[i];
+        }
+        _discLayerDims.Add((prevDim, 1));
+    }
+
+    #endregion
+
+    #region Neural Network Methods (GANDALF Pattern)
+
+    /// <summary>
+    /// Runs the generator forward pass to create synthetic data from a noise input.
+    /// </summary>
+    /// <param name="input">The input tensor (noise vector + conditional vector).</param>
+    /// <returns>The generated synthetic data tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This takes random noise and transforms it into a fake data row.
+    /// The generator uses residual connections where each hidden layer receives both the
+    /// previous output and the original input concatenated together.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
+        if (TryForwardGpuOptimized(input, out var gpuResult))
+            return gpuResult;
+
+        // If using custom layers, do simple sequential forward
+        if (_usingCustomLayers)
+        {
+            Tensor<T> current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            return current;
+        }
+
+        // Default generator with residual connections + BN + ReLU
+        return GeneratorForwardWithResidual(input);
+    }
+
+    /// <summary>
+    /// Trains the CopulaGAN network using the provided input and expected output.
+    /// </summary>
+    /// <param name="input">The input noise tensor.</param>
+    /// <param name="expectedOutput">The expected real data tensor.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This runs a single training step for the generator.
+    /// The full GAN training loop (alternating discriminator/generator) happens in Fit().
+    /// This method is provided for compatibility with the NeuralNetworkBase pattern.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        // CopulaGAN is trained adversarially through Fit() / FitAsync (the copula
+        // transform is fit statistically and the GAN is trained with the
+        // alternating critic/generator loop). The NeuralNetworkBase supervised
+        // Train(input, expected) contract does not map onto a GAN's minimax
+        // objective — silently running a forward + loss but skipping every
+        // parameter update would report a misleading "training" loss while
+        // making zero learning progress, which is worse than failing fast.
+        throw new NotSupportedException(
+            "CopulaGAN is trained adversarially; the supervised Train(input, expected) " +
+            "contract does not map onto its minimax objective. Use Fit(IEnumerable<Tensor<T>>) " +
+            "or FitAsync to drive the alternating discriminator/generator loop, which fits " +
+            "the copula transform and runs the WGAN critic + generator updates.");
+    }
+
+    /// <inheritdoc />
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int startIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                startIndex += layerParameterCount;
+            }
+        }
+    }
+
+    #endregion
+
+    #region ISyntheticTabularGenerator<T> Implementation
+
+    /// <summary>
+    /// Fits the CopulaGAN generator to the provided real tabular data.
+    /// </summary>
+    /// <param name="data">The real data matrix where each row is a sample and each column is a feature.</param>
+    /// <param name="columns">Metadata describing each column (type, categories, etc.).</param>
+    /// <param name="epochs">Number of training epochs.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the "learning" step. The generator studies your real data:
+    /// 1. Applies Gaussian copula transform to normalize continuous columns
+    /// 2. Fits VGM transformer for mode-specific normalization
+    /// 3. Trains generator and discriminator in alternating WGAN-GP steps
+    /// After fitting, call Generate() to create new synthetic rows.
+    /// </para>
+    /// </remarks>
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    {
+        ValidateFitInputs(data, columns, epochs);
+
+        _columns = PrepareColumns(data, columns);
+
+        // Step 1: Identify continuous columns and apply Gaussian copula transform
+        _continuousColumnIndices.Clear();
+        _sortedValues.Clear();
+        for (int col = 0; col < columns.Count; col++)
+        {
+            if (columns[col].IsNumerical)
+            {
+                _continuousColumnIndices.Add(col);
+            }
+        }
+        var copulaData = ApplyCopulaTransform(data);
+
+        // Step 2: Fit the VGM transformer on copula-transformed data
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(copulaData, _columns);
+        _dataWidth = _transformer.TransformedWidth;
+
+        // Step 3: Fit the data sampler
+        _sampler = new CTGANDataSampler<T>(_random);
+        _sampler.Fit(copulaData, _columns);
+        _condWidth = _sampler.ConditionalVectorWidth;
+
+        // Step 4: Compute packed input dimension
+        _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
+
+        // Step 5: Rebuild layers with actual data dimensions
+        int genInputDim = _options.EmbeddingDimension + _condWidth;
+        RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+
+        // Step 6: Transform data
+        var transformedData = _transformer.Transform(copulaData);
+
+        // Step 7: Training loop
+        T lr = NumOps.FromDouble(_options.LearningRate);
+        int pacSize = _options.PacSize;
+        int batchSize = _options.BatchSize;
+        int numPacks = Math.Max(1, batchSize / pacSize);
+        int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
+
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            for (int batch = 0; batch < numBatches; batch++)
+            {
+                // Paper-faithful WGAN-GP schedule: DiscriminatorSteps critic
+                // updates per generator update. Both via GradientTape to
+                // satisfy the autodiff migration (LayerBase.cs:1593).
+                for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
+                {
+                    TrainDiscriminatorStepBatched(transformedData, numPacks);
+                }
+                TrainGeneratorStepBatched(transformedData, numPacks);
+            }
+        }
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    {
+        ValidateFitInputs(data, columns, epochs);
+
+        _columns = PrepareColumns(data, columns);
+
+        await Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+
+            _continuousColumnIndices.Clear();
+            _sortedValues.Clear();
+            for (int col = 0; col < columns.Count; col++)
+            {
+                if (columns[col].IsNumerical)
+                {
+                    _continuousColumnIndices.Add(col);
+                }
+            }
+            var copulaData = ApplyCopulaTransform(data);
+
+            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+            _transformer.Fit(copulaData, _columns);
+            _dataWidth = _transformer.TransformedWidth;
+
+            _sampler = new CTGANDataSampler<T>(_random);
+            _sampler.Fit(copulaData, _columns);
+            _condWidth = _sampler.ConditionalVectorWidth;
+
+            _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
+
+            int genInputDim = _options.EmbeddingDimension + _condWidth;
+            RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+
+            // Pre-allocate training buffers
+            InitializeTrainingBuffers(genInputDim);
+
+            var transformedData = _transformer.Transform(copulaData);
+
+            T lr = NumOps.FromDouble(_options.LearningRate);
+            int pacSize = _options.PacSize;
+            int batchSize = _options.BatchSize;
+            int numPacks = Math.Max(1, batchSize / pacSize);
+            int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
+
+            for (int epoch = 0; epoch < epochs; epoch++)
+            {
+                ct.ThrowIfCancellationRequested();
+                for (int batch = 0; batch < numBatches; batch++)
+                {
+                    for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
+                    {
+                        TrainDiscriminatorStepBatched(transformedData, numPacks);
+                    }
+                    TrainGeneratorStepBatched(transformedData, numPacks);
+                }
+            }
+        }, ct).ConfigureAwait(false);
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Generates new synthetic tabular data rows.
+    /// </summary>
+    /// <param name="numSamples">The number of synthetic rows to generate.</param>
+    /// <param name="conditionColumn">Optional conditioning column indices.</param>
+    /// <param name="conditionValue">Optional conditioning values.</param>
+    /// <returns>A matrix of synthetic data with the same column structure as the training data.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> After fitting, this creates new fake-but-realistic rows by:
+    /// 1. Generating random noise
+    /// 2. Running through the generator to create transformed data
+    /// 3. Applying inverse VGM transform
+    /// 4. Applying inverse copula transform to restore original distributions
+    /// </para>
+    /// </remarks>
+    public Matrix<T> Generate(int numSamples, Vector<T>? conditionColumn = null, Vector<T>? conditionValue = null)
+    {
+        if (!IsFitted || _transformer is null || _sampler is null)
+        {
+            throw new InvalidOperationException(
+                "The generator must be fitted before generating data. Call Fit() first.");
+        }
+
+        if (numSamples <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
+        }
+
+        var transformedRows = new Matrix<T>(numSamples, _dataWidth);
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
+
+            Vector<T> condVector;
+            if (conditionColumn is not null && conditionValue is not null && i < conditionColumn.Length)
+            {
+                int colIdx = (int)NumOps.ToDouble(conditionColumn[i]);
+                int catVal = (int)NumOps.ToDouble(conditionValue[i]);
+                condVector = _sampler.CreateConditionVector(colIdx, catVal);
+            }
+            else
+            {
+                condVector = _sampler.SampleRandomConditionVector();
+            }
+
+            var genInput = ConcatVectors(noise, condVector);
+            var fakeRow = Predict(VectorToTensor(genInput));
+
+            for (int j = 0; j < _dataWidth && j < fakeRow.Length; j++)
+            {
+                transformedRows[i, j] = fakeRow[j];
+            }
+        }
+
+        // Inverse VGM transform
+        var copulaSpace = _transformer.InverseTransform(transformedRows);
+
+        // Inverse copula transform
+        return ApplyInverseCopulaTransform(copulaSpace);
+    }
+
+    #endregion
+
+    #region GAN Training Steps
+
+    #region Training Buffer Management
+
+    private void InitializeTrainingBuffers(int genInputDim)
+    {
+        int singleDim = _dataWidth + _condWidth;
+        _oneGrad = new Tensor<T>([1]);
+        _oneGrad[0] = NumOps.One;
+        _negOneGrad = new Tensor<T>([1]);
+        _negOneGrad[0] = NumOps.Negate(NumOps.One);
+        _packedRealBuf = new Vector<T>(_packedInputDim);
+        _packedFakeBuf = new Vector<T>(_packedInputDim);
+        _noiseBuf = new Vector<T>(_options.EmbeddingDimension);
+        _genInputBuf = new Vector<T>(genInputDim);
+        _realSingleBuf = new Vector<T>(singleDim);
+        _fakeSingleBuf = new Vector<T>(singleDim);
+        _realRowBuf = new Vector<T>(_dataWidth);
+        _fakeRowBuf = new Vector<T>(_dataWidth);
+        _interpolatedBuf = new Vector<T>(_packedInputDim);
+        _sampleGradBuf = new Tensor<T>([_dataWidth]);
+    }
+
+    private void FillStandardNormal(Vector<T> buffer)
+    {
+        for (int i = 0; i < buffer.Length; i++)
+        {
+            double u1 = 1.0 - _random.NextDouble();
+            double u2 = _random.NextDouble();
+            buffer[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+        }
+    }
+
+    private static void FillRow(Matrix<T> data, int row, Vector<T> buffer)
+    {
+        int cols = Math.Min(data.Columns, buffer.Length);
+        for (int j = 0; j < cols; j++) buffer[j] = data[row, j];
+    }
+
+    private static void ConcatInto(Vector<T> a, Vector<T> b, Vector<T> dest)
+    {
+        int aLen = a.Length;
+        for (int i = 0; i < aLen; i++) dest[i] = a[i];
+        int bLen = Math.Min(b.Length, dest.Length - aLen);
+        for (int i = 0; i < bLen; i++) dest[aLen + i] = b[i];
+    }
+
+    private static void FillFromTensor(Tensor<T> src, Vector<T> dest)
+    {
+        int len = Math.Min(src.Length, dest.Length);
+        for (int i = 0; i < len; i++) dest[i] = src[i];
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Paper-faithful WGAN-GP critic step (Xu et al. 2019 CTGAN +
+    /// Patki et al. 2016 Gaussian copula) over PacGAN-packed batches.
+    /// Tape-tracked through <see cref="DiscriminatorForwardBatched"/>.
+    /// </summary>
+    private void TrainDiscriminatorStepBatched(Matrix<T> transformedData, int numPacks)
+    {
+        if (_sampler is null) return;
+
+        var (realPacked, fakePacked) = BuildPackedRealAndFakeBatches(transformedData, numPacks);
+
+        // Preferred fused path: WganGpFusedStep (see ooples/AiDotNet#1845).
+        var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers);
+        if (discParams.Count > 0
+            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                _discriminatorOptimizer,
+                out var wganOptType, out var wganLr, out var wganB1,
+                out var wganB2, out var wganEps, out var wganWd,
+                out _, out _))
+        {
+            using var wganStep = new AiDotNet.Training.WganGpFusedStep<T>();
+            Tensor<T> DiscFwd(Tensor<T> inp) => DiscriminatorForwardBatched(inp, isTraining: true);
+            Tensor<T> EpsilonSampler(int bs) =>
+                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
+            if (wganStep.TryStep(
+                    discParameters: discParams,
+                    realBatch: realPacked,
+                    fakeBatch: fakePacked,
+                    discForward: DiscFwd,
+                    epsilonSampler: EpsilonSampler,
+                    gradientPenaltyWeight: _options.GradientPenaltyWeight,
+                    optimizerType: wganOptType,
+                    learningRate: wganLr,
+                    beta1: wganB1,
+                    beta2: wganB2,
+                    epsilon: wganEps,
+                    weightDecay: wganWd,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        // Secondary fused path: GpuResidentFusedStep with the loss composed via
+        // this class's ComputeGradientPenalty (createGraph=true GP fix, #1844).
+        var trainableDiscLayers = _discLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableDiscLayers.Count > 0)
+        {
+            int realN = realPacked.Shape[0];
+            int fakeN = fakePacked.Shape[0];
+            var stacked = Engine.TensorConcatenate([realPacked, fakePacked], axis: 0);
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> both) => DiscriminatorForwardBatched(both, isTraining: true);
+            Tensor<T> Loss(Tensor<T> allScores, Tensor<T> _)
+            {
+                var rShape = allScores._shape.ToArray(); rShape[0] = realN;
+                var fShape = allScores._shape.ToArray(); fShape[0] = fakeN;
+                var rStart = new int[allScores.Rank];
+                var fStart = new int[allScores.Rank]; fStart[0] = realN;
+                var rScores = Engine.TensorSlice(allScores, rStart, rShape);
+                var fScores = Engine.TensorSlice(allScores, fStart, fShape);
+                var axes = Enumerable.Range(0, rScores.Shape.Length).ToArray();
+                var wasserstein = Engine.TensorSubtract(
+                    Engine.ReduceMean(fScores, axes, keepDims: false),
+                    Engine.ReduceMean(rScores, axes, keepDims: false));
+                var gp = ComputeGradientPenalty(realPacked, fakePacked);
+                return Engine.TensorAdd(wasserstein,
+                    Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableDiscLayers, stacked, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _discriminatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
+        // discParams already collected above for the WganGpFusedStep attempt.
+
+        var realScores = DiscriminatorForwardBatched(realPacked, isTraining: true);
+        var fakeScores = DiscriminatorForwardBatched(fakePacked, isTraining: true);
+
+        var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+        var avgReal = Engine.ReduceMean(realScores, allAxes, keepDims: false);
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        var wassersteinLoss = Engine.TensorSubtract(avgFake, avgReal);
+        var gradientPenalty = ComputeGradientPenalty(realPacked, fakePacked);
+        var weightedGradientPenalty = Engine.TensorMultiplyScalar(
+            gradientPenalty,
+            NumOps.FromDouble(_options.GradientPenaltyWeight));
+        var lossTensor = Engine.TensorAdd(wassersteinLoss, weightedGradientPenalty);
+
+        var grads = tape.ComputeGradients(lossTensor, discParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+        {
+            var recomputedAvgReal = Engine.ReduceMean(pred, allAxes, keepDims: false);
+            var recomputedFakeScores = DiscriminatorForwardBatched(fakePacked, true);
+            var recomputedAvgFake = Engine.ReduceMean(recomputedFakeScores, allAxes, keepDims: false);
+            var recomputedWasserstein = Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
+            var recomputedGradientPenalty = ComputeGradientPenalty(realPacked, fakePacked);
+            return Engine.TensorAdd(
+                recomputedWasserstein,
+                Engine.TensorMultiplyScalar(recomputedGradientPenalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+        }
+
+        var context = new TapeStepContext<T>(
+            discParams, grads, lossValue,
+            realPacked, realPacked, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _discriminatorOptimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Paper-faithful WGAN-GP generator step. Minimizes -E[D(G(z,c),c)].
+    /// </summary>
+    private void TrainGeneratorStepBatched(Matrix<T> transformedData, int numPacks)
+    {
+        if (_sampler is null) return;
+
+        var generatorLayers = new List<ILayer<T>>();
+        generatorLayers.AddRange(Layers);
+        foreach (var bn in _genBNLayers) generatorLayers.Add(bn);
+        var genParams = TapeTrainingStep<T>.CollectParameters(generatorLayers);
+
+        int pacSize = _options.PacSize;
+        int total = numPacks * pacSize;
+
+        var noiseBatch = GenerateNoiseBatchTensor(total);
+        var condBatch = SampleConditionalBatchTensor(total);
+        var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
+
+        // GPU-RESIDENT fast path — slice condBatch back out of the persistent
+        // genInput so replay uses fresh cond each step.
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0)
+        {
+            int embedDim = _options.EmbeddingDimension;
+            int condDim = _condWidth;
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> ginp)
+            {
+                var faked = GeneratorForwardWithResidualBatched(ginp);
+                var act = ApplyOutputActivationsBatched(faked);
+                var condFromInput = Engine.TensorSlice(ginp, [0, embedDim], [total, condDim]);
+                var withCond = Engine.TensorConcatenate([act, condFromInput], axis: 1);
+                var packed = withCond.Reshape([numPacks, _packedInputDim]);
+                return DiscriminatorForwardBatched(packed, false);
+            }
+            Tensor<T> Loss(Tensor<T> scores, Tensor<T> _)
+            {
+                var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+                return Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, genInput, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _generatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
+
+        var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
+        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);
+        var fakeWithCond = Engine.TensorConcatenate([fakeActivated, condBatch], axis: 1);
+        var fakePacked = fakeWithCond.Reshape([numPacks, _packedInputDim]);
+
+        var fakeScores = DiscriminatorForwardBatched(fakePacked, isTraining: false);
+        var allAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        var lossTensor = Engine.TensorNegate(avgFake);
+
+        var grads = tape.ComputeGradients(lossTensor, genParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _)
+        {
+            var faked = GeneratorForwardWithResidualBatched(inp);
+            var act = ApplyOutputActivationsBatched(faked);
+            var withCond = Engine.TensorConcatenate([act, condBatch], axis: 1);
+            var packed = withCond.Reshape([numPacks, _packedInputDim]);
+            return DiscriminatorForwardBatched(packed, false);
+        }
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => Engine.TensorNegate(Engine.ReduceMean(pred, allAxes, keepDims: false));
+
+        var context = new TapeStepContext<T>(
+            genParams, grads, lossValue,
+            genInput, genInput, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _generatorOptimizer.Step(context);
+    }
+
+    private (Tensor<T> realPacked, Tensor<T> fakePacked) BuildPackedRealAndFakeBatches(
+        Matrix<T> transformedData,
+        int numPacks)
+    {
+        int pacSize = _options.PacSize;
+        int total = numPacks * pacSize;
+
+        var noiseBatch = GenerateNoiseBatchTensor(total);
+        var (condBatch, rowIndices) = SampleConditionalBatchWithRows(total);
+        var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
+
+        var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
+        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);
+        var fakeSingles = Engine.TensorConcatenate([fakeActivated, condBatch], axis: 1);
+
+        var realFlat = new Tensor<T>([total, _dataWidth]);
+        for (int s = 0; s < total; s++)
+        {
+            int rowIdx = rowIndices[s];
+            int cols = Math.Min(_dataWidth, transformedData.Columns);
+            for (int j = 0; j < cols; j++) realFlat[s, j] = transformedData[rowIdx, j];
+        }
+        var realSingles = Engine.TensorConcatenate([realFlat, condBatch], axis: 1);
+
+        return (realSingles.Reshape([numPacks, _packedInputDim]),
+                fakeSingles.Reshape([numPacks, _packedInputDim]));
+    }
+
+    private Tensor<T> GenerateNoiseBatchTensor(int batchSize)
+    {
+        int embedDim = _options.EmbeddingDimension;
+        int totalElements = batchSize * embedDim;
+        int halfElements = (totalElements + 1) / 2;
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
+        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
+        var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));
+        var z1 = Engine.TensorMultiply(radius, Engine.TensorCos(theta));
+        var z2 = Engine.TensorMultiply(radius, Engine.TensorSin(theta));
+        var noiseData = new T[totalElements];
+        var z1Arr = z1.ToArray();
+        var z2Arr = z2.ToArray();
+        for (int i = 0; i < halfElements; i++)
+        {
+            int idx = i * 2;
+            if (idx < totalElements) noiseData[idx] = z1Arr[i];
+            if (idx + 1 < totalElements) noiseData[idx + 1] = z2Arr[i];
+        }
+        return new Tensor<T>(noiseData, [batchSize, embedDim]);
+    }
+
+    private Tensor<T> SampleConditionalBatchTensor(int batchSize)
+    {
+        if (_sampler is null) return new Tensor<T>([batchSize, _condWidth]);
+        var batch = new Tensor<T>([batchSize, _condWidth]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, _) = _sampler.SampleConditionAndRow();
+            int cols = Math.Min(_condWidth, cv.Length);
+            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
+        }
+        return batch;
+    }
+
+    private (Tensor<T> CondBatch, int[] RowIndices) SampleConditionalBatchWithRows(int batchSize)
+    {
+        var batch = new Tensor<T>([batchSize, _condWidth]);
+        var rowIndices = new int[batchSize];
+        if (_sampler is null) return (batch, rowIndices);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, rowIndex) = _sampler.SampleConditionAndRow();
+            int cols = Math.Min(_condWidth, cv.Length);
+            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
+            rowIndices[b] = rowIndex;
+        }
+
+        return (batch, rowIndices);
+    }
+
+    private Tensor<T> ComputeGradientPenalty(Tensor<T> realPacked, Tensor<T> fakePacked)
+    {
+        int batchSize = Math.Max(1, realPacked.Shape[0]);
+        int elementsPerSample = Math.Max(1, realPacked.Length / batchSize);
+
+        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One);
+        var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realPacked.Length]);
+        var ones = new Tensor<T>([realPacked.Length]);
+        Engine.TensorFill(ones, NumOps.One);
+        var oneMinusEpsilon = Engine.TensorSubtract(ones, epsilonBroadcast);
+
+        var realFlat = realPacked.Reshape([realPacked.Length]);
+        var fakeFlat = fakePacked.Reshape([fakePacked.Length]);
+        var interpolatedFlat = Engine.TensorAdd(
+            Engine.TensorMultiply(epsilonBroadcast, realFlat),
+            Engine.TensorMultiply(oneMinusEpsilon, fakeFlat));
+        var interpolated = interpolatedFlat.Reshape(realPacked._shape);
+
+        Tensor<T> inputGradients;
+        using (var gradientTape = new GradientTape<T>())
+        {
+            var scores = DiscriminatorForwardBatched(interpolated, true);
+            var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
+            // AiDotNet #1844: createGraph=true records inner backward on outer tape
+            // so gradient penalty actually flows to disc weights (WGAN-GP correctness).
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated], createGraph: true);
+            inputGradients = gradients.TryGetValue(interpolated, out var gradient)
+                ? gradient
+                : new Tensor<T>(interpolated._shape);
+        }
+
+        var gradientsReshaped = inputGradients.Reshape([batchSize, elementsPerSample]);
+        var gradientSquared = Engine.TensorMultiply(gradientsReshaped, gradientsReshaped);
+        var gradientNormSquared = Engine.ReduceSum(gradientSquared, [1], keepDims: false);
+        var gradientNorm = Engine.TensorSqrt(Engine.TensorAddScalar(gradientNormSquared, NumOps.FromDouble(1e-12)));
+        var targetNorm = new Tensor<T>(gradientNorm._shape);
+        Engine.TensorFill(targetNorm, NumOps.One);
+        var deviation = Engine.TensorSubtract(gradientNorm, targetNorm);
+        var penalty = Engine.TensorMultiply(deviation, deviation);
+        var penaltyAxes = Enumerable.Range(0, penalty.Shape.Length).ToArray();
+        return Engine.ReduceMean(penalty, penaltyAxes, keepDims: false);
+    }
+
+    /// <summary>
+    /// Batched, tape-tracked generator forward with residual skip connections.
+    /// </summary>
+    private Tensor<T> GeneratorForwardWithResidualBatched(Tensor<T> input)
+    {
+        if (_usingCustomLayers)
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+        var h = input;
+        int numHidden = Layers.Count - 1;
+        for (int i = 0; i < numHidden; i++)
+        {
+            if (i > 0) h = Engine.TensorConcatenate([h, input], axis: 1);
+            h = Layers[i].Forward(h);
+            if (i < _genBNLayers.Count) h = _genBNLayers[i].Forward(h);
+            h = Engine.ReLU(h);
+        }
+        h = Engine.TensorConcatenate([h, input], axis: 1);
+        h = Layers[^1].Forward(h);
+        return h;
+    }
+
+    /// <summary>
+    /// Batched, tape-tracked discriminator forward (LeakyReLU 0.2 + Dropout).
+    /// </summary>
+    private Tensor<T> DiscriminatorForwardBatched(Tensor<T> input, bool isTraining)
+    {
+        var current = input;
+        T leakySlope = NumOps.FromDouble(0.2);
+        int layerIdx = 0;
+        for (int i = 0; i < _discLayers.Count; i++)
+        {
+            if (_discLayers[i] is DropoutLayer<T> dropout)
+            {
+                if (isTraining) current = dropout.Forward(current);
+                continue;
+            }
+            bool isLastDense = layerIdx == _discLayerDims.Count - 1;
+            current = _discLayers[i].Forward(current);
+            if (!isLastDense) current = Engine.LeakyReLU(current, leakySlope);
+            layerIdx++;
+        }
+        return current;
+    }
+
+    /// <summary>
+    /// Batched per-column VGM output activation: Tanh on continuous mode
+    /// value, Softmax on mode probabilities, Softmax on categorical blocks.
+    /// </summary>
+    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output)
+    {
+        if (_transformer is null) return Engine.TensorTanh(output);
+
+        int batch = output.Shape[0];
+        int totalWidth = output.Shape[1];
+        var blocks = new List<Tensor<T>>(_columns.Count * 2);
+        int idx = 0;
+
+        for (int col = 0; col < _columns.Count && idx < totalWidth; col++)
+        {
+            var transform = _transformer.GetTransformInfo(col);
+            if (transform.IsContinuous)
+            {
+                var valueSlice = Engine.TensorSlice(output, [0, idx], [batch, 1]);
+                blocks.Add(Engine.TensorTanh(valueSlice));
+                idx++;
+                int numModes = transform.Width - 1;
+                int modeLength = Math.Min(numModes, totalWidth - idx);
+                if (modeLength > 0)
+                {
+                    var modeSlice = Engine.TensorSlice(output, [0, idx], [batch, modeLength]);
+                    blocks.Add(Engine.Softmax(modeSlice, axis: 1));
+                    idx += modeLength;
+                }
+            }
+            else
+            {
+                int blockLength = Math.Min(transform.Width, totalWidth - idx);
+                var catSlice = Engine.TensorSlice(output, [0, idx], [batch, blockLength]);
+                blocks.Add(Engine.Softmax(catSlice, axis: 1));
+                idx += blockLength;
+            }
+        }
+
+        if (idx < totalWidth)
+        {
+            var tail = Engine.TensorSlice(output, [0, idx], [batch, totalWidth - idx]);
+            blocks.Add(Engine.TensorTanh(tail));
+        }
+
+        if (blocks.Count == 1) return blocks[0];
+        return Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
+    }
+
+    #endregion
+
+    #region Discriminator Forward/Backward
+
+    /// <summary>
+    /// Runs the discriminator forward pass.
+    /// </summary>
+    private Tensor<T> DiscriminatorForward(Tensor<T> input, bool isTraining)
+    {
+        _discPreActivations.Clear();
+        var current = input;
+        int layerIdx = 0;
+
+        for (int i = 0; i < _discLayers.Count; i++)
+        {
+            var layer = _discLayers[i];
+
+            // Skip dropout layers in this loop - they're interleaved
+            if (layer is DropoutLayer<T> dropout)
+            {
+                if (isTraining)
+                {
+                    current = dropout.Forward(current);
+                }
+                continue;
+            }
+
+            bool isLastDense = layerIdx == _discLayerDims.Count - 1;
+            current = layer.Forward(current);
+
+            if (!isLastDense)
+            {
+                _discPreActivations.Add(CloneTensor(current));
+                current = ApplyLeakyReLU(current);
+            }
+
+            layerIdx++;
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Updates discriminator parameters with a given learning rate.
+    /// </summary>
+    private void UpdateDiscriminatorParameters(T learningRate)
+    {
+        foreach (var layer in _discLayers)
+        {
+            layer.UpdateParameters(learningRate);
+        }
+    }
+
+    /// <summary>
+    /// Updates generator parameters with a given learning rate.
+    /// </summary>
+    private void UpdateGeneratorParameters(T learningRate)
+    {
+        foreach (var layer in Layers)
+        {
+            layer.UpdateParameters(learningRate);
+        }
+        foreach (var bn in _genBNLayers)
+        {
+            bn.UpdateParameters(learningRate);
+        }
+    }
+
+    #endregion
+
+    #region Gradient Penalty
+
+    #endregion
+
+    #region Generator Forward/Backward with Residual Connections
+
+    /// <summary>
+    /// Generator forward pass with CTGAN-style residual connections:
+    /// Each hidden layer receives [previous_output, original_input].
+    /// </summary>
+    private Tensor<T> GeneratorForwardWithResidual(Tensor<T> input)
+    {
+        _genPreActivations.Clear();
+        var inputTensor = input;
+        var current = input;
+
+        // Hidden layers with residual connections + BN + ReLU
+        for (int i = 0; i < Layers.Count - 1; i++)
+        {
+            if (i > 0)
+            {
+                current = ConcatTensors(current, inputTensor);
+            }
+
+            current = Layers[i].Forward(current);
+
+            if (i < _genBNLayers.Count)
+            {
+                current = _genBNLayers[i].Forward(current);
+            }
+
+            _genPreActivations.Add(CloneTensor(current));
+            current = ApplyReLU(current);
+        }
+
+        // Output layer with residual connection
+        current = ConcatTensors(current, inputTensor);
+        current = Layers[^1].Forward(current);
+
+        return ApplyOutputActivations(current);
+    }
+
+    #endregion
+
+    #region Copula Transform
+
+    /// <summary>
+    /// Applies Gaussian copula transform to continuous columns:
+    /// value -> empirical CDF -> inverse normal CDF (quantile function).
+    /// </summary>
+    private Matrix<T> ApplyCopulaTransform(Matrix<T> data)
+    {
+        var result = new Matrix<T>(data.Rows, data.Columns);
+
+        for (int i = 0; i < data.Rows; i++)
+        {
+            for (int j = 0; j < data.Columns; j++)
+            {
+                result[i, j] = data[i, j];
+            }
+        }
+
+        foreach (int col in _continuousColumnIndices)
+        {
+            var values = new double[data.Rows];
+            for (int i = 0; i < data.Rows; i++)
+            {
+                values[i] = NumOps.ToDouble(data[i, col]);
+            }
+
+            var sorted = new double[data.Rows];
+            Array.Copy(values, sorted, data.Rows);
+            Array.Sort(sorted);
+            _sortedValues.Add(sorted);
+
+            for (int i = 0; i < data.Rows; i++)
+            {
+                int rank = Array.BinarySearch(sorted, values[i]);
+                if (rank < 0) rank = ~rank;
+                int lo = rank;
+                while (lo > 0 && sorted[lo - 1] == values[i]) lo--;
+                int hi = rank;
+                while (hi < sorted.Length - 1 && sorted[hi + 1] == values[i]) hi++;
+                double midRank = (lo + hi) / 2.0;
+
+                double u = (midRank + 1.0) / (data.Rows + 1.0);
+                u = Math.Max(1e-6, Math.Min(1.0 - 1e-6, u));
+                double z = NormalQuantile(u);
+                result[i, col] = NumOps.FromDouble(z);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies inverse Gaussian copula transform to continuous columns.
+    /// </summary>
+    private Matrix<T> ApplyInverseCopulaTransform(Matrix<T> data)
+    {
+        var result = new Matrix<T>(data.Rows, data.Columns);
+
+        for (int i = 0; i < data.Rows; i++)
+        {
+            for (int j = 0; j < data.Columns; j++)
+            {
+                result[i, j] = data[i, j];
+            }
+        }
+
+        for (int idx = 0; idx < _continuousColumnIndices.Count && idx < _sortedValues.Count; idx++)
+        {
+            int col = _continuousColumnIndices[idx];
+            var sorted = _sortedValues[idx];
+            int n = sorted.Length;
+
+            for (int i = 0; i < data.Rows; i++)
+            {
+                double z = NumOps.ToDouble(data[i, col]);
+                double u = NormalCDF(z);
+                u = Math.Max(0, Math.Min(1, u));
+
+                double rank = u * (n + 1.0) - 1.0;
+                rank = Math.Max(0, Math.Min(n - 1, rank));
+                int lo = (int)Math.Floor(rank);
+                int hi = Math.Min(lo + 1, n - 1);
+                double frac = rank - lo;
+
+                double original = sorted[lo] * (1.0 - frac) + sorted[hi] * frac;
+                result[i, col] = NumOps.FromDouble(original);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Approximation of the inverse normal CDF using Beasley-Springer-Moro algorithm.
+    /// </summary>
+    private static double NormalQuantile(double p)
+    {
+        if (p <= 0) return -8.0;
+        if (p >= 1) return 8.0;
+
+        double t;
+        if (p < 0.5)
+        {
+            t = Math.Sqrt(-2.0 * Math.Log(p));
+            return -(2.515517 + t * (0.802853 + t * 0.010328))
+                   / (1.0 + t * (1.432788 + t * (0.189269 + t * 0.001308)));
+        }
+        else
+        {
+            t = Math.Sqrt(-2.0 * Math.Log(1.0 - p));
+            return (2.515517 + t * (0.802853 + t * 0.010328))
+                   / (1.0 + t * (1.432788 + t * (0.189269 + t * 0.001308)));
+        }
+    }
+
+    /// <summary>
+    /// Approximation of the normal CDF using the error function.
+    /// </summary>
+    private static double NormalCDF(double x)
+    {
+        return 0.5 * (1.0 + Erf(x / Math.Sqrt(2.0)));
+    }
+
+    /// <summary>
+    /// Approximation of the error function using Abramowitz and Stegun formula 7.1.26.
+    /// </summary>
+    private static double Erf(double x)
+    {
+        double sign = x >= 0 ? 1.0 : -1.0;
+        x = Math.Abs(x);
+
+        const double a1 = 0.254829592;
+        const double a2 = -0.284496736;
+        const double a3 = 1.421413741;
+        const double a4 = -1.453152027;
+        const double a5 = 1.061405429;
+        const double p = 0.3275911;
+
+        double t = 1.0 / (1.0 + p * x);
+        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
+
+        return sign * y;
+    }
+
+    #endregion
+
+    #region Activation Functions
+
+    private Tensor<T> ApplyReLU(Tensor<T> input)
+    {
+        var result = new Tensor<T>(input._shape);
+        for (int i = 0; i < input.Length; i++)
+        {
+            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
+        }
+        return result;
+    }
+
+    private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
+    {
+        int len = Math.Min(gradOutput.Length, preActivation.Length);
+        var result = new Tensor<T>(gradOutput._shape);
+        for (int i = 0; i < len; i++)
+        {
+            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
+        }
+        return result;
+    }
+
+    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
+    {
+        var result = new Tensor<T>(input._shape);
+        T slope = NumOps.FromDouble(0.2);
+        for (int i = 0; i < input.Length; i++)
+        {
+            double val = NumOps.ToDouble(input[i]);
+            result[i] = val > 0 ? input[i] : NumOps.Multiply(slope, input[i]);
+        }
+        return result;
+    }
+
+    private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
+    {
+        int len = Math.Min(gradOutput.Length, preActivation.Length);
+        var result = new Tensor<T>(gradOutput._shape);
+        T slope = NumOps.FromDouble(0.2);
+        for (int i = 0; i < len; i++)
+        {
+            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero)
+                ? gradOutput[i]
+                : NumOps.Multiply(slope, gradOutput[i]);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Applies tanh to continuous columns and softmax to categorical/mode columns.
+    /// </summary>
+    private Tensor<T> ApplyOutputActivations(Tensor<T> output)
+    {
+        if (_transformer is null) return output;
+
+        var result = new Tensor<T>(output._shape);
+        int idx = 0;
+
+        for (int col = 0; col < _columns.Count && idx < output.Length; col++)
+        {
+            var transform = _transformer.GetTransformInfo(col);
+
+            if (transform.IsContinuous)
+            {
+                if (idx < output.Length)
+                {
+                    double val = NumOps.ToDouble(output[idx]);
+                    result[idx] = NumOps.FromDouble(Math.Tanh(val));
+                    idx++;
+                }
+
+                int numModes = transform.Width - 1;
+                if (numModes > 0)
+                {
+                    ApplySoftmaxBlock(output, result, ref idx, numModes);
+                }
+            }
+            else
+            {
+                ApplySoftmaxBlock(output, result, ref idx, transform.Width);
+            }
+        }
+
+        return result;
+    }
+
+    private void ApplySoftmaxBlock(Tensor<T> input, Tensor<T> output, ref int idx, int count)
+    {
+        if (count <= 0) return;
+        int actualCount = Math.Min(count, input.Length - idx);
+        if (actualCount <= 0) return;
+        var slice = new Tensor<T>([actualCount]);
+        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
+        var result = Engine.Softmax(slice, -1);
+        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
+        idx += actualCount;
+    }
+
+    #endregion
+
+    #region Gradient Safety Utilities
+
+    /// <summary>
+    /// Applies NaN sanitization and gradient norm clipping in a single operation.
+    /// </summary>
+    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
+    {
+        // Sanitize NaN/Infinity
+        for (int i = 0; i < grad.Length; i++)
+        {
+            double v = NumOps.ToDouble(grad[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v))
+            {
+                grad[i] = NumOps.Zero;
+            }
+        }
+
+        // Clip gradient norm
+        if (maxNorm <= 0) return grad;
+
+        double normSq = 0;
+        for (int i = 0; i < grad.Length; i++)
+        {
+            double v = NumOps.ToDouble(grad[i]);
+            normSq += v * v;
+        }
+
+        double norm = Math.Sqrt(normSq);
+        if (norm <= maxNorm) return grad;
+
+        double scale = maxNorm / norm;
+        var clipped = new Tensor<T>(grad._shape);
+        for (int i = 0; i < grad.Length; i++)
+        {
+            clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
+        }
+        return clipped;
+    }
+
+    #endregion
+
+    #region Serialization and Model Metadata (GANDALF Pattern)
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "EmbeddingDimension", _options.EmbeddingDimension },
+                { "GeneratorDimensions", _options.GeneratorDimensions },
+                { "DiscriminatorDimensions", _options.DiscriminatorDimensions },
+                { "BatchSize", _options.BatchSize },
+                { "PacSize", _options.PacSize },
+                { "GradientPenaltyWeight", _options.GradientPenaltyWeight },
+                { "GeneratorLayerCount", Layers.Count },
+                { "GeneratorLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
+            },
+            ModelData = SerializeForMetadata()
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_options.EmbeddingDimension);
+        writer.Write(_options.GeneratorDimensions.Length);
+        foreach (var dim in _options.GeneratorDimensions)
+        {
+            writer.Write(dim);
+        }
+        writer.Write(_options.DiscriminatorDimensions.Length);
+        foreach (var dim in _options.DiscriminatorDimensions)
+        {
+            writer.Write(dim);
+        }
+        writer.Write(_options.BatchSize);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.GradientPenaltyWeight);
+        writer.Write(_options.PacSize);
+        writer.Write(_options.VGMModes);
+        writer.Write(_options.DiscriminatorDropout);
+    }
+
+    /// <inheritdoc/>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        // Options are reconstructed from serialized data
+        // Layers are handled by base class
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new CopulaGANGenerator<T>(
+            Architecture,
+            _options,
+            _generatorOptimizer,
+            _lossFunction);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetFeatureImportance()
+    {
+        var importance = new Dictionary<string, T>();
+        int numFeatures = Architecture.CalculatedInputSize;
+        var uniformValue = NumOps.FromDouble(1.0 / Math.Max(numFeatures, 1));
+        for (int f = 0; f < numFeatures; f++)
+        {
+            importance[$"feature_{f}"] = uniformValue;
+        }
+        return importance;
+    }
+
+    #endregion
+
+    #region Input Validation and Column Management
+
+    private static void ValidateFitInputs(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    {
+        if (data.Rows == 0 || data.Columns == 0)
+        {
+            throw new ArgumentException("Data matrix must not be empty.", nameof(data));
+        }
+
+        if (columns.Count == 0)
+        {
+            throw new ArgumentException("Column metadata list must not be empty.", nameof(columns));
+        }
+
+        if (columns.Count != data.Columns)
+        {
+            throw new ArgumentException(
+                $"Column metadata count ({columns.Count}) must match data column count ({data.Columns}).",
+                nameof(columns));
+        }
+
+        if (epochs <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs must be positive.");
+        }
+    }
+
+    private List<ColumnMetadata> PrepareColumns(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        var prepared = new List<ColumnMetadata>(columns.Count);
+
+        for (int col = 0; col < columns.Count; col++)
+        {
+            var meta = columns[col].Clone();
+            meta.ColumnIndex = col;
+
+            if (meta.IsNumerical)
+            {
+                ComputeColumnStatistics(data, col, meta);
+            }
+            else if (meta.IsCategorical && meta.NumCategories == 0)
+            {
+                var categories = new HashSet<string>();
+                for (int row = 0; row < data.Rows; row++)
+                {
+                    var val = NumOps.ToDouble(data[row, col]);
+                    categories.Add(val.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+                meta.Categories = categories.OrderBy(c => c, StringComparer.Ordinal).ToList().AsReadOnly();
+            }
+
+            prepared.Add(meta);
+        }
+
+        return prepared;
+    }
+
+    private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
+    {
+        int n = data.Rows;
+        double sum = 0;
+        double min = double.MaxValue;
+        double max = double.MinValue;
+
+        for (int row = 0; row < n; row++)
+        {
+            double val = NumOps.ToDouble(data[row, colIndex]);
+            sum += val;
+            if (val < min) min = val;
+            if (val > max) max = val;
+        }
+
+        double mean = sum / n;
+        double sumSqDiff = 0;
+        for (int row = 0; row < n; row++)
+        {
+            double val = NumOps.ToDouble(data[row, colIndex]);
+            double diff = val - mean;
+            sumSqDiff += diff * diff;
+        }
+
+        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
+        if (std < 1e-10) std = 1e-10;
+
+        meta.Min = min;
+        meta.Max = max;
+        meta.Mean = mean;
+        meta.Std = std;
+    }
+
+    #endregion
+
+    #region Random Sampling Utilities
+
+    private T SampleStandardNormal()
+    {
+        double u1 = 1.0 - _random.NextDouble();
+        double u2 = _random.NextDouble();
+        double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return NumOps.FromDouble(z);
+    }
+
+    private Vector<T> CreateStandardNormalVector(int length)
+    {
+        var v = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            v[i] = SampleStandardNormal();
+        }
+        return v;
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static Vector<T> GetRow(Matrix<T> matrix, int row)
+    {
+        var v = new Vector<T>(matrix.Columns);
+        for (int j = 0; j < matrix.Columns; j++) v[j] = matrix[row, j];
+        return v;
+    }
+
+    private static Vector<T> ConcatVectors(Vector<T> a, Vector<T> b)
+    {
+        var result = new Vector<T>(a.Length + b.Length);
+        for (int i = 0; i < a.Length; i++) result[i] = a[i];
+        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
+        return result;
+    }
+
+    private static Tensor<T> VectorToTensor(Vector<T> v)
+    {
+        var t = new Tensor<T>([v.Length]);
+        for (int i = 0; i < v.Length; i++) t[i] = v[i];
+        return t;
+    }
+
+    private static Vector<T> TensorToVector(Tensor<T> t, int length)
+    {
+        var v = new Vector<T>(length);
+        int copyLen = Math.Min(length, t.Length);
+        for (int i = 0; i < copyLen; i++) v[i] = t[i];
+        return v;
+    }
+
+    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
+    {
+        var result = new Tensor<T>([a.Length + b.Length]);
+        for (int i = 0; i < a.Length; i++) result[i] = a[i];
+        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
+        return result;
+    }
+
+    private static Tensor<T> CloneTensor(Tensor<T> source)
+    {
+        var clone = new Tensor<T>(source._shape);
+        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
+        return clone;
+    }
+
+    #endregion
+
+}

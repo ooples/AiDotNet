@@ -1,0 +1,406 @@
+using System.Security.Cryptography;
+using AiDotNet.Models.Results;
+using AiDotNet.Serving.Configuration;
+using AiDotNet.Serving.Models;
+using AiDotNet.Tensors.LinearAlgebra;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
+
+namespace AiDotNet.Serving.Services;
+
+/// <summary>
+/// Hosted service that loads models at application startup based on configuration.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This service runs during application startup and loads models specified in the
+/// ServingOptions.StartupModels configuration. Models are loaded as AiModelResult
+/// instances to maintain the facade pattern and include all configured optimizations.
+/// </para>
+/// <para><b>For Beginners:</b> This service automatically loads models when your server starts.
+///
+/// Configure startup models in appsettings.json:
+/// <code>
+/// {
+///   "ServingOptions": {
+///     "StartupModels": [
+///       { "Name": "my-model", "Path": "models/my-model.aidotnet", "NumericType": "double" }
+///     ]
+///   }
+/// }
+/// </code>
+///
+/// Benefits:
+/// - Models are ready immediately when the server starts
+/// - No cold start latency for first prediction
+/// - Validates models exist and load correctly at startup
+/// </para>
+/// </remarks>
+public class ModelStartupService : IHostedService
+{
+    private readonly IModelRepository _modelRepository;
+    private readonly ILogger<ModelStartupService> _logger;
+    private readonly ServingOptions _options;
+
+    /// <summary>
+    /// Initializes a new instance of the ModelStartupService.
+    /// </summary>
+    /// <param name="modelRepository">The model repository to register loaded models.</param>
+    /// <param name="logger">Logger for diagnostics.</param>
+    /// <param name="options">Serving options containing startup model configuration.</param>
+    public ModelStartupService(
+        IModelRepository modelRepository,
+        ILogger<ModelStartupService> logger,
+        IOptions<ServingOptions> options)
+    {
+        Guard.NotNull(modelRepository);
+        _modelRepository = modelRepository;
+        Guard.NotNull(logger);
+        _logger = logger;
+        Guard.NotNull(options);
+        Guard.NotNull(options.Value);
+        _options = options.Value;
+    }
+
+    /// <summary>
+    /// Starts the service and loads configured startup models.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        LogCpuInferenceThreadRecommendation();
+
+        if (_options.StartupModels == null || _options.StartupModels.Count == 0)
+        {
+            _logger.LogInformation("No startup models configured");
+            return;
+        }
+
+        _logger.LogInformation("Loading {Count} startup model(s)...", _options.StartupModels.Count);
+
+        var loadedCount = 0;
+        var failedCount = 0;
+
+        foreach (var modelConfig in _options.StartupModels)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning("Model loading cancelled");
+                break;
+            }
+
+            try
+            {
+                await LoadModelAsync(modelConfig);
+                loadedCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load startup model '{Name}' from '{Path}'",
+                    modelConfig.Name, modelConfig.Path);
+                failedCount++;
+            }
+        }
+
+        _logger.LogInformation("Startup model loading complete: {Loaded} loaded, {Failed} failed",
+            loadedCount, failedCount);
+
+        if (failedCount > 0)
+        {
+            _logger.LogWarning("{Failed} startup model(s) failed to load. Check configuration and file paths.",
+                failedCount);
+        }
+    }
+
+    /// <summary>
+    /// Logs the one-time CPU-inference thread-pin recommendation. All-core BLAS
+    /// saturates large batch/training GEMMs but oversubscribes the small-batch,
+    /// wide-but-short GEMMs typical of latency-sensitive serving — measured ~1.3×
+    /// faster on the wide layers at <c>ProcessorCount/2</c> threads. The pin must be
+    /// applied ONCE at process start (changing the BLAS thread count later rebuilds
+    /// the thread pool), so it's an operator/deployment action, not something this
+    /// service flips at runtime. We surface the recommendation and report whether a
+    /// thread cap is already in effect via the standard env vars.
+    /// </summary>
+    private void LogCpuInferenceThreadRecommendation()
+    {
+        string? omp = Environment.GetEnvironmentVariable("OMP_NUM_THREADS");
+        string? openblas = Environment.GetEnvironmentVariable("OPENBLAS_NUM_THREADS");
+        int recommended = Math.Max(1, Environment.ProcessorCount / 2);
+
+        if (!string.IsNullOrWhiteSpace(omp) || !string.IsNullOrWhiteSpace(openblas))
+        {
+            _logger.LogInformation(
+                "CPU inference: native BLAS thread cap detected (OMP_NUM_THREADS={Omp}, OPENBLAS_NUM_THREADS={OpenBlas}) on a {Cores}-core host.",
+                omp ?? "unset", openblas ?? "unset", Environment.ProcessorCount);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "CPU inference latency tip: BLAS threads are uncapped on this {Cores}-core host. For low-latency " +
+                "small-batch serving, pin them to ~{Recommended} (≈cores/2) before launch — e.g. set OMP_NUM_THREADS={Recommended} " +
+                "(and OPENBLAS_NUM_THREADS={Recommended}) — or call AiDotNet.Tensors.CpuInferenceConfig.PinBlasThreadsForLatency() " +
+                "once at startup. Measured ~1.3× faster on wide inference GEMMs; all-core oversubscribes small-batch work.",
+                Environment.ProcessorCount, recommended, recommended, recommended);
+        }
+    }
+
+    /// <summary>
+    /// Stops the service. No cleanup needed for loaded models.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("ModelStartupService stopping");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Loads a single model from configuration.
+    /// </summary>
+    private async Task LoadModelAsync(StartupModel modelConfig)
+    {
+        if (string.IsNullOrWhiteSpace(modelConfig.Name))
+        {
+            throw new ArgumentException("Model name is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(modelConfig.Path))
+        {
+            throw new ArgumentException($"Model path is required for '{modelConfig.Name}'");
+        }
+
+        // Resolve path relative to model directory if not absolute
+        var modelPath = modelConfig.Path;
+        if (!Path.IsPathRooted(modelPath))
+        {
+            modelPath = Path.Combine(_options.ModelDirectory, modelPath);
+        }
+
+        // Validate path is within model directory to prevent traversal attacks
+        var modelsRoot = Path.GetFullPath(_options.ModelDirectory);
+        if (!modelsRoot.EndsWith(Path.DirectorySeparatorChar.ToString()) &&
+            !modelsRoot.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+        {
+            modelsRoot += Path.DirectorySeparatorChar;
+        }
+
+        var canonicalPath = Path.GetFullPath(modelPath);
+        if (!canonicalPath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException(
+                $"Model path '{modelConfig.Path}' resolves outside the allowed model directory");
+        }
+        modelPath = canonicalPath;
+
+        // Validate model file exists
+        if (!File.Exists(modelPath))
+        {
+            throw new FileNotFoundException($"Model file not found: {modelPath}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(modelConfig.Sha256))
+        {
+            var expected = NormalizeHex(modelConfig.Sha256);
+            var actual = NormalizeHex(ComputeFileSha256Hex(modelPath));
+            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Model '{modelConfig.Name}' failed SHA-256 verification. Expected={expected}, Actual={actual}.");
+            }
+        }
+
+        _logger.LogInformation("Loading model '{Name}' from '{Path}' (type: {Type})",
+            modelConfig.Name, modelPath, modelConfig.NumericType);
+
+        // Load model based on numeric type
+        // Using Task.Run to avoid blocking the startup thread for file I/O
+        await Task.Run(() =>
+        {
+            switch (modelConfig.NumericType)
+            {
+                case NumericType.Float:
+                    LoadModelTyped<float>(modelConfig, modelPath);
+                    break;
+                case NumericType.Decimal:
+                    LoadModelTyped<decimal>(modelConfig, modelPath);
+                    break;
+                case NumericType.Double:
+                default:
+                    LoadModelTyped<double>(modelConfig, modelPath);
+                    break;
+            }
+        });
+
+        _logger.LogInformation("Successfully loaded model '{Name}'", modelConfig.Name);
+    }
+
+    /// <summary>
+    /// Routes a startup model to the generation loader (token-to-logits LMs) or the ordinary
+    /// prediction loader (regression/classification) based on its configuration.
+    /// </summary>
+    private void LoadModelTyped<T>(StartupModel modelConfig, string path)
+    {
+        if (modelConfig.EnableTextGeneration)
+        {
+            LoadGenerativeModel<T>(modelConfig.Name, path, modelConfig.QuantizeKvCacheWeights,
+                modelConfig.EnablePagedKvCache, modelConfig.PagedKvCacheBlockSize);
+            return;
+        }
+
+        LoadTypedModel<T>(modelConfig.Name, path);
+    }
+
+    /// <summary>
+    /// Loads a tensor-to-tensor (token-to-logits) language model and registers it for serving with
+    /// the KV-cached incremental generation path enabled (paged KV cache, per-request session
+    /// isolation, and prompt-prefix sharing).
+    /// </summary>
+    private void LoadGenerativeModel<T>(string name, string path, bool quantizeKvCacheWeights,
+        bool enablePagedKvCache, int pagedKvCacheBlockSize)
+    {
+        using var _ = Helpers.ModelPersistenceGuard.InternalOperation();
+
+        // Thread the operator's startup paged-KV settings into the InferenceOptimizationConfig that the
+        // unified continuous-batching engine consumes. Block size flows straight through; the incremental
+        // KV-cached build additionally forces the settings it strictly requires (see
+        // ServableModelWrapper.BuildIncrementalModel).
+        var servingConfig = new AiDotNet.Configuration.InferenceOptimizationConfig
+        {
+            EnablePagedKVCache = enablePagedKvCache,
+            PagedKVCacheBlockSize = pagedKvCacheBlockSize,
+        };
+
+        var servableModel = ServableModelWrapper<T>.LoadServable(
+            path,
+            name,
+            enableBatching: true,
+            enableSpeculativeDecoding: false,
+            licenseKey: null,
+            decryptionToken: null,
+            enableTextGeneration: true,
+            quantizeKvCacheWeights: quantizeKvCacheWeights,
+            servingInferenceConfig: servingConfig);
+
+        var success = _modelRepository.LoadModel(name, servableModel, path);
+        if (!success)
+        {
+            throw new InvalidOperationException($"A model with name '{name}' already exists");
+        }
+
+        _logger.LogDebug(
+            "Generative model '{Name}' registered (incremental generation: {Incremental}, quantized KV: {Quantized}, paged KV: {Paged}, block size: {BlockSize})",
+            name, servableModel.SupportsIncrementalGeneration, quantizeKvCacheWeights, enablePagedKvCache, pagedKvCacheBlockSize);
+    }
+
+    /// <summary>
+    /// Loads a typed model and registers it with the repository.
+    /// </summary>
+    /// <remarks>
+    /// This method loads a serialized AiModelResult from disk and wraps it
+    /// in a ServableModelWrapper for serving. The facade pattern is maintained -
+    /// all configuration (LoRA, inference opts, etc.) is preserved.
+    /// </remarks>
+    private void LoadTypedModel<T>(string name, string path)
+    {
+        // Load the serialized AiModelResult using internal constructor
+        // This is accessible via InternalsVisibleTo
+        // Serving infrastructure loads models internally — bypass license check
+        using var _ = Helpers.ModelPersistenceGuard.InternalOperation();
+        var modelResult = new AiModelResult<T, Matrix<T>, Vector<T>>();
+        modelResult.LoadFromFile(path);
+
+        // Get dimensions from the model metadata
+        var metadata = modelResult.GetModelMetadata();
+        var inputDim = metadata.FeatureCount > 0 ? metadata.FeatureCount : 1;
+
+        // Output dimension defaults to 1 for most regression/classification models
+        // Use Convert.ToInt32 to handle various numeric types from JSON deserialization
+        // (e.g., long, double, JsonElement)
+        var outputDim = 1;
+        if (metadata.Properties.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue != null)
+        {
+            try
+            {
+                outputDim = Convert.ToInt32(outputDimValue);
+            }
+            catch (Exception)
+            {
+                // If conversion fails, keep default of 1
+                _logger.LogWarning("Failed to parse OutputDimension from metadata, defaulting to 1");
+            }
+        }
+
+        // AiModelResult.Predict returns Vector<T> (single output per sample)
+        // Multi-output models are not currently supported in the serving layer
+        if (outputDim > 1)
+        {
+            _logger.LogWarning(
+                "Multi-output models (outputDim={OutputDim}) are not fully supported in serving layer; using outputDim=1",
+                outputDim);
+            outputDim = 1;
+        }
+
+        // Create predict functions that delegate to AiModelResult
+        // This preserves all facade functionality (LoRA, inference opts, etc.)
+        // Note: AiModelResult<T, Matrix<T>, Vector<T>> has Predict(Matrix<T>) -> Vector<T>
+        // We wrap single vectors in a matrix for prediction
+        Func<Vector<T>, Vector<T>> predictFunc = input =>
+        {
+            // Wrap single vector as single-row matrix
+            var inputMatrix = new Matrix<T>(1, input.Length);
+            for (int i = 0; i < input.Length; i++)
+            {
+                inputMatrix[0, i] = input[i];
+            }
+            return modelResult.Predict(inputMatrix);
+        };
+
+        Func<Matrix<T>, Matrix<T>> predictBatchFunc = inputs =>
+        {
+            // Pass entire batch for efficient batch inference
+            // AiModelResult.Predict(Matrix<T>) returns Vector<T> with one value per sample
+            var predictions = modelResult.Predict(inputs);
+
+            // Convert Vector<T> result to Matrix<T> format (single output per sample)
+            var results = new Matrix<T>(inputs.Rows, 1);
+            for (int i = 0; i < predictions.Length && i < inputs.Rows; i++)
+            {
+                results[i, 0] = predictions[i];
+            }
+            return results;
+        };
+
+        // Create a servable wrapper that implements IServableModel
+        var servableModel = new ServableModelWrapper<T>(
+            name,
+            inputDim,
+            outputDim,
+            predictFunc,
+            predictBatchFunc);
+
+        // Register with the repository
+        var success = _modelRepository.LoadModel(name, servableModel, path);
+
+        if (!success)
+        {
+            throw new InvalidOperationException($"A model with name '{name}' already exists");
+        }
+
+        _logger.LogDebug("Model '{Name}' registered with {InputDim} input dimensions and {OutputDim} output dimensions",
+            name, inputDim, outputDim);
+    }
+
+    private static string ComputeFileSha256Hex(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(stream);
+        return Convert.ToHexString(hash);
+    }
+
+    private static string NormalizeHex(string value)
+        => (value ?? string.Empty).Replace(" ", string.Empty).Trim();
+}

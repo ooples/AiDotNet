@@ -1,0 +1,2362 @@
+#nullable disable
+using Xunit;
+using AiDotNet.DistributedTraining;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.Enums;
+using AiDotNet.Autodiff;
+using AiDotNet.LossFunctions;
+using System.Threading.Tasks;
+
+namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
+
+/// <summary>
+/// Comprehensive integration tests for the DistributedTraining module.
+/// Tests communication backends, sharding configuration, and parameter analysis.
+/// </summary>
+public class DistributedTrainingIntegrationTests
+{
+    #region ReductionOperation Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ReductionOperation_HasExpectedValues()
+    {
+        // Assert
+        var values = (ReductionOperation[])Enum.GetValues(typeof(ReductionOperation));
+        Assert.Contains(ReductionOperation.Sum, values);
+        Assert.Contains(ReductionOperation.Product, values);
+        Assert.Contains(ReductionOperation.Min, values);
+        Assert.Contains(ReductionOperation.Max, values);
+        Assert.Contains(ReductionOperation.Average, values);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ReductionOperation_Sum_HasCorrectValue()
+    {
+        // Assert
+        Assert.Equal(0, (int)ReductionOperation.Sum);
+    }
+
+    #endregion
+
+    #region InMemoryCommunicationBackend Constructor Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_ValidConstruction()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+
+        // Act
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: envId);
+
+        // Assert
+        Assert.Equal(0, backend.Rank);
+        Assert.Equal(4, backend.WorldSize);
+        Assert.False(backend.IsInitialized);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_InvalidRank_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() =>
+            new InMemoryCommunicationBackend<double>(rank: -1, worldSize: 4, environmentId: envId));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_RankGreaterThanWorldSize_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() =>
+            new InMemoryCommunicationBackend<double>(rank: 4, worldSize: 4, environmentId: envId));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_InvalidWorldSize_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() =>
+            new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 0, environmentId: envId));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_EmptyEnvironmentId_ThrowsException()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() =>
+            new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: ""));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_SingleProcess_ValidConstruction()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+
+        // Act
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        // Assert
+        Assert.Equal(0, backend.Rank);
+        Assert.Equal(1, backend.WorldSize);
+    }
+
+    #endregion
+
+    #region InMemoryCommunicationBackend Initialize/Shutdown Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Initialize_SetsIsInitialized()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        // Act
+        backend.Initialize();
+
+        // Assert
+        Assert.True(backend.IsInitialized);
+
+        // Cleanup
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Shutdown_ClearsIsInitialized()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+
+        // Act
+        backend.Shutdown();
+
+        // Assert
+        Assert.False(backend.IsInitialized);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_ClearEnvironment_StaticCleanup()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+        backend.Shutdown();
+
+        // Act - static cleanup method
+        InMemoryCommunicationBackend<double>.ClearEnvironment(envId);
+
+        // Assert - no exception thrown
+    }
+
+    #endregion
+
+    #region InMemoryCommunicationBackend SingleProcess Operations Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_AllReduce_SingleProcess_NoChange()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            // Act
+            backend.AllReduce(data, ReductionOperation.Sum);
+
+            // Assert - single process, no change
+            Assert.Equal(1.0, data[0]);
+            Assert.Equal(2.0, data[1]);
+            Assert.Equal(3.0, data[2]);
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_AllGather_SingleProcess_ReturnsCopy()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            // Act
+            var result = backend.AllGather(data);
+
+            // Assert - single process, returns copy
+            Assert.Equal(3, result.Length);
+            Assert.Equal(1.0, result[0]);
+            Assert.Equal(2.0, result[1]);
+            Assert.Equal(3.0, result[2]);
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Broadcast_SingleProcess_ReturnsCopy()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            // Act
+            var result = backend.Broadcast(data, root: 0);
+
+            // Assert - single process, returns copy
+            Assert.Equal(3, result.Length);
+            Assert.Equal(1.0, result[0]);
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Scatter_SingleProcess_ReturnsCopy()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            // Act
+            var result = backend.Scatter(data, root: 0);
+
+            // Assert - single process, returns copy
+            Assert.Equal(3, result.Length);
+            Assert.Equal(1.0, result[0]);
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_ReduceScatter_SingleProcess_ReturnsCopy()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            // Act
+            var result = backend.ReduceScatter(data, ReductionOperation.Sum);
+
+            // Assert - single process, returns copy
+            Assert.Equal(3, result.Length);
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Barrier_SingleProcess_NoBlock()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act - should not block for single process
+            backend.Barrier();
+
+            // Assert - if we reach here, it worked
+            Assert.True(true);
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    #endregion
+
+    #region InMemoryCommunicationBackend Validation Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_AllReduce_NullData_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                backend.AllReduce(null!, ReductionOperation.Sum));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_AllGather_NullData_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                backend.AllGather(null!));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Broadcast_InvalidRoot_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() =>
+                backend.Broadcast(new Vector<double>(new double[] { 1.0 }), root: 5));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Scatter_InvalidRoot_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() =>
+                backend.Scatter(new Vector<double>(new double[] { 1.0 }), root: -1));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    #endregion
+
+    #region ShardingConfiguration Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_ValidConstruction()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        // Act
+        var config = new ShardingConfiguration<double>(backend);
+
+        // Assert
+        Assert.True(config.AutoSyncGradients);
+        Assert.Equal(1024, config.MinimumParameterGroupSize);
+        Assert.False(config.EnableGradientCompression);
+        Assert.Same(backend, config.CommunicationBackend);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_CustomLearningRate()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        // Act
+        var config = new ShardingConfiguration<double>(backend, learningRate: 0.001);
+
+        // Assert
+        Assert.Equal(0.001, config.LearningRate);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_NullBackend_ThrowsException()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() =>
+            new ShardingConfiguration<double>(null!));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_CreateDefault_ReturnsDefaultConfig()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        // Act
+        var config = ShardingConfiguration<double>.CreateDefault(backend);
+
+        // Assert
+        Assert.True(config.AutoSyncGradients);
+        Assert.Equal(1024, config.MinimumParameterGroupSize);
+        Assert.False(config.EnableGradientCompression);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_CreateForHighBandwidth_ReturnsOptimizedConfig()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        // Act
+        var config = ShardingConfiguration<double>.CreateForHighBandwidth(backend);
+
+        // Assert
+        Assert.True(config.AutoSyncGradients);
+        Assert.Equal(512, config.MinimumParameterGroupSize);
+        Assert.False(config.EnableGradientCompression);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_CreateForLowBandwidth_ReturnsOptimizedConfig()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        // Act
+        var config = ShardingConfiguration<double>.CreateForLowBandwidth(backend);
+
+        // Assert
+        Assert.True(config.AutoSyncGradients);
+        Assert.Equal(4096, config.MinimumParameterGroupSize);
+        Assert.True(config.EnableGradientCompression);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ShardingConfiguration_MutableProperties_CanBeSet()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        var config = new ShardingConfiguration<double>(backend);
+
+        // Act
+        config.AutoSyncGradients = false;
+        config.MinimumParameterGroupSize = 2048;
+        config.EnableGradientCompression = true;
+
+        // Assert
+        Assert.False(config.AutoSyncGradients);
+        Assert.Equal(2048, config.MinimumParameterGroupSize);
+        Assert.True(config.EnableGradientCompression);
+    }
+
+    #endregion
+
+    #region ParameterAnalyzer Constructor Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidConstruction()
+    {
+        // Act
+        var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 1024, worldSize: 4);
+
+        // Assert - no exception means success
+        Assert.NotNull(analyzer);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_DefaultConstruction()
+    {
+        // Act
+        var analyzer = new ParameterAnalyzer<double>();
+
+        // Assert - no exception means success
+        Assert.NotNull(analyzer);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_InvalidMinimumGroupSize_ThrowsException()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() =>
+            new ParameterAnalyzer<double>(minimumGroupSize: 0));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_InvalidWorldSize_ThrowsException()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() =>
+            new ParameterAnalyzer<double>(minimumGroupSize: 1024, worldSize: 0));
+    }
+
+    #endregion
+
+    #region ParameterAnalyzer.ParameterGroup Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterGroup_DefaultValues()
+    {
+        // Arrange & Act
+        var group = new ParameterAnalyzer<double>.ParameterGroup();
+
+        // Assert
+        Assert.Equal(0, group.StartIndex);
+        Assert.Equal(0, group.Size);
+        Assert.Equal(string.Empty, group.Name);
+        Assert.False(group.IsMerged);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterGroup_SetProperties()
+    {
+        // Arrange & Act
+        var group = new ParameterAnalyzer<double>.ParameterGroup
+        {
+            StartIndex = 100,
+            Size = 500,
+            Name = "Layer1.Weights",
+            IsMerged = true
+        };
+
+        // Assert
+        Assert.Equal(100, group.StartIndex);
+        Assert.Equal(500, group.Size);
+        Assert.Equal("Layer1.Weights", group.Name);
+        Assert.True(group.IsMerged);
+    }
+
+    #endregion
+
+    #region ParameterAnalyzer AnalyzeParameters Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_EmptyVector_ReturnsEmptyList()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var parameters = new Vector<double>(Array.Empty<double>());
+
+        // Act
+        var groups = analyzer.AnalyzeParameters(parameters);
+
+        // Assert
+        Assert.Empty(groups);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_NullVector_ThrowsException()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() =>
+            analyzer.AnalyzeParameters(null!));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_SmallVector_ReturnsSingleGroup()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 1024);
+        var parameters = new Vector<double>(new double[100]);
+
+        // Act
+        var groups = analyzer.AnalyzeParameters(parameters);
+
+        // Assert
+        Assert.Single(groups);
+        Assert.Equal(0, groups[0].StartIndex);
+        Assert.Equal(100, groups[0].Size);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_ExactMultiple_ReturnsCorrectGroups()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100);
+        var parameters = new Vector<double>(new double[300]);
+
+        // Act
+        var groups = analyzer.AnalyzeParameters(parameters);
+
+        // Assert
+        Assert.Equal(3, groups.Count);
+        Assert.Equal(0, groups[0].StartIndex);
+        Assert.Equal(100, groups[0].Size);
+        Assert.Equal(100, groups[1].StartIndex);
+        Assert.Equal(100, groups[1].Size);
+        Assert.Equal(200, groups[2].StartIndex);
+        Assert.Equal(100, groups[2].Size);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeParameters_GroupsHaveNames()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100);
+        var parameters = new Vector<double>(new double[200]);
+
+        // Act
+        var groups = analyzer.AnalyzeParameters(parameters);
+
+        // Assert
+        Assert.Equal("ParameterGroup_0", groups[0].Name);
+        Assert.Equal("ParameterGroup_1", groups[1].Name);
+    }
+
+    #endregion
+
+    #region ParameterAnalyzer AnalyzeForDistribution Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeForDistribution_EmptyVector_ReturnsEmptyList()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 4);
+        var parameters = new Vector<double>(Array.Empty<double>());
+
+        // Act
+        var groups = analyzer.AnalyzeForDistribution(parameters);
+
+        // Assert
+        Assert.Empty(groups);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeForDistribution_NullVector_ThrowsException()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 4);
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() =>
+            analyzer.AnalyzeForDistribution(null!));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeForDistribution_CreatesDistributedGroups()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 4);
+        var parameters = new Vector<double>(new double[10000]);
+
+        // Act
+        var groups = analyzer.AnalyzeForDistribution(parameters);
+
+        // Assert
+        Assert.NotEmpty(groups);
+        // Verify all parameters are covered
+        var totalSize = groups.Sum(g => g.Size);
+        Assert.Equal(10000, totalSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_AnalyzeForDistribution_GroupsHaveDistributedNames()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 2);
+        var parameters = new Vector<double>(new double[1000]);
+
+        // Act
+        var groups = analyzer.AnalyzeForDistribution(parameters);
+
+        // Assert
+        Assert.All(groups, g => Assert.StartsWith("DistributedGroup_", g.Name));
+    }
+
+    #endregion
+
+    #region ParameterAnalyzer CalculateDistributionStats Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_EmptyList_ReturnsEmptyDict()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>();
+
+        // Act
+        var stats = analyzer.CalculateDistributionStats(groups);
+
+        // Assert
+        Assert.Empty(stats);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_NullList_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => analyzer.CalculateDistributionStats(null));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_ValidGroups_ReturnsStats()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>(minimumGroupSize: 100, worldSize: 4);
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>
+        {
+            new() { StartIndex = 0, Size = 100, Name = "Group1" },
+            new() { StartIndex = 100, Size = 100, Name = "Group2" },
+            new() { StartIndex = 200, Size = 100, Name = "Group3" }
+        };
+
+        // Act
+        var stats = analyzer.CalculateDistributionStats(groups);
+
+        // Assert
+        Assert.Equal(3.0, stats["TotalGroups"]);
+        Assert.Equal(300.0, stats["TotalParameters"]);
+        Assert.Equal(100.0, stats["AverageGroupSize"]);
+        Assert.Equal(100.0, stats["MinGroupSize"]);
+        Assert.Equal(100.0, stats["MaxGroupSize"]);
+        Assert.Equal(0.0, stats["MergedGroups"]);
+        Assert.True(stats.ContainsKey("GroupsPerProcess"));
+        Assert.True(stats.ContainsKey("GroupSizeVariance"));
+        Assert.True(stats.ContainsKey("GroupSizeStdDev"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_CalculateDistributionStats_UnevenGroups_ReturnsCorrectStats()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>
+        {
+            new() { StartIndex = 0, Size = 50, Name = "Group1" },
+            new() { StartIndex = 50, Size = 100, Name = "Group2" },
+            new() { StartIndex = 150, Size = 150, Name = "Group3", IsMerged = true }
+        };
+
+        // Act
+        var stats = analyzer.CalculateDistributionStats(groups);
+
+        // Assert
+        Assert.Equal(3.0, stats["TotalGroups"]);
+        Assert.Equal(300.0, stats["TotalParameters"]);
+        Assert.Equal(100.0, stats["AverageGroupSize"]);
+        Assert.Equal(50.0, stats["MinGroupSize"]);
+        Assert.Equal(150.0, stats["MaxGroupSize"]);
+        Assert.Equal(1.0, stats["MergedGroups"]);
+        Assert.True(stats["GroupSizeStdDev"] > 0);
+    }
+
+    #endregion
+
+    #region ParameterAnalyzer ValidateGrouping Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_ValidGroups_ReturnsTrue()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>
+        {
+            new() { StartIndex = 0, Size = 100 },
+            new() { StartIndex = 100, Size = 100 },
+            new() { StartIndex = 200, Size = 100 }
+        };
+
+        // Act
+        var result = analyzer.ValidateGrouping(groups, totalParameterCount: 300);
+
+        // Assert
+        Assert.True(result);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_EmptyGroups_ThrowsException()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>();
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+            analyzer.ValidateGrouping(groups, totalParameterCount: 100));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_NullGroups_ThrowsException()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+            analyzer.ValidateGrouping(null!, totalParameterCount: 100));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_GroupNotStartingAtZero_ThrowsException()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>
+        {
+            new() { StartIndex = 10, Size = 100 }
+        };
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+            analyzer.ValidateGrouping(groups, totalParameterCount: 110));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_GroupWithGap_ThrowsException()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>
+        {
+            new() { StartIndex = 0, Size = 100 },
+            new() { StartIndex = 150, Size = 100 } // Gap from 100 to 150
+        };
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+            analyzer.ValidateGrouping(groups, totalParameterCount: 250));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_GroupWithOverlap_ThrowsException()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>
+        {
+            new() { StartIndex = 0, Size = 100 },
+            new() { StartIndex = 50, Size = 100 } // Overlap from 50 to 100
+        };
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+            analyzer.ValidateGrouping(groups, totalParameterCount: 150));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_IncompleteParameterCoverage_ThrowsException()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>
+        {
+            new() { StartIndex = 0, Size = 100 }
+        };
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+            analyzer.ValidateGrouping(groups, totalParameterCount: 200));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterAnalyzer_ValidateGrouping_UnsortedGroups_StillValidates()
+    {
+        // Arrange
+        var analyzer = new ParameterAnalyzer<double>();
+        var groups = new List<ParameterAnalyzer<double>.ParameterGroup>
+        {
+            new() { StartIndex = 200, Size = 100 },
+            new() { StartIndex = 0, Size = 100 },
+            new() { StartIndex = 100, Size = 100 }
+        };
+
+        // Act
+        var result = analyzer.ValidateGrouping(groups, totalParameterCount: 300);
+
+        // Assert - should sort and validate correctly
+        Assert.True(result);
+    }
+
+    #endregion
+
+    #region CommunicationManager Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_IsInitialized_InitiallyFalse()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Assert
+        Assert.False(CommunicationManager.IsInitialized);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Initialize_SetsIsInitialized()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        try
+        {
+            // Act
+            CommunicationManager.Initialize(backend);
+
+            // Assert
+            Assert.True(CommunicationManager.IsInitialized);
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Shutdown_ClearsIsInitialized()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        CommunicationManager.Initialize(backend);
+
+        // Act
+        CommunicationManager.Shutdown();
+
+        // Assert
+        Assert.False(CommunicationManager.IsInitialized);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Initialize_NullBackend_ThrowsException()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() =>
+            CommunicationManager.Initialize<double>(null!));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Initialize_AlreadyInitialized_ThrowsException()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId1 = Guid.NewGuid().ToString();
+        var envId2 = Guid.NewGuid().ToString();
+        var backend1 = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId1);
+        var backend2 = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId2);
+
+        try
+        {
+            CommunicationManager.Initialize(backend1);
+
+            // Act & Assert
+            Assert.Throws<InvalidOperationException>(() =>
+                CommunicationManager.Initialize(backend2));
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_GetRank_WhenInitialized_ReturnsRank()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 2, worldSize: 4, environmentId: envId);
+
+        try
+        {
+            CommunicationManager.Initialize(backend);
+
+            // Act
+            var rank = CommunicationManager.GetRank<double>();
+
+            // Assert
+            Assert.Equal(2, rank);
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_GetWorldSize_WhenInitialized_ReturnsWorldSize()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 8, environmentId: envId);
+
+        try
+        {
+            CommunicationManager.Initialize(backend);
+
+            // Act
+            var worldSize = CommunicationManager.GetWorldSize<double>();
+
+            // Assert
+            Assert.Equal(8, worldSize);
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_GetRank_WhenNotInitialized_ThrowsException()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+            CommunicationManager.GetRank<double>());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_AllReduce_WhenInitialized_Works()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            CommunicationManager.Initialize(backend);
+
+            // Act
+            CommunicationManager.AllReduce(data, ReductionOperation.Sum);
+
+            // Assert - single process, no change
+            Assert.Equal(1.0, data[0]);
+            Assert.Equal(2.0, data[1]);
+            Assert.Equal(3.0, data[2]);
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_AllReduce_NullData_ThrowsException()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        try
+        {
+            CommunicationManager.Initialize(backend);
+
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                CommunicationManager.AllReduce<double>(null!, ReductionOperation.Sum));
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_AllGather_WhenInitialized_Works()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            CommunicationManager.Initialize(backend);
+
+            // Act
+            var result = CommunicationManager.AllGather(data);
+
+            // Assert
+            Assert.Equal(3, result.Length);
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Broadcast_WhenInitialized_Works()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            CommunicationManager.Initialize(backend);
+
+            // Act
+            var result = CommunicationManager.Broadcast(data, root: 0);
+
+            // Assert
+            Assert.Equal(3, result.Length);
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Scatter_WhenInitialized_Works()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            CommunicationManager.Initialize(backend);
+
+            // Act
+            var result = CommunicationManager.Scatter(data, root: 0);
+
+            // Assert
+            Assert.Equal(3, result.Length);
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Barrier_WhenInitialized_Works()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+
+        try
+        {
+            CommunicationManager.Initialize(backend);
+
+            // Act - should not throw for single process
+            CommunicationManager.Barrier<double>();
+
+            // Assert - if we reach here, it worked
+            Assert.True(true);
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_ReduceScatter_WhenInitialized_Works()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1, environmentId: envId);
+        var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        try
+        {
+            CommunicationManager.Initialize(backend);
+
+            // Act
+            var result = CommunicationManager.ReduceScatter(data, ReductionOperation.Sum);
+
+            // Assert
+            Assert.Equal(3, result.Length);
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    #endregion
+
+    #region Float Backend Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task CommunicationManager_Initialize_FloatBackend_Works()
+    {
+        // Ensure clean state
+        if (CommunicationManager.IsInitialized)
+        {
+            CommunicationManager.Shutdown();
+        }
+
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 1, environmentId: envId);
+
+        try
+        {
+            // Act
+            CommunicationManager.Initialize(backend);
+
+            // Assert
+            Assert.True(CommunicationManager.IsInitialized);
+            Assert.Equal(0, CommunicationManager.GetRank<float>());
+            Assert.Equal(1, CommunicationManager.GetWorldSize<float>());
+        }
+        finally
+        {
+            CommunicationManager.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Float_SingleProcess_Operations()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 1, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Test AllReduce
+            var data = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f });
+            backend.AllReduce(data, ReductionOperation.Sum);
+            Assert.Equal(1.0f, data[0]);
+
+            // Test AllGather
+            var gathered = backend.AllGather(new Vector<float>(new float[] { 4.0f, 5.0f }));
+            Assert.Equal(2, gathered.Length);
+
+            // Test Broadcast
+            var broadcast = backend.Broadcast(new Vector<float>(new float[] { 6.0f }), root: 0);
+            Assert.Equal(1, broadcast.Length);
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    #endregion
+
+    #region Send/Receive Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Send_NullData_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                backend.Send(null!, destinationRank: 1));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Send_InvalidDestinationRank_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() =>
+                backend.Send(new Vector<double>(new double[] { 1.0 }), destinationRank: 5));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Send_NegativeTag_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() =>
+                backend.Send(new Vector<double>(new double[] { 1.0 }), destinationRank: 1, tag: -1));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Receive_InvalidSourceRank_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() =>
+                backend.Receive(sourceRank: -1, count: 10));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Receive_InvalidCount_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() =>
+                backend.Receive(sourceRank: 1, count: 0));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryCommunicationBackend_Receive_NegativeTag_ThrowsException()
+    {
+        // Arrange
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2, environmentId: envId);
+        backend.Initialize();
+
+        try
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() =>
+                backend.Receive(sourceRank: 1, count: 10, tag: -1));
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
+    #endregion
+
+    #region DDPModel Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, ddpModel.Rank);
+        Assert.Equal(4, ddpModel.WorldSize);
+        Assert.NotNull(ddpModel.WrappedModel);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_GetModelMetadata_IncludesDistributedInfo()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = ddpModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("DDP", metadata.Properties["Strategy"] as string ?? "");
+        Assert.Equal(4, metadata.Properties["WorldSize"] as int? ?? 0);
+        Assert.Equal(0, metadata.Properties["Rank"] as int? ?? -1);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_LocalParameterShard_ContainsFullParameters()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        // DDP keeps full parameters on each process
+        Assert.Equal(8, ddpModel.LocalParameterShard.Length);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_GatherFullParameters_ReturnsSameAsLocal()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var gathered = ddpModel.GatherFullParameters();
+
+        // In DDP, gathered should equal local
+        Assert.Equal(ddpModel.LocalParameterShard.Length, gathered.Length);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_Clone_CreatesNewInstance()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var cloned = ddpModel.Clone();
+
+        Assert.NotSame(ddpModel, cloned);
+        Assert.IsType<DDPModel<double, Vector<double>, Vector<double>>>(cloned);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_Train_WithCpuOffloadGradients_UpdatesParametersThroughOffloadPath()
+    {
+        await Task.Yield();
+        // End-to-end integration for the CpuOffloadGradients runtime path. Train() routes through
+        // DDPModel.SynchronizeGradients -> OffloadGradientsToCpu(_computedGradients) -> AllReduce ->
+        // ApplyGradients. We assert OBSERVABLE BEHAVIOUR, not just no-throw: the parameters must
+        // actually move, and move AGAINST the (strictly positive) gradient. If the offload path
+        // silently no-op'd (materialized nothing / never reduced), the parameters would be unchanged.
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend)
+        {
+            AutoSyncGradients = true,
+            CpuOffloadGradients = true,
+        };
+        var model = new MockDistributedModel(8);
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var target = new Vector<double>(new double[] { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 });
+
+        var before = model.GetParameters();
+        ddpModel.Train(input, target);
+        var after = model.GetParameters();
+
+        // The offloaded-gradient training step produced a real update in the correct direction.
+        bool anyChanged = false;
+        for (int i = 0; i < before.Length; i++)
+        {
+            if (after[i] != before[i]) anyChanged = true;
+            Assert.True(after[i] <= before[i],
+                $"param[{i}] must not increase under a positive gradient: {before[i]} -> {after[i]}");
+        }
+        Assert.True(anyChanged, "CpuOffloadGradients training path left every parameter unchanged (silent no-op).");
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_Train_WithCpuOffloadFull_UpdatesParametersAndInvalidatesCache()
+    {
+        await Task.Yield();
+        // End-to-end integration for Stage-3-full (all three flags on). FSDPModel.Train hits both
+        // OffloadGradientsToCpu (before AllReduce) and OffloadParamsToCpu (after the update). We assert
+        // the parameters actually change (real update through the fully-offloaded path) AND that a
+        // subsequent Predict reflects the UPDATED parameters — proving OffloadParamsToCpu invalidated
+        // the gather cache rather than serving pre-update weights.
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = ShardingConfiguration<double>.CreateForZeROOffloadFull(backend);
+        var model = new MockDistributedModel(8);
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var target = new Vector<double>(new double[] { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 });
+
+        var before = model.GetParameters();
+        fsdpModel.Train(input, target);
+        var after = model.GetParameters();
+
+        bool anyChanged = false;
+        for (int i = 0; i < before.Length; i++)
+        {
+            if (after[i] != before[i]) anyChanged = true;
+            Assert.True(after[i] <= before[i],
+                $"param[{i}] must not increase under a positive gradient: {before[i]} -> {after[i]}");
+        }
+        Assert.True(anyChanged, "CpuOffloadFull training path left every parameter unchanged (silent no-op).");
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_WithParameters_CreatesNewModel()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var newParams = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+        var newModel = ddpModel.WithParameters(newParams);
+
+        Assert.NotSame(ddpModel, newModel);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_Serialize_Deserialize_PreservesState()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var serialized = ddpModel.Serialize();
+        Assert.NotEmpty(serialized);
+
+        var ddpModel2 = new DDPModel<double, Vector<double>, Vector<double>>(new MockDistributedModel(8), config);
+        ddpModel2.Deserialize(serialized);
+
+        Assert.Equal(ddpModel.WorldSize, ddpModel2.WorldSize);
+        Assert.Equal(ddpModel.Rank, ddpModel2.Rank);
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region FSDPModel Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, fsdpModel.Rank);
+        Assert.Equal(4, fsdpModel.WorldSize);
+        Assert.NotNull(fsdpModel.WrappedModel);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_LocalParameterShard_ContainsPartialParameters()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        // FSDP shards parameters across processes
+        // With 8 parameters and 4 processes, each gets 2
+        Assert.Equal(2, fsdpModel.LocalParameterShard.Length);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_GetModelMetadata_IncludesDistributedInfo()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = fsdpModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("FSDP", metadata.Properties["Strategy"] as string ?? "");
+        Assert.Equal(4, metadata.Properties["WorldSize"] as int? ?? 0);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_Clone_CreatesNewInstance()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var cloned = fsdpModel.Clone();
+
+        Assert.NotSame(fsdpModel, cloned);
+        Assert.IsType<FSDPModel<double, Vector<double>, Vector<double>>>(cloned);
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region ZeRO Models Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO1Model_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero1Model = new ZeRO1Model<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, zero1Model.Rank);
+        Assert.Equal(4, zero1Model.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO1Model_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero1Model = new ZeRO1Model<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = zero1Model.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("ZeRO-1", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO2Model_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero2Model = new ZeRO2Model<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, zero2Model.Rank);
+        Assert.Equal(4, zero2Model.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO2Model_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero2Model = new ZeRO2Model<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = zero2Model.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("ZeRO-2", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO3Model_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero3Model = new ZeRO3Model<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, zero3Model.Rank);
+        Assert.Equal(4, zero3Model.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO3Model_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero3Model = new ZeRO3Model<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = zero3Model.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("ZeRO-3", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO3Model_LocalParameterShard_IsSharded()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero3Model = new ZeRO3Model<double, Vector<double>, Vector<double>>(model, config);
+
+        // ZeRO-3 shards parameters across processes
+        Assert.Equal(2, zero3Model.LocalParameterShard.Length);
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region PipelineParallelModel Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task PipelineParallelModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, pipelineModel.Rank);
+        Assert.Equal(4, pipelineModel.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PipelineParallelModel_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = pipelineModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("PipelineParallel", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region TensorParallelModel Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task TensorParallelModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var tensorModel = new TensorParallelModel<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, tensorModel.Rank);
+        Assert.Equal(4, tensorModel.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TensorParallelModel_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var tensorModel = new TensorParallelModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = tensorModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("TensorParallel", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region HybridShardedModel Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task HybridShardedModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var hybridModel = new HybridShardedModel<double, Vector<double>, Vector<double>>(model, config, pipelineParallelSize: 2);
+
+        Assert.Equal(0, hybridModel.Rank);
+        Assert.Equal(4, hybridModel.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HybridShardedModel_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var hybridModel = new HybridShardedModel<double, Vector<double>, Vector<double>>(model, config, pipelineParallelSize: 2);
+
+        var metadata = hybridModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("3D-Parallelism (Hybrid)", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region Edge Cases Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task InMemoryBackend_MultipleEnvironments_AreIsolated()
+    {
+        var envId1 = Guid.NewGuid().ToString();
+        var envId2 = Guid.NewGuid().ToString();
+
+        var backend1 = new InMemoryCommunicationBackend<double>(0, 1, envId1);
+        var backend2 = new InMemoryCommunicationBackend<double>(0, 1, envId2);
+
+        backend1.Initialize();
+        backend2.Initialize();
+
+        // Operations in one environment shouldn't affect the other
+        var data1 = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var data2 = new Vector<double>(new double[] { 10.0, 20.0, 30.0, 40.0 });
+
+        backend1.AllReduce(data1, ReductionOperation.Sum);
+        backend2.AllReduce(data2, ReductionOperation.Sum);
+
+        Assert.Equal(1.0, data1[0], 0.001);
+        Assert.Equal(10.0, data2[0], 0.001);
+
+        backend1.Shutdown();
+        backend2.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ShardedModel_Constructor_ThrowsOnNullModel()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+
+        Assert.Throws<ArgumentNullException>(() =>
+            new DDPModel<double, Vector<double>, Vector<double>>(null!, config));
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ShardedModel_Constructor_ThrowsOnNullConfig()
+    {
+        var model = new MockDistributedModel(8);
+
+        Assert.Throws<ArgumentNullException>(() =>
+            new DDPModel<double, Vector<double>, Vector<double>>(model, null!));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DDPModel_Deserialize_ThrowsOnWorldSizeMismatch()
+    {
+        var envId1 = Guid.NewGuid().ToString();
+        var envId2 = Guid.NewGuid().ToString();
+
+        // Create and serialize with worldSize=2
+        var backend1 = new InMemoryCommunicationBackend<double>(0, 2, envId1);
+        backend1.Initialize();
+        var config1 = new ShardingConfiguration<double>(backend1);
+        var model1 = new MockDistributedModel(8);
+        var ddpModel1 = new DDPModel<double, Vector<double>, Vector<double>>(model1, config1);
+        var serialized = ddpModel1.Serialize();
+        backend1.Shutdown();
+
+        // Try to deserialize with worldSize=4
+        var backend2 = new InMemoryCommunicationBackend<double>(0, 4, envId2);
+        backend2.Initialize();
+        var config2 = new ShardingConfiguration<double>(backend2);
+        var model2 = new MockDistributedModel(8);
+        var ddpModel2 = new DDPModel<double, Vector<double>, Vector<double>>(model2, config2);
+
+        Assert.Throws<InvalidOperationException>(() => ddpModel2.Deserialize(serialized));
+
+        backend2.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AllDistributedStrategies_HaveUniqueMetadataStrategies()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var strategies = new List<string>();
+
+        strategies.Add(new DDPModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new FSDPModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new ZeRO1Model<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new ZeRO2Model<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new ZeRO3Model<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new PipelineParallelModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new TensorParallelModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new HybridShardedModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config, 2)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+
+        // All strategies should have unique names
+        Assert.Equal(strategies.Count, strategies.Distinct().Count());
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region Mock Model for Testing
+
+    /// <summary>
+    /// Mock model that implements IFullModel for distributed training tests.
+    /// Also implements IParameterizable explicitly — distributed-training
+    /// aggregators call InterfaceGuard.Parameterizable(client) at runtime
+    /// and require the closed type to advertise IParameterizable.
+    /// </summary>
+    internal class MockDistributedModel : IFullModel<double, Vector<double>, Vector<double>>,
+        IParameterizable<double, Vector<double>, Vector<double>>,
+        IGradientComputable<double, Vector<double>, Vector<double>>
+    {
+        private Vector<double> _parameters;
+        private Vector<double>? _gradients;
+        private readonly int _parameterCount;
+        private readonly double _gradientScale;
+
+        public MockDistributedModel(int parameterCount, double gradientScale = 1.0)
+        {
+            _parameterCount = parameterCount;
+            _gradientScale = gradientScale;
+            _parameters = new Vector<double>(Enumerable.Range(0, parameterCount).Select(i => (double)i * 0.1).ToArray());
+        }
+
+        public long ParameterCount => _parameterCount;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
+
+        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+        public Vector<double> Predict(Vector<double> input)
+        {
+            // Simple mock prediction
+            var result = new double[input.Length];
+            for (int i = 0; i < input.Length; i++)
+            {
+                result[i] = input[i] * 2.0;
+            }
+            return new Vector<double>(result);
+        }
+
+        public void Train(Vector<double> input, Vector<double> expectedOutput)
+        {
+            // Simple mock training - compute gradients and update
+            _gradients = ComputeGradients(input, expectedOutput, null);
+            ApplyGradients(_gradients, 0.01);
+        }
+
+        public Vector<double> ComputeGradients(Vector<double> input, Vector<double> expectedOutput, ILossFunction<double>? lossFunction = null)
+        {
+            // Mock gradient computation, scaled by _gradientScale so multi-rank tests can give each
+            // rank a DIFFERENT gradient (e.g. scale 1 vs 2) — then a broken/removed collective no longer
+            // yields the same result as a correct reduce.
+            var gradients = new double[_parameters.Length];
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = 0.01 * (i + 1) * _gradientScale;
+            }
+            _gradients = new Vector<double>(gradients);
+            return _gradients;
+        }
+
+        public void ApplyGradients(Vector<double> gradients, double learningRate)
+        {
+            var newParams = new double[_parameters.Length];
+            for (int i = 0; i < _parameters.Length; i++)
+            {
+                newParams[i] = _parameters[i] - learningRate * gradients[i];
+            }
+            _parameters = new Vector<double>(newParams);
+        }
+
+        public Vector<double> GetParameters()
+        {
+            return _parameters.Clone();
+        }
+
+        public void SetParameters(Vector<double> parameters)
+        {
+            _parameters = parameters.Clone();
+        }
+
+        public Vector<double> GetParameterGradients()
+        {
+            return _gradients?.Clone() ?? new Vector<double>(new double[_parameterCount]);
+        }
+
+        public ModelMetadata<double> GetModelMetadata()
+        {
+            return new ModelMetadata<double>
+            {
+                Name = "MockDistributedModel",
+                TrainingDate = DateTimeOffset.UtcNow,
+                FeatureCount = _parameterCount
+            };
+        }
+
+        public byte[] Serialize()
+        {
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+
+            writer.Write(_parameterCount);
+            foreach (var param in _parameters.ToArray())
+            {
+                writer.Write(param);
+            }
+
+            return ms.ToArray();
+        }
+
+        public void Deserialize(byte[] data)
+        {
+            using var ms = new MemoryStream(data);
+            using var reader = new BinaryReader(ms);
+
+            var count = reader.ReadInt32();
+            var parameters = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                parameters[i] = reader.ReadDouble();
+            }
+            _parameters = new Vector<double>(parameters);
+        }
+
+        public void SaveModel(string filePath)
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
+
+        public void LoadModel(string filePath)
+        {
+            Deserialize(File.ReadAllBytes(filePath));
+        }
+
+        public void SaveState(Stream stream)
+        {
+            var data = Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+
+        public void LoadState(Stream stream)
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            Deserialize(ms.ToArray());
+        }
+
+        public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)
+        {
+            // Preserve the rank gradient scale — a copy that reset it to the default would silently restore
+            // identical gradients across ranks and invalidate the collective (per-rank gradient) tests.
+            var newModel = new MockDistributedModel(_parameterCount, _gradientScale);
+            newModel.SetParameters(parameters);
+            return newModel;
+        }
+
+        public IEnumerable<int> GetActiveFeatureIndices()
+        {
+            return Enumerable.Range(0, _parameterCount);
+        }
+
+        public void SetActiveFeatureIndices(IEnumerable<int> indices)
+        {
+            // No-op for mock
+        }
+
+        public bool IsFeatureUsed(int featureIndex)
+        {
+            return featureIndex >= 0 && featureIndex < _parameterCount;
+        }
+
+        public Dictionary<string, double> GetFeatureImportance()
+        {
+            return Enumerable.Range(0, _parameterCount)
+                .ToDictionary(i => $"feature_{i}", i => 1.0 / _parameterCount);
+        }
+
+        public IFullModel<double, Vector<double>, Vector<double>> Clone()
+        {
+            // Preserve the rank gradient scale (see WithParameters) so a cloned rank-scaled model keeps its
+            // distinct gradients — otherwise collective tests that rely on per-rank gradients silently pass.
+            var cloned = new MockDistributedModel(_parameterCount, _gradientScale);
+            cloned.SetParameters(_parameters);
+            return cloned;
+        }
+
+        public IFullModel<double, Vector<double>, Vector<double>> DeepCopy()
+        {
+            return Clone();
+        }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
+    }
+
+    #endregion
+}

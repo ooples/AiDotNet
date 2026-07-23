@@ -1,0 +1,482 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.ReinforcementLearning.ReplayBuffers;
+
+namespace AiDotNet.ReinforcementLearning.Agents.DQN;
+
+/// <summary>
+/// Deep Q-Network (DQN) agent for reinforcement learning.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// DQN is a landmark algorithm that combined Q-learning with deep neural networks, enabling RL
+/// to scale to high-dimensional state spaces. It introduced two key innovations:
+/// 1. Experience Replay: Breaks temporal correlations by training on random past experiences
+/// 2. Target Network: Provides stable Q-value targets by using a slowly-updating copy
+/// </para>
+/// <para><b>For Beginners:</b>
+/// DQN learns to play games (or solve problems) by learning how valuable each action is in each situation.
+/// It uses a neural network to estimate these "Q-values" - essentially, expected future rewards.
+///
+/// The agent:
+/// - Sees the current state (like game screen)
+/// - Evaluates each possible action using its Q-network
+/// - Picks the action with highest Q-value (with some random exploration)
+/// - Learns from past experiences stored in memory
+///
+/// Famous for: Learning to play Atari games from pixels (DeepMind, 2015)
+/// </para>
+/// <para><b>Reference:</b>
+/// Mnih, V., et al. (2015). "Human-level control through deep reinforcement learning." Nature.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Deep Q-Network agent for discrete action spaces
+/// var options = new DQNOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, LearningRate = 0.001 };
+/// var agent = new DQNAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current game state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Human-level Control through Deep Reinforcement Learning",
+    "https://arxiv.org/abs/1312.5602",
+    Year = 2015,
+    Authors = "Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., et al.")]
+public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
+{
+    private DQNOptions<T> _dqnOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _dqnOptions;
+    private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
+
+    private INeuralNetwork<T> _qNetwork;
+    private INeuralNetwork<T> _targetNetwork;
+    private double _epsilon;
+    private int _steps;
+
+    /// <inheritdoc/>
+    public override int FeatureCount => _dqnOptions.StateSize;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DQNAgent()
+        : this(new DQNOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the DQNAgent class.
+    /// </summary>
+    /// <param name="options">Configuration options for the DQN agent.</param>
+    public DQNAgent(DQNOptions<T> options)
+        : base(CreateBaseOptions(options))
+    {
+        _dqnOptions = options;
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(options.ReplayBufferSize, options.Seed);
+        _epsilon = options.EpsilonStart;
+        _steps = 0;
+
+        // Build Q-network
+        _qNetwork = BuildQNetwork();
+
+        // Build target network (identical architecture)
+        _targetNetwork = BuildQNetwork();
+
+        // Copy initial weights to target network
+        CopyNetworkWeights(_qNetwork, _targetNetwork);
+
+        // Register networks with base class
+        Networks.Add(_qNetwork);
+        Networks.Add(_targetNetwork);
+    }
+
+
+    private static ReinforcementLearningOptions<T> CreateBaseOptions(DQNOptions<T> options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ReinforcementLearningOptions<T>
+        {
+            LearningRate = options.LearningRate,
+            DiscountFactor = options.DiscountFactor,
+            LossFunction = options.LossFunction,
+            Seed = options.Seed,
+            BatchSize = options.BatchSize,
+            ReplayBufferSize = options.ReplayBufferSize,
+            TargetUpdateFrequency = options.TargetUpdateFrequency,
+            WarmupSteps = options.WarmupSteps,
+            EpsilonStart = options.EpsilonStart,
+            EpsilonEnd = options.EpsilonEnd,
+            EpsilonDecay = options.EpsilonDecay
+        };
+    }
+
+    private NeuralNetwork<T> BuildQNetwork()
+    {
+        var layers = new List<ILayer<T>>();
+
+        // Input layer
+        int prevSize = _dqnOptions.StateSize;
+
+        // Hidden layers
+        foreach (var hiddenSize in _dqnOptions.HiddenLayers)
+        {
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            prevSize = hiddenSize;
+        }
+
+        // Output layer (Q-values for each action)
+        layers.Add(new DenseLayer<T>(_dqnOptions.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+
+        // Create architecture with layers
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _dqnOptions.StateSize,
+            outputSize: _dqnOptions.ActionSize,
+            layers: layers
+        );
+
+        return new NeuralNetwork<T>(architecture,
+            optimizer: _dqnOptions.Optimizer,
+            lossFunction: _dqnOptions.LossFunction);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+    {
+        // Epsilon-greedy action selection
+        if (training && Random.NextDouble() < _epsilon)
+        {
+            // Random action (exploration)
+            int randomAction = Random.Next(_dqnOptions.ActionSize);
+            var action = new Vector<T>(_dqnOptions.ActionSize);
+            action[randomAction] = NumOps.One;
+            return action;
+        }
+
+        // Greedy action (exploitation)
+        var stateTensor = Tensor<T>.FromVector(state);
+        var qValuesTensor = _qNetwork.Predict(stateTensor);
+        var qValues = qValuesTensor.ToVector();
+        int bestAction = ArgMax(qValues);
+
+        var greedyAction = new Vector<T>(_dqnOptions.ActionSize);
+        greedyAction[bestAction] = NumOps.One;
+        return greedyAction;
+    }
+
+    /// <inheritdoc/>
+    Vector<T> IActionValueProvider<T>.GetActionValues(Vector<T> state)
+        => _qNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
+
+    /// <inheritdoc/>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+    {
+        var experience = new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done);
+        _replayBuffer.Add(experience);
+    }
+
+    /// <inheritdoc/>
+    public override T Train()
+    {
+        _steps++;
+        TrainingSteps++;
+
+        // Wait for warmup period — unless this is an explicit supervised one-shot update
+        // (ReinforcementLearningAgentBase.Train(state, target)), which trains on the samples
+        // gathered so far (clamped to the buffer) regardless of warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_dqnOptions.BatchSize, _replayBuffer.Count)
+            : _dqnOptions.BatchSize;
+        if ((!SupervisedUpdateRequested && _steps < _dqnOptions.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || !_replayBuffer.CanSample(effectiveBatchSize))
+        {
+            return NumOps.Zero;
+        }
+
+        // Sample batch from replay buffer
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
+        int stateSize = _dqnOptions.StateSize;
+        int actionSize = _dqnOptions.ActionSize;
+
+        // Build batched state tensor [batchSize, stateSize]
+        var batchStates = new Tensor<T>([batch.Count, stateSize]);
+        for (int i = 0; i < batch.Count; i++)
+            for (int j = 0; j < stateSize; j++)
+                batchStates[i, j] = batch[i].State[j];
+
+        // Compute TD targets outside tape (target network should NOT be tape-tracked)
+        // First get current Q-values for constructing targets
+        var currentQBatch = _qNetwork.Predict(batchStates);
+
+        // Build target Q-value tensor [batchSize, actionSize]
+        var targetQBatch = new Tensor<T>([batch.Count, actionSize]);
+        for (int i = 0; i < batch.Count; i++)
+        {
+            // Start with current Q-values (targets match current for non-updated actions)
+            for (int a = 0; a < actionSize; a++)
+                targetQBatch[i, a] = currentQBatch[i * actionSize + a];
+
+            // Compute TD target for the action taken
+            int actionIndex = ArgMax(batch[i].Action);
+            T tdTarget;
+            if (batch[i].Done)
+            {
+                tdTarget = batch[i].Reward;
+            }
+            else
+            {
+                var nextState = new Tensor<T>([1, stateSize]);
+                for (int j = 0; j < stateSize; j++)
+                    nextState[0, j] = batch[i].NextState[j];
+                var nextQ = _targetNetwork.Predict(nextState);
+                var maxNextQ = Max(nextQ.ToVector());
+                tdTarget = NumOps.Add(batch[i].Reward, NumOps.Multiply(DiscountFactor, maxNextQ));
+            }
+
+            targetQBatch[i, actionIndex] = tdTarget;
+        }
+
+        // Single batched training step — tape-based forward + loss + optimizer update
+        _qNetwork.Train(batchStates, targetQBatch);
+        var avgLoss = _qNetwork.GetLastLoss();
+        LossHistory.Add(avgLoss);
+
+        // Update target network periodically
+        if (_steps % _dqnOptions.TargetUpdateFrequency == 0)
+        {
+            CopyNetworkWeights(_qNetwork, _targetNetwork);
+        }
+
+        // Decay epsilon
+        _epsilon = Math.Max(_dqnOptions.EpsilonEnd, _epsilon * _dqnOptions.EpsilonDecay);
+
+        return avgLoss;
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetMetrics()
+    {
+        var baseMetrics = base.GetMetrics();
+        baseMetrics["Epsilon"] = NumOps.FromDouble(_epsilon);
+        baseMetrics["ReplayBufferSize"] = NumOps.FromDouble(_replayBuffer.Count);
+        baseMetrics["Steps"] = NumOps.FromDouble(_steps);
+        return baseMetrics;
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            FeatureCount = _dqnOptions.StateSize,
+        };
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write metadata
+        writer.Write(_dqnOptions.StateSize);
+        writer.Write(_dqnOptions.ActionSize);
+        writer.Write(NumOps.ToDouble(LearningRate));
+        writer.Write(NumOps.ToDouble(DiscountFactor));
+        writer.Write(_epsilon);
+        writer.Write(_steps);
+
+        // Write Q-network
+        var qNetworkBytes = _qNetwork.Serialize();
+        writer.Write(qNetworkBytes.Length);
+        writer.Write(qNetworkBytes);
+
+        // Write target network
+        var targetNetworkBytes = _targetNetwork.Serialize();
+        writer.Write(targetNetworkBytes.Length);
+        writer.Write(targetNetworkBytes);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read metadata
+        var stateSize = reader.ReadInt32();
+        var actionSize = reader.ReadInt32();
+        var learningRate = reader.ReadDouble();
+        var discountFactor = reader.ReadDouble();
+        _epsilon = reader.ReadDouble();
+        _steps = reader.ReadInt32();
+
+        // Read Q-network
+        var qNetworkLength = reader.ReadInt32();
+        var qNetworkBytes = reader.ReadBytes(qNetworkLength);
+        _qNetwork.Deserialize(qNetworkBytes);
+
+        // Read target network
+        var targetNetworkLength = reader.ReadInt32();
+        var targetNetworkBytes = reader.ReadBytes(targetNetworkLength);
+        _targetNetwork.Deserialize(targetNetworkBytes);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        return _qNetwork.GetParameters();
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _qNetwork.UpdateParameters(parameters);
+        // Sync target network to match Q-network after parameter update
+        CopyNetworkWeights(_qNetwork, _targetNetwork);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clonedOptions = new DQNOptions<T>
+        {
+            StateSize = _dqnOptions.StateSize,
+            ActionSize = _dqnOptions.ActionSize,
+            LearningRate = LearningRate,
+            DiscountFactor = DiscountFactor,
+            LossFunction = LossFunction,
+            EpsilonStart = _epsilon,
+            EpsilonEnd = _dqnOptions.EpsilonEnd,
+            EpsilonDecay = _dqnOptions.EpsilonDecay,
+            BatchSize = _dqnOptions.BatchSize,
+            ReplayBufferSize = _dqnOptions.ReplayBufferSize,
+            TargetUpdateFrequency = _dqnOptions.TargetUpdateFrequency,
+            WarmupSteps = _dqnOptions.WarmupSteps,
+            HiddenLayers = _dqnOptions.HiddenLayers,
+            Seed = _dqnOptions.Seed
+        };
+
+        var clone = new DQNAgent<T>(clonedOptions);
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> ComputeGradients(
+        Vector<T> input,
+        Vector<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        var loss = lossFunction ?? LossFunction;
+        var inputTensor = Tensor<T>.FromVector(input);
+        var outputTensor = _qNetwork.Predict(inputTensor);
+        var output = outputTensor.ToVector();
+        var lossValue = loss.CalculateLoss(output, target);
+        var gradient = loss.CalculateDerivative(output, target);
+
+        var gradientTensor = Tensor<T>.FromVector(gradient);
+
+        return gradient;
+    }
+
+    /// <inheritdoc/>
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        var currentParams = GetParameters();
+
+        // Validate that gradients vector has the correct length (parameter-space, not output-space)
+        if (gradients.Length != currentParams.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter vector length ({currentParams.Length}). " +
+                $"ApplyGradients expects parameter-space gradients (w.r.t. all network weights), not output-space gradients (w.r.t. network outputs). " +
+                $"Use _qNetwork.GetParameterGradients() after backpropagation to obtain parameter-space gradients.",
+                nameof(gradients));
+        }
+
+        SetParameters(Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate)));
+    }
+
+    // Helper methods
+
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
+    {
+        var sourceParams = source.GetParameters();
+        target.UpdateParameters(sourceParams);
+    }
+
+    private int ArgMax(Vector<T> vector)
+    {
+        int maxIndex = 0;
+        T maxValue = vector[0];
+
+        for (int i = 1; i < vector.Length; i++)
+        {
+            if (NumOps.GreaterThan(vector[i], maxValue))
+            {
+                maxValue = vector[i];
+                maxIndex = i;
+            }
+        }
+
+        return maxIndex;
+    }
+
+    private T Max(Vector<T> vector)
+    {
+        T maxValue = vector[0];
+
+        for (int i = 1; i < vector.Length; i++)
+        {
+            if (NumOps.GreaterThan(vector[i], maxValue))
+            {
+                maxValue = vector[i];
+            }
+        }
+
+        return maxValue;
+    }
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
+}

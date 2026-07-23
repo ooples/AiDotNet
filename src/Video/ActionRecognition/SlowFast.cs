@@ -1,0 +1,899 @@
+using System.IO;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+namespace AiDotNet.Video.ActionRecognition;
+
+/// <summary>
+/// SlowFast Networks for Video Recognition.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> SlowFast is a two-pathway network that processes video at two
+/// different frame rates simultaneously:
+/// - Slow pathway: Processes fewer frames (e.g., 4 fps) but with more channels to capture spatial details
+/// - Fast pathway: Processes more frames (e.g., 32 fps) but with fewer channels to capture motion
+///
+/// This design is inspired by how human vision has:
+/// - Parvo cells: Slow but detailed spatial processing
+/// - Magno cells: Fast but coarse motion processing
+///
+/// Example usage:
+/// <code>
+/// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3);
+/// var model = new SlowFast&lt;double&gt;(arch, numClasses: 400);
+/// var predictions = model.Classify(videoFrames);
+/// </code>
+/// </para>
+/// <para>
+/// <b>Technical Details:</b>
+/// - Two-pathway design with lateral connections
+/// - Slow pathway: T frames, C channels
+/// - Fast pathway: alphaT frames, betaC channels (alpha=8, beta=1/8 typically)
+/// - Lateral connections fuse information between pathways
+/// </para>
+/// <para>
+/// <b>Reference:</b> "SlowFast Networks for Video Recognition" ICCV 2019
+/// https://arxiv.org/abs/1812.03982
+/// </para>
+/// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("SlowFast Networks for Video Recognition",
+    "https://arxiv.org/abs/1812.03982",
+    Year = 2019,
+    Authors = "Christoph Feichtenhofer, Haoqi Fan, Jitendra Malik, Kaiming He")]
+public class SlowFast<T> : NeuralNetworkBase<T>
+{
+    private readonly SlowFastOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
+    #region Execution Mode
+
+    private readonly bool _useNativeMode;
+    private bool _disposed;
+
+    #endregion
+
+    #region ONNX Mode Fields
+
+    private readonly InferenceSession? _onnxSession;
+    private readonly string? _onnxModelPath;
+
+    #endregion
+
+    #region Native Mode Fields
+
+    // Training components - private set to allow deserialization restoration
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private ILossFunction<T> _lossFunction;
+    private IActivationFunction<T> _probabilityActivation;
+
+    // Configuration fields - mutable to support deserialization
+    private int _numClasses;
+    private int _slowFrames;
+    private int _fastFrames;
+    private int _slowChannels;
+    private int _fastChannels;
+    private int _alpha;
+    private int _imageSize;
+
+    /// <summary>
+    /// Fast pathway layers (high temporal resolution, low channel capacity).
+    /// Held in BOTH this list (for explicit DAG routing in Forward) AND in
+    /// the base Layers list (so framework parameter collection / training-mode
+    /// propagation / serialization sees them). The two views point at the
+    /// same ILayer instances — single ownership, dual indexing.
+    /// </summary>
+    private readonly List<ILayer<T>> _fastLayers = [];
+
+    /// <summary>
+    /// Fusion layers that combine slow and fast pathway outputs for classification.
+    /// Same dual-indexing contract as <see cref="_fastLayers"/>.
+    /// </summary>
+    private readonly List<ILayer<T>> _fusionLayers = [];
+
+    /// <summary>
+    /// Index range markers into the unified Layers list. Layers is laid out as
+    /// [slow... | fast... | fusion...]; these counts let Forward / ForwardForTraining
+    /// route the dual-pathway DAG without separate-list lookups.
+    /// </summary>
+    private int _slowLayerCount;
+    private int _fastLayerCount;
+    private int _fusionLayerCount;
+
+    /// <summary>
+    /// Custom fast pathway layers provided by user (null = use default).
+    /// </summary>
+    private IReadOnlyList<ILayer<T>>? _customFastLayers;
+
+    /// <summary>
+    /// Custom fusion layers provided by user (null = use default).
+    /// </summary>
+    private IReadOnlyList<ILayer<T>>? _customFusionLayers;
+
+    #endregion
+
+    #region Properties
+
+    internal bool UseNativeMode => _useNativeMode;
+    public override bool SupportsTraining => _useNativeMode;
+    internal int NumClasses => _numClasses;
+    internal int SlowFrames => _slowFrames;
+    internal int FastFrames => _fastFrames;
+    internal int Alpha => _alpha;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SlowFast()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 400))
+    {
+    }
+
+    /// <summary>
+    /// Creates a SlowFast model using native layers for training and inference.
+    /// </summary>
+    /// <param name="architecture">The network architecture configuration. If Architecture.Layers is provided,
+    /// it will be used as the slow pathway and customFastLayers/customFusionLayers must also be provided.</param>
+    /// <param name="numClasses">Number of action classes (default: 400 for Kinetics-400).</param>
+    /// <param name="optimizer">Optimizer for training (default: Adam).</param>
+    /// <param name="lossFunction">Loss function for training (default: CrossEntropy).</param>
+    /// <param name="probabilityActivation">Activation for converting logits to probabilities (default: Softmax).</param>
+    /// <param name="customFastLayers">Custom fast pathway layers (required if Architecture.Layers is provided).</param>
+    /// <param name="customFusionLayers">Custom fusion layers (required if Architecture.Layers is provided).</param>
+    /// <param name="slowFrames">Number of frames for slow pathway (default: 4).</param>
+    /// <param name="slowChannels">Base channels for slow pathway (default: 64).</param>
+    /// <param name="fastChannels">Base channels for fast pathway (default: 8).</param>
+    /// <param name="alpha">Frame rate ratio between fast and slow pathways (default: 8).</param>
+    public SlowFast(
+        NeuralNetworkArchitecture<T> architecture,
+        int numClasses = 400,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        IActivationFunction<T>? probabilityActivation = null,
+        IReadOnlyList<ILayer<T>>? customFastLayers = null,
+        IReadOnlyList<ILayer<T>>? customFusionLayers = null,
+        int slowFrames = 4,
+        int slowChannels = 64,
+        int fastChannels = 8,
+        int alpha = 8,
+        SlowFastOptions? options = null)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+    {
+        _options = options ?? new SlowFastOptions();
+        Options = _options;
+
+        if (numClasses < 1)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be at least 1.");
+        if (slowFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(slowFrames), "Slow frames must be at least 1.");
+        if (slowChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(slowChannels), "Slow channels must be at least 1.");
+        if (fastChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(fastChannels), "Fast channels must be at least 1.");
+        if (alpha < 1)
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be at least 1.");
+
+        // Validate custom layer consistency - if any custom layers provided, all three pathways must be specified
+        bool hasCustomSlowLayers = architecture.Layers != null && architecture.Layers.Count > 0;
+        bool hasCustomFastLayers = customFastLayers != null && customFastLayers.Count > 0;
+        bool hasCustomFusionLayers = customFusionLayers != null && customFusionLayers.Count > 0;
+
+        if (hasCustomSlowLayers || hasCustomFastLayers || hasCustomFusionLayers)
+        {
+            if (!hasCustomSlowLayers || !hasCustomFastLayers || !hasCustomFusionLayers)
+            {
+                throw new ArgumentException(
+                    "SlowFast requires all three pathway layer sets when customizing. " +
+                    "Provide Architecture.Layers (slow pathway), customFastLayers, and customFusionLayers together, " +
+                    "or leave all null to use default initialization.");
+            }
+        }
+
+        _useNativeMode = true;
+        _numClasses = numClasses;
+        _slowFrames = slowFrames;
+        _fastFrames = slowFrames * alpha;
+        _slowChannels = slowChannels;
+        _fastChannels = fastChannels;
+        _alpha = alpha;
+        _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
+
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SetBaseTrainOptimizer(_optimizer);
+        _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
+        _customFastLayers = customFastLayers;
+        _customFusionLayers = customFusionLayers;
+
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates a SlowFast model using a pretrained ONNX model for inference.
+    /// </summary>
+    /// <param name="architecture">The network architecture configuration.</param>
+    /// <param name="onnxModelPath">Path to the pretrained ONNX model file.</param>
+    /// <param name="numClasses">Number of action classes (default: 400 for Kinetics-400).</param>
+    /// <param name="probabilityActivation">Activation for converting logits to probabilities (default: Softmax).</param>
+    /// <param name="slowFrames">Number of frames for slow pathway (default: 4).</param>
+    /// <param name="slowChannels">Base channels for slow pathway (default: 64).</param>
+    /// <param name="fastChannels">Base channels for fast pathway (default: 8).</param>
+    /// <param name="alpha">Frame rate ratio between fast and slow pathways (default: 8).</param>
+    public SlowFast(
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
+        int numClasses = 400,
+        IActivationFunction<T>? probabilityActivation = null,
+        int slowFrames = 4,
+        int slowChannels = 64,
+        int fastChannels = 8,
+        int alpha = 8,
+        SlowFastOptions? options = null)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+    {
+        _options = options ?? new SlowFastOptions();
+        Options = _options;
+
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"SlowFast ONNX model not found: {onnxModelPath}");
+        if (numClasses < 1)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be at least 1.");
+        if (slowFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(slowFrames), "Slow frames must be at least 1.");
+        if (slowChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(slowChannels), "Slow channels must be at least 1.");
+        if (fastChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(fastChannels), "Fast channels must be at least 1.");
+        if (alpha < 1)
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be at least 1.");
+
+        _useNativeMode = false;
+        _onnxModelPath = onnxModelPath;
+        _numClasses = numClasses;
+        _slowFrames = slowFrames;
+        _fastFrames = slowFrames * alpha;
+        _slowChannels = slowChannels;
+        _fastChannels = fastChannels;
+        _alpha = alpha;
+        _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
+        _lossFunction = new CrossEntropyWithLogitsLoss<T>();
+        _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
+
+        try
+        {
+            _onnxSession = new InferenceSession(onnxModelPath);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load ONNX model: {ex.Message}", ex);
+        }
+
+        InitializeLayers();
+    }
+
+    #endregion
+
+    #region Public Methods
+
+    /// <summary>
+    /// Classifies video frames into action categories.
+    /// </summary>
+    public Tensor<T> Classify(Tensor<T> videoFrames)
+    {
+        if (videoFrames is null)
+            throw new ArgumentNullException(nameof(videoFrames));
+
+        return _useNativeMode ? Forward(videoFrames) : PredictOnnx(videoFrames);
+    }
+
+    /// <summary>
+    /// Gets top-K predictions with probabilities.
+    /// </summary>
+    /// <param name="videoFrames">Input video frames tensor.</param>
+    /// <param name="topK">Number of top predictions to return (default: 5).</param>
+    /// <returns>List of (ClassIndex, Probability) tuples sorted by probability descending.</returns>
+    public List<(int ClassIndex, double Probability)> GetTopKPredictions(Tensor<T> videoFrames, int topK = 5)
+    {
+        var logits = Classify(videoFrames);
+        var probabilities = _probabilityActivation.Activate(logits);
+
+        var results = new List<(int, double)>();
+        for (int i = 0; i < probabilities.Length; i++)
+        {
+            results.Add((i, Convert.ToDouble(probabilities.Data.Span[i])));
+        }
+
+        return results.OrderByDescending(x => x.Item2).Take(topK).ToList();
+    }
+
+    #endregion
+
+    #region Inference
+
+    private Tensor<T> Forward(Tensor<T> input)
+    {
+        // Validate dual pathways are initialized
+        if (_slowLayerCount == 0)
+            throw new InvalidOperationException("Slow pathway not initialized. Layers collection is empty.");
+        if (_fastLayers.Count == 0)
+            throw new InvalidOperationException("Fast pathway not initialized. Fast layers collection is empty.");
+        if (_fusionLayers.Count == 0)
+            throw new InvalidOperationException("Fusion layers not initialized. Fusion layers collection is empty.");
+
+        // SlowFast dual-pathway architecture:
+        // Input is expected as [batch, channels, frames, height, width] or [batch, channels * frames, height, width]
+        // Slow pathway: subsampled frames (every alpha-th frame)
+        // Fast pathway: all frames
+        //
+        // Layers is laid out as [slow... | fast... | fusion...] (see InitializeLayers).
+        // Forward routes the DAG by indexing into Layers ranges plus the per-pathway
+        // mirror lists (which point at the same instances).
+
+        // Run slow pathway: Layers[0 .. _slowLayerCount)
+        var slowInput = SubsampleFrames(input, _alpha);
+        var slowResult = slowInput;
+        for (int i = 0; i < _slowLayerCount; i++)
+        {
+            slowResult = Layers[i].Forward(slowResult);
+        }
+
+        // Run fast pathway
+        var fastResult = input;
+        foreach (var layer in _fastLayers)
+        {
+            fastResult = layer.Forward(fastResult);
+        }
+
+        // Concatenate slow and fast pathway outputs along channel dimension
+        var fused = ConcatenateTensors(slowResult, fastResult);
+
+        // Apply fusion layers for classification
+        foreach (var layer in _fusionLayers)
+        {
+            fused = layer.Forward(fused);
+        }
+
+        return fused;
+    }
+
+    /// <summary>
+    /// Tape-aware forward pass for training. Routes through the same
+    /// slow → fast → fusion DAG as <see cref="Forward"/> so the gradient
+    /// tape sees ALL three pathways' parameters.
+    /// </summary>
+    /// <remarks>
+    /// Without this override, base.ForwardForTraining iterates Layers as a
+    /// flat sequential chain, which (now that Layers contains the unified
+    /// [slow | fast | fusion] flat layout) would compose the layers in the
+    /// wrong topology. The DAG must be honored both at inference (Forward)
+    /// and during training (this method) — same routing logic, single source
+    /// of truth.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    /// <summary>
+    /// Subsamples frames by taking every n-th frame.
+    /// </summary>
+    private Tensor<T> SubsampleFrames(Tensor<T> input, int subsampleRate)
+    {
+        if (input.Rank < 4)
+            return input;
+
+        // Assume input is [batch, channels * frames, height, width] or [batch, channels, frames, height, width]
+        // For simplicity, if channels are flattened with frames, subsample along channel dimension
+        int batch = input.Shape[0];
+        int totalChannels = input.Shape[1];
+        int h = input.Shape[2];
+        int w = input.Shape[3];
+
+        // Calculate subsampled channels using actual input depth from architecture (supports RGB, grayscale, RGBA, etc.)
+        int channelsPerFrame = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        int framesInInput = totalChannels / channelsPerFrame;
+        int subsampledFrames = (framesInInput + subsampleRate - 1) / subsampleRate;
+        int subsampledChannels = subsampledFrames * channelsPerFrame;
+
+        if (subsampledFrames == framesInInput || subsampleRate == 1)
+            return input;
+
+        var result = new Tensor<T>([batch, subsampledChannels, h, w]);
+        int srcFrameSize = channelsPerFrame * h * w;
+        int dstFrameSize = channelsPerFrame * h * w;
+
+        for (int b = 0; b < batch; b++)
+        {
+            int dstFrame = 0;
+            for (int srcFrame = 0; srcFrame < framesInInput && dstFrame < subsampledFrames; srcFrame += subsampleRate)
+            {
+                int srcOffset = b * totalChannels * h * w + srcFrame * channelsPerFrame * h * w;
+                int dstOffset = b * subsampledChannels * h * w + dstFrame * channelsPerFrame * h * w;
+                int copyLen = Math.Min(srcFrameSize, dstFrameSize);
+                input.Data.Span.Slice(srcOffset, copyLen).CopyTo(result.Data.Span.Slice(dstOffset, copyLen));
+                dstFrame++;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Concatenates two tensors along the channel dimension.
+    /// </summary>
+    private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
+    {
+        return Engine.TensorConcatenate([a, b], axis: 1);
+    }
+
+    private Tensor<T> PredictOnnx(Tensor<T> input)
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(SlowFast<T>));
+        if (_onnxSession is null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+
+        // Validate input shape matches ONNX model expectations
+        var inputMeta = _onnxSession.InputMetadata;
+        string inputName = inputMeta.Keys.First();
+        var expectedShape = inputMeta[inputName].Dimensions;
+
+        if (expectedShape.Length != input.Rank)
+            throw new ArgumentException(
+                $"Input rank mismatch: ONNX model expects {expectedShape.Length}D tensor, got {input.Rank}D.",
+                nameof(input));
+
+        // Validate dimensions (skip dynamic dimensions marked as -1)
+        for (int i = 0; i < expectedShape.Length; i++)
+        {
+            if (expectedShape[i] > 0 && expectedShape[i] != input.Shape[i])
+                throw new ArgumentException(
+                    $"Input shape mismatch at dimension {i}: ONNX model expects {expectedShape[i]}, got {input.Shape[i]}.",
+                    nameof(input));
+        }
+
+        var inputData = new float[input.Length];
+        for (int i = 0; i < input.Length; i++)
+        {
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        }
+
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
+
+        using var results = _onnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var outputData = new T[outputTensor.Length];
+        for (int i = 0; i < outputTensor.Length; i++)
+        {
+            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) => Classify(input);
+
+    private bool _shapesProbed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// SlowFast's forward is a parallel dual-pathway DAG (slow + fast pathways, then a channel-concat
+    /// fusion), not a sequential pass over the flat Layers list, so the base linear walk mis-sizes the
+    /// fusion convs (it resolved one to the fused feature width while the real forward feeds the stem
+    /// width, throwing "Expected input depth 512, but got 3"). Resolve every lazy conv through a real
+    /// forward on a small dummy clip shaped like the generic temporal-video InputShape instead.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_shapesProbed || _slowLayerCount == 0) return;
+        _shapesProbed = true;
+        int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        _ = PredictCore(new Tensor<T>([4, c, 32, 32]));
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is not supported in ONNX mode.");
+
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Splits the gradient tensor for slow and fast pathways.
+    /// </summary>
+    private (Tensor<T> slowGradient, Tensor<T> fastGradient) SplitGradient(Tensor<T> fusedGradient)
+    {
+        if (fusedGradient.Rank != 4)
+            throw new ArgumentException("Gradient must be 4D [batch, channels, height, width].");
+
+        int batch = fusedGradient.Shape[0];
+        int totalChannels = fusedGradient.Shape[1];
+        int h = fusedGradient.Shape[2];
+        int w = fusedGradient.Shape[3];
+
+        // Slow pathway outputs _slowChannels * 8 (after 3 downsampling stages in ResNet-like arch)
+        // Fast pathway outputs _fastChannels * 8
+        int slowOutputChannels = _slowChannels * 8;
+        int fastOutputChannels = _fastChannels * 8;
+
+        // Validate channel count
+        if (totalChannels != slowOutputChannels + fastOutputChannels)
+        {
+            // Fall back to proportional split based on slow/fast channel ratio
+            slowOutputChannels = totalChannels * _slowChannels / (_slowChannels + _fastChannels);
+            fastOutputChannels = totalChannels - slowOutputChannels;
+        }
+
+        var slowGrad = new Tensor<T>([batch, slowOutputChannels, h, w]);
+        var fastGrad = new Tensor<T>([batch, fastOutputChannels, h, w]);
+
+        int slowSliceSize = slowOutputChannels * h * w;
+        int fastSliceSize = fastOutputChannels * h * w;
+        int totalSliceSize = totalChannels * h * w;
+
+        for (int bi = 0; bi < batch; bi++)
+        {
+            fusedGradient.Data.Span.Slice(bi * totalSliceSize, slowSliceSize).CopyTo(slowGrad.Data.Span.Slice(bi * slowSliceSize, slowSliceSize));
+            fusedGradient.Data.Span.Slice(bi * totalSliceSize + slowSliceSize, fastSliceSize).CopyTo(fastGrad.Data.Span.Slice(bi * fastSliceSize, fastSliceSize));
+        }
+
+        return (slowGrad, fastGrad);
+    }
+
+    #endregion
+
+    #region Layer Initialization
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+        {
+            ClearLayers();
+            _fastLayers.Clear();
+            _fusionLayers.Clear();
+            _slowLayerCount = 0;
+            _fastLayerCount = 0;
+            _fusionLayerCount = 0;
+            return;
+        }
+
+        // Check if custom layers are provided (validation already done in constructor)
+        bool hasCustomLayers = Architecture.Layers != null && Architecture.Layers.Count > 0;
+
+        IEnumerable<ILayer<T>> slowSrc;
+        IEnumerable<ILayer<T>> fastSrc;
+        IEnumerable<ILayer<T>> fusionSrc;
+
+        if (hasCustomLayers && Architecture.Layers != null && _customFastLayers != null && _customFusionLayers != null)
+        {
+            // Use custom layers for all three pathways
+            slowSrc = Architecture.Layers;
+            fastSrc = _customFastLayers;
+            fusionSrc = _customFusionLayers;
+        }
+        else
+        {
+            // Use default LayerHelper initialization
+            int inputChannels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+            int inputHeight = Architecture.InputHeight > 0 ? Architecture.InputHeight : 224;
+            int inputWidth = Architecture.InputWidth > 0 ? Architecture.InputWidth : 224;
+
+            // Feature map size after pathways (typically 14x14 for 224x224 input after 4 downsampling stages)
+            int featureHeight = inputHeight / 16;
+            int featureWidth = inputWidth / 16;
+
+            slowSrc = LayerHelper<T>.CreateSlowFastSlowPathwayLayers(
+                inputChannels, inputHeight, inputWidth, _slowChannels);
+            fastSrc = LayerHelper<T>.CreateSlowFastFastPathwayLayers(
+                inputChannels, inputHeight, inputWidth, _fastChannels);
+            fusionSrc = LayerHelper<T>.CreateSlowFastFusionLayers(
+                _slowChannels, _fastChannels, featureHeight, featureWidth, _numClasses);
+        }
+
+        // Materialize once. Each ILayer instance gets shared by both the
+        // unified Layers list (framework view) and the per-pathway list
+        // (DAG-routing view) — the framework owns parameter / training-mode /
+        // serialization walks via Layers, and Forward/ForwardForTraining use
+        // the per-pathway lists for the slow/fast/fusion DAG topology.
+        var slowList = slowSrc.ToList();
+        var fastList = fastSrc.ToList();
+        var fusionList = fusionSrc.ToList();
+
+        _slowLayerCount = slowList.Count;
+        _fastLayerCount = fastList.Count;
+        _fusionLayerCount = fusionList.Count;
+
+        // Unified flat layout in Layers: [slow... | fast... | fusion...]. This
+        // makes base.GetParameters / base.ParameterCount / base.SetTrainingMode /
+        // TapeTrainingStep.CollectParameters(Layers) cover all three pathways
+        // without per-method overrides — the previous design hid fast and
+        // fusion pathways from the framework, so their gradients were never
+        // collected and their parameters never updated during training.
+        Layers.AddRange(slowList);
+        Layers.AddRange(fastList);
+        Layers.AddRange(fusionList);
+
+        _fastLayers.AddRange(fastList);
+        _fusionLayers.AddRange(fusionList);
+    }
+
+    #endregion
+
+    #region Serialization
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
+
+        int offset = 0;
+
+        // Layers now contains [slow... | fast... | fusion...] (see InitializeLayers).
+        // A single walk covers all three pathways in the same partition order
+        // base.GetParameters / TapeTrainingStep.CollectParameters use, so the
+        // serialized layout matches what the optimizer round-trips through.
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            int paramCount = layerParams.Length;
+            if (paramCount > 0 && offset + paramCount <= parameters.Length)
+            {
+                var slice = new Vector<T>(paramCount);
+                for (int i = 0; i < paramCount; i++) slice[i] = parameters[offset + i];
+                layer.SetParameters(slice);
+                offset += paramCount;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets metadata about this model for serialization.
+    /// </summary>
+    /// <remarks>
+    /// Serializes model architecture configuration, layer weights, and training component types
+    /// (optimizer, loss function, probability activation). After deserialization, training components
+    /// are recreated from their type names using reflection. Custom layer definitions are NOT preserved -
+    /// default LayerHelper layers are used unless custom layers are re-provided after deserialization.
+    /// </remarks>
+    public override ModelMetadata<T> GetModelMetadata() => new()
+    {
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            { "ModelName", "SlowFast" },
+            { "NumClasses", _numClasses },
+            { "SlowFrames", _slowFrames },
+            { "FastFrames", _fastFrames },
+            { "Alpha", _alpha },
+            { "UseNativeMode", _useNativeMode }
+        },
+        ModelData = _useNativeMode ? this.Serialize() : []
+    };
+
+    /// <summary>
+    /// Serializes SlowFast-specific configuration data including training component types.
+    /// </summary>
+    /// <remarks>
+    /// Serializes configuration parameters and type names for training components
+    /// (optimizer, loss function, probability activation). Custom layer definitions
+    /// are NOT serialized - after deserialization, default LayerHelper layers are used
+    /// unless custom layers are re-provided.
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        if (!_useNativeMode) throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
+
+        // Configuration parameters
+        writer.Write(_numClasses);
+        writer.Write(_slowFrames);
+        writer.Write(_fastFrames);
+        writer.Write(_slowChannels);
+        writer.Write(_fastChannels);
+        writer.Write(_alpha);
+        writer.Write(_imageSize);
+
+        // Per-pathway range markers needed by deserialize to reconstruct
+        // the _fastLayers / _fusionLayers mirror views into the unified
+        // Layers list. Without these, the deserialize side cannot tell where
+        // the slow pathway ends and the fast pathway begins from the flat
+        // [slow... | fast... | fusion...] layout.
+        writer.Write(_slowLayerCount);
+        writer.Write(_fastLayerCount);
+        writer.Write(_fusionLayerCount);
+
+        // Training component type names for restoration
+        writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
+            $"Cannot resolve AssemblyQualifiedName for loss function type '{_lossFunction.GetType().FullName}'."));
+        writer.Write(_probabilityActivation.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
+            $"Cannot resolve AssemblyQualifiedName for activation function type '{_probabilityActivation.GetType().FullName}'."));
+
+        // Optimizer type (can be null for ONNX mode or after certain operations)
+        writer.Write(_optimizer is not null);
+        if (_optimizer is { } optimizer)
+        {
+            writer.Write(optimizer.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
+                $"Cannot resolve AssemblyQualifiedName for optimizer type '{optimizer.GetType().FullName}'."));
+        }
+    }
+
+    /// <summary>
+    /// Deserializes SlowFast-specific configuration data and reinitializes layers.
+    /// </summary>
+    /// <remarks>
+    /// Restores configuration parameters and recreates training components from serialized type names.
+    /// Custom layer definitions are NOT restored - default LayerHelper layers are used after deserialization.
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        if (!_useNativeMode) throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
+
+        // Restore configuration values
+        _numClasses = reader.ReadInt32();
+        _slowFrames = reader.ReadInt32();
+        _fastFrames = reader.ReadInt32();
+        _slowChannels = reader.ReadInt32();
+        _fastChannels = reader.ReadInt32();
+        _alpha = reader.ReadInt32();
+        _imageSize = reader.ReadInt32();
+
+        // Per-pathway range markers — must match what the serialize side wrote
+        // so the _fastLayers / _fusionLayers mirror views can be rebuilt as
+        // slices of the unified Layers list below.
+        _slowLayerCount = reader.ReadInt32();
+        _fastLayerCount = reader.ReadInt32();
+        _fusionLayerCount = reader.ReadInt32();
+
+        // Restore training component types
+        string lossFunctionTypeName = reader.ReadString();
+        string probabilityActivationTypeName = reader.ReadString();
+
+        // Recreate loss function from type name
+        var lossFunctionType = Type.GetType(lossFunctionTypeName);
+        if (lossFunctionType != null)
+        {
+            _lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType) ?? new CrossEntropyWithLogitsLoss<T>();
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Warning: Serialized loss function type '{lossFunctionTypeName}' could not be resolved. Falling back to CrossEntropyWithLogitsLoss.");
+            _lossFunction = new CrossEntropyWithLogitsLoss<T>();
+        }
+
+        // Recreate probability activation from type name
+        var activationType = Type.GetType(probabilityActivationTypeName);
+        if (activationType != null)
+        {
+            _probabilityActivation = (IActivationFunction<T>?)Activator.CreateInstance(activationType) ?? new SoftmaxActivation<T>();
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Warning: Serialized activation type '{probabilityActivationTypeName}' could not be resolved. Falling back to SoftmaxActivation.");
+            _probabilityActivation = new SoftmaxActivation<T>();
+        }
+
+        // Restore optimizer if it was serialized
+        bool hasOptimizer = reader.ReadBoolean();
+        if (hasOptimizer)
+        {
+            string optimizerTypeName = reader.ReadString();
+            var optimizerType = Type.GetType(optimizerTypeName);
+
+            if (optimizerType != null)
+            {
+                var constructor = optimizerType.GetConstructor([typeof(IFullModel<T, Tensor<T>, Tensor<T>>)]);
+                if (constructor != null)
+                {
+                    _optimizer = (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)constructor.Invoke([this]);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Warning: Serialized optimizer type '{optimizerTypeName}' does not have expected constructor. Falling back to Adam.");
+                    _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Warning: Serialized optimizer type '{optimizerTypeName}' could not be resolved. Falling back to Adam.");
+                _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            }
+        }
+        else
+        {
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        }
+        SetBaseTrainOptimizer(_optimizer);
+
+        // Clear custom layer references (not serialized)
+        _customFastLayers = null;
+        _customFusionLayers = null;
+
+        // Rebuild the per-pathway mirror lists as slices of the freshly-
+        // deserialized Layers. Do NOT call InitializeLayers — base
+        // DeserializeInternalUnchecked already populated Layers with the
+        // saved [slow... | fast... | fusion...] flat layout (with TRAINED
+        // weights). Re-running InitializeLayers would Clear + rebuild with
+        // random-init weights, dropping all the trained state on the floor
+        // (issue #1221 class — exactly what Clone_AfterTraining_*
+        // is designed to catch).
+        _fastLayers.Clear();
+        _fusionLayers.Clear();
+        int slowEnd = _slowLayerCount;
+        int fastEnd = slowEnd + _fastLayerCount;
+        for (int i = slowEnd; i < fastEnd && i < Layers.Count; i++)
+            _fastLayers.Add(Layers[i]);
+        for (int i = fastEnd; i < Layers.Count; i++)
+            _fusionLayers.Add(Layers[i]);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
+        new SlowFast<T>(Architecture, _numClasses, _optimizer, _lossFunction, _probabilityActivation, _customFastLayers, _customFusionLayers, _slowFrames, _slowChannels, _fastChannels, _alpha);
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Releases the unmanaged resources and optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged.</param>
+    /// <remarks>
+    /// Disposes the ONNX inference session if one was created. This is important for
+    /// releasing native ONNX runtime handles and memory when using pretrained models.
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+
+        if (disposing)
+        {
+            _onnxSession?.Dispose();
+        }
+
+        _disposed = true;
+        base.Dispose(disposing);
+    }
+
+    #endregion
+}

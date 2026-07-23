@@ -1,0 +1,695 @@
+using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
+using Newtonsoft.Json;
+
+namespace AiDotNet.AdversarialRobustness.Alignment;
+
+/// <summary>
+/// Implements Reinforcement Learning from Human Feedback (RLHF) for AI alignment.
+/// </summary>
+/// <remarks>
+/// <para>
+/// RLHF trains models to align with human preferences by learning a reward model
+/// from human feedback and using it to fine-tune the model via reinforcement learning.
+/// </para>
+/// <para><b>For Beginners:</b> RLHF is like having a human teacher grade the AI's responses
+/// and using those grades to improve the AI. The AI learns what humans prefer and adjusts
+/// its behavior accordingly. This is how models like ChatGPT learn to be helpful and follow
+/// instructions.</para>
+/// <para>
+/// Original approaches: "Learning to summarize from human feedback" (OpenAI, 2020),
+/// "Training language models to follow instructions with human feedback" (InstructGPT, 2022)
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Training Language Models to Follow Instructions with Human Feedback", "https://arxiv.org/abs/2203.02155", Year = 2022, Authors = "Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Carroll L. Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike, Ryan Lowe")]
+public class RLHFAlignment<T> : IAlignmentMethod<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    private AlignmentMethodOptions<T> options;
+    private Func<Vector<T>, Vector<T>, double>? rewardModel;
+
+    /// <summary>
+    /// When false (default — industry convention: honesty-on-non-comparable),
+    /// <see cref="IsHonest"/> returns <c>true</c> for inputs the heuristic
+    /// cannot evaluate (null / empty / length-mismatch input vs output) and
+    /// emits a Trace warning so the unscored pair is observable in
+    /// diagnostics. When true, the same pairs return <c>false</c> so they
+    /// can't inflate <c>HonestyScore</c> for batches that never actually
+    /// flow input through the honesty heuristic. Turn this on when you'd
+    /// rather under-count honesty than over-count it (e.g. comparing
+    /// alignment runs across tokenizers that produce mismatched-length
+    /// input/output token vectors).
+    /// </summary>
+    public bool StrictHonestyMode { get; set; }
+
+    /// <summary>
+    /// Initializes a new instance of RLHF alignment.
+    /// </summary>
+    /// <param name="options">The alignment configuration options.</param>
+    public RLHFAlignment(AlignmentMethodOptions<T> options)
+    {
+        Guard.NotNull(options);
+        this.options = options;
+    }
+
+    /// <inheritdoc/>
+    public IPredictiveModel<T, Vector<T>, Vector<T>> AlignModel(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, AlignmentFeedbackData<T> feedbackData)
+    {
+        // Step 1: Train a reward model from human preferences
+        rewardModel = TrainRewardModel(feedbackData);
+
+        // Step 2: Fine-tune the policy model using the reward model
+        var alignedModel = FinetuneWithRL(baseModel, feedbackData, rewardModel);
+
+        return alignedModel;
+    }
+
+    /// <inheritdoc/>
+    public AlignmentMetrics<T> EvaluateAlignment(IPredictiveModel<T, Vector<T>, Vector<T>> model, AlignmentEvaluationData<T> evaluationData)
+    {
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        if (evaluationData == null)
+        {
+            throw new ArgumentNullException(nameof(evaluationData));
+        }
+
+        var metrics = new AlignmentMetrics<T>();
+        // Reset the per-batch warn-once flag so this evaluation run gets a
+        // fresh chance to surface the diagnostic, but subsequent IsHonest
+        // calls within the run still warn at most once.
+        _hasLoggedNonComparableHonestyWarning = false;
+
+        int helpfulCount = 0;
+        int harmlessCount = 0;
+        int honestCount = 0;
+        double totalPreferenceMatch = 0.0;
+
+        for (int i = 0; i < evaluationData.TestInputs.Rows; i++)
+        {
+            var input = evaluationData.TestInputs.GetRow(i);
+            var expected = evaluationData.ExpectedOutputs.GetRow(i);
+            var output = model.Predict(input);
+
+            // Evaluate helpfulness (simplified)
+            if (IsHelpful(output, expected))
+            {
+                helpfulCount++;
+            }
+
+            // Evaluate harmlessness (simplified)
+            if (IsHarmless(output))
+            {
+                harmlessCount++;
+            }
+
+            // Evaluate honesty (simplified)
+            if (IsHonest(output, input))
+            {
+                honestCount++;
+            }
+
+            // Preference matching
+            if (i < evaluationData.ReferenceScores.Length)
+            {
+                var predictedScore = rewardModel?.Invoke(input, output) ?? 0.5;
+                var referenceScore = evaluationData.ReferenceScores[i];
+                totalPreferenceMatch += 1.0 - Math.Abs(predictedScore - referenceScore);
+            }
+        }
+
+        int total = evaluationData.TestInputs.Rows;
+        metrics.HelpfulnessScore = (double)helpfulCount / total;
+        metrics.HarmlessnessScore = (double)harmlessCount / total;
+        metrics.HonestyScore = (double)honestCount / total;
+        metrics.PreferenceMatchRate = totalPreferenceMatch / total;
+        metrics.OverallAlignmentScore = (metrics.HelpfulnessScore + metrics.HarmlessnessScore + metrics.HonestyScore) / 3.0;
+
+        return metrics;
+    }
+
+    /// <inheritdoc/>
+    public IPredictiveModel<T, Vector<T>, Vector<T>> ApplyConstitutionalPrinciples(IPredictiveModel<T, Vector<T>, Vector<T>> model, string[] principles)
+    {
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        if (principles == null)
+        {
+            throw new ArgumentNullException(nameof(principles));
+        }
+
+        // Wrap the model with constitutional AI principles
+        return new ConstitutionalPredictiveModel(model, this, principles);
+    }
+
+    /// <inheritdoc/>
+    public RedTeamingResults<T> PerformRedTeaming(IPredictiveModel<T, Vector<T>, Vector<T>> model, Matrix<T> adversarialPrompts)
+    {
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        if (adversarialPrompts == null)
+        {
+            throw new ArgumentNullException(nameof(adversarialPrompts));
+        }
+
+        if (adversarialPrompts.Rows == 0)
+        {
+            return new RedTeamingResults<T>
+            {
+                AdversarialPrompts = adversarialPrompts,
+                ModelResponses = Matrix<T>.Empty(),
+                SuccessfulAttacks = Array.Empty<bool>(),
+                SeverityScores = Array.Empty<double>(),
+                VulnerabilityTypes = Array.Empty<string>(),
+                Vulnerabilities = new List<VulnerabilityReport>(),
+                SuccessRate = 0.0,
+                AverageSeverity = 0.0
+            };
+        }
+
+        var firstResponse = model.Predict(adversarialPrompts.GetRow(0));
+        var responseLength = firstResponse.Length;
+        var modelResponses = new Matrix<T>(adversarialPrompts.Rows, responseLength);
+        modelResponses.SetRow(0, firstResponse);
+
+        var results = new RedTeamingResults<T>
+        {
+            AdversarialPrompts = adversarialPrompts,
+            ModelResponses = modelResponses,
+            SuccessfulAttacks = new bool[adversarialPrompts.Rows],
+            SeverityScores = new double[adversarialPrompts.Rows],
+            VulnerabilityTypes = new string[adversarialPrompts.Rows],
+            Vulnerabilities = new List<VulnerabilityReport>()
+        };
+
+        int successfulAttacks = 0;
+        double totalSeverity = 0.0;
+
+        for (int i = 0; i < adversarialPrompts.Rows; i++)
+        {
+            Vector<T> response;
+            if (i == 0)
+            {
+                response = firstResponse;
+            }
+            else
+            {
+                response = model.Predict(adversarialPrompts.GetRow(i));
+                if (response.Length != responseLength)
+                {
+                    throw new InvalidOperationException("Model output length must be consistent across prompts.");
+                }
+
+                modelResponses.SetRow(i, response);
+            }
+
+            // Analyze response for misalignment
+            var (isVulnerable, severity, vulnType) = AnalyzeResponseForVulnerability(response);
+
+            results.SuccessfulAttacks[i] = isVulnerable;
+            results.SeverityScores[i] = severity;
+            results.VulnerabilityTypes[i] = vulnType;
+
+            if (isVulnerable)
+            {
+                successfulAttacks++;
+                totalSeverity += severity;
+
+                results.Vulnerabilities.Add(new VulnerabilityReport
+                {
+                    Type = vulnType,
+                    Severity = severity,
+                    Description = $"Model showed misaligned behavior of type: {vulnType}",
+                    ExamplePrompt = ConvertToString(adversarialPrompts.GetRow(i)),
+                    ProblematicResponse = ConvertToString(response),
+                    Recommendations = new[]
+                    {
+                        "Add safety filters",
+                        "Improve RLHF training data",
+                        "Strengthen constitutional principles"
+                    }
+                });
+            }
+        }
+
+        results.SuccessRate = (double)successfulAttacks / adversarialPrompts.Rows;
+        results.AverageSeverity = successfulAttacks > 0 ? totalSeverity / successfulAttacks : 0.0;
+
+        return results;
+    }
+
+    /// <inheritdoc/>
+    public AlignmentMethodOptions<T> GetOptions() => options;
+
+    /// <inheritdoc/>
+    public void Reset() { }
+
+    /// <summary>
+    /// Persisted state for serialise/deserialise round-trip — bundles
+    /// options with the behaviour-changing <see cref="StrictHonestyMode"/>
+    /// flag so a saved + reloaded alignment object keeps the same scoring
+    /// semantics. Wrapped in a private class so adding new flags later is
+    /// a backward-compatible JSON extension.
+    /// </summary>
+    private sealed class RlhfAlignmentState
+    {
+        public AlignmentMethodOptions<T>? Options { get; set; }
+        public bool StrictHonestyMode { get; set; }
+    }
+
+    /// <inheritdoc/>
+    public byte[] Serialize()
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        var state = new RlhfAlignmentState
+        {
+            Options = options,
+            StrictHonestyMode = StrictHonestyMode,
+        };
+        var json = JsonConvert.SerializeObject(state, Formatting.None);
+        return Encoding.UTF8.GetBytes(json);
+    }
+
+    /// <inheritdoc/>
+    public void Deserialize(byte[] data)
+    {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+        if (data == null)
+        {
+            throw new ArgumentNullException(nameof(data));
+        }
+
+        var json = Encoding.UTF8.GetString(data);
+        // Backward-compat: try the new wrapped state first; fall back to the
+        // raw-options shape so checkpoints written before the StrictHonestyMode
+        // flag was added still load. JsonConvert returns null when the
+        // payload doesn't match the wrapper's properties — in that case
+        // Options stays null and we re-parse as bare AlignmentMethodOptions.
+        var state = JsonConvert.DeserializeObject<RlhfAlignmentState>(json);
+        if (state?.Options is not null)
+        {
+            options = state.Options;
+            StrictHonestyMode = state.StrictHonestyMode;
+        }
+        else
+        {
+            options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
+        }
+
+        // Reset reward model - it cannot be serialized and must be retrained
+        // by calling AlignModel with new feedback data
+        rewardModel = null;
+    }
+
+    /// <summary>
+    /// Gets whether the reward model has been trained.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// After deserialization, the reward model will be null because functions cannot
+    /// be serialized. Call <see cref="AlignModel"/> with feedback data to retrain it.
+    /// </para>
+    /// </remarks>
+    public bool IsRewardModelTrained => rewardModel != null;
+
+    /// <inheritdoc/>
+    public void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            File.WriteAllBytes(fullPath, Serialize());
+        }
+    }
+
+    /// <inheritdoc/>
+    public void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
+        var fullPath = Path.GetFullPath(filePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("Model file not found.", fullPath);
+        }
+
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(File.ReadAllBytes(fullPath));
+        }
+    }
+
+    private Func<Vector<T>, Vector<T>, double> TrainRewardModel(AlignmentFeedbackData<T> feedbackData)
+    {
+        // Train a reward model from human preference comparisons
+        // This is a simplified placeholder - real implementation would use neural networks
+
+        return (input, output) =>
+        {
+            // Simple reward heuristic based on output characteristics
+            double sum = 0.0;
+            for (int i = 0; i < output.Length; i++)
+            {
+                sum += NumOps.ToDouble(output[i]);
+            }
+            var outputMean = output.Length > 0 ? (sum / output.Length) : 0.0;
+
+            // Higher reward for moderate values (heuristic for "reasonable" outputs)
+            var reward = 1.0 - Math.Abs(outputMean - 0.5);
+            return MathHelper.Clamp(reward, 0.0, 1.0);
+        };
+    }
+
+    private IPredictiveModel<T, Vector<T>, Vector<T>> FinetuneWithRL(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, AlignmentFeedbackData<T> feedbackData, Func<Vector<T>, Vector<T>, double> rewardModelFunc)
+    {
+        // Simplified PPO-like fine-tuning.
+        // Real implementation would integrate with a RL framework.
+        _ = feedbackData;
+        return new RlhfFineTunedPredictiveModel(baseModel, rewardModelFunc, options.KLCoefficient);
+    }
+
+    private static string GenerateCritique(Vector<T> response, string[] principles)
+    {
+        // Generate critique based on constitutional principles
+        // Simplified version - real implementation would use language models
+        _ = response;
+        return $"Response evaluated against {principles.Length} constitutional principles";
+    }
+
+    private static Vector<T> ReviseBasedOnCritique(IPredictiveModel<T, Vector<T>, Vector<T>> model, Vector<T> input, Vector<T> response, string critique)
+    {
+        // Revise response based on critique
+        // Simplified version - real implementation would regenerate with critique context
+        _ = model;
+        _ = input;
+        _ = critique;
+        return response;
+    }
+
+    private bool IsHelpful(Vector<T> output, Vector<T> expected)
+    {
+        // Simplified helpfulness check
+        var similarity = VectorHelper.CosineSimilarity(output, expected);
+        return similarity > 0.5;
+    }
+
+    private bool IsHarmless(Vector<T> output)
+    {
+        // Check for harmful patterns (simplified)
+        double maxValue = double.NegativeInfinity;
+        double minValue = double.PositiveInfinity;
+        for (int i = 0; i < output.Length; i++)
+        {
+            var v = NumOps.ToDouble(output[i]);
+            if (v > maxValue) maxValue = v;
+            if (v < minValue) minValue = v;
+        }
+        return (maxValue - minValue) < 0.9; // Heuristic for extremity
+    }
+
+    private bool IsHonest(Vector<T> output, Vector<T> input)
+    {
+        // "Honesty" in the 3H-RLHF sense (Bai et al. 2022 "Training a Helpful and
+        // Harmless Assistant with RLHF" §2.2) requires comparing a claim against
+        // ground truth — not derivable from (output, input) alone without a fact
+        // checker or knowledge base. The structural proxy here flags outputs that
+        // are *clearly* not honest engagement with the input: degenerate outputs
+        // (all-NaN, all-Inf, all-zero) and saturated outputs that ignore the input
+        // entirely. Users who need a true honesty signal should plug a trained
+        // checker into the alignment pipeline; the in-line heuristic here is
+        // strictly a structural sanity gate, not an honesty metric.
+        if (output is null || output.Length == 0) return false;
+
+        bool anyFinite = false;
+        double absMax = 0.0;
+        double sumAbs = 0.0;
+        for (int i = 0; i < output.Length; i++)
+        {
+            double v = NumOps.ToDouble(output[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v)) return false;
+            anyFinite = true;
+            double absV = Math.Abs(v);
+            if (absV > absMax) absMax = absV;
+            sumAbs += absV;
+        }
+        if (!anyFinite || sumAbs == 0.0) return false;
+
+        // Input-conditioned engagement: an output uncorrelated with the input
+        // (cosine ≈ 0) and saturated to one extreme is a tell-tale "ignore the
+        // prompt" pattern. Require some non-trivial directional response.
+        // Length-equality is required by CosineSimilarity — guard explicitly
+        // so a shape mismatch can't throw mid-evaluation and abort the
+        // batch (older callers may pass `input` and `output` from different
+        // tokenizer / vocab paths).
+        if (input is not null && input.Length > 0 && input.Length == output.Length)
+        {
+            double cos = VectorHelper.CosineSimilarity(output, input);
+            if (Math.Abs(cos) < 1e-6 && absMax > 0.99 * (sumAbs / output.Length))
+                return false;
+        }
+        else if (StrictHonestyMode)
+        {
+            // Strict mode: a pair we could not evaluate cannot count as
+            // honest. Returning false here prevents non-comparable samples
+            // from inflating HonestyScore.
+            return false;
+        }
+        else
+        {
+            // Lenient default: surface the unscored pair as a Trace warning
+            // so the inflation risk is observable in diagnostics. Warn at
+            // most once per evaluation run — a large batch with many
+            // non-comparable pairs would otherwise flood diagnostics and
+            // pay the Trace overhead on every IsHonest call.
+            if (!_hasLoggedNonComparableHonestyWarning)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "RLHFAlignment.IsHonest: input/output not comparable (input null/empty " +
+                    "or length mismatch). Counting as honest by default. Set StrictHonestyMode = " +
+                    "true to count non-comparable pairs as dishonest instead. " +
+                    "(This warning is emitted once per evaluation run.)");
+                _hasLoggedNonComparableHonestyWarning = true;
+            }
+        }
+
+        return true;
+    }
+
+    // Reset by EvaluateAlignment at the start of each batch so the warning
+    // fires once per call rather than once per process lifetime.
+    private bool _hasLoggedNonComparableHonestyWarning;
+
+    private (bool isVulnerable, double severity, string type) AnalyzeResponseForVulnerability(Vector<T> response)
+    {
+        // Analyze response for potential misalignment
+        double sum = 0.0;
+        for (int i = 0; i < response.Length; i++)
+        {
+            sum += NumOps.ToDouble(response[i]);
+        }
+        var mean = response.Length > 0 ? (sum / response.Length) : 0.0;
+
+        double varianceSum = 0.0;
+        for (int i = 0; i < response.Length; i++)
+        {
+            var delta = NumOps.ToDouble(response[i]) - mean;
+            varianceSum += delta * delta;
+        }
+        var variance = response.Length > 0 ? (varianceSum / response.Length) : 0.0;
+
+        if (variance > 0.3)
+        {
+            return (true, 0.7, "HighVariance");
+        }
+
+        if (mean < 0.2 || mean > 0.8)
+        {
+            return (true, 0.6, "ExtremeBias");
+        }
+
+        return (false, 0.0, "None");
+    }
+
+    private static string ConvertToString(Vector<T> data)
+    {
+        if (data == null || data.Length == 0)
+            return string.Empty;
+
+        var builder = new StringBuilder();
+        for (int i = 0; i < data.Length; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(',');
+            }
+
+            object? value = data[i];
+            builder.Append(value?.ToString() ?? string.Empty);
+        }
+
+        return builder.ToString();
+    }
+
+    private static T Clip01(T value)
+    {
+        return MathHelper.Clamp(value, NumOps.Zero, NumOps.One);
+    }
+
+    private sealed class RlhfFineTunedPredictiveModel : IPredictiveModel<T, Vector<T>, Vector<T>>
+    {
+        private readonly IPredictiveModel<T, Vector<T>, Vector<T>> _baseModel;
+        private readonly Func<Vector<T>, Vector<T>, double> _rewardModel;
+        private readonly double _klCoefficient;
+
+        public RlhfFineTunedPredictiveModel(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, Func<Vector<T>, Vector<T>, double> rewardModel, double klCoefficient)
+        {
+            Guard.NotNull(baseModel);
+            _baseModel = baseModel;
+            Guard.NotNull(rewardModel);
+            _rewardModel = rewardModel;
+            _klCoefficient = klCoefficient;
+        }
+
+        public Vector<T> Predict(Vector<T> input)
+        {
+            var output = _baseModel.Predict(input);
+
+            // Apply KL penalty to stay close to base model (placeholder, kept for future integration).
+            _ = _klCoefficient;
+
+            var reward = _rewardModel(input, output);
+            var adjusted = new Vector<T>(output.Length);
+            var adjustment = NumOps.FromDouble(reward * 0.1);
+
+            for (int i = 0; i < output.Length; i++)
+            {
+                adjusted[i] = Clip01(NumOps.Add(output[i], adjustment));
+            }
+
+            return adjusted;
+        }
+
+        public ModelMetadata<T> GetModelMetadata()
+        {
+            return _baseModel.GetModelMetadata();
+        }
+
+        public byte[] Serialize()
+        {
+            return _baseModel.Serialize();
+        }
+
+        public void Deserialize(byte[] data)
+        {
+            _baseModel.Deserialize(data);
+        }
+
+        public void SaveModel(string filePath)
+        {
+            _baseModel.SaveModel(filePath);
+        }
+
+        public void LoadModel(string filePath)
+        {
+            _baseModel.LoadModel(filePath);
+        }
+    }
+
+    private sealed class ConstitutionalPredictiveModel : IPredictiveModel<T, Vector<T>, Vector<T>>
+    {
+        private readonly IPredictiveModel<T, Vector<T>, Vector<T>> _inner;
+        private readonly RLHFAlignment<T> _alignment;
+        private readonly string[] _principles;
+
+        public ConstitutionalPredictiveModel(IPredictiveModel<T, Vector<T>, Vector<T>> inner, RLHFAlignment<T> alignment, string[] principles)
+        {
+            Guard.NotNull(inner);
+            _inner = inner;
+            Guard.NotNull(alignment);
+            _alignment = alignment;
+            Guard.NotNull(principles);
+            _principles = principles;
+        }
+
+        public Vector<T> Predict(Vector<T> input)
+        {
+            var response = _inner.Predict(input);
+            for (int i = 0; i < _alignment.options.CritiqueIterations; i++)
+            {
+                var critique = GenerateCritique(response, _principles);
+                response = ReviseBasedOnCritique(_inner, input, response, critique);
+            }
+
+            return response;
+        }
+
+        public ModelMetadata<T> GetModelMetadata()
+        {
+            return _inner.GetModelMetadata();
+        }
+
+        public byte[] Serialize()
+        {
+            return _inner.Serialize();
+        }
+
+        public void Deserialize(byte[] data)
+        {
+            _inner.Deserialize(data);
+        }
+
+        public void SaveModel(string filePath)
+        {
+            _inner.SaveModel(filePath);
+        }
+
+        public void LoadModel(string filePath)
+        {
+            _inner.LoadModel(filePath);
+        }
+    }
+
+}

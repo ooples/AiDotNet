@@ -1,0 +1,270 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
+
+namespace AiDotNet.Video.Enhancement;
+
+/// <summary>
+/// DualX-VSR: dual axial spatial-temporal transformer without motion compensation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// DualX-VSR (2025) eliminates explicit motion compensation through dual axial attention:
+/// - Dual axial attention: decomposes 3D attention into two orthogonal axis pairs
+///   (height-temporal and width-temporal), capturing full spatial-temporal context with
+///   linear complexity instead of cubic
+/// - Motion-free alignment: the crossed axial attention patterns implicitly capture
+///   inter-frame correspondence without computing optical flow or deformable offsets
+/// - Symmetric bidirectional propagation: features propagate both forward and backward
+///   in time with shared axial attention weights
+/// - Each dual axial block performs height-temporal attention followed by width-temporal
+///   attention, ensuring every position can attend to any other position in the 3D volume
+///   through the composition of two axis-aligned operations
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Most video SR models need to figure out how objects moved between
+/// frames (optical flow). DualX-VSR skips this step by using a clever attention pattern
+/// that looks along two crossing axes simultaneously. Like reading a crossword puzzle by
+/// checking both across and down -- you understand the full picture without tracing each
+/// letter's path.
+///
+/// <b>Usage:</b>
+/// <code>
+/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputHeight: 64, inputWidth: 64, inputDepth: 3);
+/// var model = new DualXVSR&lt;float&gt;(arch, "dualxvsr.onnx");
+/// var hrFrames = model.Upscale(lrFrames);
+/// </code>
+/// </para>
+/// <para>
+/// <b>Reference:</b> "DualX-VSR: Dual Axial Spatial-Temporal Transformer for
+/// Real-World Video Super-Resolution without Motion Compensation" (2025)
+/// </para>
+/// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("DualX-VSR: Dual Axial Spatial-Temporal Transformer for Real-World Video Super-Resolution without Motion Compensation",
+    "https://arxiv.org/abs/2506.04830",
+    Year = 2025,
+    Authors = "Shuo Cao, Yihao Liu, Xiaohui Li, Yuanting Gao, Yu Zhou, Chao Dong")]
+public class DualXVSR<T> : VideoSuperResolutionBase<T>
+{
+    #region Fields
+
+    private readonly DualXVSROptions _options;
+    public override ModelOptions GetOptions() => _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>Creates a DualX-VSR model in ONNX inference mode.</summary>
+    public DualXVSR(NeuralNetworkArchitecture<T> architecture, string modelPath, DualXVSROptions? options = null)
+        : base(architecture)
+    {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options = options is null ? new DualXVSROptions() : new DualXVSROptions(options);
+        _useNativeMode = false;
+        ScaleFactor = _options.ScaleFactor;
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    /// <summary>Creates a DualX-VSR model in native training mode.</summary>
+    public DualXVSR(NeuralNetworkArchitecture<T> architecture, DualXVSROptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
+    {
+        _options = options is null ? new DualXVSROptions() : new DualXVSROptions(options);
+        _useNativeMode = true;
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        ScaleFactor = _options.ScaleFactor;
+        InitializeLayers();
+    }
+
+    #endregion
+
+    #region Video Super-Resolution
+
+    /// <inheritdoc />
+    public override Tensor<T> Upscale(Tensor<T> lowResFrames)
+    {
+        ThrowIfDisposed();
+        var preprocessed = PreprocessFrames(lowResFrames);
+        var output = IsOnnxMode ? RunOnnxInference(preprocessed) : Forward(preprocessed);
+        return PostprocessOutput(output);
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 64;
+            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 64;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoSuperResolutionLayers(
+                inputChannels: ch, inputHeight: h, inputWidth: w,
+                numFeatures: _options.NumFeatures,
+                numResBlocks: _options.NumAxialBlocks,
+                scaleFactor: _options.ScaleFactor));
+        }
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode) return RunOnnxInference(input);
+        return Forward(input);
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
+        int idx = 0;
+        foreach (var layer in Layers)
+        {
+            int count = checked((int)layer.ParameterCount);
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+    }
+
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "DualXVSR-Native" : "DualXVSR-ONNX",
+            Description = $"DualX-VSR {_options.Variant} dual axial spatial-temporal transformer VSR (2025)",
+            Complexity = _options.NumAxialBlocks,
+            ModelData = _useNativeMode ? this.Serialize() : []
+        };
+        m.AdditionalInfo["Variant"] = _options.Variant.ToString();
+        m.AdditionalInfo["NumFeatures"] = _options.NumFeatures.ToString();
+        m.AdditionalInfo["NumAxialBlocks"] = _options.NumAxialBlocks.ToString();
+        m.AdditionalInfo["NumHeads"] = _options.NumHeads.ToString();
+        m.AdditionalInfo["TemporalWindow"] = _options.TemporalWindow.ToString();
+        m.AdditionalInfo["ScaleFactor"] = _options.ScaleFactor.ToString();
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter w)
+    {
+        w.Write(_useNativeMode);
+        w.Write(_options.ModelPath ?? string.Empty);
+        w.Write((int)_options.Variant);
+        w.Write(_options.NumFeatures);
+        w.Write(_options.NumAxialBlocks);
+        w.Write(_options.ScaleFactor);
+        w.Write(_options.NumHeads);
+        w.Write(_options.TemporalWindow);
+        w.Write(_options.DropoutRate);
+        w.Write(_options.LearningRate);
+        w.Write(_options.WeightDecay);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader r)
+    {
+        _useNativeMode = r.ReadBoolean();
+        string mp = r.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        _options.Variant = (VideoModelVariant)r.ReadInt32();
+        _options.NumFeatures = r.ReadInt32();
+        _options.NumAxialBlocks = r.ReadInt32();
+        _options.ScaleFactor = r.ReadInt32();
+        _options.NumHeads = r.ReadInt32();
+        _options.TemporalWindow = r.ReadInt32();
+        _options.DropoutRate = r.ReadDouble();
+        if (r.BaseStream.Position < r.BaseStream.Length) _options.LearningRate = r.ReadDouble();
+        if (r.BaseStream.Position < r.BaseStream.Length) _options.WeightDecay = r.ReadDouble();
+        ScaleFactor = _options.ScaleFactor;
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxModel?.Dispose();
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
+        // Native-mode layers (with their trained weights) are already reconstructed by
+        // the base deserializer before this override runs; re-initializing here would
+        // discard them and leave the model randomly initialized.
+        if (_useNativeMode) _optimizer = CreateDefaultOptimizer();
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new DualXVSR<T>(Architecture, mp, new DualXVSROptions(_options));
+        return new DualXVSR<T>(Architecture, new DualXVSROptions(_options));
+    }
+
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            WeightDecay = _options.WeightDecay,
+            UseAdaptiveLearningRate = false
+        });
+
+    #endregion
+
+    #region Disposal
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(DualXVSR<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
+        base.Dispose(disposing);
+    }
+
+    #endregion
+}

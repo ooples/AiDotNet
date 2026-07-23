@@ -1,0 +1,1134 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
+
+namespace AiDotNet.Interpretability.Explainers;
+
+/// <summary>
+/// Influence Function explainer for training data attribution.
+/// </summary>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Influence Functions answer the question: "Which training examples
+/// were most responsible for this prediction?"
+///
+/// This is different from feature attribution (which features matter) - instead it tells
+/// you which TRAINING DATA points matter. This is incredibly useful for:
+///
+/// <b>Use Cases:</b>
+/// - <b>Debugging:</b> Finding mislabeled training data
+/// - <b>Data cleaning:</b> Identifying harmful training examples
+/// - <b>Understanding:</b> Seeing which examples the model learned from
+/// - <b>Fairness:</b> Finding training data that causes biased predictions
+///
+/// <b>How it works:</b>
+/// Influence Functions use calculus to efficiently approximate: "What would happen to
+/// this test prediction if we removed a specific training example and retrained?"
+///
+/// Instead of actually retraining (which is expensive), we use the Hessian (second
+/// derivatives of the loss) to estimate the effect mathematically.
+///
+/// <b>The math (simplified):</b>
+/// influence(training_point) = (gradient_test) * (inverse_Hessian) * (gradient_train)
+///
+/// - gradient_test: How the test loss changes with parameters
+/// - inverse_Hessian: How parameter changes propagate through the model
+/// - gradient_train: How this training point affected the parameters
+///
+/// <b>Interpretation:</b>
+/// - Positive influence: Removing this training point would HURT test performance
+/// - Negative influence: Removing this training point would HELP test performance
+/// - Large magnitude: This training point had a big effect
+/// </para>
+/// </remarks>
+public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    private readonly INeuralNetwork<T>? _network;
+    private readonly Func<Vector<T>, Vector<T>> _predictFunction;
+    private readonly Func<Vector<T>, Vector<T>, T> _lossFunction;
+    private readonly Func<Vector<T>, Vector<T>, Vector<T>>? _gradientFunction;
+    /// <summary>
+    /// Optional caller-supplied parameter-space Hessian-vector product
+    /// <c>(input, target, vector) -&gt; H_θ * vector</c>. Required for any
+    /// <see cref="ComputeInfluence"/>-style call. AiDotNet does not yet ship a
+    /// generic per-sample parameter-Hessian path (would need Pearlmutter's
+    /// trick or double-backprop on the GradientTape), so callers must supply
+    /// this when constructing the explainer if they want non-trivial influence
+    /// scoring. When null, public influence-scoring methods throw
+    /// <see cref="NotSupportedException"/> at the entry point with clear guidance.
+    /// </summary>
+    private readonly Func<Vector<T>, Vector<T>, Vector<T>, Vector<T>>? _hvpFunction;
+    private readonly Matrix<T> _trainingData;
+    private readonly Vector<T> _trainingLabels;
+    private readonly InverseHessianMethod _method;
+    private readonly double _damping;
+    private readonly int _maxIterations;
+    private readonly int _recursionDepth;
+    private readonly double _scale;
+    private readonly int? _randomState;
+    private GPUExplainerHelper<T>? _gpuHelper;
+
+    // Cached training gradients for efficiency
+    private Matrix<T>? _cachedTrainingGradients;
+
+    /// <summary>
+    /// Gets the method name.
+    /// </summary>
+    public string MethodName => "InfluenceFunctions";
+
+    /// <summary>
+    /// Gets whether this explainer supports local explanations.
+    /// </summary>
+    public bool SupportsLocalExplanations => true;
+
+    /// <summary>
+    /// Gets whether this explainer supports global explanations.
+    /// </summary>
+    public bool SupportsGlobalExplanations => true;
+
+    /// <inheritdoc/>
+    public bool IsGPUAccelerated => _gpuHelper?.IsGPUEnabled ?? false;
+
+    /// <inheritdoc/>
+    public void SetGPUHelper(GPUExplainerHelper<T>? helper)
+    {
+        _gpuHelper = helper;
+    }
+
+    /// <summary>
+    /// Initializes a new Influence Function explainer.
+    /// </summary>
+    /// <param name="network">The neural network model.</param>
+    /// <param name="lossFunction">Function that computes loss given prediction and target.</param>
+    /// <param name="trainingData">The training data matrix (rows = samples).</param>
+    /// <param name="trainingLabels">The training labels.</param>
+    /// <param name="method">Method for computing inverse Hessian-vector products.</param>
+    /// <param name="damping">Damping factor for Hessian (regularization for numerical stability).</param>
+    /// <param name="maxIterations">Maximum iterations for iterative methods.</param>
+    /// <param name="recursionDepth">Recursion depth for LiSSA.</param>
+    /// <param name="scale">Scale factor for LiSSA updates.</param>
+    /// <param name="randomState">Random seed for reproducibility.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// - <b>network:</b> The trained model you want to explain
+    /// - <b>lossFunction:</b> How to measure prediction error (e.g., MSE, cross-entropy)
+    /// - <b>trainingData:</b> The data used to train the model
+    /// - <b>method:</b> Algorithm for computing inverse Hessian (LiSSA is recommended)
+    /// - <b>damping:</b> Higher = more stable but less accurate (try 0.01)
+    /// </para>
+    /// </remarks>
+    public InfluenceFunctionExplainer(
+        INeuralNetwork<T> network,
+        Func<Vector<T>, Vector<T>, T> lossFunction,
+        Matrix<T> trainingData,
+        Vector<T> trainingLabels,
+        InverseHessianMethod method = InverseHessianMethod.LiSSA,
+        double damping = 0.01,
+        int maxIterations = 100,
+        int recursionDepth = 5000,
+        double scale = 10.0,
+        int? randomState = null,
+        Func<Vector<T>, Vector<T>, Vector<T>, Vector<T>>? hvpFunction = null)
+    {
+        Guard.NotNull(network);
+        _network = network;
+        Guard.NotNull(lossFunction);
+        _lossFunction = lossFunction;
+        Guard.NotNull(trainingData);
+        _trainingData = trainingData;
+        Guard.NotNull(trainingLabels);
+        _trainingLabels = trainingLabels;
+        ValidateTrainingShapes(trainingData, trainingLabels);
+        ValidateHyperparameters(damping, maxIterations, recursionDepth, scale);
+        _method = method;
+        _damping = damping;
+        _maxIterations = maxIterations;
+        _recursionDepth = recursionDepth;
+        _scale = scale;
+        _randomState = randomState;
+        _hvpFunction = hvpFunction;
+
+        _predictFunction = input =>
+        {
+            var tensor = Tensor<T>.FromRowMatrix(new Matrix<T>(new[] { input }));
+            return network.Predict(tensor).ToVector();
+        };
+    }
+
+    /// <summary>
+    /// Asserts that the training matrix has at least one row and that the label vector
+    /// length matches <see cref="Matrix{T}.Rows"/>. Catching these mismatches here surfaces
+    /// the configuration bug at the call site instead of crashing later inside
+    /// random-row sampling or the per-example gradient loop.
+    /// </summary>
+    private static void ValidateTrainingShapes(Matrix<T> trainingData, Vector<T> trainingLabels)
+    {
+        if (trainingData.Rows <= 0)
+        {
+            throw new ArgumentException(
+                "trainingData must contain at least one row.", nameof(trainingData));
+        }
+        if (trainingData.Columns <= 0)
+        {
+            throw new ArgumentException(
+                "trainingData must contain at least one feature column.", nameof(trainingData));
+        }
+        if (trainingLabels.Length != trainingData.Rows)
+        {
+            throw new ArgumentException(
+                $"trainingLabels.Length ({trainingLabels.Length}) must equal " +
+                $"trainingData.Rows ({trainingData.Rows}).",
+                nameof(trainingLabels));
+        }
+    }
+
+    /// <summary>
+    /// Asserts that all numeric hyperparameters are in their valid ranges. Defends
+    /// against negative damping, non-positive iteration counts, etc.
+    /// </summary>
+    private static void ValidateHyperparameters(double damping, int maxIterations, int recursionDepth, double scale)
+    {
+        if (damping < 0 || double.IsNaN(damping) || double.IsInfinity(damping))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(damping), $"damping must be a finite non-negative number; got {damping}.");
+        }
+        if (maxIterations <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxIterations), $"maxIterations must be > 0; got {maxIterations}.");
+        }
+        if (recursionDepth <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(recursionDepth), $"recursionDepth must be > 0; got {recursionDepth}.");
+        }
+        if (scale <= 0 || double.IsNaN(scale) || double.IsInfinity(scale))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(scale), $"scale must be a finite positive number; got {scale}.");
+        }
+    }
+
+    /// <summary>
+    /// Initializes a new Influence Function explainer with custom gradient function.
+    /// </summary>
+    /// <param name="predictFunction">Model prediction function.</param>
+    /// <param name="lossFunction">Loss computation function.</param>
+    /// <param name="gradientFunction">Function that computes gradient of loss w.r.t. parameters.</param>
+    /// <param name="trainingData">The training data matrix.</param>
+    /// <param name="trainingLabels">The training labels.</param>
+    /// <param name="method">Method for computing inverse Hessian-vector products.</param>
+    /// <param name="damping">Damping factor for Hessian.</param>
+    /// <param name="maxIterations">Maximum iterations for iterative methods.</param>
+    /// <param name="recursionDepth">Recursion depth for LiSSA.</param>
+    /// <param name="scale">Scale factor for LiSSA updates.</param>
+    /// <param name="randomState">Random seed for reproducibility.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this constructor when you have custom gradient computation.
+    /// The gradientFunction should return the gradient of the loss with respect to all
+    /// model parameters (weights and biases flattened into a single vector).
+    /// </para>
+    /// </remarks>
+    public InfluenceFunctionExplainer(
+        Func<Vector<T>, Vector<T>> predictFunction,
+        Func<Vector<T>, Vector<T>, T> lossFunction,
+        Func<Vector<T>, Vector<T>, Vector<T>> gradientFunction,
+        Matrix<T> trainingData,
+        Vector<T> trainingLabels,
+        InverseHessianMethod method = InverseHessianMethod.LiSSA,
+        double damping = 0.01,
+        int maxIterations = 100,
+        int recursionDepth = 5000,
+        double scale = 10.0,
+        int? randomState = null,
+        Func<Vector<T>, Vector<T>, Vector<T>, Vector<T>>? hvpFunction = null)
+    {
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(lossFunction);
+        _lossFunction = lossFunction;
+        Guard.NotNull(gradientFunction);
+        _gradientFunction = gradientFunction;
+        Guard.NotNull(trainingData);
+        _trainingData = trainingData;
+        Guard.NotNull(trainingLabels);
+        _trainingLabels = trainingLabels;
+        ValidateTrainingShapes(trainingData, trainingLabels);
+        ValidateHyperparameters(damping, maxIterations, recursionDepth, scale);
+        _method = method;
+        _damping = damping;
+        _maxIterations = maxIterations;
+        _recursionDepth = recursionDepth;
+        _scale = scale;
+        _randomState = randomState;
+        _hvpFunction = hvpFunction;
+    }
+
+    /// <summary>
+    /// Computes the influence of all training samples on a test sample.
+    /// </summary>
+    /// <param name="testInput">The test input to explain.</param>
+    /// <param name="testLabel">The true label for the test input.</param>
+    /// <returns>Influence scores for each training sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you which training examples were most influential
+    /// in determining the model's prediction on this test input.
+    ///
+    /// <b>Interpretation:</b>
+    /// - High positive influence: These training examples "taught" the model to make
+    ///   this prediction. Removing them would hurt performance on this test.
+    /// - High negative influence: These training examples are "fighting against" this
+    ///   prediction. Removing them would actually help performance on this test.
+    ///
+    /// <b>Use this to:</b>
+    /// - Find similar training examples (high positive influence)
+    /// - Find conflicting training examples (high negative influence)
+    /// - Debug wrong predictions by finding harmful training data
+    /// </para>
+    /// </remarks>
+    public InfluenceFunctionResult<T> ComputeInfluence(Vector<T> testInput, T testLabel)
+    {
+        EnsureHvpAvailable();
+        // Step 1: Compute gradient of test loss w.r.t. parameters
+        var testGradient = ComputeGradient(testInput, new Vector<T>(new[] { testLabel }));
+
+        // Step 2: Compute inverse Hessian-vector product: H^(-1) * test_gradient
+        var ihvp = ComputeInverseHessianVectorProduct(testGradient);
+
+        // Step 3: Compute training gradients (cached if available)
+        EnsureTrainingGradientsComputed();
+
+        // Step 4: Compute influence scores: influences = -(cachedGradients @ ihvp) — vectorized matmul
+        var cachedGradients = _cachedTrainingGradients
+            ?? throw new InvalidOperationException("Training gradients have not been cached. Call EnsureTrainingGradientsComputed() first.");
+        // Matrix-vector product: [N x D] @ [D x 1] = [N x 1]
+        var gradTensor = Tensor<T>.FromMatrix(cachedGradients);
+        var ihvpTensor = Tensor<T>.FromVector(ihvp).Reshape(ihvp.Length, 1);
+        var influencesTensor = Engine.TensorMatMul(gradTensor, ihvpTensor).Reshape(cachedGradients.Rows);
+        // Negate: influence = -dot product
+        var influencesVec = (Vector<T>)Engine.Multiply(influencesTensor.ToVector(), NumOps.Negate(NumOps.One));
+
+        // Get prediction and loss
+        var prediction = _predictFunction(testInput);
+        var loss = _lossFunction(prediction, new Vector<T>(new[] { testLabel }));
+
+        return new InfluenceFunctionResult<T>(
+            testInput: testInput,
+            testLabel: testLabel,
+            influences: influencesVec,
+            prediction: prediction,
+            loss: loss);
+    }
+
+    /// <summary>
+    /// Computes the self-influence of each training sample.
+    /// </summary>
+    /// <returns>Self-influence scores for each training sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Self-influence measures how much a training sample
+    /// influences its own prediction. This is incredibly useful for DATA CLEANING.
+    ///
+    /// <b>Key insight:</b> Training samples that are:
+    /// - Hard to learn (high loss even after training)
+    /// - Very different from other samples
+    /// - Potentially mislabeled
+    ///
+    /// ...will have HIGH self-influence scores.
+    ///
+    /// <b>Data cleaning workflow:</b>
+    /// 1. Compute self-influence for all training samples
+    /// 2. Examine samples with highest self-influence
+    /// 3. Many of these will be mislabeled or corrupted
+    /// 4. Clean/correct these samples
+    /// 5. Retrain with cleaner data
+    ///
+    /// This can significantly improve model quality!
+    /// </para>
+    /// </remarks>
+    public SelfInfluenceResult<T> ComputeSelfInfluence()
+    {
+        EnsureHvpAvailable();
+        EnsureTrainingGradientsComputed();
+
+        var selfInfluences = new Vector<T>(_trainingData.Rows);
+
+        for (int i = 0; i < _trainingData.Rows; i++)
+        {
+            // Get gradient for this training sample
+            var cachedGrads = _cachedTrainingGradients
+                ?? throw new InvalidOperationException("Training gradients not computed.");
+            var trainGradient = new Vector<T>(cachedGrads.Columns);
+            for (int j = 0; j < trainGradient.Length; j++)
+            {
+                trainGradient[j] = _cachedTrainingGradients[i, j];
+            }
+
+            // Compute inverse Hessian-vector product
+            var ihvp = ComputeInverseHessianVectorProduct(trainGradient);
+
+            // Self-influence = -gradient dot ihvp — vectorized
+            selfInfluences[i] = NumOps.Negate(VectorHelper.DotProduct(trainGradient, ihvp));
+        }
+
+        return new SelfInfluenceResult<T>(
+            selfInfluences: selfInfluences,
+            trainingData: _trainingData,
+            trainingLabels: _trainingLabels);
+    }
+
+    /// <summary>
+    /// Computes TracIn-style influence using gradient checkpoints.
+    /// </summary>
+    /// <param name="testInput">The test input.</param>
+    /// <param name="testLabel">The test label.</param>
+    /// <param name="checkpointGradients">Gradients at different training checkpoints.</param>
+    /// <returns>TracIn influence scores.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TracIn (Tracing Influence) is a simpler alternative to
+    /// full influence functions. Instead of computing the inverse Hessian (expensive),
+    /// it just sums up gradient dot products from different training checkpoints.
+    ///
+    /// <b>Intuition:</b> If the gradient of a training sample and test sample point
+    /// in the same direction at many checkpoints, they're similar and the training
+    /// sample influenced the test prediction.
+    ///
+    /// <b>TracIn vs Influence Functions:</b>
+    /// - TracIn is faster (no Hessian computation)
+    /// - Influence Functions are more theoretically grounded
+    /// - Both give similar rankings in practice
+    ///
+    /// <b>Requirements:</b> You need to save gradient checkpoints during training.
+    /// </para>
+    /// </remarks>
+    public TracInResult<T> ComputeTracIn(
+        Vector<T> testInput,
+        T testLabel,
+        List<Matrix<T>> checkpointGradients)
+    {
+        if (checkpointGradients == null || checkpointGradients.Count == 0)
+            throw new ArgumentException("At least one checkpoint is required.", nameof(checkpointGradients));
+
+        int numTrainingSamples = _trainingData.Rows;
+        var tracInScores = new Vector<T>(numTrainingSamples);
+
+        // Compute test gradient at current parameters
+        var testGradient = ComputeGradient(testInput, new Vector<T>(new[] { testLabel }));
+
+        // For each checkpoint, compute dot product contribution.
+        foreach (var checkpointGrad in checkpointGradients)
+        {
+            if (checkpointGrad.Rows != numTrainingSamples)
+                throw new ArgumentException(
+                    $"Checkpoint gradient matrix has {checkpointGrad.Rows} rows but " +
+                    $"trainingData has {numTrainingSamples} rows.",
+                    nameof(checkpointGradients));
+
+            // Reject checkpoints whose parameter width doesn't exactly match the test
+            // gradient — silent truncation via Math.Min would produce numerically valid
+            // but mathematically wrong TracIn scores for any model whose parameter count
+            // changed between checkpoints (lazy-resolution growth, rank changes, etc.).
+            if (checkpointGrad.Columns != testGradient.Length)
+                throw new ArgumentException(
+                    $"Checkpoint gradient parameter width ({checkpointGrad.Columns}) does " +
+                    $"not match the test gradient parameter width ({testGradient.Length}). " +
+                    "TracIn requires every checkpoint snapshot to share the same parameter " +
+                    "vector layout as the model at scoring time.",
+                    nameof(checkpointGradients));
+
+            for (int i = 0; i < numTrainingSamples; i++)
+            {
+                double dot = 0;
+                for (int j = 0; j < testGradient.Length; j++)
+                {
+                    dot += NumOps.ToDouble(testGradient[j]) * NumOps.ToDouble(checkpointGrad[i, j]);
+                }
+                tracInScores[i] = NumOps.Add(tracInScores[i], NumOps.FromDouble(dot));
+            }
+        }
+
+        return new TracInResult<T>(
+            testInput: testInput,
+            testLabel: testLabel,
+            tracInScores: tracInScores,
+            numCheckpoints: checkpointGradients.Count);
+    }
+
+    /// <summary>
+    /// Computes inverse Hessian-vector product using the selected method.
+    /// </summary>
+    private Vector<T> ComputeInverseHessianVectorProduct(Vector<T> vector)
+    {
+        return _method switch
+        {
+            InverseHessianMethod.LiSSA => ComputeIHVP_LiSSA(vector),
+            InverseHessianMethod.ConjugateGradient => ComputeIHVP_ConjugateGradient(vector),
+            InverseHessianMethod.Direct => ComputeIHVP_Direct(vector),
+            _ => ComputeIHVP_LiSSA(vector)
+        };
+    }
+
+    /// <summary>
+    /// Computes inverse Hessian-vector product using LiSSA.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> LiSSA (Linear-time Stochastic Second-order Algorithm) is
+    /// an efficient way to approximate H^(-1) * v without computing the full Hessian.
+    ///
+    /// The Hessian H can be huge (millions of parameters × millions of parameters),
+    /// but we only need H^(-1) * v for a specific vector v.
+    ///
+    /// LiSSA works by:
+    /// 1. Starting with v as the initial estimate
+    /// 2. Iteratively refining: estimate = v + (I - H/scale) * estimate
+    /// 3. This converges to H^(-1) * v
+    ///
+    /// The trick is computing (I - H/scale) * estimate efficiently using
+    /// gradients of gradients (Hessian-vector products).
+    /// </para>
+    /// </remarks>
+    private Vector<T> ComputeIHVP_LiSSA(Vector<T> vector)
+    {
+        var rand = _randomState.HasValue
+            ? RandomHelper.CreateSeededRandom(_randomState.Value)
+            : RandomHelper.CreateSecureRandom();
+
+        int n = vector.Length;
+        var estimate = vector.Clone();
+
+        for (int iter = 0; iter < _recursionDepth; iter++)
+        {
+            // Sample a random training point
+            int idx = rand.Next(_trainingData.Rows);
+            var input = _trainingData.GetRow(idx);
+            var label = _trainingLabels[idx];
+
+            // Compute Hessian-vector product for this sample
+            var hvp = ComputeHessianVectorProduct(input, new Vector<T>(new[] { label }), estimate);
+
+            // Update: estimate = vector + (1 - damping) * estimate - hvp / scale — vectorized
+            var scaledEstimate = Engine.Multiply(estimate, NumOps.FromDouble(1 - _damping));
+            var scaledHvp = Engine.Divide(hvp, NumOps.FromDouble(_scale));
+            estimate = (Vector<T>)Engine.Subtract(Engine.Add(vector, scaledEstimate), scaledHvp);
+        }
+
+        return estimate;
+    }
+
+    /// <summary>
+    /// Computes inverse Hessian-vector product using conjugate gradient.
+    /// </summary>
+    private Vector<T> ComputeIHVP_ConjugateGradient(Vector<T> vector)
+    {
+        var x = new Vector<T>(vector.Length); // Initial guess
+        var r = vector.Clone(); // Residual
+        var p = r.Clone(); // Search direction
+
+        for (int iter = 0; iter < _maxIterations; iter++)
+        {
+            // Compute average Hessian-vector product over training data
+            var Ap = ComputeAverageHessianVectorProduct(p);
+
+            // Add damping: Ap = Ap + damping * p — vectorized
+            Ap = (Vector<T>)Engine.Add(Ap, Engine.Multiply(p, NumOps.FromDouble(_damping)));
+
+            // Compute step size
+            double rDotR = NumOps.ToDouble(VectorHelper.DotProduct(r, r));
+            double pDotAp = NumOps.ToDouble(VectorHelper.DotProduct(p, Ap));
+
+            if (Math.Abs(pDotAp) < 1e-10) break;
+
+            double alpha = rDotR / pDotAp;
+
+            // Update solution: x = x + alpha * p — vectorized
+            x = (Vector<T>)Engine.Add(x, Engine.Multiply(p, NumOps.FromDouble(alpha)));
+
+            // Update residual: r_new = r - alpha * Ap — vectorized
+            var rNew = (Vector<T>)Engine.Subtract(r, Engine.Multiply(Ap, NumOps.FromDouble(alpha)));
+
+            double rNewDotRNew = NumOps.ToDouble(VectorHelper.DotProduct(rNew, rNew));
+            if (rNewDotRNew < 1e-10) break;
+
+            // Update search direction: p = r_new + beta * p — vectorized
+            double beta = rNewDotRNew / rDotR;
+            p = (Vector<T>)Engine.Add(rNew, Engine.Multiply(p, NumOps.FromDouble(beta)));
+
+            r = rNew;
+        }
+
+        return x;
+    }
+
+    /// <summary>
+    /// Computes inverse Hessian-vector product directly (only for small models).
+    /// </summary>
+    private Vector<T> ComputeIHVP_Direct(Vector<T> vector)
+    {
+        // Compute full Hessian (expensive!)
+        int n = vector.Length;
+
+        // For very small models only
+        if (n > 100)
+        {
+            // Fall back to LiSSA for larger models
+            return ComputeIHVP_LiSSA(vector);
+        }
+
+        var hessian = new Matrix<T>(n, n);
+
+        // Compute Hessian columns via Hessian-vector products with unit vectors
+        for (int j = 0; j < n; j++)
+        {
+            // Use Hessian-vector product with unit vector
+            var unitVector = new Vector<T>(n);
+            unitVector[j] = NumOps.One;
+
+            var hvp = ComputeAverageHessianVectorProduct(unitVector);
+
+            for (int i = 0; i < n && i < hvp.Length; i++)
+            {
+                hessian[i, j] = hvp[i];
+            }
+
+            // Add damping
+            hessian[j, j] = NumOps.Add(hessian[j, j], NumOps.FromDouble(_damping));
+        }
+
+        // Solve (H + damping*I) * result = vector using Cholesky
+        return SolvePositiveDefinite(hessian, vector);
+    }
+
+    /// <summary>
+    /// Computes Hessian-vector product for a single sample.
+    /// </summary>
+    /// <remarks>
+    /// Influence functions require a parameter-space Hessian-vector product:
+    /// <c>H_θ * v</c> where <c>H_θ = ∂²L/∂θ²</c>. The previous implementation perturbed
+    /// the <i>input</i> instead of the parameters and only iterated <c>input.Length</c>
+    /// dimensions, which silently skipped most of the parameter vector and produced
+    /// numerically valid but mathematically wrong IHVPs. AiDotNet does not currently
+    /// expose a generic per-sample parameter-Hessian path, so this method now fails
+    /// fast with <see cref="NotSupportedException"/> rather than returning misleading
+    /// scores. Implement a real parameter-space HVP (e.g. via Pearlmutter's trick or
+    /// double-backprop on the GradientTape) and route this call through it.
+    /// </remarks>
+    private Vector<T> ComputeHessianVectorProduct(Vector<T> input, Vector<T> target, Vector<T> vector)
+    {
+        // Public entry points (ComputeInfluence, ComputeAverageInfluence, etc.) call
+        // EnsureHvpAvailable first, so by the time we reach this method _hvpFunction
+        // is guaranteed non-null. The null-forgiving assert keeps the contract local.
+        var hvp = _hvpFunction!;
+        return hvp(input, target, vector);
+    }
+
+    /// <summary>
+    /// Throws <see cref="NotSupportedException"/> with clear guidance if the caller did
+    /// not supply an <c>hvpFunction</c> at construction time. Public influence-scoring
+    /// methods invoke this BEFORE doing any work so users find out at the entry point
+    /// rather than after the gradient cache is populated.
+    /// </summary>
+    private void EnsureHvpAvailable()
+    {
+        if (_hvpFunction is not null) return;
+        throw new NotSupportedException(
+            "InfluenceFunctionExplainer requires a parameter-space Hessian-vector " +
+            "product function. AiDotNet does not yet ship a generic per-sample " +
+            "parameter-Hessian path (would need Pearlmutter's trick or double-backprop " +
+            "on the GradientTape). Pass the optional 'hvpFunction' argument to either " +
+            "constructor: a delegate (input, target, vector) => H_θ * vector, computed " +
+            "via your model's autodiff stack. Without it, ComputeInfluence and the " +
+            "iterative IHVP methods (LiSSA, ConjugateGradient, Direct) cannot run.");
+    }
+
+    /// <summary>
+    /// Computes average Hessian-vector product over training data.
+    /// </summary>
+    private Vector<T> ComputeAverageHessianVectorProduct(Vector<T> vector)
+    {
+        int n = vector.Length;
+        var avgHvp = new Vector<T>(n);
+        int numSamples = Math.Min(50, _trainingData.Rows); // Subsample for efficiency
+
+        var rand = _randomState.HasValue
+            ? RandomHelper.CreateSeededRandom(_randomState.Value + 1000)
+            : RandomHelper.CreateSecureRandom();
+
+        for (int s = 0; s < numSamples; s++)
+        {
+            int idx = rand.Next(_trainingData.Rows);
+            var input = _trainingData.GetRow(idx);
+            var label = _trainingLabels[idx];
+
+            var hvp = ComputeHessianVectorProduct(input, new Vector<T>(new[] { label }), vector);
+
+            avgHvp = (Vector<T>)Engine.Add(avgHvp, hvp);
+        }
+
+        // Average — vectorized
+        avgHvp = (Vector<T>)Engine.Divide(avgHvp, NumOps.FromDouble(numSamples));
+
+        return avgHvp;
+    }
+
+    /// <summary>
+    /// Computes average gradient over training data.
+    /// </summary>
+    private Vector<T> ComputeAverageGradient()
+    {
+        EnsureTrainingGradientsComputed();
+
+        var cachedGrads = _cachedTrainingGradients
+            ?? throw new InvalidOperationException("Training gradients not computed.");
+        int n = cachedGrads.Columns;
+        var avg = new Vector<T>(n);
+
+        for (int i = 0; i < _trainingData.Rows; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                avg[j] = NumOps.Add(avg[j], _cachedTrainingGradients[i, j]);
+            }
+        }
+
+        for (int j = 0; j < n; j++)
+        {
+            avg[j] = NumOps.Divide(avg[j], NumOps.FromDouble(_trainingData.Rows));
+        }
+
+        return avg;
+    }
+
+    /// <summary>
+    /// Ensures training gradients are computed and cached.
+    /// </summary>
+    private void EnsureTrainingGradientsComputed()
+    {
+        if (_cachedTrainingGradients != null) return;
+
+        int numSamples = _trainingData.Rows;
+        int numParams = 0;
+
+        // Compute first gradient to determine size
+        var firstGrad = ComputeGradient(_trainingData.GetRow(0),
+            new Vector<T>(new[] { _trainingLabels[0] }));
+        numParams = firstGrad.Length;
+
+        _cachedTrainingGradients = new Matrix<T>(numSamples, numParams);
+
+        for (int j = 0; j < numParams; j++)
+        {
+            _cachedTrainingGradients[0, j] = firstGrad[j];
+        }
+
+        for (int i = 1; i < numSamples; i++)
+        {
+            var grad = ComputeGradient(_trainingData.GetRow(i),
+                new Vector<T>(new[] { _trainingLabels[i] }));
+
+            // Reject inconsistent gradient widths instead of silently truncating /
+            // zero-filling. A mismatch here means ComputeGradient is returning
+            // different parameter vectors for different samples — every downstream
+            // influence score would be quietly corrupted.
+            if (grad.Length != numParams)
+            {
+                throw new InvalidOperationException(
+                    $"ComputeGradient returned an inconsistent parameter vector for " +
+                    $"training sample {i}: expected length {numParams} (matching sample 0), " +
+                    $"got {grad.Length}. Influence scoring requires every training sample " +
+                    $"to share the same parameter vector layout.");
+            }
+
+            for (int j = 0; j < numParams; j++)
+            {
+                _cachedTrainingGradients[i, j] = grad[j];
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Computes the gradient of the loss for a single sample w.r.t. model parameters.
+    /// </summary>
+    /// <remarks>
+    /// Constructor invariants guarantee exactly one of <c>_gradientFunction</c> or
+    /// <c>_network</c> is non-null, so the dispatch below is exhaustive. The previous
+    /// finite-difference fallback was dead code and has been removed; if a future
+    /// constructor relaxes the invariant, this method will throw fast instead of
+    /// silently returning approximate input-gradients (which is the wrong quantity
+    /// for influence functions).
+    /// </remarks>
+    private Vector<T> ComputeGradient(Vector<T> input, Vector<T> target)
+    {
+        if (_gradientFunction != null)
+        {
+            return _gradientFunction(input, target);
+        }
+
+        if (_network != null)
+        {
+            var inputTensor = Tensor<T>.FromVector(input);
+            var targetTensor = Tensor<T>.FromVector(target);
+            return _network.ComputeGradients(inputTensor, targetTensor);
+        }
+
+        throw new InvalidOperationException(
+            "InfluenceFunctionExplainer was constructed without a network or gradient " +
+            "function. This should be unreachable given the constructor invariants; if " +
+            "you reach this branch, the constructor contract has been violated.");
+    }
+
+    /// <summary>
+    /// Solves a positive definite system using Cholesky decomposition.
+    /// </summary>
+    private Vector<T> SolvePositiveDefinite(Matrix<T> A, Vector<T> b)
+    {
+        int n = A.Rows;
+        var L = new Matrix<T>(n, n);
+
+        // Cholesky decomposition
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j <= i; j++)
+            {
+                double sum = NumOps.ToDouble(A[i, j]);
+                for (int k = 0; k < j; k++)
+                {
+                    sum -= NumOps.ToDouble(L[i, k]) * NumOps.ToDouble(L[j, k]);
+                }
+
+                if (i == j)
+                {
+                    L[i, j] = NumOps.FromDouble(Math.Sqrt(Math.Max(sum, 1e-10)));
+                }
+                else
+                {
+                    double ljj = NumOps.ToDouble(L[j, j]);
+                    L[i, j] = NumOps.FromDouble(ljj > 1e-10 ? sum / ljj : 0);
+                }
+            }
+        }
+
+        // Solve L * y = b
+        var y = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double sum = NumOps.ToDouble(b[i]);
+            for (int j = 0; j < i; j++)
+            {
+                sum -= NumOps.ToDouble(L[i, j]) * NumOps.ToDouble(y[j]);
+            }
+            double lii = NumOps.ToDouble(L[i, i]);
+            y[i] = NumOps.FromDouble(lii > 1e-10 ? sum / lii : 0);
+        }
+
+        // Solve L^T * x = y
+        var x = new Vector<T>(n);
+        for (int i = n - 1; i >= 0; i--)
+        {
+            double sum = NumOps.ToDouble(y[i]);
+            for (int j = i + 1; j < n; j++)
+            {
+                sum -= NumOps.ToDouble(L[j, i]) * NumOps.ToDouble(x[j]);
+            }
+            double lii = NumOps.ToDouble(L[i, i]);
+            x[i] = NumOps.FromDouble(lii > 1e-10 ? sum / lii : 0);
+        }
+
+        return x;
+    }
+}
+
+/// <summary>
+/// Methods for computing inverse Hessian-vector products.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> The Hessian is a huge matrix of second derivatives.
+/// We need its inverse times a vector, but computing the inverse directly is too slow.
+/// These methods approximate H^(-1) * v efficiently.
+/// </para>
+/// </remarks>
+public enum InverseHessianMethod
+{
+    /// <summary>
+    /// LiSSA (Linear-time Stochastic Second-order Algorithm).
+    /// Fast and memory-efficient, recommended for large models.
+    /// </summary>
+    LiSSA,
+
+    /// <summary>
+    /// Conjugate Gradient method.
+    /// More accurate but slower than LiSSA.
+    /// </summary>
+    ConjugateGradient,
+
+    /// <summary>
+    /// Direct matrix inversion.
+    /// Only feasible for very small models (less than 100 parameters).
+    /// </summary>
+    Direct
+}
+
+/// <summary>
+/// Result of influence function computation.
+/// </summary>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
+public class InfluenceFunctionResult<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the test input that was explained.
+    /// </summary>
+    public Vector<T> TestInput { get; }
+
+    /// <summary>
+    /// Gets the test label.
+    /// </summary>
+    public T TestLabel { get; }
+
+    /// <summary>
+    /// Gets influence scores for each training sample.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Positive = helpful training sample, negative = harmful.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Influences { get; }
+
+    /// <summary>
+    /// Gets the model's prediction on the test input.
+    /// </summary>
+    public Vector<T> Prediction { get; }
+
+    /// <summary>
+    /// Gets the loss on the test input.
+    /// </summary>
+    public T Loss { get; }
+
+    /// <summary>
+    /// Gets the number of training samples.
+    /// </summary>
+    public int NumTrainingSamples => Influences.Length;
+
+    /// <summary>
+    /// Initializes a new influence function result.
+    /// </summary>
+    public InfluenceFunctionResult(
+        Vector<T> testInput,
+        T testLabel,
+        Vector<T> influences,
+        Vector<T> prediction,
+        T loss)
+    {
+        TestInput = testInput;
+        TestLabel = testLabel;
+        Influences = influences;
+        Prediction = prediction;
+        Loss = loss;
+    }
+
+    /// <summary>
+    /// Gets the top K most influential training samples.
+    /// </summary>
+    /// <param name="k">Number of samples to return.</param>
+    /// <returns>Indices and influence scores of top influential samples.</returns>
+    public IEnumerable<(int Index, T Influence)> GetTopInfluential(int k = 10)
+    {
+        return Enumerable.Range(0, Influences.Length)
+            .Select(i => (Index: i, Influence: Influences[i]))
+            .OrderByDescending(x => Math.Abs(NumOps.ToDouble(x.Influence)))
+            .Take(k);
+    }
+
+    /// <summary>
+    /// Gets the most helpful training samples (highest positive influence).
+    /// </summary>
+    public IEnumerable<(int Index, T Influence)> GetMostHelpful(int k = 10)
+    {
+        return Enumerable.Range(0, Influences.Length)
+            .Select(i => (Index: i, Influence: Influences[i]))
+            .OrderByDescending(x => NumOps.ToDouble(x.Influence))
+            .Take(k);
+    }
+
+    /// <summary>
+    /// Gets the most harmful training samples (lowest/most negative influence).
+    /// </summary>
+    public IEnumerable<(int Index, T Influence)> GetMostHarmful(int k = 10)
+    {
+        return Enumerable.Range(0, Influences.Length)
+            .Select(i => (Index: i, Influence: Influences[i]))
+            .OrderBy(x => NumOps.ToDouble(x.Influence))
+            .Take(k);
+    }
+
+    /// <summary>
+    /// Returns a human-readable summary.
+    /// </summary>
+    public override string ToString()
+    {
+        var topHelpful = GetMostHelpful(3).ToList();
+        var topHarmful = GetMostHarmful(3).ToList();
+
+        return $"Influence Function Result:\n" +
+               $"  Test loss: {Loss}\n" +
+               $"  Top helpful: {string.Join(", ", topHelpful.Select(x => $"#{x.Index}({x.Influence:F4})"))}\n" +
+               $"  Top harmful: {string.Join(", ", topHarmful.Select(x => $"#{x.Index}({x.Influence:F4})"))}";
+    }
+}
+
+/// <summary>
+/// Result of self-influence computation.
+/// </summary>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
+public class SelfInfluenceResult<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the self-influence score for each training sample.
+    /// </summary>
+    public Vector<T> SelfInfluences { get; }
+
+    /// <summary>
+    /// Gets the training data.
+    /// </summary>
+    public Matrix<T> TrainingData { get; }
+
+    /// <summary>
+    /// Gets the training labels.
+    /// </summary>
+    public Vector<T> TrainingLabels { get; }
+
+    /// <summary>
+    /// Initializes a new self-influence result.
+    /// </summary>
+    public SelfInfluenceResult(Vector<T> selfInfluences, Matrix<T> trainingData, Vector<T> trainingLabels)
+    {
+        SelfInfluences = selfInfluences;
+        TrainingData = trainingData;
+        TrainingLabels = trainingLabels;
+    }
+
+    /// <summary>
+    /// Gets samples most likely to be mislabeled or problematic.
+    /// </summary>
+    /// <param name="k">Number of samples to return.</param>
+    /// <returns>Indices and self-influence scores of potentially problematic samples.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> High self-influence often indicates:
+    /// - Mislabeled data
+    /// - Outliers
+    /// - Hard examples
+    ///
+    /// These are good candidates for manual review in a data cleaning workflow.
+    /// </para>
+    /// </remarks>
+    public IEnumerable<(int Index, T SelfInfluence, Vector<T> Data, T Label)> GetPotentiallyProblematic(int k = 10)
+    {
+        return Enumerable.Range(0, SelfInfluences.Length)
+            .Select(i => (Index: i, SelfInfluence: SelfInfluences[i], Data: TrainingData.GetRow(i), Label: TrainingLabels[i]))
+            .OrderByDescending(x => NumOps.ToDouble(x.SelfInfluence))
+            .Take(k);
+    }
+
+    /// <summary>
+    /// Returns a human-readable summary.
+    /// </summary>
+    public override string ToString()
+    {
+        var topProblematic = GetPotentiallyProblematic(5).ToList();
+
+        double mean = 0, max = double.MinValue;
+        for (int i = 0; i < SelfInfluences.Length; i++)
+        {
+            double val = NumOps.ToDouble(SelfInfluences[i]);
+            mean += val;
+            if (val > max) max = val;
+        }
+        mean /= SelfInfluences.Length;
+
+        return $"Self-Influence Analysis:\n" +
+               $"  Mean self-influence: {mean:F4}\n" +
+               $"  Max self-influence: {max:F4}\n" +
+               $"  Top problematic samples: {string.Join(", ", topProblematic.Select(x => $"#{x.Index}({NumOps.ToDouble(x.SelfInfluence):F4})"))}";
+    }
+}
+
+/// <summary>
+/// Result of TracIn computation.
+/// </summary>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
+public class TracInResult<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the test input.
+    /// </summary>
+    public Vector<T> TestInput { get; }
+
+    /// <summary>
+    /// Gets the test label.
+    /// </summary>
+    public T TestLabel { get; }
+
+    /// <summary>
+    /// Gets TracIn scores for each training sample.
+    /// </summary>
+    public Vector<T> TracInScores { get; }
+
+    /// <summary>
+    /// Gets the number of checkpoints used.
+    /// </summary>
+    public int NumCheckpoints { get; }
+
+    /// <summary>
+    /// Initializes a new TracIn result.
+    /// </summary>
+    public TracInResult(Vector<T> testInput, T testLabel, Vector<T> tracInScores, int numCheckpoints)
+    {
+        TestInput = testInput;
+        TestLabel = testLabel;
+        TracInScores = tracInScores;
+        NumCheckpoints = numCheckpoints;
+    }
+
+    /// <summary>
+    /// Gets the most influential training samples according to TracIn.
+    /// </summary>
+    public IEnumerable<(int Index, T Score)> GetTopInfluential(int k = 10)
+    {
+        return Enumerable.Range(0, TracInScores.Length)
+            .Select(i => (Index: i, Score: TracInScores[i]))
+            .OrderByDescending(x => NumOps.ToDouble(x.Score))
+            .Take(k);
+    }
+
+    /// <summary>
+    /// Returns a human-readable summary.
+    /// </summary>
+    public override string ToString()
+    {
+        var top = GetTopInfluential(5).ToList();
+        return $"TracIn Result (using {NumCheckpoints} checkpoints):\n" +
+               $"  Top influential: {string.Join(", ", top.Select(x => $"#{x.Index}({NumOps.ToDouble(x.Score):F4})"))}";
+    }
+}

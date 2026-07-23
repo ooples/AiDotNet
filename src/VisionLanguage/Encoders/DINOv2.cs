@@ -1,0 +1,253 @@
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.VisionLanguage.Interfaces;
+
+namespace AiDotNet.VisionLanguage.Encoders;
+
+/// <summary>
+/// DINOv2 self-supervised vision encoder producing universal visual features without labels.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// DINOv2 (Oquab et al., 2024) trains ViT with iBOT masked image modeling + DINO self-distillation
+/// on LVD-142M curated images. Register tokens reduce artifact patterns in attention maps. The model
+/// produces features usable for classification, segmentation, and depth estimation via linear probing.
+/// </para>
+/// <para><b>References:</b>
+/// <list type="bullet"><item>Paper: "DINOv2: Learning Robust Visual Features without Supervision" (Oquab et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> DINOv2 from Meta learns powerful visual features without any
+/// labeled data using self-supervised training on 142 million curated images. Its features
+/// are so general that a simple linear classifier on top achieves strong results for image
+/// classification, segmentation, and depth estimation — making it a universal vision backbone.
+/// Default values follow the original paper settings.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a DINOv2 model for self-supervised visual feature extraction
+/// // producing universal features for classification, segmentation, and depth
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DINOv2&lt;double&gt;(architecture, "dinov2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DINOv2&lt;double&gt;(architecture, new DINOv2Options());
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper(
+    "DINOv2: Learning Robust Visual Features without Supervision",
+    "https://arxiv.org/abs/2304.07193",
+    Year = 2024,
+    Authors = "Oquab et al."
+)]
+public class DINOv2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+{
+    private readonly DINOv2Options _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    public DINOv2(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        DINOv2Options? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new DINOv2Options();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.EmbeddingDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    public DINOv2(
+        NeuralNetworkArchitecture<T> architecture,
+        DINOv2Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new DINOv2Options();
+        if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0)
+        {
+            if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
+                throw new ArgumentException(
+                    "DINOv2 native mode requires square images (InputWidth must equal InputHeight).",
+                    nameof(architecture)
+                );
+            if (architecture.InputDepth > 0 && architecture.InputDepth != 3)
+                throw new ArgumentException(
+                    "DINOv2 native mode requires 3-channel RGB input (InputDepth must equal 3).",
+                    nameof(architecture)
+                );
+            _options = new DINOv2Options(_options) { ImageSize = architecture.InputHeight };
+        }
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.EmbeddingDim;
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.EmbeddingDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return L2Normalize(c);
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+            Layers.AddRange(Architecture.Layers);
+        else
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultViTLayers(
+                    _options.EmbeddingDim,
+                    _options.NumLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    patchSize: _options.PatchSize
+                )
+            );
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "DINOv2-Native" : "DINOv2-ONNX",
+            Description =
+                "DINOv2: Learning Robust Visual Features without Supervision (Oquab et al., 2024)",
+            FeatureCount = _options.EmbeddingDim,
+            Complexity = _options.NumLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "DINOv2";
+        m.AdditionalInfo["RegisterTokens"] = _options.NumRegisterTokens.ToString();
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.EmbeddingDim);
+        writer.Write(_options.NumLayers);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.NumRegisterTokens);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.EmbeddingDim = reader.ReadInt32();
+        _options.NumLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        _options.NumRegisterTokens = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new DINOv2<T>(Architecture, mp, _options);
+        return new DINOv2<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(DINOv2<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
+}

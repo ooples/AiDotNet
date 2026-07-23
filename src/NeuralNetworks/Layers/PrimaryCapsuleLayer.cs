@@ -1,0 +1,1011 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents a primary capsule layer for capsule networks.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The PrimaryCapsuleLayer is the first layer in a capsule network that transforms traditional scalar feature maps
+/// into capsule vectors. It performs a convolution operation followed by reshaping the output into capsules.
+/// Each capsule represents a group of neurons that encodes both the presence and properties of a particular entity.
+/// This layer serves as a bridge between standard convolutional layers and higher-level capsule layers.
+/// </para>
+/// <para><b>For Beginners:</b> This layer is the first step in creating a capsule network.
+/// 
+/// In traditional neural networks, each neuron outputs a single number indicating the presence of a feature.
+/// In capsule networks, neurons are grouped into "capsules" where each capsule outputs a vector:
+/// - The length of the vector represents the presence of an entity
+/// - The orientation of the vector represents properties of that entity
+/// 
+/// Think of it like this:
+/// - Standard neurons: "I see a nose with 90% confidence"
+/// - Capsule neurons: "I see a nose with 90% confidence, and it's pointing 30° to the left, 
+///   it's 2cm long, it has a slightly curved shape..."
+/// 
+/// The primary capsule layer converts traditional feature maps (from convolutional layers)
+/// into these vector-based capsules that can capture more detailed information about the entities detected.
+/// 
+/// This approach helps the network understand spatial relationships and maintain information
+/// about pose, orientation, and other properties that are typically lost in traditional networks.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Capsule)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 4, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// The weight tensor for convolution operations. Shape: [outputChannels, inputChannels * kernelSize * kernelSize]
+    /// </summary>
+    /// <remarks>
+    /// This tensor contains the learnable weights for the convolution operation.
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _convWeights;
+
+    /// <summary>
+    /// The bias tensor for convolution operations. Shape: [outputChannels]
+    /// </summary>
+    /// <remarks>
+    /// This tensor contains the learnable biases for the convolution operation.
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _convBias;
+
+    /// <summary>
+    /// The gradient of the loss with respect to the convolution weights.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the gradient of the convolution weights, which is used to update the weights
+    /// during the parameter update step.
+    /// </remarks>
+    private Tensor<T>? _convWeightsGradient;
+
+    /// <summary>
+    /// The gradient of the loss with respect to the convolution bias.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the gradient of the convolution bias, which is used to update the bias
+    /// during the parameter update step.
+    /// </remarks>
+    private Tensor<T>? _convBiasGradient;
+
+    /// <summary>
+    /// The input tensor from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the input tensor from the most recent forward pass, which is needed
+    /// during the backward pass for gradient calculation.
+    /// </remarks>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Stores whether the original input was provided in NCHW layout.
+    /// </summary>
+    private bool _inputWasNCHW;
+
+    /// <summary>
+    /// The output tensor from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the output tensor from the most recent forward pass, which is needed
+    /// during the backward pass for gradient calculation.
+    /// </remarks>
+    private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastPreSquash;
+
+    /// <summary>
+    /// The number of input channels.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the number of channels in the input tensor.
+    /// </remarks>
+    // Non-readonly: lazy ctor leaves _inputChannels = -1 until
+    // OnFirstForward resolves it from input.Shape[1] (NCHW). Eager
+    // ctor sets it at construction.
+    private int _inputChannels;
+    private bool _isInitialized;
+
+    /// <summary>
+    /// The number of capsule channels.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the number of different types of capsules that the layer will produce.
+    /// </remarks>
+    private readonly int _capsuleChannels;
+
+    /// <summary>
+    /// The dimension of each capsule.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the dimension of the vector that each capsule outputs.
+    /// </remarks>
+    private readonly int _capsuleDimension;
+
+    /// <summary>
+    /// The size of the convolutional kernel.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the size of the square kernel used for convolution operations.
+    /// </remarks>
+    private readonly int _kernelSize;
+
+    /// <summary>
+    /// The stride of the convolution operation.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the number of pixels to skip when sliding the convolution window.
+    /// </remarks>
+    private readonly int _stride;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because the PrimaryCapsuleLayer has trainable parameters.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that PrimaryCapsuleLayer can be trained through backpropagation. The layer
+    /// has trainable parameters (convolution weights and biases) that are updated during training to optimize
+    /// the capsule transformation process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
+    /// 
+    /// A value of true means:
+    /// - The layer has internal values (weights and biases) that change during training
+    /// - It will improve its performance as it sees more data
+    /// - It learns to extract better capsule representations from the input
+    /// 
+    /// During training, the layer learns to transform input features into capsule vectors
+    /// that best represent the entities in the data.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount => _convWeights.Length + _convBias.Length;
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// PrimaryCapsuleLayer requires Im2Col transformation and data reordering that don't have
+    /// GPU kernel implementations. The previous "GPU" implementation downloaded to CPU for these
+    /// operations, defeating GPU benefits - CPU fallback is used instead.
+    /// </remarks>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PrimaryCapsuleLayer{T}"/> class with the specified parameters
+    /// and a scalar activation function.
+    /// </summary>
+    /// <param name="inputChannels">The number of input channels.</param>
+    /// <param name="capsuleChannels">The number of capsule channels.</param>
+    /// <param name="capsuleDimension">The dimension of each capsule.</param>
+    /// <param name="kernelSize">The size of the convolutional kernel.</param>
+    /// <param name="stride">The stride of the convolution operation.</param>
+    /// <param name="scalarActivation">The activation function to apply after processing. Defaults to Squash if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a PrimaryCapsuleLayer with the specified parameters. It initializes the convolution
+    /// weights and biases and sets up the layer to transform input feature maps into primary capsules.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor sets up the layer with the necessary parameters.
+    /// 
+    /// When creating a PrimaryCapsuleLayer, you need to specify:
+    /// - inputChannels: How many channels your input has (e.g., 3 for RGB images, or more if from a conv layer)
+    /// - capsuleChannels: How many different types of capsules to create
+    /// - capsuleDimension: How many values in each capsule's output vector
+    /// - kernelSize: The size of the area examined by the convolution (e.g., 3 for a 3×3 kernel)
+    /// - stride: How far to move the kernel each step
+    /// - scalarActivation: The function applied to each scalar value (defaults to Squash)
+    /// 
+    /// For example, if you set capsuleChannels=8 and capsuleDimension=16, you'll have 8 different 
+    /// types of capsules, each outputting a 16-dimensional vector.
+    /// 
+    /// The default Squash activation function is specifically designed for capsule networks.
+    /// It ensures that the length of each capsule's output vector is between 0 and 1, 
+    /// which is ideal for representing the probability of an entity being present.
+    /// </para>
+    /// </remarks>
+    public PrimaryCapsuleLayer(int inputChannels, int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IActivationFunction<T>? scalarActivation = null)
+        : base([inputChannels], [capsuleChannels * capsuleDimension], scalarActivation ?? new SquashActivation<T>())
+    {
+        _inputChannels = inputChannels;
+        _capsuleChannels = capsuleChannels;
+        _capsuleDimension = capsuleDimension;
+        _kernelSize = kernelSize;
+        _stride = stride;
+
+        int outputChannels = capsuleChannels * capsuleDimension;
+        int inputSize = inputChannels * kernelSize * kernelSize;
+        _convWeights = new Tensor<T>([outputChannels, inputSize]);
+        _convBias = new Tensor<T>([outputChannels]);
+
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor (scalar activation): resolves <c>inputChannels</c>
+    /// from <c>input.Shape[1]</c> (NCHW) on first <see cref="Forward"/>.
+    /// Capsule architecture (channels × dimension) and conv geometry
+    /// (kernelSize, stride) are architectural and stay required.
+    /// </summary>
+    /// <param name="capsuleChannels">Number of capsule channels.</param>
+    /// <param name="capsuleDimension">Dimension of each capsule's output vector.</param>
+    /// <param name="kernelSize">Convolution kernel size (square).</param>
+    /// <param name="stride">Convolution stride.</param>
+    /// <param name="scalarActivation">Optional scalar activation (defaults to Squash).</param>
+    public PrimaryCapsuleLayer(int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IActivationFunction<T>? scalarActivation = null)
+        : base([-1], [capsuleChannels * capsuleDimension], scalarActivation ?? new SquashActivation<T>())
+    {
+        if (capsuleChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capsuleChannels), "capsuleChannels must be positive.");
+        if (capsuleDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capsuleDimension), "capsuleDimension must be positive.");
+        if (kernelSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
+        if (stride <= 0)
+            throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
+
+        _inputChannels = -1;
+        _capsuleChannels = capsuleChannels;
+        _capsuleDimension = capsuleDimension;
+        _kernelSize = kernelSize;
+        _stride = stride;
+
+        // Empty placeholders — EnsureInitialized re-allocates against
+        // resolved _inputChannels.
+        _convWeights = new Tensor<T>([0, 0]);
+        _convBias = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PrimaryCapsuleLayer{T}"/> class with the specified parameters
+    /// and a vector activation function.
+    /// </summary>
+    /// <param name="inputChannels">The number of input channels.</param>
+    /// <param name="capsuleChannels">The number of capsule channels.</param>
+    /// <param name="capsuleDimension">The dimension of each capsule.</param>
+    /// <param name="kernelSize">The size of the convolutional kernel.</param>
+    /// <param name="stride">The stride of the convolution operation.</param>
+    /// <param name="vectorActivation">The vector activation function to apply after processing. Defaults to Squash if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a PrimaryCapsuleLayer with the specified parameters and a vector activation function.
+    /// A vector activation function operates on entire capsule vectors rather than individual elements.
+    /// </para>
+    /// <para><b>For Beginners:</b> This constructor is similar to the other one, but uses a vector-based activation function.
+    ///
+    /// A vector activation function:
+    /// - Operates on entire capsule vectors at once, rather than one value at a time
+    /// - Can better preserve the relationship between values in a capsule
+    /// - The default Squash function ensures vector lengths are between 0 and 1
+    ///
+    /// The Squash function is specifically designed for capsule networks. It scales vectors
+    /// non-linearly so that small vectors shrink to nearly zero length, while large vectors
+    /// shrink to have a length slightly below 1, preserving their direction.
+    /// </para>
+    /// </remarks>
+    public PrimaryCapsuleLayer(int inputChannels, int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IVectorActivationFunction<T>? vectorActivation = null)
+        : base([inputChannels], [capsuleChannels * capsuleDimension], vectorActivation ?? new SquashActivation<T>())
+    {
+        _inputChannels = inputChannels;
+        _capsuleChannels = capsuleChannels;
+        _capsuleDimension = capsuleDimension;
+        _kernelSize = kernelSize;
+        _stride = stride;
+
+        int outputChannels = capsuleChannels * capsuleDimension;
+        int inputSize = inputChannels * kernelSize * kernelSize;
+        _convWeights = new Tensor<T>([outputChannels, inputSize]);
+        _convBias = new Tensor<T>([outputChannels]);
+
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor (vector activation): resolves <c>inputChannels</c>
+    /// from <c>input.Shape[1]</c> (NCHW) on first <see cref="Forward"/>.
+    /// See the scalar-activation lazy ctor for design notes.
+    /// </summary>
+    /// <param name="capsuleChannels">Number of capsule channels.</param>
+    /// <param name="capsuleDimension">Dimension of each capsule's output vector.</param>
+    /// <param name="kernelSize">Convolution kernel size (square).</param>
+    /// <param name="stride">Convolution stride.</param>
+    /// <param name="vectorActivation">Optional vector activation (defaults to Squash).</param>
+    public PrimaryCapsuleLayer(int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IVectorActivationFunction<T>? vectorActivation)
+        : base([-1], [capsuleChannels * capsuleDimension], vectorActivation ?? new SquashActivation<T>())
+    {
+        if (capsuleChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capsuleChannels), "capsuleChannels must be positive.");
+        if (capsuleDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capsuleDimension), "capsuleDimension must be positive.");
+        if (kernelSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
+        if (stride <= 0)
+            throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
+
+        _inputChannels = -1;
+        _capsuleChannels = capsuleChannels;
+        _capsuleDimension = capsuleDimension;
+        _kernelSize = kernelSize;
+        _stride = stride;
+        _convWeights = new Tensor<T>([0, 0]);
+        _convBias = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Resolves <c>_inputChannels</c> from input shape using the same
+    /// rank-aware reshape contract that <see cref="Forward"/> uses, so
+    /// the lazy contract matches the eager behavior:
+    /// <list type="bullet">
+    /// <item><b>rank-1 [C]</b>: channels = shape[0] (Forward expands to
+    /// [1,1,1,C], NHWC).</item>
+    /// <item><b>rank-2 [W, C]</b>: channels = shape[1] (Forward expands
+    /// to [1,1,W,C], NHWC).</item>
+    /// <item><b>rank-3 [H, W, C]</b>: channels = shape[2] (Forward expands
+    /// to [1,H,W,C], NHWC). Note: Forward's NCHW [C,H,W] disambiguation
+    /// requires <c>_inputChannels</c> to already be known, so it can't
+    /// be detected lazily — rank-3 inputs are always treated as NHWC
+    /// in the lazy path. Callers needing rank-3 NCHW must use the
+    /// eager ctor.</item>
+    /// <item><b>rank-4 [B, C, H, W]</b>: channels = shape[1] (NCHW —
+    /// Forward's primary 4D path; matches the
+    /// <c>[LayerProperty(TestInputShape="1, 1, 8, 8")]</c> contract).</item>
+    /// <item><b>rank-5+ [B1, ..., H, W, C]</b>: channels = last axis
+    /// (Forward's higher-rank branch reshapes to [flatBatch, H, W, C],
+    /// NHWC).</item>
+    /// </list>
+    /// Pre-fix this method hard-required rank-4 and always read
+    /// shape[1], which both rejected valid rank-1/2/3 inputs that
+    /// Forward already handled, AND mis-resolved NHWC [B,H,W,C] inputs
+    /// by treating height as channels.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"PrimaryCapsuleLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputChannels;
+        if (rank <= 3)
+        {
+            // rank-1/2/3: channels is the last axis (NHWC convention,
+            // matches Forward's shape4D expansion path).
+            inputChannels = input.Shape[rank - 1];
+        }
+        else if (rank == 4)
+        {
+            // Standard NCHW [B, C, H, W] — channel axis is at index 1.
+            // This is the primary 4D path Forward uses when shape[1]
+            // matches _inputChannels (which is what the lazy ctor will
+            // see by definition once _inputChannels is set here).
+            inputChannels = input.Shape[1];
+        }
+        else
+        {
+            // rank-5+: Forward's higher-rank branch reshapes to
+            // [flatBatch, H, W, C] (NHWC). Channels is the last axis.
+            inputChannels = input.Shape[rank - 1];
+        }
+
+        if (inputChannels <= 0)
+            throw new ArgumentException(
+                $"PrimaryCapsuleLayer's input channel count must be positive; got {inputChannels} from input shape.",
+                nameof(input));
+
+        _inputChannels = inputChannels;
+        ResolveShapes(new[] { inputChannels }, OutputShape);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate conv weights against the resolved
+    /// <c>_inputChannels × kernelSize × kernelSize</c> input dim and run
+    /// the standard parameter initialization. Eager-ctor instances bypass
+    /// this path because <see cref="_isInitialized"/> is set to true at
+    /// construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_inputChannels <= 0)
+            throw new InvalidOperationException(
+                "PrimaryCapsuleLayer cannot initialize until OnFirstForward has resolved the input channel count from input shape.");
+
+        int outputChannels = _capsuleChannels * _capsuleDimension;
+        int inputSize = _inputChannels * _kernelSize * _kernelSize;
+        _convWeights = AllocateLazyWeight([outputChannels, inputSize]);
+        _convBias = AllocateLazyWeight([outputChannels]);
+        InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Initializes the layer's weights and biases.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method initializes the convolution weights using a scaling factor derived from the dimensions
+    /// of the weight matrices. The scaling helps prevent vanishing or exploding gradients
+    /// during training. The bias is initialized to zero.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method sets up the initial values for the layer's weights and biases.
+    /// 
+    /// Proper initialization is important for neural networks because:
+    /// - Starting with good values helps the network learn faster
+    /// - It helps prevent problems during training like vanishing or exploding gradients
+    ///   (when values become too small or too large)
+    /// 
+    /// This method:
+    /// - Calculates a scaling factor based on the size of the matrices
+    /// - Initializes weights to small random values multiplied by this scale
+    /// - Sets all bias values to zero
+    /// 
+    /// This approach (known as "He initialization") works well for many types of neural networks,
+    /// including capsule networks.
+    /// </para>
+    /// </remarks>
+    private void InitializeParameters()
+    {
+        int rows = _convWeights.Shape[0];
+        int cols = _convWeights.Shape[1];
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
+
+        // Initialize weights with scaled random values using Engine
+        // operations. Critical: copy the result into the EXISTING
+        // lazy-allocated _convWeights tensor in place — replacing it
+        // would discard the AllocateLazyWeight registration that the
+        // ctor set up. Closes review-comment #1271.7Bo8.
+        var randomTensor = Tensor<T>.CreateRandom(rows, cols);
+        var halfTensor = new Tensor<T>([rows, cols]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+        scaled.AsSpan().CopyTo(_convWeights.AsWritableSpan());
+
+        // Initialize bias to zero using Fill (already in place).
+        _convBias.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the primary capsule layer.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor containing capsule vectors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the primary capsule layer. It performs a convolution
+    /// operation on the input tensor, reshapes the result into capsule vectors, and applies the activation
+    /// function to produce the final output. The input and output tensors are cached for use during the
+    /// backward pass.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method transforms the input features into capsule vectors.
+    /// 
+    /// During the forward pass:
+    /// 1. The method applies a convolution operation to the input
+    ///    (similar to a standard convolutional layer)
+    /// 2. It reshapes the result into groups of vectors (the capsules)
+    /// 3. It applies the activation function (typically Squash) to each capsule vector
+    /// 
+    /// The output is a set of capsule vectors where:
+    /// - Each capsule vector's length represents the probability of detecting an entity
+    /// - The orientation of the vector represents properties of the detected entity
+    /// 
+    /// This is the key difference from traditional neural networks - instead of just 
+    /// detecting if something is present, the capsules also capture information about 
+    /// the properties of what they detect.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Lazy-ctor instances start with _inputChannels = -1; resolve from
+        // input.Shape on first call. Eager-ctor instances are already
+        // initialized so both calls are no-ops.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+
+        // PrimaryCapsule needs to handle both NCHW (from ConvolutionalLayer) and NHWC inputs
+        // Detect format: if first dim (for 3D) or second dim (for 4D) matches _inputChannels, it's NCHW
+        Tensor<T> processInput;
+        int batchSize;
+        bool inputIsNCHW = false;
+
+        if (rank < 4)
+        {
+            // For 3D input, detect format:
+            // NCHW: [C, H, W] where C == _inputChannels
+            // NHWC: [H, W, C] where C == _inputChannels (last dim)
+            if (rank == 3 && input.Shape[0] == _inputChannels)
+            {
+                // NCHW format: [C, H, W] -> [1, C, H, W]
+                inputIsNCHW = true;
+                processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+                batchSize = 1;
+            }
+            else
+            {
+                // NHWC format: add leading dimensions to make 4D
+                // 3D [H, W, C] -> [1, H, W, C]
+                // 2D [W, C] -> [1, 1, W, C]
+                // 1D [C] -> [1, 1, 1, C]
+                var shape4D = new int[4];
+                int offset = 4 - rank;
+                for (int i = 0; i < offset; i++)
+                    shape4D[i] = 1;
+                for (int i = 0; i < rank; i++)
+                    shape4D[offset + i] = input.Shape[i];
+                processInput = Engine.Reshape(input, shape4D);
+                batchSize = shape4D[0];
+            }
+        }
+        else if (rank == 4)
+        {
+            // For 4D, detect NCHW vs NHWC by checking which dim matches _inputChannels
+            // NCHW: [B, C, H, W] where C == _inputChannels (dim 1)
+            // NHWC: [B, H, W, C] where C == _inputChannels (dim 3)
+            if (input.Shape[1] == _inputChannels && input.Shape[3] != _inputChannels)
+            {
+                inputIsNCHW = true;
+            }
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch, assume NHWC for last 3 dims
+            // e.g., 5D [B1, B2, H, W, C] -> [B1*B2, H, W, C]
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            int height = input.Shape[rank - 3];
+            int width = input.Shape[rank - 2];
+            int channels = input.Shape[rank - 1];
+            processInput = Engine.Reshape(input, [flatBatch, height, width, channels]);
+        }
+
+        _inputWasNCHW = inputIsNCHW;
+        _lastInput = processInput;
+
+        // Get spatial dimensions based on format
+        int inputHeight, inputWidth;
+        if (inputIsNCHW)
+        {
+            // NCHW: [B, C, H, W]
+            inputHeight = processInput.Shape[2];
+            inputWidth = processInput.Shape[3];
+        }
+        else
+        {
+            // NHWC: [B, H, W, C]
+            inputHeight = processInput.Shape[1];
+            inputWidth = processInput.Shape[2];
+        }
+
+        int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
+        int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
+
+        // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW]
+        int outputChannels = _capsuleChannels * _capsuleDimension;
+        var kernelNCHW = Engine.Reshape(_convWeights, [outputChannels, _inputChannels, _kernelSize, _kernelSize]);
+
+        // Convert input to NCHW for Conv2D if needed
+        Tensor<T> inputNCHW = inputIsNCHW
+            ? processInput
+            : Engine.TensorPermute(processInput, [0, 3, 1, 2]);
+
+        // Convolution
+        var convNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
+
+        // Add bias (reshape to [1, outChannels, 1, 1] for broadcast)
+        var biasNCHW = Engine.Reshape(_convBias, [1, outputChannels, 1, 1]);
+        convNCHW = Engine.TensorBroadcastAdd(convNCHW, biasNCHW);
+
+        // Convert back to NHWC and reshape to capsule layout
+        var convNHWC = Engine.TensorPermute(convNCHW, [0, 2, 3, 1]);
+        var output = Engine.Reshape(convNHWC, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+
+        // Apply activation (Squash) to each capsule vector
+        // SquashActivation expects 2D input [numCapsules, capsuleDim], so reshape and apply
+        int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
+        var flatOutput = Engine.Reshape(output, [totalCapsules, _capsuleDimension]);
+        _lastPreSquash = flatOutput;
+        var activatedFlat = ApplyActivation(flatOutput);
+        _lastOutput = Engine.Reshape(activatedFlat, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+
+        // Restore output shape to match original input rank
+        // Output is 5D [B, OH, OW, capsuleChannels, capsuleDim]
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            if (_originalInputShape.Length < 4)
+            {
+                // Lower-rank: remove batch dimension
+                // 3D input -> 4D output [OH, OW, capsuleChannels, capsuleDim]
+                return Engine.Reshape(_lastOutput, [outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+            }
+            else
+            {
+                // Higher-rank: restore leading dimensions
+                // e.g., 5D input [B1, B2, H, W, C] -> 6D output [B1, B2, OH, OW, capsuleChannels, capsuleDim]
+                var outShape = new int[_originalInputShape.Length + 1];
+                for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                    outShape[d] = _originalInputShape[d];
+                outShape[_originalInputShape.Length - 3] = outputHeight;
+                outShape[_originalInputShape.Length - 2] = outputWidth;
+                outShape[_originalInputShape.Length - 1] = _capsuleChannels;
+                outShape[_originalInputShape.Length] = _capsuleDimension;
+                return Engine.Reshape(_lastOutput, outShape);
+            }
+        }
+
+        return _lastOutput;
+    }
+
+    /// <summary>
+    /// Performs GPU-accelerated forward pass through the primary capsule layer.
+    /// </summary>
+    /// <param name="inputs">GPU-resident input tensors.</param>
+    /// <returns>GPU-resident output tensor after capsule transformation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass using GPU-resident operations where possible.
+    /// The convolution and reshape operations are kept on GPU for efficiency.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend is null)
+            throw new InvalidOperationException("GPU backend unavailable.");
+
+        var input = inputs[0];
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy-ctor PrimaryCapsuleLayer that takes the GPU path on first
+        // use would dereference the [0,0] / [0] zero-sized convWeights
+        // / convBias tensors. OnFirstForward resolves _inputChannels
+        // from input.Shape and EnsureInitialized allocates the conv
+        // tensors at the right size.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
+        // Detect input format: NCHW [B, C, H, W] vs NHWC [B, H, W, C]
+        // NCHW has channels in dim 1, NHWC has channels in dim 3
+        // LIMITATION: This heuristic is ambiguous when spatial dimensions equal channel count
+        // (e.g., 32x32 image with 32 channels). In such cases, prefer NCHW format or use
+        // explicit format parameter in a future API enhancement.
+        bool inputIsNCHW = input.Shape[1] == _inputChannels && input.Shape[3] != _inputChannels;
+
+        // Get spatial dimensions based on format
+        int batchSize, inputHeight, inputWidth;
+        Tensor<T>? inputNCHW = null;
+        Tensor<T>? convOutput = null;
+        Tensor<T>? convNHWC = null;
+        Tensor<T>? capsuleLayout = null;
+        Tensor<T>? kernelNCHW = null;
+
+        try
+        {
+            if (inputIsNCHW)
+            {
+                batchSize = input.Shape[0];
+                inputHeight = input.Shape[2];
+                inputWidth = input.Shape[3];
+                // Don't assign to inputNCHW to avoid disposing the input tensor
+            }
+            else
+            {
+                // NHWC [B, H, W, C] -> NCHW [B, C, H, W]
+                batchSize = input.Shape[0];
+                inputHeight = input.Shape[1];
+                inputWidth = input.Shape[2];
+                inputNCHW = gpuEngine.PermuteGpu(input, [0, 3, 1, 2]);
+            }
+
+            int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
+            int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
+
+            // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW].
+            // Tracked via the outer kernelNCHW so the finally block can release the GPU
+            // tensor — otherwise every ForwardGpu call leaks one reshape tensor.
+            int outputChannels = _capsuleChannels * _capsuleDimension;
+            kernelNCHW = Engine.Reshape(_convWeights, new[] { outputChannels, _inputChannels, _kernelSize, _kernelSize });
+
+            // GPU Convolution + Bias (FusedActivationType.None since we apply Squash separately)
+            convOutput = gpuEngine.FusedConv2DGpu<T>(
+                inputNCHW ?? input, kernelNCHW, _convBias,
+                strideH: _stride, strideW: _stride,
+                padH: 0, padW: 0,
+                dilationH: 1, dilationW: 1,
+                FusedActivationType.None);
+
+            // Convert back to NHWC: [B, outC, OH, OW] -> [B, OH, OW, outC]
+            convNHWC = gpuEngine.PermuteGpu(convOutput, [0, 2, 3, 1]);
+
+            // Reshape to capsule layout: [B, OH, OW, capsuleChannels * capsuleDim] -> [B, OH, OW, capsuleChannels, capsuleDim]
+            capsuleLayout = gpuEngine.ReshapeGpu(convNHWC, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+
+            // Apply Squash activation to the last axis (capsule dimension)
+            var output = gpuEngine.SquashGpu(capsuleLayout, axis: -1);
+
+            return output;
+        }
+        finally
+        {
+            // Dispose all intermediate tensors (not the input or final output)
+            kernelNCHW?.Dispose();
+            inputNCHW?.Dispose();
+            convOutput?.Dispose();
+            convNHWC?.Dispose();
+            capsuleLayout?.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Extracts a patch from the input tensor for convolution.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="batch">The batch index.</param>
+    /// <param name="startY">The starting Y coordinate of the patch.</param>
+    /// <param name="startX">The starting X coordinate of the patch.</param>
+    /// <returns>A vector containing the flattened patch values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method extracts a square patch from the input tensor at the specified location and flattens
+    /// it into a vector for use in the convolution operation. The patch has dimensions _kernelSize × _kernelSize
+    /// and includes all input channels.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method extracts a small square region from the input for processing.
+    /// 
+    /// For convolution operations, we need to:
+    /// - Look at a small area of the input at a time (the "patch" or "receptive field")
+    /// - Apply the same operation to each patch as we move across the input
+    /// 
+    /// This method:
+    /// - Takes coordinates that specify where to start (startX, startY)
+    /// - Extracts a square patch of size _kernelSize × _kernelSize
+    /// - Includes all channels from the input for that patch
+    /// - Flattens this 3D patch into a 1D vector for easier processing
+    /// 
+    /// For example, with a 3×3 kernel and 3 input channels, this would extract
+    /// a 3×3×3 patch (27 values) and arrange them into a single vector.
+    /// </para>
+    /// </remarks>
+    private Vector<T> ExtractPatch(Tensor<T> input, int batch, int startY, int startX)
+    {
+        var patch = new Vector<T>(_inputChannels * _kernelSize * _kernelSize);
+        int index = 0;
+        for (int c = 0; c < _inputChannels; c++)
+        {
+            for (int i = 0; i < _kernelSize; i++)
+            {
+                for (int j = 0; j < _kernelSize; j++)
+                {
+                    patch[index++] = input[batch, startY + i, startX + j, c];
+                }
+            }
+        }
+
+        return patch;
+    }
+
+
+    /// <summary>
+    /// Updates the parameters of the primary capsule layer using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <exception cref="InvalidOperationException">Thrown when UpdateParameters is called before Backward.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates the convolution weights and biases of the layer based on the gradients calculated
+    /// during the backward pass. The learning rate controls the size of the parameter updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the layer's weights and biases during training.
+    /// 
+    /// After the backward pass calculates how parameters should change, this method:
+    /// - Takes each weight and bias
+    /// - Subtracts the corresponding gradient scaled by the learning rate
+    /// - This moves the parameters in the direction that reduces errors
+    /// 
+    /// The learning rate controls how big each update step is:
+    /// - Smaller learning rates mean slower but more stable learning
+    /// - Larger learning rates mean faster but potentially unstable learning
+    /// 
+    /// This is how the layer gradually improves its ability to transform inputs
+    /// into meaningful capsule representations over many training iterations.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_convWeightsGradient == null || _convBiasGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        // Use Engine operations for GPU/CPU acceleration
+        var scaledWeightGrad = Engine.TensorMultiplyScalar(_convWeightsGradient, learningRate);
+        _convWeights = Engine.TensorSubtract(_convWeights, scaledWeightGrad);
+
+        var scaledBiasGrad = Engine.TensorMultiplyScalar(_convBiasGradient, learningRate);
+        _convBias = Engine.TensorSubtract(_convBias, scaledBiasGrad);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters from the primary capsule layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters from the layer as a single vector. It concatenates
+    /// the convolution weights and biases into a single vector. This is useful for optimization algorithms
+    /// that operate on all parameters at once, or for saving and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learnable values in the layer.
+    /// 
+    /// The parameters:
+    /// - Are the numbers that the neural network learns during training
+    /// - Include all the weights and biases from this layer
+    /// - Are combined into a single long list (vector)
+    /// 
+    /// This is useful for:
+    /// - Saving the model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques that need access to all parameters
+    /// 
+    /// The method carefully arranges all parameters in a specific order
+    /// so they can be correctly restored later.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Use Vector.Concatenate for production-grade parameter extraction
+        return Vector<T>.Concatenate(
+            new Vector<T>(_convWeights.ToArray()),
+            new Vector<T>(_convBias.ToArray())
+        );
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters for the primary capsule layer.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets all trainable parameters of the layer from a single vector. It extracts the appropriate
+    /// portions of the input vector for each parameter (convolution weights and biases). This is useful for
+    /// loading saved model weights or for implementing optimization algorithms that operate on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with the correct length
+    /// - The method extracts portions for each weight matrix and bias vector
+    /// - It places each value in its correct position
+    /// 
+    /// This is useful for:
+    /// - Loading a previously saved model
+    /// - Transferring parameters from another model
+    /// - Testing different parameter values
+    /// 
+    /// An error is thrown if the input vector doesn't have the expected number of parameters,
+    /// ensuring that all matrices and vectors maintain their correct dimensions.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var wGrad = _convWeightsGradient != null ? new Vector<T>(_convWeightsGradient.ToArray()) : new Vector<T>(_convWeights.Length);
+        var bGrad = _convBiasGradient != null ? new Vector<T>(_convBiasGradient.ToArray()) : new Vector<T>(_convBias.Length);
+        return Vector<T>.Concatenate(wGrad, bGrad);
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["CapsuleChannels"] = _capsuleChannels.ToString();
+        metadata["CapsuleDimension"] = _capsuleDimension.ToString();
+        metadata["KernelSize"] = _kernelSize.ToString();
+        metadata["Stride"] = _stride.ToString();
+        return metadata;
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _convWeightsGradient = null;
+        _convBiasGradient = null;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int weightSize = _convWeights.Length;
+        int biasSize = _convBias.Length;
+        int totalParams = weightSize + biasSize;
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+
+        // Write in-place to preserve registered parameter tensor references
+        parameters.Slice(0, weightSize).AsSpan().CopyTo(_convWeights.Data.Span);
+        parameters.Slice(weightSize, biasSize).AsSpan().CopyTo(_convBias.Data.Span);
+
+        // Invalidate any GPU-resident copy of these persistent parameter tensors.
+        // The CPU spans were just overwritten, but the GPU keeps a separately-uploaded
+        // mirror of registered persistent tensors and reuses it on subsequent ForwardGpu
+        // calls. Without this invalidation the GPU forward path would silently keep
+        // computing against the pre-update weights, mirroring DenseLayer/Conv layers.
+        Engine.InvalidatePersistentTensor(_convWeights);
+        Engine.InvalidatePersistentTensor(_convBias);
+    }
+
+    /// <summary>
+    /// Resets the internal state of the primary capsule layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method resets the internal state of the primary capsule layer, including the cached inputs, outputs,
+    /// and gradients. This is useful when starting to process a new sequence or batch of data, or when
+    /// implementing stateful networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+    /// 
+    /// When resetting the state:
+    /// - Stored inputs and outputs from previous processing are cleared
+    /// - All calculated gradients are cleared
+    /// - The layer forgets any information from previous data batches
+    /// 
+    /// This is important for:
+    /// - Processing a new, unrelated batch of data
+    /// - Ensuring clean state before a new training epoch
+    /// - Preventing information from one batch affecting another
+    /// 
+    /// Resetting state helps ensure that each forward and backward pass is independent,
+    /// which is important for correct behavior in many neural network architectures.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // Clear cached values from forward and backward passes
+        _lastInput = null;
+        _lastOutput = null;
+        _convWeightsGradient = null;
+        _convBiasGradient = null;
+        _originalInputShape = null;
+        _inputWasNCHW = false;
+    }
+
+}

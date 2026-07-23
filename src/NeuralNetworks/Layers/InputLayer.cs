@@ -1,0 +1,240 @@
+﻿using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Gpu;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// Represents an input layer that passes input data through unchanged to the next layer in the neural network.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The Input Layer serves as the entry point for data into a neural network. Unlike other layers, 
+/// it doesn't transform the data or learn any parameters; it simply validates and passes the input
+/// through to the next layer. This layer establishes the dimensionality of the input data for the
+/// entire network.
+/// </para>
+/// <para><b>For Beginners:</b> This layer is like the doorway to your neural network.
+/// 
+/// Think of the InputLayer as:
+/// - The entrance where your data first enters the neural network
+/// - A way to tell the network what shape your data has
+/// - A pass-through that doesn't change your data
+/// 
+/// For example, if you're processing images that are 28x28 pixels, you would use an InputLayer
+/// with inputSize=784 (28×28) to tell the network about the size of each image.
+/// 
+/// Unlike other layers, the InputLayer doesn't learn or transform anything - it just
+/// passes your data into the network.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Input)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, SupportsBackpropagation = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+public class InputLayer<T> : LayerBase<T>
+{
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// <c>false</c> because the input layer has no trainable parameters.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer can be trained through backpropagation.
+    /// The InputLayer always returns false because it contains no trainable parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
+    /// 
+    /// A value of false means:
+    /// - The layer doesn't have any values that can be adjusted during training
+    /// - It will behave exactly the same before and after training
+    /// - It doesn't participate in the learning process
+    /// 
+    /// The input layer doesn't need to learn because its only job is to feed data into the network.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => false;
+
+    /// <inheritdoc/>
+    protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
+    {
+        return inputs[0];
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InputLayer{T}"/> class with the specified input size.
+    /// </summary>
+    /// <param name="inputSize">The size of the input vector.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a new Input Layer with the specified input size. The layer uses an identity
+    /// activation function, meaning it does not transform the input data in any way.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new doorway to your neural network with a specific size.
+    /// 
+    /// When creating an Input Layer, you specify:
+    /// - inputSize: How many features your data has (like pixels in an image or properties in a dataset)
+    /// 
+    /// This size tells the rest of the network what dimensions to expect for input data.
+    /// For example, if your data has 10 features, you would set inputSize=10.
+    /// 
+    /// The layer is automatically set up to pass data through without changing it.
+    /// </para>
+    /// </remarks>
+    public InputLayer(int inputSize)
+        : base([inputSize], [inputSize], new IdentityActivation<T>() as IActivationFunction<T>)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InputLayer{T}"/> class with an explicit
+    /// multi-dimensional input shape.
+    /// </summary>
+    /// <param name="inputShape">The full shape of each input sample, excluding the batch dimension.
+    /// For example, a 2D input of shape [seq_len, embed_dim] would be passed as
+    /// <c>new[] { seq_len, embed_dim }</c>.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor lets callers declare a non-flat input shape natively, so that downstream
+    /// rank-aware layers (e.g. <see cref="MultiHeadAttentionLayer{T}"/> which expects
+    /// <c>[seq_len, embed_dim]</c>) see a matching <see cref="LayerBase{T}.GetOutputShape"/>
+    /// and the strict <c>AreLayersCompatible</c> check passes without requiring an intermediate
+    /// <c>ReshapeLayer</c>. Closes #1325.
+    /// </para>
+    /// <para><b>For Beginners:</b> The other constructor (<c>InputLayer(int inputSize)</c>) declares
+    /// a 1D input shape <c>[inputSize]</c>. Use this constructor instead when your downstream layer
+    /// expects multi-dimensional input — for example pre-encoded sequence data
+    /// <c>[seq_len, embed_dim]</c> feeding directly into an attention layer.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="inputShape"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="inputShape"/> is empty
+    /// or contains a non-positive dimension.</exception>
+    public InputLayer(int[] inputShape)
+        : base(ValidateAndCloneShape(inputShape, nameof(inputShape)),
+               ValidateAndCloneShape(inputShape, nameof(inputShape)),
+               new IdentityActivation<T>() as IActivationFunction<T>)
+    {
+    }
+
+    private static int[] ValidateAndCloneShape(int[] shape, string paramName)
+    {
+        if (shape is null)
+            throw new ArgumentNullException(paramName);
+        if (shape.Length == 0)
+            throw new ArgumentException("InputLayer shape must have at least one dimension.", paramName);
+        for (int i = 0; i < shape.Length; i++)
+        {
+            if (shape[i] <= 0)
+                throw new ArgumentException(
+                    $"InputLayer shape dimensions must be positive (got shape[{i}] = {shape[i]}).",
+                    paramName);
+        }
+        return (int[])shape.Clone();
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the input layer, simply returning the input unchanged.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The same input tensor, unchanged.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the forward pass of the input layer. Since the input layer does not transform
+    /// the data, it simply returns the input tensor as is.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method passes your data into the neural network without changing it.
+    /// 
+    /// The forward pass:
+    /// - Takes in your data
+    /// - Passes it through unchanged
+    /// - Sends it to the next layer
+    /// 
+    /// This simple pass-through behavior is all that's needed for an input layer,
+    /// as its purpose is just to feed data into the network.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        return input;
+    }
+
+    /// <summary>
+    /// Update parameters is a no-op for the input layer since it has no trainable parameters.
+    /// </summary>
+    /// <param name="learningRate">The learning rate (unused in this layer).</param>
+    /// <remarks>
+    /// <para>
+    /// This method is implemented as required by the LayerBase interface but does nothing for the InputLayer
+    /// since it has no parameters to update.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method exists but does nothing because there's nothing to update.
+    /// 
+    /// Since the input layer:
+    /// - Has no weights or biases
+    /// - Doesn't transform the data
+    /// - Doesn't learn from training
+    /// 
+    /// This method is included only because all layers must have this method,
+    /// but it doesn't actually do anything for the input layer.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Input layer has no parameters to update
+    }
+
+    /// <summary>
+    /// Returns an empty vector since the input layer has no trainable parameters.
+    /// </summary>
+    /// <returns>An empty vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns an empty vector since the InputLayer has no trainable parameters.
+    /// It is implemented as required by the LayerBase interface.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns an empty list because there are no parameters.
+    /// 
+    /// Since the input layer:
+    /// - Has no weights or biases
+    /// - Doesn't have any learnable values
+    /// 
+    /// This method returns an empty vector to indicate there are no parameters.
+    /// Other layers would return their weights and biases here.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // InputLayer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
+    /// <summary>
+    /// Reset state is a no-op for the input layer since it maintains no state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method is implemented as required by the LayerBase interface but does nothing for the InputLayer
+    /// since it maintains no state between forward and backward passes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method exists but does nothing because there's no state to reset.
+    /// 
+    /// Since the input layer:
+    /// - Doesn't store any information between processing steps
+    /// - Doesn't keep track of previous inputs or outputs
+    /// - Has no memory that needs to be cleared
+    /// 
+    /// This method is included only because all layers must have this method,
+    /// but it doesn't actually do anything for the input layer.
+    /// </para>
+    /// </remarks>
+    public override void ResetState()
+    {
+        // InputLayer has no state to reset
+    }
+}

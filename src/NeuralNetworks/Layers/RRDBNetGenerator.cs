@@ -1,0 +1,624 @@
+﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+
+namespace AiDotNet.NeuralNetworks.Layers;
+
+/// <summary>
+/// RRDBNet Generator - the full generator architecture from ESRGAN and Real-ESRGAN.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// This implements the complete RRDBNet generator from the ESRGAN paper (Wang et al., 2018).
+/// It combines multiple RRDB blocks with upsampling for image super-resolution.
+/// </para>
+/// <para>
+/// The architecture is:
+/// <code>
+/// Input (3 channels, LR image)
+///   ↓
+/// Conv1: 3 → numFeatures (initial feature extraction)
+///   ↓
+/// RRDB × numRRDBBlocks (deep feature extraction)
+///   ↓
+/// Trunk Conv: numFeatures → numFeatures
+///   ↓
+/// + (global residual connection from Conv1 output)
+///   ↓
+/// Upsampling Blocks (PixelShuffle 2x each, repeated for scale)
+///   ↓
+/// HR Conv: numFeatures → numFeatures, LeakyReLU
+///   ↓
+/// Final Conv: numFeatures → 3 (output channels)
+///   ↓
+/// Output (3 channels, HR image)
+/// </code>
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This is the "brain" of Real-ESRGAN that transforms low-resolution
+/// images into high-resolution ones.
+///
+/// Key components:
+/// - **Initial Conv**: Extracts basic features from the input image
+/// - **RRDB Blocks**: 23 deep blocks that learn how to enhance details
+/// - **Trunk Conv + Residual**: Combines deep features with initial features
+/// - **Upsampling**: Makes the image bigger (2x or 4x depending on scale)
+/// - **Final Convs**: Produces the final RGB output image
+///
+/// The default parameters (64 features, 32 growth, 23 RRDBs, 4x scale) are from the
+/// Real-ESRGAN paper and produce excellent results for general image super-resolution.
+/// </para>
+/// <para>
+/// <b>Reference:</b> Wang et al., "Real-ESRGAN: Training Real-World Blind Super-Resolution
+/// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
+/// </para>
+/// </remarks>
+public class RRDBNetGenerator<T> : LayerBase<T>
+{
+    #region Fields
+
+    /// <summary>
+    /// Initial convolution: 3 → numFeatures.
+    /// </summary>
+    private readonly ConvolutionalLayer<T> _convFirst;
+
+    /// <summary>
+    /// The RRDB blocks for deep feature extraction.
+    /// </summary>
+    private readonly RRDBLayer<T>[] _rrdbBlocks;
+
+    /// <summary>
+    /// Trunk convolution after RRDB blocks.
+    /// </summary>
+    private readonly ConvolutionalLayer<T> _trunkConv;
+
+    /// <summary>
+    /// Upsampling convolutions (one before each PixelShuffle).
+    /// For 4x upscaling: 2 convs (64 → 256 each for 2x PixelShuffle).
+    /// </summary>
+    private readonly ConvolutionalLayer<T>[] _upsampleConvs;
+
+    /// <summary>
+    /// PixelShuffle layers for upsampling.
+    /// </summary>
+    private readonly PixelShuffleLayer<T>[] _pixelShuffleLayers;
+
+    /// <summary>
+    /// High-resolution convolution (after upsampling).
+    /// </summary>
+    private readonly ConvolutionalLayer<T> _hrConv;
+
+    /// <summary>
+    /// Final convolution: numFeatures → outputChannels (typically 3 for RGB).
+    /// </summary>
+    private readonly ConvolutionalLayer<T> _convLast;
+
+    /// <summary>
+    /// LeakyReLU activation with negative slope 0.2.
+    /// </summary>
+    private readonly LeakyReLUActivation<T> _leakyReLU;
+
+    /// <summary>
+    /// Number of feature channels.
+    /// </summary>
+    private readonly int _numFeatures;
+
+    /// <summary>
+    /// Number of input channels (3 for RGB).
+    /// </summary>
+    private readonly int _inputChannels;
+
+    /// <summary>
+    /// Number of output channels (3 for RGB).
+    /// </summary>
+    private readonly int _outputChannels;
+
+    /// <summary>
+    /// Upscaling factor (2 or 4).
+    /// </summary>
+    private readonly int _scale;
+
+    /// <summary>
+    /// Cached input for backpropagation.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Cached conv1 output for trunk residual.
+    /// </summary>
+    private Tensor<T>? _conv1Output;
+
+    /// <summary>
+    /// Cached intermediate outputs for backpropagation.
+    /// </summary>
+    private Tensor<T>[]? _rrdbOutputs;
+
+    /// <summary>
+    /// Cached upsampling outputs for backpropagation.
+    /// </summary>
+    private Tensor<T>[]? _upsampleOutputs;
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Gets the number of RRDB blocks.
+    /// </summary>
+    public int NumRRDBBlocks => _rrdbBlocks.Length;
+
+    /// <summary>
+    /// Gets the number of feature channels.
+    /// </summary>
+    public int NumFeatures => _numFeatures;
+
+    /// <summary>
+    /// Gets the upscaling factor.
+    /// </summary>
+    public int Scale => _scale;
+
+    /// <inheritdoc />
+    public override bool SupportsTraining => true;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Initializes a new RRDBNet generator.
+    /// </summary>
+    /// <param name="inputHeight">Height of input image.</param>
+    /// <param name="inputWidth">Width of input image.</param>
+    /// <param name="inputChannels">Number of input channels (3 for RGB).</param>
+    /// <param name="outputChannels">Number of output channels (3 for RGB).</param>
+    /// <param name="numFeatures">Number of feature channels. Default: 64 (from paper).</param>
+    /// <param name="growthChannels">Growth channels for RDB. Default: 32 (from paper).</param>
+    /// <param name="numRRDBBlocks">Number of RRDB blocks. Default: 23 (from paper).</param>
+    /// <param name="scale">Upscaling factor (2 or 4). Default: 4.</param>
+    /// <param name="residualScale">Residual scaling factor. Default: 0.2 (from paper).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Create a Real-ESRGAN generator for 4x super-resolution:
+    /// <code>
+    /// var generator = new RRDBNetGenerator&lt;float&gt;(
+    ///     inputHeight: 64,
+    ///     inputWidth: 64,
+    ///     inputChannels: 3,      // RGB input
+    ///     outputChannels: 3,     // RGB output
+    ///     numFeatures: 64,       // Paper default
+    ///     growthChannels: 32,    // Paper default
+    ///     numRRDBBlocks: 23,     // Paper default (deep network)
+    ///     scale: 4               // 4x upscaling
+    /// );
+    /// // Input: 64x64 → Output: 256x256
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public RRDBNetGenerator(
+        int inputChannels = 3,
+        int outputChannels = 3,
+        int numFeatures = 64,
+        int growthChannels = 32,
+        int numRRDBBlocks = 23,
+        int scale = 4,
+        double residualScale = 0.2)
+        : base(
+            [inputChannels, -1, -1],
+            [outputChannels, -1, -1])
+    {
+        // Real-ESRGAN paper (Wang et al. 2021) describes ×4 as the headline
+        // configuration but the RRDB + pixel-shuffle backbone generalises to
+        // any power of two by stacking 2× upsample stages. ×2 (one stage),
+        // ×4 (two stages), and ×8 (three stages) are all valid scales.
+        if (scale != 2 && scale != 4 && scale != 8)
+            throw new ArgumentOutOfRangeException(nameof(scale), "Scale must be 2, 4, or 8 (powers of two via stacked pixel-shuffle stages).");
+        if (numRRDBBlocks <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numRRDBBlocks), "Number of RRDB blocks must be positive.");
+        if (numFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be positive.");
+
+        _numFeatures = numFeatures;
+        _scale = scale;
+        _inputChannels = inputChannels;
+        _outputChannels = outputChannels;
+        _leakyReLU = new LeakyReLUActivation<T>(0.2);
+
+        // Initial convolution: inputChannels → numFeatures
+        _convFirst = new ConvolutionalLayer<T>(
+            outputDepth: numFeatures,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1,
+            activationFunction: null);
+
+        // RRDB blocks — lazy on spatial dims, channels are constant.
+        _rrdbBlocks = new RRDBLayer<T>[numRRDBBlocks];
+        for (int i = 0; i < numRRDBBlocks; i++)
+        {
+            _rrdbBlocks[i] = new RRDBLayer<T>(
+                numFeatures: numFeatures,
+                growthChannels: growthChannels,
+                residualScale: residualScale);
+        }
+
+        // Trunk convolution (after RRDB blocks)
+        _trunkConv = new ConvolutionalLayer<T>(
+            outputDepth: numFeatures,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1,
+            activationFunction: null);
+
+        // Upsampling: ×2 → 1 stage, ×4 → 2 stages, ×8 → 3 stages.
+        // Each stage: Conv (numFeatures → numFeatures × 4) + PixelShuffle(2) + LeakyReLU.
+        // log2(scale) gives the right number of stages for every supported scale.
+        // Math.Log2 is unavailable on net471; Math.Log(x, 2) is the portable form.
+        int numUpsampleStages = (int)Math.Round(Math.Log(scale, 2.0));
+        _upsampleConvs = new ConvolutionalLayer<T>[numUpsampleStages];
+        _pixelShuffleLayers = new PixelShuffleLayer<T>[numUpsampleStages];
+
+        for (int i = 0; i < numUpsampleStages; i++)
+        {
+            _upsampleConvs[i] = new ConvolutionalLayer<T>(
+                outputDepth: numFeatures * 4,
+                kernelSize: 3,
+                stride: 1,
+                padding: 1,
+                activationFunction: null);
+
+            _pixelShuffleLayers[i] = new PixelShuffleLayer<T>(upscaleFactor: 2);
+        }
+
+        // HR convolution (after upsampling)
+        _hrConv = new ConvolutionalLayer<T>(
+            outputDepth: numFeatures,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1,
+            activationFunction: null);
+
+        // Final convolution: numFeatures → outputChannels
+        _convLast = new ConvolutionalLayer<T>(
+            outputDepth: outputChannels,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1,
+            activationFunction: null);
+
+        RegisterSubLayer(_convFirst);
+        RegisterSubLayer(_trunkConv);
+        RegisterSubLayer(_hrConv);
+        RegisterSubLayer(_convLast);
+        foreach (var rrdb in _rrdbBlocks) RegisterSubLayer(rrdb);
+        foreach (var conv in _upsampleConvs) RegisterSubLayer(conv);
+        foreach (var ps in _pixelShuffleLayers) RegisterSubLayer(ps);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves spatial dims from <c>input.Shape</c>, drives each sub-
+    /// layer's lazy resolution along the well-known channel layout
+    /// (numFeatures throughout, except the final 3-channel projection),
+    /// and locks the layer's input/output shapes.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inChannels, inH, inW;
+        if (s.Length == 3) { inChannels = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inChannels = s[1]; inH = s[2]; inW = s[3]; }
+        else
+            throw new ArgumentException(
+                $"RRDBNetGenerator requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+        if (inChannels != _inputChannels)
+            throw new ArgumentException(
+                $"RRDBNetGenerator expected {_inputChannels} input channels, got {inChannels}.",
+                nameof(input));
+
+        _convFirst.ResolveFromShape(new[] { _inputChannels, inH, inW });
+        foreach (var block in _rrdbBlocks)
+            block.ResolveFromShape(new[] { _numFeatures, inH, inW });
+        _trunkConv.ResolveFromShape(new[] { _numFeatures, inH, inW });
+
+        int currentH = inH;
+        int currentW = inW;
+        for (int i = 0; i < _upsampleConvs.Length; i++)
+        {
+            _upsampleConvs[i].ResolveFromShape(new[] { _numFeatures, currentH, currentW });
+            _pixelShuffleLayers[i].ResolveFromShape(new[] { _numFeatures * 4, currentH, currentW });
+            currentH *= 2;
+            currentW *= 2;
+        }
+
+        _hrConv.ResolveFromShape(new[] { _numFeatures, currentH, currentW });
+        _convLast.ResolveFromShape(new[] { _numFeatures, currentH, currentW });
+
+        // Propagate training mode to every freshly-allocated sub-layer.
+        _convFirst.SetTrainingMode(IsTrainingMode);
+        _trunkConv.SetTrainingMode(IsTrainingMode);
+        _hrConv.SetTrainingMode(IsTrainingMode);
+        _convLast.SetTrainingMode(IsTrainingMode);
+        foreach (var block in _rrdbBlocks) block.SetTrainingMode(IsTrainingMode);
+        foreach (var conv in _upsampleConvs) conv.SetTrainingMode(IsTrainingMode);
+        foreach (var ps in _pixelShuffleLayers) ps.SetTrainingMode(IsTrainingMode);
+
+        ResolveShapes(
+            new[] { _inputChannels, inH, inW },
+            new[] { _outputChannels, currentH, currentW });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before any sub-layer's shape was resolved. With every sub-
+        // layer now reporting a real GetParameters().Length, the
+        // SubVector cuts in ApplyParameters land on the right data.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyParameters(pending);
+        }
+    }
+
+    #endregion
+
+    #region Forward Pass
+
+    /// <inheritdoc />
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        if (!IsShapeResolved) OnFirstForward(input);
+
+        // #1668: gate every backward-only cache (the per-stage outputs + intermediate
+        // arrays). Forward uses the local `conv1Output`/`x`; the fields/arrays only hold
+        // references for an eager Backward, so in an InferenceMode arena loop nothing
+        // survives the per-step Reset.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
+
+        // Initial feature extraction
+        var conv1Output = _convFirst.Forward(input);
+        _conv1Output = cacheBwd ? conv1Output : null;
+        var x = conv1Output;
+
+        // Deep feature extraction through RRDB blocks. The array is always allocated
+        // (cheap — references only) but the per-block tensors are stored only when an
+        // eager Backward will read them (#1668).
+        _rrdbOutputs = new Tensor<T>[_rrdbBlocks.Length];
+        for (int i = 0; i < _rrdbBlocks.Length; i++)
+        {
+            x = _rrdbBlocks[i].Forward(x);
+            if (cacheBwd) _rrdbOutputs[i] = x;
+        }
+
+        // Trunk convolution + global residual
+        var trunk = _trunkConv.Forward(x);
+        x = AddTensors(trunk, conv1Output); // Global residual connection
+
+        // Upsampling (array always allocated; tensors stored only for backward — #1668)
+        _upsampleOutputs = new Tensor<T>[_upsampleConvs.Length * 2]; // Conv output + PixelShuffle output
+        for (int i = 0; i < _upsampleConvs.Length; i++)
+        {
+            x = _upsampleConvs[i].Forward(x);
+            if (cacheBwd) _upsampleOutputs[i * 2] = x;
+            x = _pixelShuffleLayers[i].Forward(x);
+            x = ApplyLeakyReLU(x);
+            if (cacheBwd) _upsampleOutputs[i * 2 + 1] = x;
+        }
+
+        // HR convolution + activation
+        x = _hrConv.Forward(x);
+        x = ApplyLeakyReLU(x);
+
+        // Final convolution
+        x = _convLast.Forward(x);
+
+        return x;
+    }
+
+    #endregion
+
+    #region Backward Pass
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Applies LeakyReLU activation.
+    /// </summary>
+    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
+    {
+        var output = TensorAllocator.Rent<T>(input._shape);
+        for (int i = 0; i < input.Length; i++)
+        {
+            output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Backward pass through LeakyReLU.
+    /// </summary>
+    private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
+    {
+        var output = TensorAllocator.Rent<T>(gradient._shape);
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            output.Data.Span[i] = NumOps.Multiply(
+                gradient.Data.Span[i],
+                _leakyReLU.Derivative(forwardInput.Data.Span[i]));
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Adds two tensors element-wise.
+    /// </summary>
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        return Engine.TensorAdd(a, b);
+    }
+
+    #endregion
+
+    #region Parameter Management
+
+    /// <inheritdoc />
+    public override void UpdateParameters(T learningRate)
+    {
+        _convFirst.UpdateParameters(learningRate);
+
+        foreach (var rrdb in _rrdbBlocks)
+        {
+            rrdb.UpdateParameters(learningRate);
+        }
+
+        _trunkConv.UpdateParameters(learningRate);
+
+        foreach (var conv in _upsampleConvs)
+        {
+            conv.UpdateParameters(learningRate);
+        }
+
+        _hrConv.UpdateParameters(learningRate);
+        _convLast.UpdateParameters(learningRate);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+
+        AddParametersToList(allParams, _convFirst.GetParameters());
+
+        foreach (var rrdb in _rrdbBlocks)
+        {
+            AddParametersToList(allParams, rrdb.GetParameters());
+        }
+
+        AddParametersToList(allParams, _trunkConv.GetParameters());
+
+        foreach (var conv in _upsampleConvs)
+        {
+            AddParametersToList(allParams, conv.GetParameters());
+        }
+
+        AddParametersToList(allParams, _hrConv.GetParameters());
+        AddParametersToList(allParams, _convLast.GetParameters());
+
+        return new Vector<T>([.. allParams]);
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Buffer until OnFirstForward resolves shapes when arriving pre-
+        // resolution: every sub-layer (_convFirst, _rrdbBlocks[i],
+        // _trunkConv, _upsampleConvs[i], _hrConv, _convLast) reports
+        // GetParameters().Length == 0 before OnFirstForward, so the
+        // SubVector cuts below all consume zero bytes and the parameters
+        // get silently dropped — a deserialized RRDBNet checkpoint
+        // would inference with random weights instead of the loaded
+        // values. Replay in OnFirstForward once shapes are resolved.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+        ApplyParameters(parameters);
+    }
+
+    /// <summary>
+    /// Buffer for SetParameters when called pre-OnFirstForward. Replayed
+    /// in OnFirstForward once every sub-layer reports a real
+    /// GetParameters().Length.
+    /// </summary>
+    private Vector<T>? _pendingParameters;
+
+    private void ApplyParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+
+        offset = SetLayerParameters(_convFirst, parameters, offset);
+
+        foreach (var rrdb in _rrdbBlocks)
+        {
+            offset = SetLayerParameters(rrdb, parameters, offset);
+        }
+
+        offset = SetLayerParameters(_trunkConv, parameters, offset);
+
+        foreach (var conv in _upsampleConvs)
+        {
+            offset = SetLayerParameters(conv, parameters, offset);
+        }
+
+        offset = SetLayerParameters(_hrConv, parameters, offset);
+        SetLayerParameters(_convLast, parameters, offset);
+    }
+
+    private static void AddParametersToList(List<T> list, Vector<T> parameters)
+    {
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            list.Add(parameters[i]);
+        }
+    }
+
+    private static int SetLayerParameters(ILayer<T> layer, Vector<T> parameters, int offset)
+    {
+        int count = layer.GetParameters().Length;
+        layer.SetParameters(parameters.SubVector(offset, count));
+        return offset + count;
+    }
+
+    /// <inheritdoc />
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _conv1Output = null;
+        _rrdbOutputs = null;
+        _upsampleOutputs = null;
+
+        _convFirst.ResetState();
+        foreach (var rrdb in _rrdbBlocks)
+        {
+            rrdb.ResetState();
+        }
+        _trunkConv.ResetState();
+        foreach (var conv in _upsampleConvs)
+        {
+            conv.ResetState();
+        }
+        foreach (var ps in _pixelShuffleLayers)
+        {
+            ps.ResetState();
+        }
+        _hrConv.ResetState();
+        _convLast.ResetState();
+    }
+
+    #endregion
+
+    #region JIT Compilation
+
+
+    /// <summary>
+    /// Builds a Conv2D computation node from a ConvolutionalLayer.
+    /// </summary>
+    private static ComputationNode<T> BuildConvNode(ConvolutionalLayer<T> conv, ComputationNode<T> input, string namePrefix)
+    {
+        var biases = conv.GetBiases();
+        return TensorOperations<T>.Conv2D(
+            input,
+            TensorOperations<T>.Constant(conv.GetFilters(), $"{namePrefix}kernel"),
+            biases is not null ? TensorOperations<T>.Constant(biases, $"{namePrefix}bias") : null,
+            stride: new int[] { conv.Stride, conv.Stride },
+            padding: new int[] { conv.Padding, conv.Padding });
+    }
+
+    #endregion
+
+}

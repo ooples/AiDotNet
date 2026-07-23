@@ -1,0 +1,101 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Image Diffusion Models"
+  seoTitle="40+ Image Diffusion Models for .NET - AiDotNet"
+  seoDescription="Generate, edit, and transform images with 40+ diffusion model implementations. Stable Diffusion, SDXL, SD3, Flux, DALL-E, ControlNet, and more in pure C#."
+  count="40+"
+  tagline="State-of-the-art image generation, editing, and style transfer in pure C#"
+  description="Every major image diffusion architecture implemented in C#. From Stable Diffusion 1.5 to SD3.5, from DALL-E to Flux, from ControlNet to IP-Adapter. Generate images from text, edit with inpainting, apply style transfer, and upscale results - all without Python."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>'
+  useCases={['Text-to-Image Generation', 'Image Editing & Inpainting', 'Style Transfer', 'Super-Resolution', 'Product Photography', 'Game Asset Generation', 'Architectural Visualization', 'Medical Imaging']}
+  subcategories={[
+    {
+      name: 'Stable Diffusion Family',
+      description: 'The complete Stable Diffusion evolution from v1.5 through SD3.5, including all variants and extensions.',
+      items: [
+        { name: 'Stable Diffusion 1.5', detail: 'The foundational latent diffusion model. 512x512 generation with CLIP text encoder.' },
+        { name: 'Stable Diffusion 2.0/2.1', detail: 'OpenCLIP-based text encoder with 768x768 support and depth-to-image.' },
+        { name: 'SDXL', detail: 'Dual text encoder (CLIP + OpenCLIP), 1024x1024 native resolution, refiner model.' },
+        { name: 'SDXL Turbo', detail: 'Adversarial diffusion distillation for 1-4 step generation.' },
+        { name: 'SD3 / SD3.5', detail: 'MMDiT architecture with three text encoders (CLIP, OpenCLIP, T5) for superior text understanding.' },
+        { name: 'Stable Cascade', detail: 'Three-stage architecture with Wurstchen compression for efficient high-res generation.' },
+        { name: 'StableDiffusion SAG', detail: 'Self-Attention Guidance for improved coherence without classifier-free guidance.' },
+        { name: 'StableDiffusion GLIGEN', detail: 'Grounded Language-to-Image Generation with bounding box layout control.' },
+        { name: 'StableDiffusion DiffEdit', detail: 'Automatic mask generation for text-guided image editing.' },
+        { name: 'StableDiffusion Attend-and-Excite', detail: 'Attention-based guidance for better prompt adherence.' },
+      ]
+    },
+    {
+      name: 'ControlNet & Spatial Control',
+      description: 'Fine-grained spatial control over image generation using poses, edges, depth maps, and more.',
+      items: [
+        { name: 'ControlNet', detail: 'Add spatial conditioning (Canny edges, depth, pose) to Stable Diffusion.' },
+        { name: 'ControlNet XS', detail: 'Lightweight ControlNet variant with fewer parameters.' },
+        { name: 'ControlNet Union', detail: 'Single model supporting multiple control types simultaneously.' },
+        { name: 'T2I-Adapter', detail: 'Lightweight adapter for spatial control with minimal overhead.' },
+        { name: 'IP-Adapter', detail: 'Image prompt adapter for style and content transfer from reference images.' },
+        { name: 'IP-Adapter FaceID', detail: 'Face-preserving generation using facial embeddings.' },
+        { name: 'InstantID', detail: 'Zero-shot identity-preserving generation from a single face image.' },
+        { name: 'PhotoMaker', detail: 'Customized photo generation preserving identity across styles.' },
+        { name: 'InstantStyle', detail: 'Style transfer from reference images while preserving content.' },
+      ]
+    },
+    {
+      name: 'Flux & Latest Architectures',
+      description: 'Cutting-edge diffusion architectures from Black Forest Labs and beyond.',
+      items: [
+        { name: 'Flux', detail: 'Flow-matching transformer architecture with state-of-the-art quality.' },
+        { name: 'Flux ControlNet', detail: 'Spatial conditioning for Flux generation pipeline.' },
+        { name: 'Flux Img2Img', detail: 'Image-to-image translation using Flux architecture.' },
+        { name: 'Flux Inpaint', detail: 'Region-based editing and inpainting with Flux.' },
+        { name: 'Flux Fill', detail: 'Outpainting and fill operations using Flux models.' },
+      ]
+    },
+    {
+      name: 'Other Major Architectures',
+      description: 'Alternative diffusion architectures from Google, Meta, and the research community.',
+      items: [
+        { name: 'DALL-E 2/3', detail: 'OpenAI\'s CLIP-guided diffusion for highly creative image generation.' },
+        { name: 'Imagen', detail: 'Google\'s text-to-image with cascaded diffusion and T5 text encoder.' },
+        { name: 'Kandinsky 2.2/3.0', detail: 'Multilingual diffusion model with CLIP image prior.' },
+        { name: 'PixArt-Alpha/Sigma', detail: 'Efficient transformer-based diffusion with DiT architecture.' },
+        { name: 'Playground v2/2.5', detail: 'Aesthetic-focused generation with human preference alignment.' },
+        { name: 'DeepFloyd IF', detail: 'Pixel-space cascaded diffusion with T5-XXL text encoder.' },
+        { name: 'Consistency Models', detail: 'Direct generation without iterative denoising (single-step capable).' },
+        { name: 'LCM (Latent Consistency)', detail: 'Consistency distillation for 2-4 step generation from any SD model.' },
+        { name: 'SDXL Lightning', detail: 'Progressive adversarial distillation for 1-4 step SDXL generation.' },
+        { name: 'Hyper-SD', detail: 'Reward-guided progressive distillation for ultra-fast generation.' },
+      ]
+    },
+    {
+      name: 'Inpainting & Editing',
+      description: 'Precise image editing, object removal, and region-based generation.',
+      items: [
+        { name: 'SD Inpainting', detail: 'Mask-guided image editing for SD 1.5 and 2.x models.' },
+        { name: 'SDXL Inpainting', detail: 'High-resolution inpainting with SDXL quality.' },
+        { name: 'InstructPix2Pix', detail: 'Edit images using natural language instructions.' },
+        { name: 'Paint-by-Example', detail: 'Replace image regions using example images as reference.' },
+        { name: 'BrushNet', detail: 'Plug-and-play dual-branch inpainting for any SD model.' },
+        { name: 'PowerPaint', detail: 'Versatile inpainting with object removal, replacement, and outpainting.' },
+        { name: 'Blended Diffusion', detail: 'Seamless compositing of generated and original image regions.' },
+      ]
+    },
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train an image diffusion model with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new StableDiffusionXL<float>(
+        width: 1024, height: 1024,
+        numInferenceSteps: 30))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(imageData, labels);
+
+// Generate images
+var generated = result.Predict(promptEmbedding);`}
+  codeTitle="Image diffusion with AiModelBuilder"
+/>

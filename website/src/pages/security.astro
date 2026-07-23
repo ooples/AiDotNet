@@ -1,0 +1,131 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Security Policy - AiDotNet"
+  description="AiDotNet security policy: vulnerability reporting via GitHub Security Advisories or admin@aidotnet.dev, PGP key, response SLA, embargo policy, and supported versions."
+>
+  <div class="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+      <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-2">Security Policy</h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-8">Last updated: May 22, 2026</p>
+
+      <div class="prose prose-slate dark:prose-invert max-w-none space-y-8">
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Reporting a Vulnerability</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            We take the security of AiDotNet seriously. Please report security vulnerabilities through
+            one of the channels below — never via public GitHub issues, discussions, or social media.
+          </p>
+
+          <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mt-6">Preferred: GitHub Security Advisories</h3>
+          <p class="text-slate-600 dark:text-slate-300">
+            Report privately through the
+            <a href="https://github.com/ooples/AiDotNet/security/advisories/new" class="text-blue-600 dark:text-blue-400 hover:underline">GitHub Security Advisory form</a>.
+            This is the fastest path and gives us a structured audit trail.
+          </p>
+
+          <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mt-6">Alternative: Encrypted Email</h3>
+          <p class="text-slate-600 dark:text-slate-300">
+            Email <a href="mailto:admin@aidotnet.dev" class="text-blue-600 dark:text-blue-400 hover:underline">admin@aidotnet.dev</a>.
+            We strongly recommend encrypting sensitive disclosures with our PGP key
+            (available at <a href="https://github.com/ooples/AiDotNet/blob/master/docs/security/pgp.txt" class="text-blue-600 dark:text-blue-400 hover:underline">docs/security/pgp.txt</a>
+            in the repository, or by request).
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Response SLA</h2>
+          <table class="min-w-full border-collapse">
+            <thead>
+              <tr class="border-b border-slate-300 dark:border-slate-700">
+                <th class="text-left py-2 px-3 text-slate-700 dark:text-slate-200">Stage</th>
+                <th class="text-left py-2 px-3 text-slate-700 dark:text-slate-200">Target</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-600 dark:text-slate-300">
+              <tr class="border-b border-slate-200 dark:border-slate-800"><td class="py-2 px-3">Acknowledge receipt</td><td class="py-2 px-3">5 business days</td></tr>
+              <tr class="border-b border-slate-200 dark:border-slate-800"><td class="py-2 px-3">Triage + severity classification</td><td class="py-2 px-3">10 business days</td></tr>
+              <tr class="border-b border-slate-200 dark:border-slate-800"><td class="py-2 px-3">Fix for SEV-1 (critical)</td><td class="py-2 px-3">30 days from triage</td></tr>
+              <tr class="border-b border-slate-200 dark:border-slate-800"><td class="py-2 px-3">Fix for SEV-2 (high)</td><td class="py-2 px-3">60 days from triage</td></tr>
+              <tr><td class="py-2 px-3">Fix for SEV-3 (medium) or lower</td><td class="py-2 px-3">Next minor release</td></tr>
+            </tbody>
+          </table>
+          <p class="text-slate-600 dark:text-slate-300 mt-4">
+            Severity uses the <a href="https://www.first.org/cvss/v3.1/specification-document" class="text-blue-600 dark:text-blue-400 hover:underline">CVSS 3.1</a>
+            calculator. We assign CVE identifiers via GitHub Security Advisories for any vulnerability rated SEV-2 or higher.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Embargo Policy</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            We follow a 90-day embargo from the date we acknowledge the report, or until a fix is publicly
+            released — whichever is sooner. Reporters who prefer a shorter or longer embargo for coordinated
+            disclosure should say so in their initial report. We will not unilaterally extend embargoes
+            beyond 90 days without reporter agreement.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Supported Versions</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Until AiDotNet reaches 1.0, supported versions are the two most recent minor releases:
+          </p>
+          <ul class="list-disc list-inside text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+            <li>Latest minor: all security fixes</li>
+            <li>Previous minor: SEV-1 and SEV-2 fixes only</li>
+            <li>All older 0.x releases: upgrade required</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            After 1.0 ships, we will publish a long-term-support window and update this section.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Federal / Regulated Adoption</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            U.S. government, military, national laboratory, and other regulated deployments
+            (FedRAMP, FISMA, NIST AI RMF / SP 800-218 SSDF, CMMC, HIPAA, SOC 2 Type II, ISO 27001)
+            should contact <a href="mailto:admin@aidotnet.dev" class="text-blue-600 dark:text-blue-400 hover:underline">admin@aidotnet.dev</a>
+            for our Enterprise security program. The Enterprise tier includes:
+          </p>
+          <ul class="list-disc list-inside text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+            <li>Air-gapped deployment support (no telemetry, no license-server callout)</li>
+            <li>FIPS 140-3 compatible cryptographic modules</li>
+            <li>SBOM (CycloneDX 1.5) generation per release</li>
+            <li>SLSA Level 3 build provenance attestations</li>
+            <li>Signed NuGet packages</li>
+            <li>Dedicated security contact + custom SLA</li>
+            <li>NIST SP 800-218 SSDF compliance documentation</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            See <a href="/federal-use" class="text-blue-600 dark:text-blue-400 hover:underline">/federal-use</a>
+            for the federal-use page or
+            <a href="/enterprise" class="text-blue-600 dark:text-blue-400 hover:underline">/enterprise</a>
+            for general enterprise terms.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Coordinated Disclosure & Credit</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            We credit reporters in our advisory text and in release notes unless the reporter requests
+            anonymity. If you wish to publish your own write-up after the embargo ends, please share
+            the draft with us at least 48 hours in advance so we can coordinate timing.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Escalation</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            If you have not received an acknowledgement within 5 business days, please escalate
+            to <a href="mailto:admin@aidotnet.dev" class="text-blue-600 dark:text-blue-400 hover:underline">admin@aidotnet.dev</a>
+            with subject <code>[ESCALATION] Security report not acknowledged</code>.
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

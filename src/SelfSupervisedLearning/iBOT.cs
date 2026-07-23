@@ -1,0 +1,382 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.SelfSupervisedLearning.Losses;
+
+namespace AiDotNet.SelfSupervisedLearning;
+
+/// <summary>
+/// iBOT: Image BERT Pre-Training with Online Tokenizer - combining DINO with masked image modeling.
+/// </summary>
+/// <typeparam name="T">The numeric type used for computations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> iBOT combines the best of DINO (self-distillation) with
+/// masked image modeling (like MAE). It masks patches in the student view and predicts
+/// both the CLS token (like DINO) and the masked patches (like BERT for images).</para>
+///
+/// <para><b>Key innovations:</b></para>
+/// <list type="bullet">
+/// <item><b>Dual objective:</b> CLS token distillation + masked patch prediction</item>
+/// <item><b>Online tokenizer:</b> Uses teacher to provide targets for masked patches</item>
+/// <item><b>Shared architecture:</b> Single network handles both objectives</item>
+/// <item><b>Better representations:</b> Combines global (CLS) and local (patch) learning</item>
+/// </list>
+///
+/// <para><b>Loss formula:</b></para>
+/// <code>
+/// L = L_cls (DINO loss on CLS token) + λ * L_mim (masked patch prediction)
+/// </code>
+///
+/// <para><b>Reference:</b> Zhou et al., "iBOT: Image BERT Pre-Training with Online Tokenizer"
+/// (ICLR 2022)</para>
+///
+/// <para><b>Best for:</b> Combining generative and discriminative approaches.</para>
+/// <para><b>Pros:</b> Best of both worlds (DINO + MAE-like objectives).</para>
+/// <para><b>Cons:</b> More complex than pure DINO or MAE.</para>
+/// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("iBOT: Image BERT Pre-Training with Online Tokenizer", "https://arxiv.org/abs/2111.07832", Year = 2022, Authors = "Jinghao Zhou, Chen Wei, Huiber Wang, Wei Shen, Cihang Xie, Alan Yuille, Tao Kong")]
+public class iBOT<T> : TeacherStudentSSL<T>
+{
+    private readonly DINOLoss<T> _clsLoss;
+    private readonly DINOLoss<T> _patchLoss;
+    private readonly int _outputDim;
+    private readonly double _mimWeight;
+    private readonly double _maskRatio;
+
+    /// <inheritdoc />
+    public override string Name => "iBOT";
+
+    /// <inheritdoc />
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.SelfDistillation;
+
+    /// <summary>
+    /// Gets the weight for masked image modeling loss.
+    /// </summary>
+    public double MIMWeight => _mimWeight;
+
+    /// <summary>
+    /// Gets the mask ratio for patches.
+    /// </summary>
+    public double MaskRatio => _maskRatio;
+
+    /// <summary>
+    /// Initializes a new instance of the iBOT class.
+    /// </summary>
+    /// <param name="studentEncoder">The student encoder (ViT required).</param>
+    /// <param name="teacherEncoder">The teacher encoder (momentum-updated copy).</param>
+    /// <param name="studentProjector">Projection head for student.</param>
+    /// <param name="teacherProjector">Projection head for teacher.</param>
+    /// <param name="outputDim">Output dimension of the projection heads.</param>
+    /// <param name="mimWeight">Weight for masked image modeling loss (default: 1.0).</param>
+    /// <param name="maskRatio">Ratio of patches to mask (default: 0.4).</param>
+    /// <param name="config">Optional SSL configuration.</param>
+    public iBOT(
+        INeuralNetwork<T> studentEncoder,
+        IMomentumEncoder<T> teacherEncoder,
+        IProjectorHead<T> studentProjector,
+        IProjectorHead<T> teacherProjector,
+        int outputDim = 8192,
+        double mimWeight = 1.0,
+        double maskRatio = 0.4,
+        SelfSupervisedLearningConfig<T>? config = null)
+        : base(studentEncoder, teacherEncoder, studentProjector, teacherProjector,
+               outputDim, config ?? new SelfSupervisedLearningConfig<T>())
+    {
+        _outputDim = outputDim;
+        _mimWeight = mimWeight;
+        _maskRatio = maskRatio;
+
+        var dinoConfig = _config.DINO ?? new DINOConfig();
+        var studentTemp = dinoConfig.StudentTemperature ?? 0.1;
+        var teacherTemp = dinoConfig.TeacherTemperatureStart ?? 0.04;
+        var centerMomentum = dinoConfig.CenterMomentum ?? 0.9;
+
+        // Separate losses for CLS and patch prediction
+        _clsLoss = new DINOLoss<T>(outputDim, studentTemp, teacherTemp, centerMomentum);
+        _patchLoss = new DINOLoss<T>(outputDim, studentTemp, teacherTemp, centerMomentum);
+
+        NumGlobalCrops = 2;
+        NumLocalCrops = 0;
+    }
+
+    private int EstimateNumPatches(Tensor<T> view)
+    {
+        // Estimate patch count based on tensor shape
+        // For image tensors [batch, channels, height, width], compute from spatial dimensions
+        if (view.Shape.Length >= 4)
+        {
+            var height = view.Shape[2];
+            var width = view.Shape[3];
+            var patchSize = 16; // Standard ViT patch size
+            return (height / patchSize) * (width / patchSize);
+        }
+
+        // For pre-processed sequence inputs [batch, seq_len, dim] or [batch, dim]
+        // Assume seq_len dimension represents patches (minus CLS token)
+        if (view.Shape.Length == 3)
+        {
+            return Math.Max(1, view.Shape[1] - 1); // Subtract 1 for CLS token
+        }
+
+        // Fallback: assume 196 patches (14x14 for 224x224 images with 16x16 patches)
+        return 196;
+    }
+
+    private T ComputeMaskedPatchLoss(Tensor<T> studentOut, Tensor<T> teacherOut, Tensor<T> mask)
+    {
+        var batchSize = studentOut.Shape[0];
+        var numPatches = mask.Shape[1];
+
+        // For sequence outputs [batch, seq_len, dim], extract and compute loss on masked positions
+        if (studentOut.Shape.Length == 3 && studentOut.Shape[1] > 1)
+        {
+            var seqLen = studentOut.Shape[1];
+            var dim = studentOut.Shape[2];
+
+            // Skip CLS token (position 0), patches start at position 1
+            var patchStartIdx = 1;
+            var numPatchTokens = Math.Min(seqLen - patchStartIdx, numPatches);
+
+            if (numPatchTokens <= 0)
+            {
+                return NumOps.Zero;
+            }
+
+            // Compute loss only on masked positions
+            T totalLoss = NumOps.Zero;
+            int maskedCount = 0;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatchTokens; p++)
+                {
+                    // Check if this patch is masked
+                    if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                    {
+                        var patchIdx = patchStartIdx + p;
+
+                        // Compute MSE loss between student and teacher at this position
+                        T patchLoss = NumOps.Zero;
+                        for (int d = 0; d < dim; d++)
+                        {
+                            var diff = NumOps.Subtract(studentOut[b, patchIdx, d], teacherOut[b, patchIdx, d]);
+                            patchLoss = NumOps.Add(patchLoss, NumOps.Multiply(diff, diff));
+                        }
+
+                        totalLoss = NumOps.Add(totalLoss, patchLoss);
+                        maskedCount++;
+                    }
+                }
+            }
+
+            // Average over masked patches
+            if (maskedCount > 0)
+            {
+                return NumOps.Divide(totalLoss, NumOps.FromDouble(maskedCount * studentOut.Shape[2]));
+            }
+
+            return NumOps.Zero;
+        }
+
+        // For 2D outputs [batch, dim], use DINO-style loss weighted by mask ratio
+        // This handles the case where encoder outputs only CLS tokens
+        var numMasked = 0;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int p = 0; p < numPatches; p++)
+            {
+                if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                {
+                    numMasked++;
+                }
+            }
+        }
+
+        var baseLoss = _patchLoss.ComputeLoss(studentOut, teacherOut);
+
+        // Weight loss by proportion of masked patches
+        var maskWeight = numMasked > 0 ? (double)numMasked / (batchSize * numPatches) : 0.0;
+        return NumOps.Multiply(baseLoss, NumOps.FromDouble(maskWeight));
+    }
+
+    /// <summary>
+    /// Computes the gradient of the masked patch loss with respect to studentOut.
+    /// For MSE loss on masked patches, grad = 2*(student - teacher)/N for masked positions, 0 otherwise.
+    /// </summary>
+    private Tensor<T> ComputeMaskedPatchGradient(Tensor<T> studentOut, Tensor<T> teacherOut, Tensor<T> mask)
+    {
+        var grad = new Tensor<T>(studentOut._shape);
+        var batchSize = studentOut.Shape[0];
+        var numPatches = mask.Shape[1];
+
+        if (studentOut.Shape.Length == 3 && studentOut.Shape[1] > 1)
+        {
+            var seqLen = studentOut.Shape[1];
+            var dim = studentOut.Shape[2];
+            var patchStartIdx = 1;
+            var numPatchTokens = Math.Min(seqLen - patchStartIdx, numPatches);
+
+            if (numPatchTokens <= 0)
+            {
+                return grad;
+            }
+
+            // Count masked patches for normalization
+            int maskedCount = 0;
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatchTokens; p++)
+                {
+                    if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                    {
+                        maskedCount++;
+                    }
+                }
+            }
+
+            if (maskedCount == 0)
+            {
+                return grad;
+            }
+
+            var scale = NumOps.FromDouble(2.0 / (maskedCount * dim));
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatchTokens; p++)
+                {
+                    if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                    {
+                        var patchIdx = patchStartIdx + p;
+                        for (int d = 0; d < dim; d++)
+                        {
+                            var diff = NumOps.Subtract(studentOut[b, patchIdx, d], teacherOut[b, patchIdx, d]);
+                            grad[b, patchIdx, d] = NumOps.Multiply(diff, scale);
+                        }
+                    }
+                }
+            }
+
+            return grad;
+        }
+
+        // For 2D outputs, use DINOLoss gradients weighted by mask ratio
+        var (_, baseGrad) = _patchLoss.ComputeLossWithGradients(studentOut, teacherOut);
+        int numMasked = 0;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int p = 0; p < numPatches; p++)
+            {
+                if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                {
+                    numMasked++;
+                }
+            }
+        }
+
+        var maskWeight = numMasked > 0 ? (double)numMasked / (batchSize * numPatches) : 0.0;
+        var weightT = NumOps.FromDouble(maskWeight);
+
+        for (int i = 0; i < baseGrad.Length; i++)
+        {
+            grad[i] = NumOps.Multiply(baseGrad[i], weightT);
+        }
+
+        return grad;
+    }
+
+    /// <summary>
+    /// Combines CLS and MIM loss gradients element-wise: result = clsWeight * gradCls + mimWeight * gradMim.
+    /// </summary>
+    private Tensor<T> CombineLossGradients(Tensor<T> gradCls, Tensor<T> gradMim, double clsWeight, double mimWeight)
+    {
+        var result = new Tensor<T>(gradCls._shape);
+        var cw = NumOps.FromDouble(clsWeight);
+        var mw = NumOps.FromDouble(mimWeight);
+
+        for (int i = 0; i < gradCls.Length; i++)
+        {
+            result[i] = NumOps.Add(
+                NumOps.Multiply(gradCls[i], cw),
+                NumOps.Multiply(gradMim[i], mw));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Updates the student network with pre-accumulated projector gradients.
+    /// </summary>
+    private void UpdateStudent(T learningRate, Vector<T> accumulatedProjGrads)
+    {
+        // Update encoder
+        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
+        var encoderParams = _encoder.GetParameters();
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
+
+        // Update projector with accumulated gradients from both views
+        if (_projector is not null)
+        {
+            var projParams = _projector.GetParameters();
+            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(accumulatedProjGrads, learningRate)));
+        }
+    }
+
+    private Tensor<T> GenerateMask(int batchSize, int numPatches)
+    {
+        var rng = RandomHelper.Shared;
+        var mask = new T[batchSize * numPatches];
+        var numMasked = (int)(numPatches * _maskRatio);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Shuffle indices
+            var indices = Enumerable.Range(0, numPatches).OrderBy(_ => rng.Next()).ToArray();
+
+            for (int p = 0; p < numPatches; p++)
+            {
+                mask[b * numPatches + indices[p]] = p < numMasked
+                    ? NumOps.One
+                    : NumOps.Zero;
+            }
+        }
+
+        return new Tensor<T>(mask, [batchSize, numPatches]);
+    }
+
+    /// <summary>
+    /// Creates an iBOT instance with default configuration.
+    /// </summary>
+    public static iBOT<T> Create(
+        INeuralNetwork<T> encoder,
+        Func<INeuralNetwork<T>, INeuralNetwork<T>> createEncoderCopy,
+        int encoderOutputDim,
+        int outputDim = 8192,
+        int hiddenDim = 2048,
+        double mimWeight = 1.0,
+        double maskRatio = 0.4)
+    {
+        var studentProjector = new MLPProjector<T>(
+            encoderOutputDim, hiddenDim, outputDim, useBatchNormOnOutput: true);
+        var teacherProjector = new MLPProjector<T>(
+            encoderOutputDim, hiddenDim, outputDim, useBatchNormOnOutput: true);
+
+        teacherProjector.SetParameters(studentProjector.GetParameters());
+
+        var encoderCopy = createEncoderCopy(encoder);
+        var teacherEncoder = new MomentumEncoder<T>(encoderCopy, 0.996);
+
+        return new iBOT<T>(encoder, teacherEncoder, studentProjector, teacherProjector,
+                          outputDim, mimWeight, maskRatio);
+    
+
+}
+}

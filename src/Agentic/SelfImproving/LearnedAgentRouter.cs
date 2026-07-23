@@ -1,0 +1,190 @@
+using AiDotNet.Agentic.Agents;
+using AiDotNet.Agentic.Models;
+
+// Disambiguate from the legacy AiDotNet.PromptEngineering.Templates.ChatMessage (global using).
+using ChatMessage = AiDotNet.Agentic.Models.ChatMessage;
+
+namespace AiDotNet.Agentic.SelfImproving;
+
+/// <summary>
+/// A router that learns, from graded <see cref="AgentTrajectory"/> history, which candidate agent performs
+/// best and routes new requests accordingly — a contextual reward-weighted bandit. As more rewarded runs
+/// accumulate, the routing improves, so the orchestration gets better at its task over time without a
+/// hand-tuned router.
+/// </summary>
+/// <typeparam name="T">The numeric type shared across the agent stack.</typeparam>
+/// <remarks>
+/// <para>
+/// Because it is an <see cref="IAgent{T}"/>, the router drops in anywhere an agent is expected and composes
+/// with tracing (so its own routed runs feed back into the trajectory store, closing the self-improvement
+/// loop). It exploits the highest mean-reward agent for the request's context, explores unseen agents first
+/// (optimistic), and takes a random agent with probability <c>explorationRate</c> to keep discovering. An
+/// optional context key lets it learn different best-agents for different kinds of task.
+/// </para>
+/// <para><b>For Beginners:</b> Imagine a dispatcher who remembers which worker did best on each kind of job.
+/// Given a new job it sends it to the worker with the best track record (occasionally trying others to keep
+/// learning). Feed it the graded history and it gets smarter about who to pick.
+/// </para>
+/// </remarks>
+public sealed class LearnedAgentRouter<T> : IAgent<T>
+{
+    private readonly Dictionary<string, IAgent<T>> _candidates;
+    private readonly Dictionary<string, RewardStatistics> _statistics = new(StringComparer.Ordinal);
+    private readonly double _explorationRate;
+    private readonly Random _random;
+    private readonly Func<IReadOnlyList<ChatMessage>, string>? _contextKey;
+
+    /// <summary>
+    /// Initializes a new learned router.
+    /// </summary>
+    /// <param name="candidates">The candidate agents to route among. Must be non-empty with unique names.</param>
+    /// <param name="explorationRate">The probability of choosing a random candidate instead of the best (0–1). Default 0 (pure exploit).</param>
+    /// <param name="contextKey">Optional function mapping a request to a context key, so the router learns per-context best-agents. <c>null</c> learns globally.</param>
+    /// <param name="seed">Optional RNG seed for reproducible exploration.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidates"/> (or any candidate) is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">Thrown when candidates is empty or contains duplicate names.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="explorationRate"/> is outside [0, 1].</exception>
+    public LearnedAgentRouter(
+        IReadOnlyList<IAgent<T>> candidates,
+        double explorationRate = 0.0,
+        Func<IReadOnlyList<ChatMessage>, string>? contextKey = null,
+        int? seed = null)
+    {
+        Guard.NotNull(candidates);
+        if (candidates.Count == 0)
+        {
+            throw new ArgumentException("At least one candidate agent is required.", nameof(candidates));
+        }
+
+        if (explorationRate < 0 || explorationRate > 1 || double.IsNaN(explorationRate))
+        {
+            throw new ArgumentOutOfRangeException(nameof(explorationRate), "Exploration rate must be in [0, 1].");
+        }
+
+        _candidates = new Dictionary<string, IAgent<T>>(StringComparer.Ordinal);
+        foreach (var candidate in candidates)
+        {
+            Guard.NotNull(candidate);
+            if (_candidates.ContainsKey(candidate.Name))
+            {
+                throw new ArgumentException($"Duplicate candidate agent name '{candidate.Name}'.", nameof(candidates));
+            }
+
+            _candidates.Add(candidate.Name, candidate);
+        }
+
+        _explorationRate = explorationRate;
+        _contextKey = contextKey;
+        _random = seed is { } value
+            ? RandomHelper.CreateSeededRandom(value)
+            : RandomHelper.CreateSecureRandom();
+    }
+
+    /// <inheritdoc/>
+    public string Name => "learned-router";
+
+    /// <inheritdoc/>
+    public string Description => "Routes to the candidate agent with the best learned reward for the request's context.";
+
+    /// <summary>
+    /// Updates the router's policy from graded trajectories. Trajectories whose <see cref="AgentTrajectory.AgentName"/>
+    /// matches a candidate and whose <see cref="AgentTrajectory.Reward"/> is set contribute to that agent's mean
+    /// reward (per the trajectory's context key).
+    /// </summary>
+    /// <param name="trajectories">The graded trajectories to learn from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="trajectories"/> is <c>null</c>.</exception>
+    public void LearnFrom(IEnumerable<AgentTrajectory> trajectories)
+    {
+        Guard.NotNull(trajectories);
+        foreach (var trajectory in trajectories)
+        {
+            if (trajectory.Reward is not { } reward || !_candidates.ContainsKey(trajectory.AgentName))
+            {
+                continue;
+            }
+
+            var context = _contextKey is null ? string.Empty : _contextKey(trajectory.Messages);
+            var key = StatKey(context, trajectory.AgentName);
+            if (!_statistics.TryGetValue(key, out var stats))
+            {
+                stats = new RewardStatistics();
+                _statistics[key] = stats;
+            }
+
+            stats.Add(reward);
+        }
+    }
+
+    /// <summary>
+    /// Returns the name of the agent the router would choose for the given request, without running it
+    /// (deterministic when <c>explorationRate</c> is 0).
+    /// </summary>
+    /// <param name="messages">The request conversation.</param>
+    /// <returns>The chosen candidate's name.</returns>
+    public string SelectAgentName(IReadOnlyList<ChatMessage> messages)
+    {
+        Guard.NotNull(messages);
+        return Select(messages).Name;
+    }
+
+    /// <inheritdoc/>
+    public Task<AgentRunResult> RunAsync(
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.NotNull(messages);
+        return Select(messages).RunAsync(messages, cancellationToken);
+    }
+
+    private IAgent<T> Select(IReadOnlyList<ChatMessage> messages)
+    {
+        var context = _contextKey is null ? string.Empty : _contextKey(messages);
+
+        // Optimistic exploration: try any candidate with no data for this context first.
+        foreach (var candidate in _candidates.Values)
+        {
+            if (!_statistics.ContainsKey(StatKey(context, candidate.Name)))
+            {
+                return candidate;
+            }
+        }
+
+        // Epsilon-greedy exploration.
+        if (_explorationRate > 0 && _random.NextDouble() < _explorationRate)
+        {
+            var index = _random.Next(_candidates.Count);
+            return _candidates.Values.ElementAt(index);
+        }
+
+        // Exploit: the candidate with the highest mean reward for this context.
+        IAgent<T>? best = null;
+        var bestMean = double.NegativeInfinity;
+        foreach (var candidate in _candidates.Values)
+        {
+            var mean = _statistics[StatKey(context, candidate.Name)].Mean;
+            if (best is null || mean > bestMean)
+            {
+                best = candidate;
+                bestMean = mean;
+            }
+        }
+
+        return best ?? _candidates.Values.First();
+    }
+
+    private static string StatKey(string context, string agentName) => context + "\0" + agentName;
+
+    private sealed class RewardStatistics
+    {
+        private int _count;
+        private double _sum;
+
+        public double Mean => _count == 0 ? 0.0 : _sum / _count;
+
+        public void Add(double reward)
+        {
+            _count++;
+            _sum += reward;
+        }
+    }
+}

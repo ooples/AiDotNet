@@ -1,0 +1,383 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.ImageEditing;
+
+/// <summary>
+/// DiffEdit model for automatic mask generation and text-guided image editing.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// DiffEdit automatically generates editing masks by comparing noise predictions conditioned
+/// on source and target text prompts. The difference in predictions highlights which regions
+/// need to change, producing a spatial mask without any manual annotation. The mask is then
+/// used to selectively apply the edit while preserving unrelated regions.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> DiffEdit lets you edit images by just describing what to change.
+///
+/// How it works:
+/// 1. You provide the original image, a source prompt, and a target prompt
+/// 2. The model predicts noise for both prompts and computes the difference
+/// 3. The difference map becomes an automatic editing mask
+/// 4. The image is re-generated in masked regions guided by the target prompt
+///
+/// Key characteristics:
+/// - Based on Stable Diffusion 1.5 (512x512, CLIP ViT-L/14)
+/// - No manual mask required -- masks are generated automatically
+/// - Preserves unedited regions faithfully
+/// - Uses DDIM scheduler for deterministic inversion and editing
+/// </para>
+/// <para>
+/// Technical specifications:
+/// - Architecture: SD 1.5 U-Net with differential noise prediction for mask generation
+/// - Text encoder: CLIP ViT-L/14 (768-dim, 77 max tokens)
+/// - Cross-attention dimension: 768
+/// - VAE: 4 latent channels, scale factor 0.18215
+/// - Noise schedule: Scaled linear beta [0.00085, 0.012], 1000 timesteps
+/// - Scheduler: DDIM (deterministic inversion required)
+///
+/// Reference: Couairon et al., "DiffEdit: Diffusion-based Semantic Image Editing with Mask Guidance", ICLR 2023
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new DiffEditModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.ImageEditing)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("DiffEdit: Diffusion-based Semantic Image Editing with Mask Guidance", "https://arxiv.org/abs/2210.11427", Year = 2023, Authors = "Couairon et al.")]
+public class DiffEditModel<T> : LatentDiffusionModelBase<T>
+{
+    #region Constants
+
+    /// <summary>
+    /// Default image width for DiffEdit (SD 1.5 native resolution).
+    /// </summary>
+    public const int DefaultWidth = 512;
+
+    /// <summary>
+    /// Default image height for DiffEdit (SD 1.5 native resolution).
+    /// </summary>
+    public const int DefaultHeight = 512;
+
+    /// <summary>
+    /// Number of latent channels in the VAE.
+    /// </summary>
+    private const int LATENT_CHANNELS = 4;
+
+    /// <summary>
+    /// Cross-attention dimension matching CLIP ViT-L/14 output (768).
+    /// </summary>
+    private const int CROSS_ATTENTION_DIM = 768;
+
+    /// <summary>
+    /// Default classifier-free guidance scale (7.5).
+    /// </summary>
+    private const double DEFAULT_GUIDANCE_SCALE = 7.5;
+
+    #endregion
+
+    #region Fields
+
+    private UNetNoisePredictor<T> _unet;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    #endregion
+
+    #region Properties
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _unet;
+
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+
+    /// <inheritdoc />
+    public override long ParameterCount
+    {
+        get
+        {
+            // Lazy-init fix pattern (SDXLTurboModel / DDPMModel / RealESRGANModel /
+            // EDiffIModel): force U-Net + VAE shape resolution so ParameterCount is
+            // arch-derived and matches what SetParameters validates against.
+            _unet.TriggerLazyShapeResolution();
+            _vae.TriggerLazyShapeResolution();
+            return _unet.ParameterCount + _vae.ParameterCount;
+        }
+    }
+
+    /// <summary>
+    /// Gets the cross-attention dimension (768 for CLIP ViT-L/14).
+    /// </summary>
+    public int CrossAttentionDim => CROSS_ATTENTION_DIM;
+
+    #endregion
+
+    #region Constructor
+
+    /// <summary>
+    /// Initializes a new instance of DiffEditModel with full customization support.
+    /// </summary>
+    /// <param name="options">Configuration options. If null, uses SD 1.5 defaults.</param>
+    /// <param name="scheduler">Custom noise scheduler. If null, creates a DDIM scheduler.</param>
+    /// <param name="unet">Custom U-Net. If null, creates the standard SD 1.5 U-Net.</param>
+    /// <param name="vae">Custom VAE. If null, creates the standard SD 1.5 VAE.</param>
+    /// <param name="conditioner">Text encoder conditioning module.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    public DiffEditModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? unet = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _conditioner = conditioner;
+
+        InitializeLayers(unet, vae, seed);
+
+        SetGuidanceScale(DEFAULT_GUIDANCE_SCALE);
+    }
+
+    #endregion
+
+    #region Layer Initialization
+
+    /// <summary>
+    /// Initializes the U-Net and VAE layers using custom layers if provided,
+    /// or creating industry-standard SD 1.5 layers.
+    /// </summary>
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? unet,
+        StandardVAE<T>? vae,
+        int? seed)
+    {
+        _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
+            inputChannels: LATENT_CHANNELS,
+            outputChannels: LATENT_CHANNELS,
+            baseChannels: 320,
+            channelMultipliers: [1, 2, 4, 4],
+            numResBlocks: 2,
+            attentionResolutions: [4, 2, 1],
+            contextDim: CROSS_ATTENTION_DIM,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3,
+            latentChannels: LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2,
+            latentScaleFactor: 0.18215,
+            seed: seed);
+    }
+
+    #endregion
+
+    #region Generation Methods
+
+    /// <inheritdoc />
+    public override Tensor<T> GenerateFromText(
+        string prompt,
+        string? negativePrompt = null,
+        int width = DefaultWidth,
+        int height = DefaultHeight,
+        int numInferenceSteps = 50,
+        double? guidanceScale = null,
+        int? seed = null)
+    {
+        var effectiveGuidanceScale = guidanceScale ?? DEFAULT_GUIDANCE_SCALE;
+
+        return base.GenerateFromText(
+            prompt,
+            negativePrompt,
+            width,
+            height,
+            numInferenceSteps,
+            effectiveGuidanceScale,
+            seed);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ImageToImage(
+        Tensor<T> inputImage,
+        string prompt,
+        string? negativePrompt = null,
+        double strength = 0.75,
+        int numInferenceSteps = 50,
+        double? guidanceScale = null,
+        int? seed = null)
+    {
+        var effectiveGuidanceScale = guidanceScale ?? DEFAULT_GUIDANCE_SCALE;
+
+        return base.ImageToImage(
+            inputImage,
+            prompt,
+            negativePrompt,
+            strength,
+            numInferenceSteps,
+            effectiveGuidanceScale,
+            seed);
+    }
+
+    #endregion
+
+    #region IParameterizable Implementation
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        // Resolve lazy shape (see ParameterCount comment) so the returned vector
+        // matches the arch-derived total SetParameters validates against.
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
+        var unetParams = _unet.GetParameters();
+        var vaeParams = _vae.GetParameters();
+
+        var totalLength = unetParams.Length + vaeParams.Length;
+        var combined = new Vector<T>(totalLength);
+
+        for (int i = 0; i < unetParams.Length; i++)
+        {
+            combined[i] = unetParams[i];
+        }
+
+        for (int i = 0; i < vaeParams.Length; i++)
+        {
+            combined[unetParams.Length + i] = vaeParams[i];
+        }
+
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // See GetParameters for the lazy-resolve rationale.
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
+
+        if (parameters.Length != unetCount + vaeCount)
+        {
+            throw new ArgumentException(
+                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        var unetParams = new Vector<T>(unetCount);
+        var vaeParams = new Vector<T>(vaeCount);
+
+        for (int i = 0; i < unetCount; i++)
+        {
+            unetParams[i] = parameters[i];
+        }
+
+        for (int i = 0; i < vaeCount; i++)
+        {
+            vaeParams[i] = parameters[unetCount + i];
+        }
+
+        _unet.SetParameters(unetParams);
+        _vae.SetParameters(vaeParams);
+    }
+
+    #endregion
+
+    #region ICloneable Implementation
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        return Clone();
+    }
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        // Delegate to sub-Clones — same lazy-init fix pattern as
+        // SDXLTurboModel / RealESRGANModel / EDiffIModel / DDPMModel.
+        // Preserve outer configuration (architecture / options / scheduler) so
+        // custom diffusion settings round-trip through Clone (CodeRabbit PR #1562).
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
+        return new DiffEditModel<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
+            unet: clonedUnet,
+            vae: clonedVae,
+            conditioner: _conditioner);
+    }
+
+    #endregion
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "DiffEdit",
+            Version = "1.0",
+            Description = "DiffEdit automatically generates editing masks by comparing noise predictions between source and target prompts",
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
+            Complexity = ParameterCount
+        };
+
+        metadata.SetProperty("architecture", "latent-diffusion");
+        metadata.SetProperty("base_model", "Stable Diffusion 1.5");
+        metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
+        metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("default_resolution", DefaultWidth);
+        metadata.SetProperty("scheduler", "DDIM");
+        metadata.SetProperty("mask_generation", "differential_noise_prediction");
+
+        return metadata;
+    }
+
+    #endregion
+}

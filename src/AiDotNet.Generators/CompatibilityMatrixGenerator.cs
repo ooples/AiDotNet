@@ -1,0 +1,780 @@
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace AiDotNet.Generators;
+
+/// <summary>
+/// Roslyn incremental source generator that produces a compile-time compatibility matrix
+/// showing which models work with which optimizers, loss functions, and preprocessors.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Analyzes [ModelCategory] attributes to determine compatible loss functions and optimizers
+/// based on predefined compatibility rules. Emits a static <c>ModelCompatibility</c> class
+/// with query methods and diagnostic warnings for suspicious combinations.
+/// </para>
+/// </remarks>
+[Generator]
+public class CompatibilityMatrixGenerator : IIncrementalGenerator
+{
+    private const string IFullModelName = "AiDotNet.Interfaces.IFullModel";
+    private const string ModelCategoryAttr = "AiDotNet.Attributes.ModelCategoryAttribute";
+    private const string ModelTaskAttr = "AiDotNet.Attributes.ModelTaskAttribute";
+    private const string ModelMetadataExemptAttr = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
+
+    // Named constants for ModelCategory enum values (must match AiDotNet.Enums.ModelCategory)
+    private const int CatNeuralNetwork = 0;
+    private const int CatRegression = 1;
+    private const int CatClassifier = 2;
+    private const int CatClustering = 3;
+    private const int CatGAN = 4;
+    private const int CatDiffusion = 5;
+    private const int CatTransformer = 6;
+    private const int CatReinforcementLearningAgent = 7;
+    private const int CatGaussianProcess = 8;
+    private const int CatEnsemble = 9;
+    private const int CatBayesian = 10;
+    private const int CatSurvivalModel = 11;
+    private const int CatCausalModel = 12;
+    private const int CatTimeSeriesModel = 13;
+    private const int CatAutoencoder = 14;
+    private const int CatRecurrentNetwork = 15;
+    private const int CatConvolutionalNetwork = 16;
+    private const int CatGraphNetwork = 17;
+    private const int CatEmbeddingModel = 18;
+    private const int CatFoundationModel = 19;
+    private const int CatMetaLearning = 20;
+    private const int CatTabularModel = 21;
+    private const int CatSyntheticDataGenerator = 22;
+    private const int CatPhysicsInformed = 23;
+    private const int CatNeuralOperator = 24;
+    private const int CatAgent = 25;
+    private const int CatSignalProcessing = 26;
+    private const int CatSVM = 27;
+    private const int CatKernel = 28;
+    private const int CatInstanceBased = 29;
+    private const int CatLinear = 30;
+    private const int CatDecisionTree = 31;
+    private const int CatStatistical = 32;
+    private const int CatRegularization = 33;
+    private const int CatInterpretable = 34;
+    private const int CatOptimization = 35;
+    private const int CatAnomalyDetection = 36;
+
+    // Optimizer name constants (must match actual optimizer class names in AiDotNet.Optimizers)
+    private const string OptSGD = "SGD";
+    private const string OptAdam = "Adam";
+    private const string OptAdamW = "AdamW";
+    private const string OptRMSProp = "RMSProp";
+    private const string OptAdaGrad = "AdaGrad";
+    private const string OptAdadelta = "Adadelta";
+    private const string OptLAMB = "LAMB";
+    private const string OptLBFGS = "LBFGS";
+    private const string OptSMO = "SMO";
+    private const string OptBuiltIn = "BuiltIn";
+
+    // Loss function name constants (must match actual loss class names in AiDotNet.LossFunctions)
+    private const string LossMSE = "MSE";
+    private const string LossMAE = "MAE";
+    private const string LossHuber = "Huber";
+    private const string LossLogCosh = "LogCosh";
+    private const string LossCrossEntropy = "CrossEntropy";
+    private const string LossBinaryCrossEntropy = "BinaryCrossEntropy";
+    private const string LossHinge = "Hinge";
+    private const string LossFocalLoss = "FocalLoss";
+    private const string LossAdversarial = "Adversarial";
+    private const string LossWasserstein = "Wasserstein";
+    private const string LossHingeLoss = "HingeLoss";
+    private const string LossL1 = "L1";
+    private const string LossVLB = "VLB";
+    private const string LossBCE = "BCE";
+    private const string LossKLDivergence = "KLDivergence";
+    private const string LossCoxPartialLikelihood = "CoxPartialLikelihood";
+    private const string LossLogRankLoss = "LogRankLoss";
+    private const string LossQuantileLoss = "QuantileLoss";
+
+    // Preprocessor name constants
+    private const string PrepStandardScaler = "StandardScaler";
+    private const string PrepMinMaxScaler = "MinMaxScaler";
+    private const string PrepOneHotEncoder = "OneHotEncoder";
+    private const string PrepTokenizerPreprocessor = "TokenizerPreprocessor";
+    private const string PrepGraphNormalizer = "GraphNormalizer";
+    private const string PrepTimeSeriesScaler = "TimeSeriesScaler";
+
+    // Diagnostic for suspicious model/optimizer combinations (reducible overlap)
+    private static readonly DiagnosticDescriptor SuspiciousOptimizer = new(
+        id: "AIDN030",
+        title: "Conflicting optimizer requirements across model categories",
+        messageFormat: "Model '{0}' has categories '{1}' with conflicting optimizer requirements. Ensure the model's default optimizer is from the intersection of compatible optimizers for all its categories.",
+        category: "AiDotNet.Compatibility",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    // Diagnostic for impossible model/optimizer combinations (empty intersection)
+    private static readonly DiagnosticDescriptor ImpossibleOptimizerCombination = new(
+        id: "AIDN031",
+        title: "Impossible optimizer requirements across model categories",
+        messageFormat: "Model '{0}' has categories '{1}' with no common optimizer. The intersection of compatible optimizers is empty, meaning no optimizer can satisfy all categories simultaneously.",
+        category: "AiDotNet.Compatibility",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+            predicate: static (node, _) => IsCandidate(node),
+            transform: static (ctx, _) => GetModelClassOrNull(ctx))
+            .Where(static s => s is not null);
+
+        var collected = classDeclarations.Collect().Combine(context.CompilationProvider);
+
+        context.RegisterSourceOutput(collected, static (spc, source) =>
+        {
+            var (candidates, compilation) = source;
+            Execute(spc, candidates, compilation);
+        });
+    }
+
+    private static bool IsCandidate(SyntaxNode node)
+    {
+        if (node is not ClassDeclarationSyntax cds)
+            return false;
+        if (cds.BaseList is null || cds.BaseList.Types.Count == 0)
+            return false;
+        foreach (var modifier in cds.Modifiers)
+        {
+            if (modifier.Text == "abstract")
+                return false;
+        }
+        return true;
+    }
+
+    private static INamedTypeSymbol? GetModelClassOrNull(GeneratorSyntaxContext ctx)
+    {
+        var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol;
+        if (symbol is null || symbol.IsAbstract)
+            return null;
+        foreach (var iface in symbol.AllInterfaces)
+        {
+            if (iface.IsGenericType &&
+                iface.OriginalDefinition.ToDisplayString().StartsWith(IFullModelName, System.StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+        }
+        return null;
+    }
+
+    private static void Execute(
+        SourceProductionContext context,
+        ImmutableArray<INamedTypeSymbol?> candidates,
+        Compilation compilation)
+    {
+        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
+        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
+        var categoryEnumType = compilation.GetTypeByMetadataName("AiDotNet.Enums.ModelCategory");
+
+        if (categoryAttrSymbol is null || candidates.IsDefaultOrEmpty)
+        {
+            EmitCompatibilityClass(context, new List<CompatEntry>());
+            return;
+        }
+
+        var entries = new List<CompatEntry>();
+        var seen = new HashSet<string>();
+
+        foreach (var modelClass in candidates)
+        {
+            if (modelClass is null)
+                continue;
+
+            var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (!seen.Add(fullName))
+                continue;
+
+            // Skip classes marked with [ModelMetadataExempt]
+            if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
+                continue;
+
+            var categories = new List<int>();
+            foreach (var attr in modelClass.GetAttributes())
+            {
+                if (attr.AttributeClass is not null &&
+                    SymbolEqualityComparer.Default.Equals(attr.AttributeClass, categoryAttrSymbol))
+                {
+                    if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int c)
+                        categories.Add(c);
+                }
+            }
+
+            if (categories.Count > 0)
+            {
+                entries.Add(new CompatEntry
+                {
+                    ClassName = modelClass.Name,
+                    FullyQualifiedName = fullName,
+                    TypeParameterCount = modelClass.TypeParameters.Length,
+                    Categories = categories,
+                    Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
+                });
+            }
+        }
+
+        entries.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
+
+        // Emit diagnostics for models whose categories have conflicting optimizer requirements.
+        // AIDN030 (Warning): intersection is non-empty but smaller than union (reducible overlap).
+        // AIDN031 (Error): intersection is empty (impossible combination, no optimizer works).
+        foreach (var entry in entries)
+        {
+            var (_, _, _, warnings) = GetCompatibilityRules(entry.Categories);
+            if (warnings.Count > 0 && entry.Location is not null)
+            {
+                var categoryNames = string.Join(", ", entry.Categories.Select(c => GetCategoryName(c, categoryEnumType)));
+                bool isImpossible = warnings.Any(w => w.StartsWith("IMPOSSIBLE:", System.StringComparison.Ordinal));
+
+                context.ReportDiagnostic(Diagnostic.Create(
+                    isImpossible ? ImpossibleOptimizerCombination : SuspiciousOptimizer,
+                    entry.Location,
+                    entry.ClassName,
+                    categoryNames));
+            }
+        }
+
+        EmitCompatibilityClass(context, entries);
+    }
+
+    private static void EmitCompatibilityClass(SourceProductionContext context, List<CompatEntry> entries)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine();
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using AiDotNet.Enums;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Generated;");
+        sb.AppendLine();
+
+        // ModelCompatibilityInfo class
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// Contains compatibility information for a model type.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("internal sealed class ModelCompatibilityInfo");
+        sb.AppendLine("{");
+        sb.AppendLine("    /// <summary>Gets the model type.</summary>");
+        sb.AppendLine("    public Type ModelType { get; }");
+        sb.AppendLine("    /// <summary>Gets compatible optimizer categories.</summary>");
+        sb.AppendLine("    public IReadOnlyList<string> CompatibleOptimizers { get; }");
+        sb.AppendLine("    /// <summary>Gets compatible loss function categories.</summary>");
+        sb.AppendLine("    public IReadOnlyList<string> CompatibleLossFunctions { get; }");
+        sb.AppendLine("    /// <summary>Gets recommended preprocessors.</summary>");
+        sb.AppendLine("    public IReadOnlyList<string> RecommendedPreprocessors { get; }");
+        sb.AppendLine("    /// <summary>Gets any compatibility warnings.</summary>");
+        sb.AppendLine("    public IReadOnlyList<string> Warnings { get; }");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Initializes a new compatibility info entry.</summary>");
+        sb.AppendLine("    public ModelCompatibilityInfo(");
+        sb.AppendLine("        Type modelType,");
+        sb.AppendLine("        string[] compatibleOptimizers,");
+        sb.AppendLine("        string[] compatibleLossFunctions,");
+        sb.AppendLine("        string[] recommendedPreprocessors,");
+        sb.AppendLine("        string[] warnings)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        ModelType = modelType;");
+        sb.AppendLine("        CompatibleOptimizers = compatibleOptimizers;");
+        sb.AppendLine("        CompatibleLossFunctions = compatibleLossFunctions;");
+        sb.AppendLine("        RecommendedPreprocessors = recommendedPreprocessors;");
+        sb.AppendLine("        Warnings = warnings;");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        // ModelCompatibility static class
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// Auto-generated compile-time compatibility matrix for models, optimizers, and loss functions.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("internal static class ModelCompatibility");
+        sb.AppendLine("{");
+
+        // Build the lookup dictionary
+        sb.AppendLine("    private static readonly Dictionary<Type, ModelCompatibilityInfo> _lookup = BuildLookup();");
+        sb.AppendLine();
+
+        // GetInfo method
+        sb.AppendLine("    /// <summary>Gets compatibility information for a model type.</summary>");
+        sb.AppendLine("    public static ModelCompatibilityInfo? GetInfo(Type modelType)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var key = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;");
+        sb.AppendLine("        if (_lookup.TryGetValue(key, out var info))");
+        sb.AppendLine("            return info;");
+        sb.AppendLine("        return null;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // GetCompatibleOptimizers
+        sb.AppendLine("    /// <summary>Gets optimizer categories compatible with the given model type.</summary>");
+        sb.AppendLine("    public static IReadOnlyList<string> GetCompatibleOptimizers(Type modelType)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var info = GetInfo(modelType);");
+        sb.AppendLine("        return info is not null ? info.CompatibleOptimizers : Array.Empty<string>();");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // GetCompatibleLossFunctions
+        sb.AppendLine("    /// <summary>Gets loss function categories compatible with the given model type.</summary>");
+        sb.AppendLine("    public static IReadOnlyList<string> GetCompatibleLossFunctions(Type modelType)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var info = GetInfo(modelType);");
+        sb.AppendLine("        return info is not null ? info.CompatibleLossFunctions : Array.Empty<string>();");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // GetRecommendedPreprocessors
+        sb.AppendLine("    /// <summary>Gets recommended preprocessors for the given model type.</summary>");
+        sb.AppendLine("    public static IReadOnlyList<string> GetRecommendedPreprocessors(Type modelType)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var info = GetInfo(modelType);");
+        sb.AppendLine("        return info is not null ? info.RecommendedPreprocessors : Array.Empty<string>();");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // IsCompatible method
+        sb.AppendLine("    /// <summary>Checks whether the given model type is compatible with the given optimizer type.</summary>");
+        sb.AppendLine("    /// <param name=\"modelType\">The model type to check.</param>");
+        sb.AppendLine("    /// <param name=\"optimizerType\">The optimizer type to check against.</param>");
+        sb.AppendLine("    /// <returns><c>true</c> if the combination is compatible or the model is unknown; otherwise <c>false</c>.</returns>");
+        sb.AppendLine("    public static bool IsCompatible(Type modelType, Type optimizerType)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var info = GetInfo(modelType);");
+        sb.AppendLine("        if (info is null)");
+        sb.AppendLine("            return true; // Unknown models are assumed compatible");
+        sb.AppendLine();
+        sb.AppendLine("        var optimizerName = optimizerType.Name;");
+        sb.AppendLine("        var backtick = optimizerName.IndexOf('`');");
+        sb.AppendLine("        if (backtick >= 0)");
+        sb.AppendLine("            optimizerName = optimizerName.Substring(0, backtick);");
+        sb.AppendLine();
+        sb.AppendLine("        foreach (var compat in info.CompatibleOptimizers)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (string.Equals(compat, optimizerName, StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine("                return true;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // IsCompatibleLossFunction method
+        sb.AppendLine("    /// <summary>Checks whether the given model type is compatible with the given loss function type.</summary>");
+        sb.AppendLine("    /// <param name=\"modelType\">The model type to check.</param>");
+        sb.AppendLine("    /// <param name=\"lossFunctionType\">The loss function type to check against.</param>");
+        sb.AppendLine("    /// <returns><c>true</c> if the combination is compatible or the model is unknown; otherwise <c>false</c>.</returns>");
+        sb.AppendLine("    public static bool IsCompatibleLossFunction(Type modelType, Type lossFunctionType)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var info = GetInfo(modelType);");
+        sb.AppendLine("        if (info is null)");
+        sb.AppendLine("            return true; // Unknown models are assumed compatible");
+        sb.AppendLine();
+        sb.AppendLine("        var lossName = lossFunctionType.Name;");
+        sb.AppendLine("        var backtick = lossName.IndexOf('`');");
+        sb.AppendLine("        if (backtick >= 0)");
+        sb.AppendLine("            lossName = lossName.Substring(0, backtick);");
+        sb.AppendLine();
+        sb.AppendLine("        foreach (var compat in info.CompatibleLossFunctions)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (string.Equals(compat, lossName, StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine("                return true;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // BuildLookup
+        sb.AppendLine("    private static Dictionary<Type, ModelCompatibilityInfo> BuildLookup()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var dict = new Dictionary<Type, ModelCompatibilityInfo>();");
+
+        foreach (var entry in entries)
+        {
+            var typeExpr = BuildTypeOfExpression(entry);
+            var (optimizers, lossFunctions, preprocessors, warnings) = GetCompatibilityRules(entry.Categories);
+
+            sb.AppendLine($"        dict[{typeExpr}] = new ModelCompatibilityInfo(");
+            sb.AppendLine($"            {typeExpr},");
+            sb.AppendLine($"            compatibleOptimizers: new string[] {{ {FormatStringArray(optimizers)} }},");
+            sb.AppendLine($"            compatibleLossFunctions: new string[] {{ {FormatStringArray(lossFunctions)} }},");
+            sb.AppendLine($"            recommendedPreprocessors: new string[] {{ {FormatStringArray(preprocessors)} }},");
+            sb.AppendLine($"            warnings: new string[] {{ {FormatStringArray(warnings)} }});");
+        }
+
+        sb.AppendLine("        return dict;");
+        sb.AppendLine("    }");
+
+        sb.AppendLine("}");
+
+        context.AddSource("ModelCompatibility.g.cs", sb.ToString());
+    }
+
+    private static (List<string> optimizers, List<string> lossFunctions, List<string> preprocessors, List<string> warnings) GetCompatibilityRules(List<int> categories)
+    {
+        var lossFunctions = new HashSet<string>();
+        var preprocessors = new HashSet<string>();
+        var warnings = new List<string>();
+
+        // Collect each category's optimizer set separately so we can intersect them.
+        // Union is used for loss functions and preprocessors (additive),
+        // but intersection is used for optimizers (restrictive — every category must agree).
+        var perCategoryOptimizers = new List<HashSet<string>>();
+
+        foreach (var cat in categories)
+        {
+            var catOptimizers = new HashSet<string>();
+            switch (cat)
+            {
+                case CatClassifier:
+                    lossFunctions.Add(LossCrossEntropy);
+                    lossFunctions.Add(LossBinaryCrossEntropy);
+                    lossFunctions.Add(LossHinge);
+                    lossFunctions.Add(LossFocalLoss);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    preprocessors.Add(PrepOneHotEncoder);
+                    break;
+
+                case CatRegression:
+                case CatLinear:
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    lossFunctions.Add(LossHuber);
+                    lossFunctions.Add(LossLogCosh);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    preprocessors.Add(PrepMinMaxScaler);
+                    break;
+
+                case CatGAN:
+                    lossFunctions.Add(LossAdversarial);
+                    lossFunctions.Add(LossWasserstein);
+                    lossFunctions.Add(LossHingeLoss);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
+                    catOptimizers.Add(OptLBFGS);
+                    catOptimizers.Add(OptBuiltIn);
+                    preprocessors.Add(PrepMinMaxScaler);
+                    break;
+
+                case CatDiffusion:
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossL1);
+                    lossFunctions.Add(LossVLB);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
+                    catOptimizers.Add(OptLBFGS);
+                    catOptimizers.Add(OptBuiltIn);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatTransformer:
+                    lossFunctions.Add(LossCrossEntropy);
+                    lossFunctions.Add(LossMSE);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
+                    catOptimizers.Add(OptLBFGS);
+                    catOptimizers.Add(OptBuiltIn);
+                    preprocessors.Add(PrepTokenizerPreprocessor);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatAutoencoder:
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossBCE);
+                    lossFunctions.Add(LossKLDivergence);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepMinMaxScaler);
+                    break;
+
+                case CatSurvivalModel:
+                    lossFunctions.Add(LossCoxPartialLikelihood);
+                    lossFunctions.Add(LossLogRankLoss);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
+                    catOptimizers.Add(OptLBFGS);
+                    catOptimizers.Add(OptBuiltIn);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatTimeSeriesModel:
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    lossFunctions.Add(LossQuantileLoss);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
+                    catOptimizers.Add(OptBuiltIn);
+                    catOptimizers.Add(OptLBFGS);
+                    preprocessors.Add(PrepTimeSeriesScaler);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatNeuralNetwork:
+                case CatRecurrentNetwork:
+                case CatConvolutionalNetwork:
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    lossFunctions.Add(LossMAE);
+                    // Modern neural networks use adaptive optimizers. SGD is rarely the
+                    // correct default and causes conflicts with Transformer/GAN/Diffusion
+                    // categories. Models that specifically need SGD can override.
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
+                    catOptimizers.Add(OptLBFGS);
+                    catOptimizers.Add(OptBuiltIn);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatGraphNetwork:
+                    lossFunctions.Add(LossCrossEntropy);
+                    lossFunctions.Add(LossMSE);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepGraphNormalizer);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatSyntheticDataGenerator:
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossKLDivergence);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepMinMaxScaler);
+                    break;
+
+                case CatEnsemble:
+                case CatDecisionTree:
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    // Tree models primarily use built-in, but hybrid models may need adaptive optimizers
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatSVM:
+                case CatKernel:
+                    lossFunctions.Add(LossHinge);
+                    lossFunctions.Add(LossMSE);
+                    // SMO is captured by BuiltIn (SVM-specific built-in solver)
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatClustering:
+                case CatCausalModel:
+                case CatInstanceBased:
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    preprocessors.Add(PrepMinMaxScaler);
+                    break;
+
+                case CatGaussianProcess:
+                case CatBayesian:
+                    // Gaussian processes and Bayesian models use built-in solvers or adaptive optimizers
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    catOptimizers.Add(OptBuiltIn);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
+                    catOptimizers.Add(OptLBFGS);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatFoundationModel:
+                case CatEmbeddingModel:
+                case CatTabularModel:
+                    // Foundation models, embeddings, and tabular models use adaptive optimizers
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatStatistical:
+                case CatRegularization:
+                case CatInterpretable:
+                    // Statistical and regularized models use built-in solvers, LBFGS, or adaptive optimizers
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    catOptimizers.Add(OptBuiltIn);
+                    catOptimizers.Add(OptLBFGS);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatPhysicsInformed:
+                case CatNeuralOperator:
+                    // Physics-informed models use adaptive optimizers and LBFGS
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossL1);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatReinforcementLearningAgent:
+                case CatMetaLearning:
+                case CatAgent:
+                    // RL agents, meta-learning, and autonomous agents use adaptive optimizers
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatSignalProcessing:
+                    // Signal processing models
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatOptimization:
+                    // Optimization-based models
+                    lossFunctions.Add(LossMSE);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+
+                case CatAnomalyDetection:
+                    // Anomaly detection
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    AddModernOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    preprocessors.Add(PrepMinMaxScaler);
+                    break;
+
+                default:
+                    // Unknown categories get all gradient optimizers as fallback
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    AddAllGradientOptimizers(catOptimizers);
+                    preprocessors.Add(PrepStandardScaler);
+                    break;
+            }
+
+            if (catOptimizers.Count > 0)
+                perCategoryOptimizers.Add(catOptimizers);
+        }
+
+        // Build the final optimizer set. Use union across categories for the compatibility
+        // matrix (what CAN work), but check for conflicts: if a restrictive category (GAN,
+        // Diffusion, Transformer, etc.) is combined with a permissive one (NeuralNetwork),
+        // the restrictive category's set should be the final answer. When this happens, we
+        // emit AIDN030 so developers verify their model uses an optimizer from the safe set.
+        var optimizers = new HashSet<string>();
+        foreach (var set in perCategoryOptimizers)
+            optimizers.UnionWith(set);
+
+        if (optimizers.Count == 0)
+            AddAllGradientOptimizers(optimizers);
+
+        // Detect conflicts: if we have multiple category optimizer sets and they disagree,
+        // compute the intersection to find the safe set. If the safe set is smaller than
+        // the union, there's a conflict worth flagging.
+        if (perCategoryOptimizers.Count > 1)
+        {
+            var safeSet = new HashSet<string>(perCategoryOptimizers[0]);
+            for (int i = 1; i < perCategoryOptimizers.Count; i++)
+                safeSet.IntersectWith(perCategoryOptimizers[i]);
+
+            if (safeSet.Count == 0)
+            {
+                // Empty intersection: no optimizer can satisfy all categories.
+                // Flag as impossible combination but keep the union for the compatibility matrix
+                // so developers can still see what each category would individually support.
+                warnings.Add("IMPOSSIBLE: No common optimizer exists across all categories. The intersection is empty.");
+            }
+            else if (safeSet.Count < optimizers.Count)
+            {
+                var removed = new HashSet<string>(optimizers);
+                removed.ExceptWith(safeSet);
+
+                // Use the safe intersection as the actual optimizer set
+                optimizers = safeSet;
+                warnings.Add($"Incompatible optimizers removed: {string.Join(", ", removed.OrderBy(r => r))}");
+            }
+        }
+
+        return (optimizers.OrderBy(o => o).ToList(),
+                lossFunctions.OrderBy(l => l).ToList(),
+                preprocessors.OrderBy(p => p).ToList(),
+                warnings);
+    }
+
+    private static void AddAllGradientOptimizers(HashSet<string> optimizers)
+    {
+        optimizers.Add(OptSGD);
+        optimizers.Add(OptAdam);
+        optimizers.Add(OptAdamW);
+        optimizers.Add(OptRMSProp);
+        optimizers.Add(OptAdaGrad);
+        optimizers.Add(OptAdadelta);
+    }
+
+    /// <summary>
+    /// Adds the standard adaptive optimizer set used by most modern model categories.
+    /// This is the common intersection that all neural-network-family categories agree on.
+    /// </summary>
+    private static void AddModernOptimizers(HashSet<string> optimizers)
+    {
+        optimizers.Add(OptAdam);
+        optimizers.Add(OptAdamW);
+        optimizers.Add(OptRMSProp);
+        optimizers.Add(OptLBFGS);
+        optimizers.Add(OptBuiltIn);
+    }
+
+    private static string BuildTypeOfExpression(CompatEntry entry)
+        => GeneratorHelpers.BuildTypeOfExpression(entry.FullyQualifiedName, entry.TypeParameterCount);
+
+    private static string FormatStringArray(IEnumerable<string> values)
+        => GeneratorHelpers.FormatStringArray(values);
+
+    private static string GetCategoryName(int categoryValue, INamedTypeSymbol? categoryEnumType)
+        => GeneratorHelpers.GetEnumName(categoryValue, GeneratorHelpers.CategoryNames, categoryEnumType);
+
+    private static bool HasAttribute(ImmutableArray<AttributeData> attributes, INamedTypeSymbol attributeType)
+    {
+        foreach (var attr in attributes)
+        {
+            if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, attributeType))
+                return true;
+        }
+        return false;
+    }
+
+    private class CompatEntry
+    {
+        public string ClassName { get; set; } = string.Empty;
+        public string FullyQualifiedName { get; set; } = string.Empty;
+        public int TypeParameterCount { get; set; }
+        public List<int> Categories { get; set; } = new List<int>();
+        public Location? Location { get; set; }
+    }
+}

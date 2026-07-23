@@ -1,0 +1,1124 @@
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Memory;
+
+namespace AiDotNet.NeuralNetworks.Layers.SSM;
+
+/// <summary>
+/// Implements the Simplified State Space (S5) layer from Smith et al., 2023.
+/// </summary>
+/// <remarks>
+/// <para>
+/// S5 is a multi-input multi-output (MIMO) state space model that uses a diagonalized state
+/// matrix with parallel scan for efficient sequence processing. Unlike S4D, which applies
+/// independent single-input single-output (SISO) SSMs per feature, S5 uses a single MIMO SSM
+/// that couples all input dimensions through shared state dynamics.
+/// </para>
+/// <para>
+/// The continuous-time MIMO SSM is:
+/// <code>
+///   x'(t) = A * x(t) + B * u(t)       (state equation, x in R^N, u in R^H)
+///   y(t)  = Re(C * x(t)) + D * u(t)   (output equation, y in R^H)
+/// </code>
+/// where A is diagonalized via eigendecomposition: A = V * Lambda * V^{-1}, with Lambda containing
+/// complex eigenvalues. This diagonalization decouples the state dimensions while retaining the
+/// MIMO structure through B and C matrices that mix input/output dimensions with state dimensions.
+/// </para>
+/// <para>
+/// Discretization uses the Zero-Order Hold (ZOH) method:
+/// <code>
+///   A_bar = exp(Delta * Lambda)                    (diagonal, element-wise complex exp)
+///   B_bar = (A_bar - I) * Lambda^{-1} * B_tilde   (where B_tilde = V^{-1} * B)
+/// </code>
+/// The discrete recurrence x_t = A_bar * x_{t-1} + B_bar * u_t is then computed efficiently
+/// using a parallel associative scan in O(L log L) time, where L is the sequence length.
+/// </para>
+/// <para>
+/// The A matrix is initialized using the HiPPO framework (High-order Polynomial Projection Operator)
+/// which provides optimal polynomial approximations for continuous signal history. The S5 paper
+/// uses the HiPPO-LegS (Legendre-Scaled) initialization, which gives the diagonal eigenvalues
+/// Lambda_n = -1/2 + n*pi*i, placing them along a vertical line in the left half-plane with
+/// logarithmically spaced frequencies. This ensures stable dynamics with a rich frequency spectrum
+/// for capturing long-range dependencies.
+/// </para>
+/// <para><b>For Beginners:</b> S5 is an efficient sequence model that competes with Transformers
+/// on long-range tasks while being much more computationally efficient.
+///
+/// Think of S5 as a bank of coupled oscillators processing a signal:
+/// - Each oscillator has a complex frequency (how fast it vibrates) and a decay rate
+/// - Unlike S4D where each feature has its own independent oscillator bank, S5 shares
+///   one oscillator bank across ALL features -- this is the "MIMO" (multi-input multi-output) part
+/// - The B matrix controls how each input feature excites the oscillators
+/// - The C matrix controls how oscillator states are combined to produce each output feature
+/// - The D matrix provides a direct skip connection from input to output
+///
+/// The key advantages of S5 over S4D:
+/// 1. MIMO formulation: Features interact through shared state, enabling richer representations
+/// 2. Parallel scan: The entire sequence is processed in O(L log L) instead of O(L) sequential steps
+/// 3. Simpler architecture: Fewer parameters than S4D with comparable or better performance
+///
+/// The "simplified" in S5 refers to replacing S4's complex NPLR (Normal Plus Low-Rank) structure
+/// with a straightforward diagonalization, making the model much easier to implement and reason about
+/// while maintaining strong empirical performance.
+/// </para>
+/// <para>
+/// <b>Reference:</b> Smith et al., "Simplified State Space Layers for Sequence Modeling", ICLR 2023.
+/// https://arxiv.org/abs/2208.04933
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+public partial class S5Layer<T> : LayerBase<T>
+{
+    private readonly int _modelDimension;
+    private readonly int _stateDimension;
+
+    // Diagonal A stored as real/imaginary pairs: [stateDim]
+    // Lambda = a_real + i * a_imag, initialized with HiPPO-LegS: Lambda_n = -1/2 + n*pi*i
+    private Tensor<T> _aReal;
+    private Tensor<T> _aImag;
+
+    // B input matrix (complex, after V^{-1} transformation): [stateDim, modelDim] real/imag
+    // Maps H-dimensional input to N-dimensional complex state
+    private Tensor<T> _bReal;
+    private Tensor<T> _bImag;
+
+    // C output matrix (complex): [modelDim, stateDim] real/imag
+    // Maps N-dimensional complex state to H-dimensional real output via Re(C * x)
+    private Tensor<T> _cReal;
+    private Tensor<T> _cImag;
+
+    // D skip connection: [modelDim]
+    private Tensor<T> _dParam;
+
+    // Discretization step size: [stateDim] (stored as log for positivity)
+    private Tensor<T> _logDelta;
+
+    // Input projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _inputProjectionBias;
+
+    // Output projection: [modelDim, modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _outputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
+    private Tensor<T> _outputProjectionBias;
+
+    // Cached values for backward pass
+    private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastProjectedInput;
+    private Tensor<T>? _lastHiddenStatesReal;
+    private Tensor<T>? _lastHiddenStatesImag;
+    private Tensor<T>? _lastScanOutputReal;
+    private int[]? _originalInputShape;
+
+    // Gradients
+    private Tensor<T>? _aRealGradient;
+    private Tensor<T>? _aImagGradient;
+    private Tensor<T>? _bRealGradient;
+    private Tensor<T>? _bImagGradient;
+    private Tensor<T>? _cRealGradient;
+    private Tensor<T>? _cImagGradient;
+    private Tensor<T>? _dParamGradient;
+    private Tensor<T>? _logDeltaGradient;
+    private Tensor<T>? _inputProjectionWeightsGradient;
+    private Tensor<T>? _inputProjectionBiasGradient;
+    private Tensor<T>? _outputProjectionWeightsGradient;
+    private Tensor<T>? _outputProjectionBiasGradient;
+
+    /// <inheritdoc />
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the model dimension (H), the width of input and output at each sequence position.
+    /// </summary>
+    public int ModelDimension => _modelDimension;
+
+    /// <summary>
+    /// Gets the SSM state dimension (N), the number of diagonal complex eigenvalues.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each state dimension is an independent complex oscillator with
+    /// a learned frequency and decay rate. The HiPPO initialization spaces these frequencies so that
+    /// the model can capture patterns at many different time scales simultaneously. Typical values
+    /// are 64 (as in the S5 paper) for a good balance of expressivity and efficiency.</para>
+    /// </remarks>
+    public int StateDimension => _stateDimension;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters.
+    /// </summary>
+    public override long ParameterCount =>
+        // Cast the first term to long so the sum widens to 64-bit before any
+        // addend can wrap — twelve tensor lengths in 32-bit math will
+        // overflow on large state-space configs.
+        (long)_aReal.Length + _aImag.Length +
+        _bReal.Length + _bImag.Length +
+        _cReal.Length + _cImag.Length +
+        _dParam.Length + _logDelta.Length +
+        _inputProjectionWeights.Length + _inputProjectionBias.Length +
+        _outputProjectionWeights.Length + _outputProjectionBias.Length;
+
+    /// <summary>
+    /// Creates a new S5 (Simplified State Space) layer.
+    /// </summary>
+    /// <param name="sequenceLength">Maximum sequence length.</param>
+    /// <param name="modelDimension">
+    /// Model dimension (H). Default: 256.
+    /// <para><b>For Beginners:</b> The width of the representation at each sequence position.
+    /// This determines both the input and output size of the layer.</para>
+    /// </param>
+    /// <param name="stateDimension">
+    /// SSM state dimension (N). Default: 64.
+    /// <para><b>For Beginners:</b> The number of independent complex oscillators in the diagonalized
+    /// state matrix. Unlike S4D where each feature has N states (total H*N), S5 shares N states
+    /// across all H features via the MIMO B and C matrices. The S5 paper uses N=64 as default.
+    /// Larger N captures more temporal patterns but increases computation.</para>
+    /// </param>
+    /// <param name="activationFunction">Optional activation function applied to the final output.</param>
+    /// <exception cref="ArgumentException">Thrown when parameters are invalid.</exception>
+    public S5Layer(
+        int sequenceLength,
+        int modelDimension = 256,
+        int stateDimension = 64,
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base(
+            [sequenceLength, modelDimension],
+            [sequenceLength, modelDimension],
+            activationFunction ?? new IdentityActivation<T>())
+    {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
+        if (sequenceLength <= 0)
+            throw new ArgumentException(
+                $"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
+        if (modelDimension <= 0)
+            throw new ArgumentException(
+                $"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
+        if (stateDimension <= 0)
+            throw new ArgumentException(
+                $"State dimension ({stateDimension}) must be positive.", nameof(stateDimension));
+
+        _modelDimension = modelDimension;
+        _stateDimension = stateDimension;
+
+        // Diagonal A: [stateDim] real and imaginary (complex eigenvalues)
+        _aReal = new Tensor<T>([stateDimension]);
+        _aImag = new Tensor<T>([stateDimension]);
+
+        // B (complex): [stateDim, modelDim] -- maps input to state
+        _bReal = new Tensor<T>([stateDimension, modelDimension]);
+        _bImag = new Tensor<T>([stateDimension, modelDimension]);
+
+        // C (complex): [modelDim, stateDim] -- maps state to output
+        _cReal = new Tensor<T>([modelDimension, stateDimension]);
+        _cImag = new Tensor<T>([modelDimension, stateDimension]);
+
+        // D: [modelDim] skip connection
+        _dParam = new Tensor<T>([modelDimension]);
+
+        // Log delta (discretization step): [stateDim]
+        _logDelta = new Tensor<T>([stateDimension]);
+
+        // Input projection: [modelDim, modelDim]
+        _inputProjectionWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _inputProjectionBias = new Tensor<T>([modelDimension]);
+
+        // Output projection: [modelDim, modelDim]
+        _outputProjectionWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _outputProjectionBias = new Tensor<T>([modelDimension]);
+
+        InitializeParameters();
+    }
+
+    private void InitializeParameters()
+    {
+        // HiPPO-LegS diagonal initialization: Lambda_n = -1/2 + n*pi*i
+        // Real part: -0.5 (controls decay rate, placing eigenvalues in the stable left half-plane)
+        // Imaginary part: n*pi (logarithmically spaced frequencies for multi-scale pattern capture)
+        for (int n = 0; n < _stateDimension; n++)
+        {
+            _aReal[n] = NumOps.FromDouble(-0.5);
+            _aImag[n] = NumOps.FromDouble(Math.PI * (n + 1));
+        }
+
+        // B initialized with Xavier/Glorot for both real and imaginary parts
+        // This ensures proper signal scaling through the MIMO input mapping
+        InitializeTensor2D(_bReal);
+        InitializeTensor2D(_bImag);
+
+        // C initialized with Xavier/Glorot for both real and imaginary parts
+        InitializeTensor2D(_cReal);
+        InitializeTensor2D(_cImag);
+
+        // D initialized to ones (identity skip connection, following S4/S5 convention)
+        _dParam.Fill(NumOps.One);
+
+        // Input/output projections: Xavier initialization
+        InitializeTensor2D(_inputProjectionWeights);
+        _inputProjectionBias.Fill(NumOps.Zero);
+        InitializeTensor2D(_outputProjectionWeights);
+        _outputProjectionBias.Fill(NumOps.Zero);
+
+        // Log delta: initialize so delta spans [0.001, 0.1] uniformly in log space
+        // log(0.001) ~ -6.9, log(0.1) ~ -2.3
+        for (int n = 0; n < _stateDimension; n++)
+        {
+            double logVal = -6.9 + Random.NextDouble() * 4.6;
+            _logDelta[n] = NumOps.FromDouble(logVal);
+        }
+    }
+
+    private void InitializeTensor2D(Tensor<T> tensor)
+    {
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        _originalInputShape = input._shape;
+
+        int rank = input.Shape.Length;
+        int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
+        int modelDim = input.Shape[rank - 1];
+
+        int batchSize = 1;
+        for (int d = 0; d < rank - 2; d++)
+            batchSize *= input.Shape[d];
+        if (rank < 3) batchSize = 1;
+
+        var input3D = rank == 2
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
+
+        _lastInput = input3D;
+
+        // Step 1: Input projection [batch*seq, modelDim] -> [batch*seq, modelDim]
+        var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
+        var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
+        var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _modelDimension });
+        var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
+        var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _modelDimension });
+        _lastProjectedInput = projected3D;
+
+        // Step 2: Kernel-based MIMO SSM (numerically stable for gradient checking)
+        var scanOutput = KernelBasedMIMOForward(projected3D, batchSize, seqLen);
+        _lastScanOutputReal = scanOutput;
+
+        // Step 3: Output projection [batch*seq, modelDim] -> [batch*seq, modelDim]
+        var scanFlat = Engine.Reshape(scanOutput, new[] { batchSize * seqLen, _modelDimension });
+        var outputFlat = Engine.TensorMatMul(scanFlat, _outputProjectionWeights);
+        var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
+        var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
+        var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
+
+        var result = ApplyActivation(output3D);
+        _lastOutput = result;
+
+        if (rank == 2)
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
+
+        var outputShape = new int[rank];
+        for (int i = 0; i < rank - 2; i++)
+            outputShape[i] = input.Shape[i];
+        outputShape[rank - 2] = seqLen;
+        outputShape[rank - 1] = _modelDimension;
+        return Engine.Reshape(result, outputShape);
+    }
+
+    /// <summary>
+    /// Performs the S5 MIMO recurrence with diagonalized complex state transitions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The MIMO recurrence for diagonal A with N state dimensions and H input/output dimensions:
+    /// <code>
+    ///   x_n[t] = A_bar_n * x_n[t-1] + sum_h(B_bar[n,h] * u_h[t])   for n = 1..N
+    ///   y_h[t] = sum_n Re(C[h,n] * x_n[t]) + D[h] * u_h[t]          for h = 1..H
+    /// </code>
+    /// where A_bar_n = exp(delta_n * A_n) is the discretized diagonal state transition,
+    /// and B_bar[n,h] = (A_bar_n - 1) / A_n * B[n,h] is the discretized input matrix.
+    /// </para>
+    /// <para>
+    /// The parallel scan exploits the associative property of the linear recurrence:
+    /// each (A_bar, B_bar * u) pair can be combined using the binary operator
+    /// (a1, b1) * (a2, b2) = (a1*a2, a2*b1 + b2), enabling O(log L) parallel computation.
+    /// Here we implement a sequential scan for clarity; parallelism is at the batch level.
+    /// </para>
+    /// </remarks>
+    private static (double r, double i) ComputeBBarScalar(double dt, double ar, double ai, double br, double bi)
+    {
+        double expR = Math.Exp(dt * ar);
+        double cosA = Math.Cos(dt * ai);
+        double sinA = Math.Sin(dt * ai);
+        double diffR = expR * cosA - 1.0;
+        double diffI = expR * sinA;
+        double aMagSq = ar * ar + ai * ai;
+        double quotR, quotI;
+        if (aMagSq < 1e-12) { quotR = dt * br; quotI = dt * bi; }
+        else { quotR = (diffR * ar + diffI * ai) / aMagSq; quotI = (diffI * ar - diffR * ai) / aMagSq; }
+        return (quotR * br - quotI * bi, quotR * bi + quotI * br);
+    }
+
+    /// <summary>Kernel-based MIMO forward for S5. K[h_out, h_in, l] = Re(sum_n C[h_out,n] * Bbar[n,h_in] * Abar[n]^l)</summary>
+    private Tensor<T> KernelBasedMIMOForward(Tensor<T> u, int batchSize, int seqLen)
+    {
+        var delta = new double[_stateDimension];
+        for (int n = 0; n < _stateDimension; n++)
+            delta[n] = NumOps.ToDouble(NumOps.Exp(_logDelta[n]));
+
+        // Build kernel K[h_out, h_in, l]
+        var kernelD = new double[_modelDimension, _modelDimension, seqLen];
+        _cachedDelta = new Vector<T>(delta.Select(d => NumOps.FromDouble(d)));
+
+        for (int n = 0; n < _stateDimension; n++)
+        {
+            double dt = delta[n];
+            double ar = NumOps.ToDouble(_aReal[n]);
+            double ai = NumOps.ToDouble(_aImag[n]);
+
+            double expR = Math.Exp(dt * ar);
+            double abar_r = expR * Math.Cos(dt * ai);
+            double abar_i = expR * Math.Sin(dt * ai);
+
+            // For each (h_out, h_in): K_contribution = C[h_out,n] * Bbar[n,h_in] * Abar[n]^l
+            for (int ho = 0; ho < _modelDimension; ho++)
+            {
+                double cr = NumOps.ToDouble(_cReal[ho, n]);
+                double ci = NumOps.ToDouble(_cImag[ho, n]);
+
+                for (int hi = 0; hi < _modelDimension; hi++)
+                {
+                    double br = NumOps.ToDouble(_bReal[n, hi]);
+                    double bi = NumOps.ToDouble(_bImag[n, hi]);
+                    var bbar = ComputeBBarScalar(dt, ar, ai, br, bi);
+
+                    // C_eff = C * Bbar (complex multiply)
+                    double ceff_r = cr * bbar.r - ci * bbar.i;
+                    double ceff_i = cr * bbar.i + ci * bbar.r;
+
+                    double pow_r = 1.0, pow_i = 0.0;
+                    for (int l = 0; l < seqLen; l++)
+                    {
+                        kernelD[ho, hi, l] += ceff_r * pow_r - ceff_i * pow_i;
+                        double new_r = pow_r * abar_r - pow_i * abar_i;
+                        double new_i = pow_r * abar_i + pow_i * abar_r;
+                        pow_r = new_r; pow_i = new_i;
+                    }
+                }
+            }
+        }
+
+        // Convert kernel to T[,,]
+        _cachedKernel = new T[_modelDimension, _modelDimension, seqLen];
+        for (int ho = 0; ho < _modelDimension; ho++)
+            for (int hi = 0; hi < _modelDimension; hi++)
+                for (int l = 0; l < seqLen; l++)
+                    _cachedKernel[ho, hi, l] = NumOps.FromDouble(kernelD[ho, hi, l]);
+
+        // Causal matrix convolution: y[b,t,ho] = sum_l sum_hi K[ho,hi,l] * u[b,t-l,hi] + D[ho] * u[b,t,ho]
+        var output = TensorAllocator.Rent<T>([batchSize, seqLen, _modelDimension]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Pre-allocate reusable vectors outside hot loops
+            var kRow = new Vector<T>(_modelDimension);
+            var uLag = new Vector<T>(_modelDimension);
+
+            for (int t = 0; t < seqLen; t++)
+            {
+                for (int ho = 0; ho < _modelDimension; ho++)
+                {
+                    T sum = NumOps.Multiply(_dParam[ho], u[b, t, ho]);
+                    for (int l = 0; l <= t; l++)
+                    {
+                        for (int hi = 0; hi < _modelDimension; hi++)
+                        {
+                            kRow[hi] = _cachedKernel[ho, hi, l];
+                            uLag[hi] = u[b, t - l, hi];
+                        }
+                        sum = NumOps.Add(sum, Engine.DotProduct(kRow, uLag));
+                    }
+                    output[b, t, ho] = sum;
+                }
+            }
+        }
+
+        return output;
+    }
+
+    private T[,,]? _cachedKernel;
+    private Vector<T>? _cachedDelta;
+
+    private Tensor<T> MIMOParallelScan(Tensor<T> u, int batchSize, int seqLen)
+    {
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+
+        // Compute delta = exp(logDelta): [stateDim]
+        var delta = new T[_stateDimension];
+        for (int n = 0; n < _stateDimension; n++)
+            delta[n] = NumOps.Exp(_logDelta[n]);
+
+        // Pre-compute discretized A_bar = exp(delta * A) for complex diagonal A
+        // exp((delta*a_real) + i*(delta*a_imag))
+        //   = exp(delta*a_real) * (cos(delta*a_imag) + i*sin(delta*a_imag))
+        var aBarReal = new T[_stateDimension];
+        var aBarImag = new T[_stateDimension];
+        var bBarReal = new T[_stateDimension * _modelDimension];
+        var bBarImag = new T[_stateDimension * _modelDimension];
+
+        for (int n = 0; n < _stateDimension; n++)
+        {
+            double dt = NumOps.ToDouble(delta[n]);
+            double ar = NumOps.ToDouble(_aReal[n]);
+            double ai = NumOps.ToDouble(_aImag[n]);
+
+            // Complex exp: exp(dt*ar) * (cos(dt*ai) + i*sin(dt*ai))
+            double expDtAr = Math.Exp(dt * ar);
+            double cosVal = Math.Cos(dt * ai);
+            double sinVal = Math.Sin(dt * ai);
+
+            aBarReal[n] = NumOps.FromDouble(expDtAr * cosVal);
+            aBarImag[n] = NumOps.FromDouble(expDtAr * sinVal);
+
+            // B_bar = (A_bar - I) / A * B for each input dimension h
+            // (A_bar - I) = (expDtAr*cos - 1) + i*(expDtAr*sin)
+            double diffReal = expDtAr * cosVal - 1.0;
+            double diffImag = expDtAr * sinVal;
+
+            // Complex division by A = ar + i*ai
+            double aMagSq = ar * ar + ai * ai;
+
+            for (int h = 0; h < _modelDimension; h++)
+            {
+                double br = NumOps.ToDouble(_bReal[new[] { n, h }]);
+                double bi = NumOps.ToDouble(_bImag[new[] { n, h }]);
+
+                double quotReal, quotImag;
+                if (aMagSq < 1e-12)
+                {
+                    // First-order approximation when A is near zero: B_bar ~ delta * B
+                    quotReal = dt * br;
+                    quotImag = dt * bi;
+                }
+                else
+                {
+                    // (diffR + i*diffI) / (ar + i*ai) = ((diffR*ar + diffI*ai) + i*(diffI*ar - diffR*ai)) / |A|^2
+                    double divReal = (diffReal * ar + diffImag * ai) / aMagSq;
+                    double divImag = (diffImag * ar - diffReal * ai) / aMagSq;
+
+                    // Multiply by B[n,h]: (divR + i*divI) * (br + i*bi)
+                    quotReal = divReal * br - divImag * bi;
+                    quotImag = divReal * bi + divImag * br;
+                }
+
+                int idx = n * _modelDimension + h;
+                bBarReal[idx] = NumOps.FromDouble(quotReal);
+                bBarImag[idx] = NumOps.FromDouble(quotImag);
+            }
+        }
+
+        // Hidden state: [batch, stateDim] real and imaginary
+        var hReal = new Tensor<T>(new[] { batchSize, _stateDimension });
+        var hImag = new Tensor<T>(new[] { batchSize, _stateDimension });
+
+        // Store all hidden states for backward pass: [batch, seqLen+1, stateDim]
+        var allHiddenReal = new Tensor<T>(new[] { batchSize, seqLen + 1, _stateDimension });
+        var allHiddenImag = new Tensor<T>(new[] { batchSize, seqLen + 1, _stateDimension });
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            for (int bi = 0; bi < batchSize; bi++)
+            {
+                // State update: x_n[t] = A_bar_n * x_n[t-1] + sum_h(B_bar[n,h] * u_h[t])
+                for (int n = 0; n < _stateDimension; n++)
+                {
+                    T abR = aBarReal[n];
+                    T abI = aBarImag[n];
+                    T hR = hReal[new[] { bi, n }];
+                    T hI = hImag[new[] { bi, n }];
+
+                    // Complex multiply A_bar * h_prev:
+                    // (abR + i*abI) * (hR + i*hI) = (abR*hR - abI*hI) + i*(abR*hI + abI*hR)
+                    T newHR = NumOps.Subtract(
+                        NumOps.Multiply(abR, hR),
+                        NumOps.Multiply(abI, hI));
+                    T newHI = NumOps.Add(
+                        NumOps.Multiply(abR, hI),
+                        NumOps.Multiply(abI, hR));
+
+                    // Add B_bar * u: sum_h(B_bar[n,h] * u[t,h])
+                    // B_bar is complex, u is real, so contribution is:
+                    //   real += B_bar_real[n,h] * u[h], imag += B_bar_imag[n,h] * u[h]
+                    for (int h = 0; h < _modelDimension; h++)
+                    {
+                        T uVal = u[new[] { bi, t, h }];
+                        int idx = n * _modelDimension + h;
+                        newHR = NumOps.Add(newHR, NumOps.Multiply(bBarReal[idx], uVal));
+                        newHI = NumOps.Add(newHI, NumOps.Multiply(bBarImag[idx], uVal));
+                    }
+
+                    hReal[new[] { bi, n }] = newHR;
+                    hImag[new[] { bi, n }] = newHI;
+                }
+
+                // Output: y_h[t] = sum_n Re(C[h,n] * x_n[t]) + D[h] * u_h[t]
+                // Re((cR + i*cI) * (xR + i*xI)) = cR*xR - cI*xI
+                for (int h = 0; h < _modelDimension; h++)
+                {
+                    T yVal = NumOps.Zero;
+                    for (int n = 0; n < _stateDimension; n++)
+                    {
+                        T cR = _cReal[new[] { h, n }];
+                        T cI = _cImag[new[] { h, n }];
+                        T xR = hReal[new[] { bi, n }];
+                        T xI = hImag[new[] { bi, n }];
+
+                        yVal = NumOps.Add(yVal,
+                            NumOps.Subtract(
+                                NumOps.Multiply(cR, xR),
+                                NumOps.Multiply(cI, xI)));
+                    }
+
+                    // Skip connection: + D[h] * u[t,h]
+                    T uH = u[new[] { bi, t, h }];
+                    yVal = NumOps.Add(yVal, NumOps.Multiply(_dParam[h], uH));
+
+                    output[new[] { bi, t, h }] = yVal;
+                }
+            }
+
+            // Save state snapshot for backward pass
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int n = 0; n < _stateDimension; n++)
+                {
+                    allHiddenReal[new[] { bi, t + 1, n }] = hReal[new[] { bi, n }];
+                    allHiddenImag[new[] { bi, t + 1, n }] = hImag[new[] { bi, n }];
+                }
+        }
+
+        _lastHiddenStatesReal = allHiddenReal;
+        _lastHiddenStatesImag = allHiddenImag;
+        return output;
+    }
+
+    /// <summary>
+    /// Backward pass through the MIMO complex recurrent scan.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Computes gradients for all MIMO SSM parameters (A, B, C, D, delta) by backpropagating
+    /// through time. The gradient flows backward through the recurrence using:
+    ///   dh_prev = conj(A_bar) * dh  (conjugate transpose for complex diagonal)
+    /// and accumulates parameter gradients at each timestep.
+    /// </para>
+    /// </remarks>
+    /// <summary>Kernel-based MIMO backward for S5.</summary>
+    private Tensor<T> KernelBasedMIMOBackward(
+        Tensor<T> dOutput, Tensor<T> x, int batchSize, int seqLen)
+    {
+        if (_cachedKernel == null || _cachedDelta == null)
+            throw new InvalidOperationException("Forward must be called before backward.");
+
+        _aRealGradient = new Tensor<T>([_stateDimension]);
+        _aImagGradient = new Tensor<T>([_stateDimension]);
+        _bRealGradient = new Tensor<T>([_stateDimension, _modelDimension]);
+        _bImagGradient = new Tensor<T>([_stateDimension, _modelDimension]);
+        _cRealGradient = new Tensor<T>([_modelDimension, _stateDimension]);
+        _cImagGradient = new Tensor<T>([_modelDimension, _stateDimension]);
+        _dParamGradient = new Tensor<T>([_modelDimension]);
+
+        // Step 1: Conv backward — compute dK[ho, hi, l] and dX[b, t, hi]
+        var dK = new double[_modelDimension, _modelDimension, seqLen];
+        var dX = TensorAllocator.Rent<T>([batchSize, seqLen, _modelDimension]);
+
+        for (int ho = 0; ho < _modelDimension; ho++)
+        {
+            double dSkip = NumOps.ToDouble(_dParam[ho]);
+            double dD = 0;
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int t = 0; t < seqLen; t++)
+                {
+                    double dOut = NumOps.ToDouble(dOutput[b, t, ho]);
+                    dD += dOut * NumOps.ToDouble(x[b, t, ho]);
+
+                    for (int l = 0; l <= t; l++)
+                        for (int hi = 0; hi < _modelDimension; hi++)
+                            dK[ho, hi, l] += dOut * NumOps.ToDouble(x[b, t - l, hi]);
+                }
+            }
+            _dParamGradient[ho] = NumOps.FromDouble(dD);
+        }
+
+        // dx[b,t,hi] = sum_ho sum_l dOut[b,t+l,ho] * K[ho,hi,l] + D[hi]*dOut[b,t,hi]
+        for (int b = 0; b < batchSize; b++)
+            for (int t = 0; t < seqLen; t++)
+                for (int hi = 0; hi < _modelDimension; hi++)
+                {
+                    double dxVal = NumOps.ToDouble(_dParam[hi]) * NumOps.ToDouble(dOutput[b, t, hi]);
+                    for (int l = 0; l < seqLen - t; l++)
+                        for (int ho = 0; ho < _modelDimension; ho++)
+                            dxVal += NumOps.ToDouble(dOutput[b, t + l, ho]) * NumOps.ToDouble(_cachedKernel[ho, hi, l]);
+                    dX[b, t, hi] = NumOps.FromDouble(dxVal);
+                }
+
+        // Step 2: Chain dK to SSM params per state n
+        for (int n = 0; n < _stateDimension; n++)
+        {
+            double dt = NumOps.ToDouble(_cachedDelta[n]);
+            double ar = NumOps.ToDouble(_aReal[n]);
+            double ai = NumOps.ToDouble(_aImag[n]);
+            double expR = Math.Exp(dt * ar);
+            double abar_r = expR * Math.Cos(dt * ai);
+            double abar_i = expR * Math.Sin(dt * ai);
+
+            double dAbarR_total = 0, dAbarI_total = 0;
+
+            for (int ho = 0; ho < _modelDimension; ho++)
+            {
+                double cr = NumOps.ToDouble(_cReal[ho, n]);
+                double ci = NumOps.ToDouble(_cImag[ho, n]);
+
+                for (int hi = 0; hi < _modelDimension; hi++)
+                {
+                    double br = NumOps.ToDouble(_bReal[n, hi]);
+                    double bi = NumOps.ToDouble(_bImag[n, hi]);
+                    var bbar = ComputeBBarScalar(dt, ar, ai, br, bi);
+
+                    double ceff_r = cr * bbar.r - ci * bbar.i;
+                    double ceff_i = cr * bbar.i + ci * bbar.r;
+
+                    double pow_r = 1.0, pow_i = 0.0;
+                    double dCeffR = 0, dCeffI = 0;
+
+                    for (int l = 0; l < seqLen; l++)
+                    {
+                        dCeffR += dK[ho, hi, l] * pow_r;
+                        dCeffI += dK[ho, hi, l] * (-pow_i);
+
+                        if (l > 0)
+                        {
+                            double abarMagSq = abar_r * abar_r + abar_i * abar_i;
+                            if (abarMagSq > 1e-20)
+                            {
+                                double prev_r = (pow_r * abar_r + pow_i * abar_i) / abarMagSq;
+                                double prev_i = (pow_i * abar_r - pow_r * abar_i) / abarMagSq;
+                                dAbarR_total += dK[ho, hi, l] * l * (ceff_r * prev_r - ceff_i * prev_i);
+                                dAbarI_total += dK[ho, hi, l] * l * (ceff_r * prev_i + ceff_i * prev_r);
+                            }
+                        }
+
+                        double new_r = pow_r * abar_r - pow_i * abar_i;
+                        double new_i = pow_r * abar_i + pow_i * abar_r;
+                        pow_r = new_r; pow_i = new_i;
+                    }
+
+                    // C gradient: dC_r[ho,n] += dCeff_r * bbar_r + dCeff_i * bbar_i
+                    _cRealGradient[ho, n] = NumOps.Add(_cRealGradient[ho, n],
+                        NumOps.FromDouble(dCeffR * bbar.r + dCeffI * bbar.i));
+                    _cImagGradient[ho, n] = NumOps.Add(_cImagGradient[ho, n],
+                        NumOps.FromDouble(dCeffI * bbar.r - dCeffR * bbar.i));
+
+                    // B gradient
+                    double dBbarR = dCeffR * cr + dCeffI * ci;
+                    double dBbarI = dCeffI * cr - dCeffR * ci;
+                    _bRealGradient[n, hi] = NumOps.Add(_bRealGradient[n, hi], NumOps.FromDouble(dBbarR));
+                    _bImagGradient[n, hi] = NumOps.Add(_bImagGradient[n, hi], NumOps.FromDouble(dBbarI));
+                }
+            }
+
+            // A gradient: chain through A_bar and B_bar
+            double gradAr = dt * (dAbarR_total * abar_r - dAbarI_total * abar_i);
+            double gradAi = dt * (dAbarR_total * abar_i + dAbarI_total * abar_r);
+
+            // B_bar contribution to A
+            double aMagSq = ar * ar + ai * ai;
+            if (aMagSq > 1e-12)
+            {
+                double abarA_r = abar_r * ar - abar_i * ai;
+                double abarA_i = abar_r * ai + abar_i * ar;
+                double num_r = dt * abarA_r - (abar_r - 1);
+                double num_i = dt * abarA_i - abar_i;
+                double aSq_r = ar * ar - ai * ai;
+                double aSq_i = 2 * ar * ai;
+                double aSqMagSq = aSq_r * aSq_r + aSq_i * aSq_i;
+                double dfda_r = (num_r * aSq_r + num_i * aSq_i) / aSqMagSq;
+                double dfda_i = (num_i * aSq_r - num_r * aSq_i) / aSqMagSq;
+
+                for (int hi = 0; hi < _modelDimension; hi++)
+                {
+                    double br = NumOps.ToDouble(_bReal[n, hi]);
+                    double bi = NumOps.ToDouble(_bImag[n, hi]);
+                    double dBbardA_r = dfda_r * br - dfda_i * bi;
+                    double dBbardA_i = dfda_r * bi + dfda_i * br;
+                    double dBbR = NumOps.ToDouble(_bRealGradient[n, hi]);
+                    double dBbI = NumOps.ToDouble(_bImagGradient[n, hi]);
+                    gradAr += dBbR * dBbardA_r + dBbI * dBbardA_i;
+                    gradAi += dBbR * (-dBbardA_i) + dBbI * dBbardA_r;
+                }
+            }
+
+            _aRealGradient[n] = NumOps.FromDouble(gradAr);
+            _aImagGradient[n] = NumOps.FromDouble(gradAi);
+        }
+
+        return dX;
+    }
+
+    private Tensor<T> MIMOScanBackward(
+        Tensor<T> dOutput, Tensor<T> u, int batchSize, int seqLen)
+    {
+        var dU = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+
+        // Initialize gradient accumulators
+        _aRealGradient = new Tensor<T>(new[] { _stateDimension });
+        _aImagGradient = new Tensor<T>(new[] { _stateDimension });
+        _bRealGradient = new Tensor<T>(new[] { _stateDimension, _modelDimension });
+        _bImagGradient = new Tensor<T>(new[] { _stateDimension, _modelDimension });
+        _cRealGradient = new Tensor<T>(new[] { _modelDimension, _stateDimension });
+        _cImagGradient = new Tensor<T>(new[] { _modelDimension, _stateDimension });
+        _dParamGradient = new Tensor<T>(new[] { _modelDimension });
+        _logDeltaGradient = new Tensor<T>(new[] { _stateDimension });
+
+        var hiddenStatesReal = _lastHiddenStatesReal
+            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        var hiddenStatesImag = _lastHiddenStatesImag
+            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Recompute discretized A_bar for backward pass
+        var aBarReal = new T[_stateDimension];
+        var aBarImag = new T[_stateDimension];
+        var deltaArr = new double[_stateDimension];
+
+        for (int n = 0; n < _stateDimension; n++)
+        {
+            double dt = NumOps.ToDouble(NumOps.Exp(_logDelta[n]));
+            deltaArr[n] = dt;
+            double ar = NumOps.ToDouble(_aReal[n]);
+            double ai = NumOps.ToDouble(_aImag[n]);
+            double expDtAr = Math.Exp(dt * ar);
+
+            aBarReal[n] = NumOps.FromDouble(expDtAr * Math.Cos(dt * ai));
+            aBarImag[n] = NumOps.FromDouble(expDtAr * Math.Sin(dt * ai));
+        }
+
+        // Running gradient of hidden state (complex): dL/dh[t]
+        var dhReal = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
+        var dhImag = TensorAllocator.Rent<T>(new[] { batchSize, _stateDimension });
+
+        for (int t = seqLen - 1; t >= 0; t--)
+        {
+            for (int bi = 0; bi < batchSize; bi++)
+            {
+                // Gradient from output: y_h = sum_n Re(C[h,n] * x_n) + D[h] * u_h
+                // dh_real[n] += sum_h C_real[h,n] * dOut[h]
+                // dh_imag[n] -= sum_h C_imag[h,n] * dOut[h]
+                // dC_real[h,n] += x_real[n] * dOut[h]
+                // dC_imag[h,n] -= x_imag[n] * dOut[h]
+                // dD[h] += u[h] * dOut[h]
+                // dU[h] += D[h] * dOut[h]
+
+                for (int h = 0; h < _modelDimension; h++)
+                {
+                    T dOutVal = dOutput[new[] { bi, t, h }];
+                    T uVal = u[new[] { bi, t, h }];
+
+                    // dD gradient
+                    _dParamGradient[h] = NumOps.Add(_dParamGradient[h],
+                        NumOps.Multiply(uVal, dOutVal));
+
+                    // dU from skip connection
+                    dU[new[] { bi, t, h }] = NumOps.Add(dU[new[] { bi, t, h }],
+                        NumOps.Multiply(_dParam[h], dOutVal));
+
+                    for (int n = 0; n < _stateDimension; n++)
+                    {
+                        T xR = hiddenStatesReal[new[] { bi, t + 1, n }];
+                        T xI = hiddenStatesImag[new[] { bi, t + 1, n }];
+
+                        // dh from output (Re(C*x) = Cr*xr - Ci*xi)
+                        dhReal[new[] { bi, n }] = NumOps.Add(dhReal[new[] { bi, n }],
+                            NumOps.Multiply(_cReal[new[] { h, n }], dOutVal));
+                        dhImag[new[] { bi, n }] = NumOps.Add(dhImag[new[] { bi, n }],
+                            NumOps.Negate(NumOps.Multiply(_cImag[new[] { h, n }], dOutVal)));
+
+                        // dC gradient
+                        _cRealGradient[new[] { h, n }] = NumOps.Add(
+                            _cRealGradient[new[] { h, n }],
+                            NumOps.Multiply(xR, dOutVal));
+                        _cImagGradient[new[] { h, n }] = NumOps.Add(
+                            _cImagGradient[new[] { h, n }],
+                            NumOps.Negate(NumOps.Multiply(xI, dOutVal)));
+                    }
+                }
+
+                // Backprop through state update: x[t] = A_bar * x[t-1] + B_bar * u[t]
+                for (int n = 0; n < _stateDimension; n++)
+                {
+                    T dhR = dhReal[new[] { bi, n }];
+                    T dhI = dhImag[new[] { bi, n }];
+                    T hPrevR = hiddenStatesReal[new[] { bi, t, n }];
+                    T hPrevI = hiddenStatesImag[new[] { bi, t, n }];
+                    T abR = aBarReal[n];
+                    T abI = aBarImag[n];
+
+                    // d_A_bar contribution: dh * conj(h_prev)
+                    // d_A_bar_real += dhR * hPrevR + dhI * hPrevI
+                    // d_A_bar_imag += dhI * hPrevR - dhR * hPrevI
+                    T dAbR = NumOps.Add(
+                        NumOps.Multiply(dhR, hPrevR),
+                        NumOps.Multiply(dhI, hPrevI));
+                    T dAbI = NumOps.Subtract(
+                        NumOps.Multiply(dhI, hPrevR),
+                        NumOps.Multiply(dhR, hPrevI));
+
+                    // Chain rule through A_bar = exp(delta * A):
+                    // dA_bar/dA_real = delta * A_bar_real (for diagonal real part)
+                    // dA_bar/dA_imag = delta * (-A_bar_imag, A_bar_real) (rotation)
+                    // Simplified: dA_real += delta * (dAbR * abR + dAbI * abI)
+                    //            dA_imag += delta * (dAbI * abR - dAbR * abI)
+                    double dt = deltaArr[n];
+                    T dtT = NumOps.FromDouble(dt);
+
+                    _aRealGradient[n] = NumOps.Add(_aRealGradient[n],
+                        NumOps.Multiply(dtT, NumOps.Add(
+                            NumOps.Multiply(dAbR, abR),
+                            NumOps.Multiply(dAbI, abI))));
+                    _aImagGradient[n] = NumOps.Add(_aImagGradient[n],
+                        NumOps.Multiply(dtT, NumOps.Subtract(
+                            NumOps.Multiply(dAbI, abR),
+                            NumOps.Multiply(dAbR, abI))));
+
+                    // dLogDelta: chain through delta = exp(logDelta) and A_bar = exp(delta*A)
+                    // d_logDelta += delta * (dAbR * (ar * abR + ai * (-abI)) + dAbI * (ar * abI + ai * abR))
+                    double ar = NumOps.ToDouble(_aReal[n]);
+                    double ai = NumOps.ToDouble(_aImag[n]);
+                    T dLogDelta_n = NumOps.Multiply(dtT, NumOps.Add(
+                        NumOps.Multiply(dAbR, NumOps.FromDouble(ar * NumOps.ToDouble(abR) - ai * NumOps.ToDouble(abI))),
+                        NumOps.Multiply(dAbI, NumOps.FromDouble(ar * NumOps.ToDouble(abI) + ai * NumOps.ToDouble(abR)))));
+                    _logDeltaGradient[n] = NumOps.Add(_logDeltaGradient[n], dLogDelta_n);
+
+                    // dB gradient and dU from B path
+                    // Using simplified B_bar ~ delta * B for gradient computation
+                    // dB_real[n,h] += dhR * delta * u[t,h], dB_imag[n,h] += dhI * delta * u[t,h]
+                    // dU[t,h] += delta * (B_real[n,h] * dhR + B_imag[n,h] * dhI)
+                    for (int h = 0; h < _modelDimension; h++)
+                    {
+                        T uVal = u[new[] { bi, t, h }];
+                        T dtU = NumOps.Multiply(dtT, uVal);
+
+                        _bRealGradient[new[] { n, h }] = NumOps.Add(
+                            _bRealGradient[new[] { n, h }],
+                            NumOps.Multiply(dhR, dtU));
+                        _bImagGradient[new[] { n, h }] = NumOps.Add(
+                            _bImagGradient[new[] { n, h }],
+                            NumOps.Multiply(dhI, dtU));
+
+                        // dU from B: Re(conj(B_bar) * dh) ~ delta * (Br * dhR + Bi * dhI)
+                        dU[new[] { bi, t, h }] = NumOps.Add(dU[new[] { bi, t, h }],
+                            NumOps.Multiply(dtT, NumOps.Add(
+                                NumOps.Multiply(_bReal[new[] { n, h }], dhR),
+                                NumOps.Multiply(_bImag[new[] { n, h }], dhI))));
+                    }
+
+                    // Propagate dh to previous timestep: dh_prev = conj(A_bar) * dh
+                    // conj(A_bar) = (abR - i*abI)
+                    // (abR - i*abI)(dhR + i*dhI) = (abR*dhR + abI*dhI) + i*(abR*dhI - abI*dhR)
+                    T newDhR = NumOps.Add(
+                        NumOps.Multiply(abR, dhR),
+                        NumOps.Multiply(abI, dhI));
+                    T newDhI = NumOps.Subtract(
+                        NumOps.Multiply(abR, dhI),
+                        NumOps.Multiply(abI, dhR));
+
+                    dhReal[new[] { bi, n }] = newDhR;
+                    dhImag[new[] { bi, n }] = newDhI;
+                }
+            }
+        }
+
+        return dU;
+    }
+
+    #region Parameter Management
+
+    /// <inheritdoc />
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_aRealGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        T negLR = NumOps.Negate(learningRate);
+        _aReal = Engine.TensorAdd(_aReal, Engine.TensorMultiplyScalar(_aRealGradient, negLR));
+        _aImag = Engine.TensorAdd(_aImag, Engine.TensorMultiplyScalar(_aImagGradient!, negLR));
+        _bReal = Engine.TensorAdd(_bReal, Engine.TensorMultiplyScalar(_bRealGradient!, negLR));
+        _bImag = Engine.TensorAdd(_bImag, Engine.TensorMultiplyScalar(_bImagGradient!, negLR));
+        _cReal = Engine.TensorAdd(_cReal, Engine.TensorMultiplyScalar(_cRealGradient!, negLR));
+        _cImag = Engine.TensorAdd(_cImag, Engine.TensorMultiplyScalar(_cImagGradient!, negLR));
+        _dParam = Engine.TensorAdd(_dParam, Engine.TensorMultiplyScalar(_dParamGradient!, negLR));
+        _logDelta = Engine.TensorAdd(_logDelta, Engine.TensorMultiplyScalar(_logDeltaGradient!, negLR));
+        _inputProjectionWeights = Engine.TensorAdd(_inputProjectionWeights,
+            Engine.TensorMultiplyScalar(_inputProjectionWeightsGradient!, negLR));
+        _inputProjectionBias = Engine.TensorAdd(_inputProjectionBias,
+            Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
+        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights,
+            Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias,
+            Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
+
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        int index = 0;
+        foreach (var tensor in GetAllTensors())
+            for (int i = 0; i < tensor.Length; i++)
+                parameters[index++] = tensor[i];
+        return parameters;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+        int index = 0;
+        foreach (var tensor in GetAllTensors())
+            for (int i = 0; i < tensor.Length; i++)
+                tensor[i] = parameters[index++];
+    }
+
+    private Tensor<T>[] GetAllTensors() =>
+    [
+        _aReal, _aImag,
+        _bReal, _bImag,
+        _cReal, _cImag,
+        _dParam, _logDelta,
+        _inputProjectionWeights, _inputProjectionBias,
+        _outputProjectionWeights, _outputProjectionBias
+    ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_aRealGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        return Vector<T>.Concatenate(
+            new Vector<T>(_aRealGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_aImagGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_bRealGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_bImagGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_cRealGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_cImagGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_dParamGradient?.ToArray() ?? Array.Empty<T>()),
+            _logDeltaGradient != null ? new Vector<T>(_logDeltaGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_logDelta.Length),
+            new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _aRealGradient = null; _aImagGradient = null; _bRealGradient = null; _bImagGradient = null; _cRealGradient = null; _cImagGradient = null; _dParamGradient = null; _logDeltaGradient = null;
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+    }
+
+    /// <inheritdoc />
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastOutput = null;
+        _lastProjectedInput = null;
+        _lastHiddenStatesReal = null;
+        _lastHiddenStatesImag = null;
+        _lastScanOutputReal = null;
+        _originalInputShape = null;
+        _aRealGradient = null;
+        _aImagGradient = null;
+        _bRealGradient = null;
+        _bImagGradient = null;
+        _cRealGradient = null;
+        _cImagGradient = null;
+        _dParamGradient = null;
+        _logDeltaGradient = null;
+        _inputProjectionWeightsGradient = null;
+        _inputProjectionBiasGradient = null;
+        _outputProjectionWeightsGradient = null;
+        _outputProjectionBiasGradient = null;
+    }
+
+    #endregion
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["ModelDimension"] = _modelDimension.ToString();
+        metadata["StateDimension"] = _stateDimension.ToString();
+        return metadata;
+    }
+
+    /// <summary>
+    /// Gets the A parameter (real part of diagonal eigenvalues) for external inspection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The real part of the diagonal eigenvalues controls the decay rate of each state dimension.
+    /// Initialized to -0.5 per the HiPPO-LegS scheme.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GetAReal() => _aReal;
+
+    /// <summary>
+    /// Gets the A parameter (imaginary part of diagonal eigenvalues) for external inspection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The imaginary part of the diagonal eigenvalues controls the oscillation frequency.
+    /// Initialized to n*pi per the HiPPO-LegS scheme, giving logarithmically spaced frequencies.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GetAImag() => _aImag;
+
+    /// <summary>
+    /// Gets the D skip connection parameter for external inspection.
+    /// </summary>
+    public Tensor<T> GetDParameter() => _dParam;
+
+    /// <summary>
+    /// Gets the log-delta (discretization step) parameter for external inspection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Delta controls the discretization step size per state dimension. Stored as log(delta)
+    /// to ensure positivity. Smaller delta values give finer temporal resolution.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GetLogDelta() => _logDelta;
+
+    /// <summary>
+    /// Gets the output projection weights for external inspection.
+    /// </summary>
+    public Tensor<T> GetOutputProjectionWeights() => _outputProjectionWeights;
+}

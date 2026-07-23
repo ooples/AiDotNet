@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "AiDotNet.Serving.Tests": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:52429;http://localhost:52431"
+    }
+  }
+}

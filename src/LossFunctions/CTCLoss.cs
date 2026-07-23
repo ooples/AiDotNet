@@ -1,0 +1,576 @@
+﻿
+
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
+namespace AiDotNet.LossFunctions;
+
+/// <summary>
+/// Implements the Connectionist Temporal Classification (CTC) loss function for sequence-to-sequence learning.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Connectionist Temporal Classification (CTC) is a loss function designed for 
+/// sequence-to-sequence learning problems where the alignment between input and output sequences is unknown.
+/// 
+/// For example, in speech recognition, we have:
+/// - Input: An audio waveform (long sequence of sound samples)
+/// - Output: Text transcript (shorter sequence of characters)
+/// 
+/// The key challenge is that we don't know exactly which parts of the audio correspond to each character.
+/// CTC solves this by considering all possible alignments between the input and output sequences.
+/// 
+/// CTC introduces a special "blank" token to handle:
+/// - Repetitions of characters (e.g., "hello" vs "hheellloo")
+/// - Silence or transitions between sounds
+/// 
+/// This loss function is commonly used in:
+/// - Speech recognition
+/// - Handwriting recognition
+/// - Any task where input and output sequences have different lengths and unknown alignment
+/// </para>
+/// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.TextGeneration)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Probabilities, ApiShape = LossApiShape.Sequence)]
+public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
+{
+    private readonly int _blankIndex;
+
+    /// <summary>Gets the blank symbol index used by this CTC loss.</summary>
+    public int BlankIndex => _blankIndex;
+    private readonly bool _inputsAreLogProbs;
+    private readonly T _logZero;
+    private readonly int _numClasses;
+
+    /// <summary>
+    /// Initializes a new instance of the CTCLoss class.
+    /// </summary>
+    /// <param name="numericOperations">The numeric operations provider for type T.</param>
+    /// <param name="blankIndex">The index of the blank symbol in the vocabulary. Default is 0.</param>
+    /// <param name="inputsAreLogProbs">Whether inputs are already in log space. Default is true.</param>
+    /// <exception cref="ArgumentNullException">Thrown when numericOperations is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when blankIndex is negative.</exception>
+    public CTCLoss(int numClasses = 29, int blankIndex = 0, bool inputsAreLogProbs = true)
+    {
+        if (blankIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(blankIndex), "Blank index cannot be negative.");
+        }
+
+        _numClasses = numClasses;
+        _blankIndex = blankIndex;
+        _inputsAreLogProbs = inputsAreLogProbs;
+        _logZero = NumOps.FromDouble(-1000.0); // Effectively zero in log space
+    }
+
+    /// <summary>
+    /// Calculates the CTC loss for a batch of sequences.
+    /// </summary>
+    /// <param name="logProbs">Log probabilities tensor [batch, time, classes].</param>
+    /// <param name="targets">Target label sequences for each batch item.</param>
+    /// <param name="inputLengths">Actual lengths of each input sequence.</param>
+    /// <param name="targetLengths">Actual lengths of each target sequence.</param>
+    /// <returns>The average CTC loss value across the batch.</returns>
+    public T CalculateLoss(Tensor<T> logProbs, int[][] targets, int[] inputLengths, int[] targetLengths)
+    {
+        // Validate inputs
+        ValidateInputs(logProbs, targets, inputLengths, targetLengths);
+
+        int batchSize = inputLengths.Length;
+        T batchLoss = NumOps.Zero;
+
+        // Process each batch item
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Create the extended target sequence with blanks
+            List<int> extendedLabels = new List<int>(targetLengths[b] * 2 + 1);
+            extendedLabels.Add(_blankIndex); // Start with blank
+
+            for (int i = 0; i < targetLengths[b]; i++)
+            {
+                extendedLabels.Add(targets[b][i]);
+                extendedLabels.Add(_blankIndex);
+            }
+
+            int extendedLength = extendedLabels.Count;
+            int sequenceLength = inputLengths[b];
+
+            // Create forward and backward variables for dynamic programming
+            T[,] alpha = new T[sequenceLength, extendedLength];
+            T[,] beta = new T[sequenceLength, extendedLength];
+
+            // Initialize with log zero probability
+            for (int t = 0; t < sequenceLength; t++)
+            {
+                for (int s = 0; s < extendedLength; s++)
+                {
+                    alpha[t, s] = _logZero;
+                    beta[t, s] = _logZero;
+                }
+            }
+
+            // Forward pass (alpha)
+            ComputeAlpha(b, alpha, extendedLabels, logProbs, sequenceLength, extendedLength);
+
+            // Backward pass (beta)
+            ComputeBeta(b, beta, extendedLabels, logProbs, sequenceLength, extendedLength);
+
+            // Compute log probability by summing over all valid paths
+            T logProb = _logZero;
+
+            // Sum probabilities for all valid ending positions (last blank and last label)
+            if (extendedLength > 1) // More than just a blank
+            {
+                logProb = LogSumExp(alpha[sequenceLength - 1, extendedLength - 1],
+                                  alpha[sequenceLength - 1, extendedLength - 2]);
+            }
+            else
+            {
+                logProb = alpha[sequenceLength - 1, 0]; // Just the blank
+            }
+
+            // Negative log likelihood
+            T loss = NumOps.Negate(logProb);
+            batchLoss = NumOps.Add(batchLoss, loss);
+        }
+
+        // Return average loss
+        return NumOps.Divide(batchLoss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Calculates the gradient of the CTC loss with respect to the inputs.
+    /// </summary>
+    /// <param name="logProbs">Log probabilities tensor [batch, time, classes].</param>
+    /// <param name="targets">Target label sequences for each batch item.</param>
+    /// <param name="inputLengths">Actual lengths of each input sequence.</param>
+    /// <param name="targetLengths">Actual lengths of each target sequence.</param>
+    /// <returns>The gradient tensor with same shape as inputs.</returns>
+    public Tensor<T> CalculateGradient(Tensor<T> logProbs, int[][] targets, int[] inputLengths, int[] targetLengths)
+    {
+        // Validate inputs
+        ValidateInputs(logProbs, targets, inputLengths, targetLengths);
+
+        int batchSize = inputLengths.Length;
+        int maxTime = logProbs.Shape[1];
+        int numClasses = logProbs.Shape[2];
+
+        // Initialize gradient tensor with same shape as input
+        var gradient = new Tensor<T>(logProbs._shape);
+
+        // For each item in the batch
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Create the extended target sequence with blanks
+            List<int> extendedLabels = new List<int>(targetLengths[b] * 2 + 1);
+            extendedLabels.Add(_blankIndex); // Start with blank
+
+            for (int i = 0; i < targetLengths[b]; i++)
+            {
+                extendedLabels.Add(targets[b][i]);
+                extendedLabels.Add(_blankIndex);
+            }
+
+            int extendedLength = extendedLabels.Count;
+            int sequenceLength = inputLengths[b];
+
+            // Create forward and backward variables
+            T[,] alpha = new T[sequenceLength, extendedLength];
+            T[,] beta = new T[sequenceLength, extendedLength];
+
+            // Initialize
+            for (int t = 0; t < sequenceLength; t++)
+            {
+                for (int s = 0; s < extendedLength; s++)
+                {
+                    alpha[t, s] = _logZero;
+                    beta[t, s] = _logZero;
+                }
+            }
+
+            // Forward pass
+            ComputeAlpha(b, alpha, extendedLabels, logProbs, sequenceLength, extendedLength);
+
+            // Backward pass
+            ComputeBeta(b, beta, extendedLabels, logProbs, sequenceLength, extendedLength);
+
+            // Compute total log probability (denominator for gradient)
+            T totalLogProb = _logZero;
+
+            if (extendedLength > 1)
+            {
+                totalLogProb = LogSumExp(alpha[sequenceLength - 1, extendedLength - 1],
+                                       alpha[sequenceLength - 1, extendedLength - 2]);
+            }
+            else
+            {
+                totalLogProb = alpha[sequenceLength - 1, 0];
+            }
+
+            // Compute gradients for this sequence
+            for (int t = 0; t < sequenceLength; t++)
+            {
+                // Initialize all class gradients to zero (in log space)
+                var classGradients = new T[numClasses];
+                for (int c = 0; c < numClasses; c++)
+                {
+                    classGradients[c] = _logZero;
+                }
+
+                // For each position in the extended label sequence
+                for (int s = 0; s < extendedLength; s++)
+                {
+                    int labelIdx = extendedLabels[s];
+
+                    // Posterior probability of this path (alpha * beta / totalProb)
+                    // In log space: alpha + beta - totalLogProb
+                    T logPathProb = NumOps.Subtract(
+                        NumOps.Add(alpha[t, s], beta[t, s]),
+                        totalLogProb
+                    );
+
+                    // Add to the gradient for this class
+                    // Convert from log space to get actual gradient
+                    T expPathProb = NumOps.Exp(logPathProb);
+
+                    // Accumulate probability for this label
+                    if (labelIdx < numClasses) // Safety check
+                    {
+                        classGradients[labelIdx] = LogSumExp(
+                            classGradients[labelIdx],
+                            NumericalStabilityHelper.SafeLog(expPathProb, NumericalStabilityHelper.SmallEpsilon)
+                        );
+                    }
+                }
+
+                // Set gradients for this time step
+                // Gradient is derivative of -log(p) which is -1/p
+                for (int c = 0; c < numClasses; c++)
+                {
+                    // Skip updating gradient for positions outside sequence length
+                    if (t >= sequenceLength)
+                    {
+                        break;
+                    }
+
+                    T expProb = NumOps.Exp(classGradients[c]);
+                    T gradValue = NumOps.Negate(expProb);
+
+                    // Add to batch element's gradient
+                    gradient[new[] { b, t, c }] = gradValue;
+                }
+            }
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Computes the forward variables (alpha) for the CTC algorithm.
+    /// </summary>
+    private void ComputeAlpha(int batchIndex, T[,] alpha, List<int> extendedLabels,
+                             Tensor<T> logProbs, int sequenceLength, int extendedLength)
+    {
+        // Initialize first time step (t=0)
+        T logProb0 = GetLogProb(logProbs, batchIndex, 0, extendedLabels[0]);
+        alpha[0, 0] = logProb0;
+
+        if (extendedLength > 1)
+        {
+            T logProb1 = GetLogProb(logProbs, batchIndex, 0, extendedLabels[1]);
+            alpha[0, 1] = logProb1;
+        }
+
+        // Forward pass
+        for (int t = 1; t < sequenceLength; t++)
+        {
+            for (int s = 0; s < extendedLength; s++)
+            {
+                int label = extendedLabels[s];
+
+                // Initialize with the no-skip case
+                T logProbSum = alpha[t - 1, s];
+
+                // Can come from previous label (except for first blank label)
+                if (s > 0)
+                {
+                    logProbSum = LogSumExp(logProbSum, alpha[t - 1, s - 1]);
+                }
+
+                // Special case for label pairs like a-a, where we skip the blank between repeated labels
+                if (s > 1 && label != _blankIndex && extendedLabels[s - 2] == label)
+                {
+                    logProbSum = LogSumExp(logProbSum, alpha[t - 1, s - 2]);
+                }
+
+                // Multiply by current observation probability (add in log space)
+                T logProbCurrent = GetLogProb(logProbs, batchIndex, t, label);
+                alpha[t, s] = NumOps.Add(logProbSum, logProbCurrent);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes the backward variables (beta) for the CTC algorithm.
+    /// </summary>
+    private void ComputeBeta(int batchIndex, T[,] beta, List<int> extendedLabels,
+                            Tensor<T> logProbs, int sequenceLength, int extendedLength)
+    {
+        // Initialize last time step (t=T-1)
+        beta[sequenceLength - 1, extendedLength - 1] = NumOps.Zero; // log(1) = 0
+
+        if (extendedLength > 1)
+        {
+            beta[sequenceLength - 1, extendedLength - 2] = NumOps.Zero; // log(1) = 0
+        }
+
+        // Backward pass
+        for (int t = sequenceLength - 2; t >= 0; t--)
+        {
+            for (int s = 0; s < extendedLength; s++)
+            {
+                // Initialize with the no-skip case
+                T logProbSum = NumOps.Add(
+                    beta[t + 1, s],
+                    GetLogProb(logProbs, batchIndex, t + 1, extendedLabels[s])
+                );
+
+                // Can go to next label
+                if (s < extendedLength - 1)
+                {
+                    T nextLogProb = NumOps.Add(
+                        beta[t + 1, s + 1],
+                        GetLogProb(logProbs, batchIndex, t + 1, extendedLabels[s + 1])
+                    );
+                    logProbSum = LogSumExp(logProbSum, nextLogProb);
+                }
+
+                // Special case for merging paths with repeated characters
+                if (s < extendedLength - 2 && extendedLabels[s] == extendedLabels[s + 2] && extendedLabels[s] != _blankIndex)
+                {
+                    T skipLogProb = NumOps.Add(
+                        beta[t + 1, s + 2],
+                        GetLogProb(logProbs, batchIndex, t + 1, extendedLabels[s + 2])
+                    );
+                    logProbSum = LogSumExp(logProbSum, skipLogProb);
+                }
+
+                beta[t, s] = logProbSum;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the log probability for a specific batch, time, and label.
+    /// </summary>
+    private T GetLogProb(Tensor<T> logProbs, int batch, int time, int label)
+    {
+        // Check bounds to avoid index errors
+        if (label >= logProbs.Shape[2])
+        {
+            return _logZero;
+        }
+
+        T value = logProbs[new[] { batch, time, label }];
+
+        // If inputs are not already in log space, convert them
+        if (!_inputsAreLogProbs)
+        {
+            value = NumericalStabilityHelper.SafeLog(value, NumericalStabilityHelper.SmallEpsilon);
+        }
+
+        return value;
+    }
+
+    /// <summary>
+    /// Computes log(exp(x) + exp(y)) in a numerically stable way.
+    /// </summary>
+    private T LogSumExp(T x, T y)
+    {
+        // Handle edge cases for numerical stability
+        if (NumOps.LessThan(x, _logZero))
+            return y;
+        if (NumOps.LessThan(y, _logZero))
+            return x;
+
+        T maxVal = MathHelper.Max(x, y);
+        return NumOps.Add(
+            maxVal,
+            NumericalStabilityHelper.SafeLog(
+                NumOps.Add(
+                    NumOps.Exp(NumOps.Subtract(x, maxVal)),
+                    NumOps.Exp(NumOps.Subtract(y, maxVal))
+                ),
+                NumericalStabilityHelper.SmallEpsilon
+            )
+        );
+    }
+
+    /// <summary>
+    /// Validates input parameters for the CTC loss calculation.
+    /// </summary>
+    private void ValidateInputs(Tensor<T> logProbs, int[][] targets, int[] inputLengths, int[] targetLengths)
+    {
+        if (logProbs == null)
+            throw new ArgumentNullException(nameof(logProbs));
+        if (targets == null)
+            throw new ArgumentNullException(nameof(targets));
+        if (inputLengths == null)
+            throw new ArgumentNullException(nameof(inputLengths));
+        if (targetLengths == null)
+            throw new ArgumentNullException(nameof(targetLengths));
+
+        int batchSize = logProbs.Shape[0];
+
+        if (targets.Length != batchSize)
+            throw new ArgumentException($"Number of target sequences ({targets.Length}) doesn't match batch size ({batchSize})");
+        if (inputLengths.Length != batchSize)
+            throw new ArgumentException($"Number of input lengths ({inputLengths.Length}) doesn't match batch size ({batchSize})");
+        if (targetLengths.Length != batchSize)
+            throw new ArgumentException($"Number of target lengths ({targetLengths.Length}) doesn't match batch size ({batchSize})");
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            if (inputLengths[b] <= 0 || inputLengths[b] > logProbs.Shape[1])
+                throw new ArgumentException($"Invalid input length at index {b}: {inputLengths[b]}");
+
+            if (targetLengths[b] <= 0)
+                throw new ArgumentException($"Invalid target length at index {b}: {targetLengths[b]}");
+
+            if (targetLengths[b] > inputLengths[b])
+                throw new ArgumentException($"Target length ({targetLengths[b]}) exceeds input length ({inputLengths[b]}) at index {b}");
+
+            if (targets[b] == null || targets[b].Length < targetLengths[b])
+                throw new ArgumentException($"Target sequence at index {b} is null or shorter than specified length");
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // LossFunctionBase<T> implementation — no adapter needed
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Calculates CTC loss from flattened predicted log-probs and encoded target labels.
+    /// Target encoding: [batchSize, targetLen0, label0_0, ..., targetLen1, label1_0, ...]
+    /// </summary>
+    public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
+    {
+        if (predicted is null) throw new ArgumentNullException(nameof(predicted));
+        if (actual is null) throw new ArgumentNullException(nameof(actual));
+
+        int batchSize = (int)Convert.ToDouble(actual[0]);
+        if (batchSize <= 0)
+            throw new ArgumentException("Invalid batch size encoded in actual vector");
+
+        int timeStepsTotal = predicted.Length / (_numClasses * batchSize);
+        var logProbs = new Tensor<T>(new[] { batchSize, timeStepsTotal, _numClasses });
+
+        int index = 0;
+        for (int b = 0; b < batchSize; b++)
+            for (int t = 0; t < timeStepsTotal; t++)
+                for (int c = 0; c < _numClasses; c++)
+                    logProbs[new[] { b, t, c }] = predicted[index++];
+
+        int actualIndex = 1;
+        var targets = new int[batchSize][];
+        var inputLengths = new int[batchSize];
+        var targetLengths = new int[batchSize];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            targetLengths[b] = (int)Convert.ToDouble(actual[actualIndex++]);
+            inputLengths[b] = timeStepsTotal;
+            targets[b] = new int[targetLengths[b]];
+            for (int i = 0; i < targetLengths[b]; i++)
+                targets[b][i] = (int)Convert.ToDouble(actual[actualIndex++]);
+        }
+
+        return CalculateLoss(logProbs, targets, inputLengths, targetLengths);
+    }
+
+    /// <summary>
+    /// Calculates the gradient of CTC loss from flattened vectors.
+    /// </summary>
+    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
+    {
+        if (predicted is null) throw new ArgumentNullException(nameof(predicted));
+        if (actual is null) throw new ArgumentNullException(nameof(actual));
+
+        int batchSize = (int)Convert.ToDouble(actual[0]);
+        if (batchSize <= 0)
+            throw new ArgumentException("Invalid batch size encoded in actual vector");
+
+        int timeStepsTotal = predicted.Length / (_numClasses * batchSize);
+        var logProbs = new Tensor<T>(new[] { batchSize, timeStepsTotal, _numClasses });
+
+        int index = 0;
+        for (int b = 0; b < batchSize; b++)
+            for (int t = 0; t < timeStepsTotal; t++)
+                for (int c = 0; c < _numClasses; c++)
+                    logProbs[new[] { b, t, c }] = predicted[index++];
+
+        int actualIndex = 1;
+        var targets = new int[batchSize][];
+        var inputLengths = new int[batchSize];
+        var targetLengths = new int[batchSize];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            targetLengths[b] = (int)Convert.ToDouble(actual[actualIndex++]);
+            inputLengths[b] = timeStepsTotal;
+            targets[b] = new int[targetLengths[b]];
+            for (int i = 0; i < targetLengths[b]; i++)
+                targets[b][i] = (int)Convert.ToDouble(actual[actualIndex++]);
+        }
+
+        var gradientTensor = CalculateGradient(logProbs, targets, inputLengths, targetLengths);
+        var gradientVector = new Vector<T>(predicted.Length);
+
+        index = 0;
+        for (int b = 0; b < batchSize; b++)
+            for (int t = 0; t < timeStepsTotal; t++)
+                for (int c = 0; c < _numClasses; c++)
+                    gradientVector[index++] = gradientTensor[new[] { b, t, c }];
+
+        return gradientVector;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Uses the tape-tracked TensorCTCLoss engine op for differentiable CTC loss.
+    /// predicted: log-probabilities [batch, time, classes]
+    /// target: encoded labels [batchSize, targetLen0, label0_0, ..., targetLen1, label1_0, ...]
+    /// </remarks>
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        int batchSize = predicted.Shape.Length == 3 ? predicted.Shape[0]
+            : (int)Convert.ToDouble(NumOps.ToDouble(target[0]));
+        int timeSteps = predicted.Shape.Length == 3 ? predicted.Shape[1]
+            : predicted.Length / (_numClasses * batchSize);
+
+        var inputLengths = new int[batchSize];
+        var targetLengths = new int[batchSize];
+        var allTargets = new List<int>();
+        int idx = 1;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            inputLengths[b] = timeSteps;
+            int tLen = (int)Convert.ToDouble(NumOps.ToDouble(target[idx++]));
+            targetLengths[b] = tLen;
+            for (int t = 0; t < tLen; t++)
+                allTargets.Add((int)Convert.ToDouble(NumOps.ToDouble(target[idx++])));
+        }
+
+        var targetsArray = allTargets.ToArray();
+        var targetsTensor = new Tensor<int>(targetsArray, new[] { targetsArray.Length });
+
+        var logProbs = predicted;
+        if (predicted.Shape.Length != 3)
+            logProbs = Engine.Reshape(predicted, new[] { batchSize, timeSteps, _numClasses });
+
+        return Engine.TensorCTCLoss(logProbs, targetsTensor, inputLengths, targetLengths, _blankIndex);
+    }
+}

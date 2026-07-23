@@ -1,0 +1,676 @@
+namespace AiDotNet.Inference.PagedAttention;
+
+/// <summary>
+/// Paged key-value cache for efficient LLM serving memory management.
+/// </summary>
+/// <remarks>
+/// <para>
+/// PagedKVCache implements the vLLM-style paged attention memory management system.
+/// Instead of pre-allocating contiguous memory for each sequence's maximum length,
+/// it dynamically allocates fixed-size blocks as sequences grow.
+/// </para>
+/// <para><b>For Beginners:</b> Traditional KV-cache is like reserving a whole hotel floor per guest.
+///
+/// PagedKVCache is like renting hotel rooms individually:
+/// - Guest arrives: Get them a room (allocate 1 block)
+/// - Guest needs more space: Give them another room (allocate more blocks)
+/// - Guest leaves: Rooms become available (free blocks)
+///
+/// Benefits:
+/// - 8-9x more sequences can fit in memory
+/// - No wasted space for short sequences
+/// - Efficient beam search with copy-on-write
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type for tensor computations.</typeparam>
+internal class PagedKVCache<T> : IDisposable
+{
+    private readonly PagedKVCacheConfig _config;
+    private readonly BlockManager<T> _blockManager;
+    private readonly BlockTableManager<T> _blockTableManager;
+
+    // Physical storage for K and V tensors, split by block to avoid very large single-object allocations.
+    // Shape per block: [num_layers, 2 (K/V), block_size, num_heads, head_dim]
+    private readonly T[][] _kvBlocks;
+    private readonly long _elementsPerBlock;
+
+    // Tracking
+    private readonly Dictionary<long, SequenceMetadata> _sequenceMetadata;
+    private readonly object _lock = new();
+    private bool _disposed;
+
+    /// <summary>
+    /// Gets the configuration.
+    /// </summary>
+    public PagedKVCacheConfig Config => _config;
+
+    /// <summary>
+    /// Gets the block manager.
+    /// </summary>
+    public BlockManager<T> BlockManager => _blockManager;
+
+    /// <summary>
+    /// Gets the block table manager.
+    /// </summary>
+    public BlockTableManager<T> BlockTableManager => _blockTableManager;
+
+    /// <summary>
+    /// Gets the number of active sequences.
+    /// </summary>
+    public virtual int ActiveSequenceCount
+    {
+        get { lock (_lock) return _sequenceMetadata.Count; }
+    }
+
+    /// <summary>
+    /// Creates a new paged KV cache.
+    /// </summary>
+    public PagedKVCache(PagedKVCacheConfig config)
+    {
+        Guard.NotNull(config);
+        _config = config;
+
+        // Create block manager
+        var blockConfig = new BlockManagerConfig
+        {
+            BlockSize = config.BlockSize,
+            NumBlocks = config.NumBlocks,
+            NumLayers = config.NumLayers,
+            NumHeads = config.NumHeads,
+            HeadDimension = config.HeadDimension
+        };
+        _blockManager = new BlockManager<T>(blockConfig);
+        _blockTableManager = new BlockTableManager<T>(_blockManager);
+
+        // Calculate elements per block
+        // Each block stores: block_size tokens x num_layers x 2 (K,V) x num_heads x head_dim
+        _elementsPerBlock = (long)config.BlockSize * config.NumLayers * 2 * config.NumHeads * config.HeadDimension;
+
+        if (_elementsPerBlock > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(config), $"PagedKVCache requires elementsPerBlock <= {int.MaxValue}, but got {_elementsPerBlock}. Reduce BlockSize/model dimensions.");
+
+        // Allocate physical storage per block to avoid single large allocations (notably on .NET Framework).
+        _kvBlocks = new T[config.NumBlocks][];
+        for (int i = 0; i < _kvBlocks.Length; i++)
+        {
+            try
+            {
+                _kvBlocks[i] = new T[(int)_elementsPerBlock];
+            }
+            catch (OutOfMemoryException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to allocate PagedKVCache block storage ({_elementsPerBlock} elements per block, {config.NumBlocks} blocks). " +
+                    "Reduce available memory/NumBlocks or use a runtime that supports larger allocations.",
+                    ex);
+            }
+        }
+
+        _sequenceMetadata = new Dictionary<long, SequenceMetadata>();
+    }
+
+    /// <summary>
+    /// Creates a new paged KV cache from memory size.
+    /// </summary>
+    public static PagedKVCache<T> FromMemorySize(
+        long availableBytes,
+        int numLayers,
+        int numHeads,
+        int headDim,
+        int blockSize = 16)
+    {
+        var config = PagedKVCacheConfig.FromMemorySize(
+            availableBytes, numLayers, numHeads, headDim, blockSize);
+        return new PagedKVCache<T>(config);
+    }
+
+    /// <summary>
+    /// Allocates cache space for a new sequence.
+    /// </summary>
+    /// <param name="sequenceId">The sequence ID.</param>
+    /// <param name="initialTokens">Number of initial tokens (e.g., prompt length).</param>
+    /// <returns>True if allocation succeeded.</returns>
+    public virtual bool AllocateSequence(long sequenceId, int initialTokens)
+    {
+        lock (_lock)
+        {
+            if (_sequenceMetadata.ContainsKey(sequenceId))
+                return false;
+
+            // Allocate at least one block up-front so the first token write (position 0) always has capacity.
+            // Actual "current length" bookkeeping still starts at initialTokens.
+            int blocksNeeded = _blockManager.BlocksForTokens(Math.Max(1, initialTokens));
+            blocksNeeded = Math.Max(1, blocksNeeded);
+            var table = _blockTableManager.CreateBlockTable(sequenceId, blocksNeeded);
+
+            if (table == null)
+                return false;
+
+            _sequenceMetadata[sequenceId] = new SequenceMetadata
+            {
+                SequenceId = sequenceId,
+                CurrentLength = initialTokens,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Extends a sequence's cache for additional tokens.
+    /// </summary>
+    /// <param name="sequenceId">The sequence ID.</param>
+    /// <param name="additionalTokens">Number of additional tokens.</param>
+    /// <returns>True if extension succeeded.</returns>
+    public virtual bool ExtendSequence(long sequenceId, int additionalTokens)
+    {
+        lock (_lock)
+        {
+            if (!_sequenceMetadata.TryGetValue(sequenceId, out var metadata))
+                return false;
+
+            int newLength = metadata.CurrentLength + additionalTokens;
+            if (!_blockTableManager.EnsureCapacity(sequenceId, newLength))
+                return false;
+
+            metadata.CurrentLength = newLength;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Frees all cache blocks for a sequence.
+    /// </summary>
+    public virtual void FreeSequence(long sequenceId)
+    {
+        lock (_lock)
+        {
+            _blockTableManager.FreeBlockTable(sequenceId);
+            _sequenceMetadata.Remove(sequenceId);
+        }
+    }
+
+    /// <summary>
+    /// Forks a sequence's cache for beam search.
+    /// </summary>
+    /// <param name="sourceSequenceId">The source sequence ID.</param>
+    /// <param name="newSequenceId">The new sequence ID.</param>
+    /// <returns>True if fork succeeded.</returns>
+    public virtual bool ForkSequence(long sourceSequenceId, long newSequenceId)
+    {
+        lock (_lock)
+        {
+            if (!_sequenceMetadata.TryGetValue(sourceSequenceId, out var sourceMetadata))
+                return false;
+
+            var forkedTable = _blockTableManager.ForkBlockTable(sourceSequenceId, newSequenceId);
+            if (forkedTable == null)
+                return false;
+
+            _sequenceMetadata[newSequenceId] = new SequenceMetadata
+            {
+                SequenceId = newSequenceId,
+                CurrentLength = sourceMetadata.CurrentLength,
+                CreatedAt = DateTime.UtcNow,
+                ParentSequenceId = sourceSequenceId
+            };
+
+            return true;
+        }
+    }
+
+    private int GetBlockStorageOffset(int layer, bool isValue, int tokenOffset, int head)
+    {
+        // Layout (within block): [layer][kv][token][head][dim]
+        long offset = 0;
+        offset += (long)layer * 2 * _config.BlockSize * _config.NumHeads * _config.HeadDimension;
+        offset += (isValue ? 1 : 0) * (long)_config.BlockSize * _config.NumHeads * _config.HeadDimension;
+        offset += (long)tokenOffset * _config.NumHeads * _config.HeadDimension;
+        offset += (long)head * _config.HeadDimension;
+
+        if (offset > int.MaxValue)
+            throw new InvalidOperationException($"Computed storage offset exceeds {int.MaxValue}: {offset}");
+
+        return (int)offset;
+    }
+
+    /// <summary>
+    /// Writes key tensor for a token position.
+    /// </summary>
+    public void WriteKey(long sequenceId, int tokenPosition, int layer, ReadOnlySpan<T> keyData)
+    {
+        // Serialize against the allocators (AllocateSequence/ExtendSequence/ForkSequence/FreeSequence)
+        // which mutate the shared block-table/block-manager structures under the same lock. Without
+        // this, concurrent serving sessions (distinct sequence ids on one shared cache) race on the
+        // block-table dictionary + ref-count/COW state — corrupting the first decode token while two
+        // forwards overlap. Monitor is reentrant, so the COW path below is safe.
+        lock (_lock)
+        {
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+            // Check for copy-on-write
+            if (_blockManager.GetReferenceCount(blockId) > 1)
+            {
+                _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
+                table = _blockTableManager.GetBlockTable(sequenceId)
+                    ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
+                (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+            }
+
+            // Write key data for all heads
+            var blockStorage = _kvBlocks[blockId];
+            for (int head = 0; head < _config.NumHeads; head++)
+            {
+                int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
+                int dataOffset = head * _config.HeadDimension;
+                keyData.Slice(dataOffset, _config.HeadDimension).CopyTo(
+                    blockStorage.AsSpan(storageOffset, _config.HeadDimension));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes value tensor for a token position.
+    /// </summary>
+    public void WriteValue(long sequenceId, int tokenPosition, int layer, ReadOnlySpan<T> valueData)
+    {
+        // See WriteKey: serialize shared block-table/COW access against the allocators.
+        lock (_lock)
+        {
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+            // Check for copy-on-write
+            if (_blockManager.GetReferenceCount(blockId) > 1)
+            {
+                _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
+                table = _blockTableManager.GetBlockTable(sequenceId)
+                    ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
+                (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+            }
+
+            // Write value data for all heads
+            var blockStorage = _kvBlocks[blockId];
+            for (int head = 0; head < _config.NumHeads; head++)
+            {
+                int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
+                int dataOffset = head * _config.HeadDimension;
+                valueData.Slice(dataOffset, _config.HeadDimension).CopyTo(
+                    blockStorage.AsSpan(storageOffset, _config.HeadDimension));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads key tensor for a token position.
+    /// </summary>
+    public void ReadKey(long sequenceId, int tokenPosition, int layer, Span<T> keyData)
+    {
+        // See WriteKey: serialize shared block-table access against the allocators so a concurrent
+        // sequence's allocation/COW cannot tear the block-table lookup mid-read.
+        lock (_lock)
+        {
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+            var blockStorage = _kvBlocks[blockId];
+            for (int head = 0; head < _config.NumHeads; head++)
+            {
+                int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
+                int dataOffset = head * _config.HeadDimension;
+                blockStorage.AsSpan(storageOffset, _config.HeadDimension).CopyTo(
+                    keyData.Slice(dataOffset, _config.HeadDimension));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads value tensor for a token position.
+    /// </summary>
+    public void ReadValue(long sequenceId, int tokenPosition, int layer, Span<T> valueData)
+    {
+        // See WriteKey: serialize shared block-table access against the allocators.
+        lock (_lock)
+        {
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+            var blockStorage = _kvBlocks[blockId];
+            for (int head = 0; head < _config.NumHeads; head++)
+            {
+                int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
+                int dataOffset = head * _config.HeadDimension;
+                blockStorage.AsSpan(storageOffset, _config.HeadDimension).CopyTo(
+                    valueData.Slice(dataOffset, _config.HeadDimension));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Bulk-reads Key AND Value for a contiguous range of token positions [startPosition, startPosition+count)
+    /// for one layer, under a SINGLE lock, into contiguous per-position slices of <paramref name="keyDst"/>
+    /// and <paramref name="valueDst"/> (each laid out [count, NumHeads*HeadDimension]). Decode attention reads
+    /// the whole KV history every token; doing that as one locked bulk copy instead of a lock per position
+    /// removes O(seqLen) lock acquisitions per layer per token — the dominant decode cost (profiled at ~51%
+    /// of decode time as contended Monitor.Enter).
+    /// </summary>
+    public virtual void ReadKeyValueRange(
+        long sequenceId, int startPosition, int count, int layer, Span<T> keyDst, Span<T> valueDst)
+    {
+        int perPos = _config.NumHeads * _config.HeadDimension;
+        if (keyDst.Length < count * perPos || valueDst.Length < count * perPos)
+            throw new ArgumentException("Destination spans are too small for the requested range.");
+        lock (_lock)
+        {
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+            for (int i = 0; i < count; i++)
+            {
+                int pos = startPosition + i;
+                var (blockId, offset) = table.GetBlockAndOffset(pos);
+                var blockStorage = _kvBlocks[blockId];
+                int posBase = i * perPos;
+                for (int head = 0; head < _config.NumHeads; head++)
+                {
+                    int dataOffset = posBase + head * _config.HeadDimension;
+                    int kOff = GetBlockStorageOffset(layer, isValue: false, offset, head);
+                    int vOff = GetBlockStorageOffset(layer, isValue: true, offset, head);
+                    blockStorage.AsSpan(kOff, _config.HeadDimension).CopyTo(keyDst.Slice(dataOffset, _config.HeadDimension));
+                    blockStorage.AsSpan(vOff, _config.HeadDimension).CopyTo(valueDst.Slice(dataOffset, _config.HeadDimension));
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the block table for a sequence (for paged attention kernel).
+    /// </summary>
+    public virtual int[]? GetBlockTable(long sequenceId)
+    {
+        // GetBlockTableArray returns a fresh copy; take the lock so the snapshot is consistent with a
+        // concurrent allocator mutating the same sequence's block table.
+        lock (_lock)
+        {
+            return _blockTableManager.GetBlockTableArray(sequenceId);
+        }
+    }
+
+    /// <summary>
+    /// Rolls a sequence's logical length back to <paramref name="newLength"/>, discarding the KV at
+    /// positions <c>newLength .. CurrentLength-1</c>. Used by speculative decoding to drop the KV of
+    /// rejected draft tokens so the corrected token can be (re)written at <paramref name="newLength"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only the logical length is lowered; the already-allocated blocks are retained (the sequence will
+    /// regrow into them and <see cref="WriteKey"/>/<see cref="WriteValue"/> overwrite the stale slots,
+    /// while the paged attention kernel only attends over <see cref="GetSequenceLength"/> positions, so
+    /// the discarded slots are never read). This keeps rollback O(1) with no block churn for the small
+    /// speculation windows typical of decoding.
+    /// </remarks>
+    /// <param name="sequenceId">The sequence to truncate.</param>
+    /// <param name="newLength">The new logical length (0 ≤ newLength ≤ current length).</param>
+    /// <returns>True if the sequence exists and was truncated; false if it is unknown.</returns>
+    public virtual bool TruncateSequence(long sequenceId, int newLength)
+    {
+        if (newLength < 0)
+            throw new ArgumentOutOfRangeException(nameof(newLength), "New length must be non-negative.");
+
+        lock (_lock)
+        {
+            if (!_sequenceMetadata.TryGetValue(sequenceId, out var metadata))
+                return false;
+
+            if (newLength > metadata.CurrentLength)
+                throw new ArgumentOutOfRangeException(nameof(newLength),
+                    $"Cannot truncate sequence {sequenceId} to {newLength}; current length is {metadata.CurrentLength}. Truncation only shrinks.");
+
+            metadata.CurrentLength = newLength;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Sliding-window KV retention: releases the leading KV blocks of <paramref name="sequenceId"/> that hold
+    /// only positions below <paramref name="keepFromPosition"/> (the window lower bound), returning their
+    /// memory to the pool so a long sequence's KV footprint stays bounded by the window rather than growing
+    /// without limit. The sequence's logical length and absolute token→block indexing for surviving positions
+    /// are unchanged (evicted slots become <c>-1</c> sentinels that the sliding-window attention never reads),
+    /// so no position rebasing is required. Idempotent.
+    /// </summary>
+    /// <param name="sequenceId">The sequence whose stale prefix blocks should be evicted.</param>
+    /// <param name="keepFromPosition">The lowest position still inside the attention window; blocks entirely
+    /// below it are freed.</param>
+    /// <returns>The number of physical blocks released on this call.</returns>
+    public virtual int EvictBlocksBelow(long sequenceId, int keepFromPosition)
+    {
+        lock (_lock)
+        {
+            return _blockTableManager.EvictBelow(sequenceId, keepFromPosition);
+        }
+    }
+
+    /// <summary>
+    /// Gets the current length of a sequence.
+    /// </summary>
+    public virtual int GetSequenceLength(long sequenceId)
+    {
+        lock (_lock)
+        {
+            return _sequenceMetadata.TryGetValue(sequenceId, out var metadata) ? metadata.CurrentLength : 0;
+        }
+    }
+
+    /// <summary>
+    /// Checks if more tokens can be added to a sequence without new allocation.
+    /// </summary>
+    public virtual bool HasCapacityFor(long sequenceId, int additionalTokens)
+    {
+        lock (_lock)
+        {
+            if (!_sequenceMetadata.TryGetValue(sequenceId, out var metadata))
+                return false;
+
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                return false;
+
+            int newLength = metadata.CurrentLength + additionalTokens;
+            int blocksNeeded = _blockManager.BlocksForTokens(newLength);
+            int additionalBlocks = blocksNeeded - table.NumLogicalBlocks;
+
+            return additionalBlocks <= 0 || _blockManager.CanAllocate(additionalBlocks);
+        }
+    }
+
+    /// <summary>
+    /// Gets statistics about the cache.
+    /// </summary>
+    public virtual PagedKVCacheStats GetStats()
+    {
+        lock (_lock)
+        {
+            var blockStats = _blockManager.GetStats();
+            long totalTokens = _sequenceMetadata.Values.Sum(m => m.CurrentLength);
+
+            return new PagedKVCacheStats
+            {
+                ActiveSequences = _sequenceMetadata.Count,
+                TotalTokensCached = totalTokens,
+                BlockStats = blockStats,
+                AverageSequenceLength = _sequenceMetadata.Count > 0
+                    ? (double)totalTokens / _sequenceMetadata.Count
+                    : 0,
+                MemoryEfficiency = CalculateMemoryEfficiency()
+            };
+        }
+    }
+
+    /// <summary>
+    /// Gets the underlying storage blocks (for GPU transfer).
+    /// </summary>
+    public IReadOnlyList<T[]> GetStorageBlocks() => _kvBlocks;
+
+    /// <summary>
+    /// Releases resources.
+    /// </summary>
+    public virtual void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        lock (_lock)
+        {
+            _sequenceMetadata.Clear();
+            _blockTableManager.Clear();
+        }
+    }
+
+    private void CopyBlockData(int sourceBlockId, int destBlockId)
+    {
+        Array.Copy(_kvBlocks[sourceBlockId], 0, _kvBlocks[destBlockId], 0, (int)_elementsPerBlock);
+    }
+
+    private double CalculateMemoryEfficiency()
+    {
+        // Calculate how efficiently we're using memory compared to traditional allocation
+        lock (_lock)
+        {
+            if (_sequenceMetadata.Count == 0)
+                return 1.0;
+
+            // Traditional: each sequence reserves max_seq_len tokens
+            long traditionalTokens = _sequenceMetadata.Count * _config.MaxSeqLen;
+
+            // Paged: actual blocks allocated * block size
+            var blockStats = _blockManager.GetStats();
+            long pagedTokenCapacity = blockStats.AllocatedBlocks * _config.BlockSize;
+
+            if (traditionalTokens == 0)
+                return 1.0;
+
+            return (double)pagedTokenCapacity / traditionalTokens;
+        }
+    }
+
+    private class SequenceMetadata
+    {
+        public long SequenceId { get; set; }
+        public int CurrentLength { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public long? ParentSequenceId { get; set; }
+    }
+}
+
+/// <summary>
+/// Configuration for PagedKVCache.
+/// </summary>
+internal class PagedKVCacheConfig
+{
+    /// <summary>
+    /// Number of tokens per block.
+    /// </summary>
+    public int BlockSize { get; set; } = 16;
+
+    /// <summary>
+    /// Total number of blocks.
+    /// </summary>
+    public int NumBlocks { get; set; } = 1024;
+
+    /// <summary>
+    /// Number of transformer layers.
+    /// </summary>
+    public int NumLayers { get; set; } = 32;
+
+    /// <summary>
+    /// Number of attention heads.
+    /// </summary>
+    public int NumHeads { get; set; } = 32;
+
+    /// <summary>
+    /// Dimension of each head.
+    /// </summary>
+    public int HeadDimension { get; set; } = 128;
+
+    /// <summary>
+    /// Maximum sequence length (for efficiency calculation).
+    /// </summary>
+    public int MaxSeqLen { get; set; } = 2048;
+
+    /// <summary>
+    /// Creates configuration from available memory.
+    /// </summary>
+    public static PagedKVCacheConfig FromMemorySize(
+        long availableBytes,
+        int numLayers,
+        int numHeads,
+        int headDim,
+        int blockSize = 16)
+    {
+        // Calculate bytes per block
+        // Each block: block_size * num_layers * 2 (K,V) * num_heads * head_dim * sizeof(float)
+        long bytesPerBlock = (long)blockSize * numLayers * 2 * numHeads * headDim * sizeof(float);
+        int numBlocks = (int)(availableBytes / bytesPerBlock);
+
+        return new PagedKVCacheConfig
+        {
+            BlockSize = blockSize,
+            NumBlocks = numBlocks,
+            NumLayers = numLayers,
+            NumHeads = numHeads,
+            HeadDimension = headDim
+        };
+    }
+
+    /// <summary>
+    /// Creates configuration for a specific model.
+    /// </summary>
+    public static PagedKVCacheConfig ForModel(string modelName, long availableBytes, int blockSize = 16)
+    {
+        return modelName.ToLowerInvariant() switch
+        {
+            "llama-7b" => FromMemorySize(availableBytes, 32, 32, 128, blockSize),
+            "llama-13b" => FromMemorySize(availableBytes, 40, 40, 128, blockSize),
+            "llama-70b" => FromMemorySize(availableBytes, 80, 64, 128, blockSize),
+            "gpt-2" => FromMemorySize(availableBytes, 12, 12, 64, blockSize),
+            "mistral-7b" => FromMemorySize(availableBytes, 32, 32, 128, blockSize),
+            _ => FromMemorySize(availableBytes, 32, 32, 128, blockSize)
+        };
+    }
+}
+
+/// <summary>
+/// Statistics about the paged KV cache.
+/// </summary>
+internal class PagedKVCacheStats
+{
+    /// <summary>Number of active sequences.</summary>
+    public int ActiveSequences { get; set; }
+
+    /// <summary>Total tokens currently cached.</summary>
+    public long TotalTokensCached { get; set; }
+
+    /// <summary>Average sequence length.</summary>
+    public double AverageSequenceLength { get; set; }
+
+    /// <summary>Memory efficiency compared to traditional allocation.</summary>
+    public double MemoryEfficiency { get; set; }
+
+    /// <summary>Underlying block manager statistics.</summary>
+    public BlockManagerStats BlockStats { get; set; } = new();
+}

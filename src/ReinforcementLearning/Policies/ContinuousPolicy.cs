@@ -1,0 +1,164 @@
+using System;
+using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Extensions;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.ReinforcementLearning.Policies.Exploration;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
+
+namespace AiDotNet.ReinforcementLearning.Policies
+{
+    /// <summary>
+    /// Policy for continuous action spaces using a neural network to output Gaussian parameters.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create a Gaussian continuous policy for unbounded continuous actions
+    /// var network = new NeuralNetwork&lt;double&gt;();
+    /// var policy = new ContinuousPolicy&lt;double&gt;(network, actionSize: 2, new EpsilonGreedyExploration&lt;double&gt;());
+    ///
+    /// // Sample an action from the Gaussian distribution
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+    /// var action = policy.SelectAction(state, training: true);
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ResearchPaper("Reinforcement Learning: An Introduction",
+        "https://incompleteideas.net/book/the-book-2nd.html",
+        Year = 2018,
+        Authors = "Sutton, R. S. & Barto, A. G.")]
+    public class ContinuousPolicy<T> : PolicyBase<T>
+    {
+        private readonly INeuralNetwork<T> _policyNetwork;
+        private readonly IExplorationStrategy<T> _explorationStrategy;
+        private readonly int _actionSize;
+        private readonly bool _useTanhSquashing;
+
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public ContinuousPolicy()
+            : this(
+                new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>(
+                    inputType: Enums.InputType.OneDimensional,
+                    taskType: Enums.NeuralNetworkTaskType.Regression,
+                    inputSize: 4,
+                    outputSize: 4)),
+                2,
+                new EpsilonGreedyExploration<T>())
+        {
+        }
+
+        public ContinuousPolicy(
+            INeuralNetwork<T> policyNetwork,
+            int actionSize,
+            IExplorationStrategy<T> explorationStrategy,
+            bool useTanhSquashing = false,
+            Random? random = null)
+            : base(random)
+        {
+            Guard.NotNull(policyNetwork);
+            _policyNetwork = policyNetwork;
+            Guard.NotNull(explorationStrategy);
+            _explorationStrategy = explorationStrategy;
+            _actionSize = actionSize;
+            _useTanhSquashing = useTanhSquashing;
+        }
+
+        public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+        {
+            // Get mean and log_std from network
+            var stateTensor = Tensor<T>.FromVector(state);
+            var outputTensor = _policyNetwork.Predict(stateTensor);
+            var output = outputTensor.ToVector();
+
+            // Split output into mean and log_std
+            var mean = new Vector<T>(_actionSize);
+            var logStd = new Vector<T>(_actionSize);
+
+            for (int i = 0; i < _actionSize; i++)
+            {
+                mean[i] = output[i];
+                logStd[i] = output[_actionSize + i];
+            }
+
+            // Sample from Gaussian distribution
+            var action = new Vector<T>(_actionSize);
+            for (int i = 0; i < _actionSize; i++)
+            {
+                double meanValue = NumOps.ToDouble(mean[i]);
+                double stdValue = Math.Exp(NumOps.ToDouble(logStd[i]));
+
+                double sampledValue = meanValue + stdValue * _random.NextGaussian();
+
+                if (_useTanhSquashing)
+                {
+                    sampledValue = Math.Tanh(sampledValue);
+                }
+
+                action[i] = NumOps.FromDouble(sampledValue);
+            }
+
+            if (training)
+            {
+                return _explorationStrategy.GetExplorationAction(state, action, _actionSize, _random);
+            }
+
+            return action;
+        }
+
+        public override T ComputeLogProb(Vector<T> state, Vector<T> action)
+        {
+            // Get mean and log_std from network
+            var stateTensor = Tensor<T>.FromVector(state);
+            var outputTensor = _policyNetwork.Predict(stateTensor);
+            var output = outputTensor.ToVector();
+
+            T logProb = NumOps.Zero;
+
+            for (int i = 0; i < _actionSize; i++)
+            {
+                double meanValue = NumOps.ToDouble(output[i]);
+                double logStdValue = NumOps.ToDouble(output[_actionSize + i]);
+                double stdValue = Math.Exp(logStdValue);
+
+                double actionValue = NumOps.ToDouble(action[i]);
+
+                // Gaussian log probability: -0.5 * ((x - mu) / sigma)^2 - log(sigma) - 0.5 * log(2*pi)
+                double diff = (actionValue - meanValue) / stdValue;
+                double gaussianLogProb = -0.5 * diff * diff - Math.Log(stdValue) - 0.5 * Math.Log(2.0 * Math.PI);
+
+                if (_useTanhSquashing)
+                {
+                    // Correction for tanh squashing: log_prob -= log(1 - tanh^2(x))
+                    double tanhCorrection = Math.Log(1.0 - Math.Tanh(actionValue) * Math.Tanh(actionValue) + 1e-6);
+                    gaussianLogProb -= tanhCorrection;
+                }
+
+                logProb = NumOps.Add(logProb, NumOps.FromDouble(gaussianLogProb));
+            }
+
+            return logProb;
+        }
+
+        public override IReadOnlyList<INeuralNetwork<T>> GetNetworks()
+        {
+            return new List<INeuralNetwork<T>> { _policyNetwork };
+        }
+
+        public override void Reset()
+        {
+            _explorationStrategy.Reset();
+        }
+    }
+}
