@@ -69,7 +69,7 @@ public class BEATsOptions : ModelOptions
     /// <summary>Initializes an independent copy of an existing configuration.</summary>
     public BEATsOptions(BEATsOptions other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null) throw new ArgumentNullException(nameof(other));
         SampleRate = other.SampleRate;
         FftSize = other.FftSize;
         HopLength = other.HopLength;
