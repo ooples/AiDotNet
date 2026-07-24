@@ -2839,6 +2839,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumVisionLayers = 1, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 256, " +
                     "MaxSequenceLength = 16, MaxGenerationLength = 8, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "FinBERTNER" && model.TypeParameterCount == 1)
+            {
+                // FinBERTNER otherwise inherits the full BERT-base NER fixture (768 hidden,
+                // 12 encoder blocks, 3072 FFN, padding every sample to 256 tokens). Its
+                // TrainingError probe therefore exceeds 120 seconds even though the generated
+                // task contains only eight tokens. Exercise the same transformer encoder and
+                // token-classification head at smoke scale. Keep AdamW's intended BERT fine-tune
+                // learning rate (5e-5); the convergence override below handles its short warm-up.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 32, outputSize: 9), " +
+                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
+                    "NumLabels = 9, MaxSequenceLength = 8, LearningRate = 5e-5, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.Video.Tracking.", System.StringComparison.Ordinal))
@@ -7649,7 +7665,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // keep the test fast while matching the model's expected
             // embedding size. Models with non-default hidden dimensions
             // (TinyBERT=312, etc.) need a manual test override.
-            sb.AppendLine(model.ClassName is "BLINKNER" or "ClinicalBERTNER"
+            sb.AppendLine(model.ClassName is "BLINKNER" or "ClinicalBERTNER" or "FinBERTNER"
                 ? "    protected override int[] InputShape => new[] { 8, 32 };"
                 : "    protected override int[] InputShape => new[] { 8, 768 };");
 
@@ -7837,12 +7853,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Weights and optimizer defaults stay paper-faithful.
             int shortIterations = model.ClassName switch
             {
-                "DistilBERTNER" or "BioBERTNER" or "BLINKNER" => 5,
+                "DistilBERTNER" or "BioBERTNER" or "BLINKNER" or "FinBERTNER" => 5,
                 _ => 1
             };
             int longIterations = model.ClassName switch
             {
-                "DistilBERTNER" or "BioBERTNER" or "BLINKNER" => 15,
+                "DistilBERTNER" or "BioBERTNER" or "BLINKNER" or "FinBERTNER" => 15,
                 _ => 2
             };
             sb.AppendLine($"    protected override int MoreDataShortIterations => {shortIterations};");
@@ -8158,6 +8174,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // updates preserves the extra-training comparison while bounding only
         // this probe; every other CLIPA invariant retains its existing budget.
         if (model.ClassName == "CLIPA")
+        {
+            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+        }
+
+        // DiffCutSegmentation keeps its paper diffusion encoder widths
+        // (320/640/1280/1280) even for the generated small-image fixture.
+        // Its other forward/training invariants pass, but MoreData's generic
+        // 50 + 200 full backward passes exceed the 120-second CPU gate.
+        // Compare one update with two so the same extra-training direction is
+        // exercised without changing the production model or other test budgets.
+        if (model.ClassName == "DiffCutSegmentation")
         {
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
