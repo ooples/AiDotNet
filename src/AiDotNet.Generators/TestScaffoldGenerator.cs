@@ -3327,6 +3327,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumBridgeLayers = 1, NumHeads = 4, VocabSize = 64, " +
                     "MaxSequenceLength = 16, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "DeBERTaNER" && model.TypeParameterCount == 1)
+            {
+                // DeBERTa's disentangled attention is numerically aggressive at the shared
+                // TransformerNER default learning rate: the generated two-step MoreData probe can
+                // increase cross-entropy after cloning. Keep the same encoder/classification
+                // topology at CI-smoke width and use a conservative fine-tuning rate so the
+                // self-relative non-degradation invariant remains meaningful.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 32, outputSize: 9), " +
+                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
+                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 1e-5 })";
+            }
             else if (model.ClassName == "BLINKNER" && model.TypeParameterCount == 1)
             {
                 // BLINK keeps the full BERT-base encoder defaults in production. Its generated
@@ -7774,7 +7789,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // keep the test fast while matching the model's expected
             // embedding size. Models with non-default hidden dimensions
             // (TinyBERT=312, etc.) need a manual test override.
-            sb.AppendLine(model.ClassName is "BLINKNER" or "ClinicalBERTNER" or "FinBERTNER"
+            sb.AppendLine(model.ClassName is "BLINKNER" or "ClinicalBERTNER" or "FinBERTNER" or "DeBERTaNER"
                 ? "    protected override int[] InputShape => new[] { 8, 32 };"
                 : "    protected override int[] InputShape => new[] { 8, 768 };");
 
