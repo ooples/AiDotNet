@@ -7189,10 +7189,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        return tensor;");
                 sb.AppendLine("    }");
                 sb.AppendLine();
-                sb.AppendLine(model.ClassName == "Bark"
+                sb.AppendLine(model.ClassName is "Bark" or "FishSpeech"
                     ? "    protected override int MoreDataShortIterations => 1;"
                     : "    protected override int MoreDataShortIterations => 3;");
-                sb.AppendLine(model.ClassName == "Bark"
+                sb.AppendLine(model.ClassName is "Bark" or "FishSpeech"
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
                 if (model.ClassName == "Bark")
@@ -10489,7 +10489,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "CSM" or "Bark" or "FireRedTTS" or "F5TTS"
+        return className is "GPTSoVITS" or "CSM" or "Bark" or "FireRedTTS" or "F5TTS" or "FishSpeech"
             or "CosyVoice" or "CosyVoice2" or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "IndexTTS" or "OuteTTS"
@@ -10527,6 +10527,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "Chatterbox" => 16,
             "FireRedTTS" => 16,
             "F5TTS" => 16,
+            "FishSpeech" => 32,
             "GPTSoVITS" => 1024,
             _ => 1024,
         };
