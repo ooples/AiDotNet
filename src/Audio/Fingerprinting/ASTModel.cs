@@ -363,8 +363,29 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Cannot train in ONNX inference mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(input, expected); }
+        try
+        {
+            // Training accepts the same raw-waveform contract as Predict and
+            // Fingerprint. The patch embedder consumes a rank-4 log-mel image,
+            // so bypassing the STFT frontend here fed [batch, samples]
+            // directly into a [batch, channels, height, width] layer.
+            var mel = PreprocessAudio(input);
+            TrainWithTape(mel, expected);
+        }
         finally { SetTrainingMode(false); }
+    }
+
+    /// <summary>
+    /// Runs the same raw-waveform preprocessing used by prediction before
+    /// walking the native AST layers. The base implementation assumes that
+    /// callers already provide the layer-stack tensor, while AST's public
+    /// contract accepts raw audio samples.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+        return base.GetNamedLayerActivations(PreprocessAudio(input));
     }
 
     /// <inheritdoc/>
