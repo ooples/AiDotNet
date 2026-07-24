@@ -2834,6 +2834,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumVisionLayers = 1, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 256, " +
                     "MaxSequenceLength = 16, MaxGenerationLength = 8, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "Fuyu" && model.TypeParameterCount == 1)
+            {
+                // Fuyu feeds raw image patches directly into its decoder. The default
+                // 4096-wide/36-layer configuration at 1080px creates enormous attention
+                // work during generated warm-up. Preserve direct patch -> decoder topology
+                // at CI scale through the public options surface only.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 32), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.FuyuOptions { ImageSize = 32, " +
+                    "PatchSize = 8, VisionDim = 32, ProjectionDim = 32, DecoderDim = 32, " +
+                    "NumVisionLayers = 0, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 64, " +
+                    "MaxSequenceLength = 16, MaxGenerationLength = 8, MaxVisualTokens = 16, " +
+                    "DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "FinBERTNER" && model.TypeParameterCount == 1)
             {
                 // FinBERTNER otherwise inherits the full BERT-base NER fixture (768 hidden,
