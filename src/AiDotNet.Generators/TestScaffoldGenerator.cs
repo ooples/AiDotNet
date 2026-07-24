@@ -771,7 +771,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 32-layer decoder, so the generated model can OOM in its constructor.
         // The public-options fixture below retains all three streams.
         "BLIP3",
-        "CosyVoice3", "CosyVoiceClone", "AdaSpeech2", "BEATs",
+        "CosyVoice2", "CosyVoice3", "CosyVoiceClone", "AdaSpeech2", "BEATs",
         // Moshi is another foundation-scale codec LM (1024-wide, 12 decoder
         // layers). The Generated J-M runner fell from 12 GB available memory
         // to about 250 MB while its full-scale <double> fixture was active.
@@ -2803,6 +2803,42 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumVisionLayers = 1, NumTextLayers = 1, NumVisionHeads = 4, NumTextHeads = 4, " +
                     "VocabSize = 64, MaxSequenceLength = 8, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "CogVideo" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Video.Generation.", System.StringComparison.Ordinal))
+            {
+                // CogVideo's production defaults build a 1024-wide, 24-layer
+                // video U-Net whose channel multipliers reach 4096. Those
+                // convolution kernels are lazy, so construction appears cheap
+                // but the first gradient probe materializes them and exhausts
+                // a 16 GB runner. Exercise the same input projection, four-level
+                // encoder, temporal/spatial middle block, symmetric decoder,
+                // pixel shuffle, and output projection at CI-smoke width.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "embedDim: 32, numLayers: 4, numFrames: 4, numTimesteps: 16)";
+            }
+            else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Video.Tracking.", System.StringComparison.Ordinal))
+            {
+                // Production ByteTrack uses a 256-channel CSP/FPN detector and
+                // focal loss for objectness/class labels. The generic generated
+                // regression fixture supplies arbitrary continuous targets;
+                // treating those as focal-label probabilities drives its finite
+                // loss steadily uphill (0.39 -> 4.75), while also materializing
+                // 2.3M parameters. Exercise the same five-stage backbone, FPN,
+                // and detection head at bounded width with the constructor's
+                // public regression loss hook, matching the generated task.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 6), " +
+                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), " +
+                    "numFeatures: 16, numClasses: 1)";
+            }
             else if (model.ClassName == "ALIGN" && model.TypeParameterCount == 1)
             {
                 // ALIGN keeps EfficientNet-B7-scale vision and a 12-layer text
@@ -2990,6 +3026,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "AudioEncoderLayers = 1, AudioEncoderHeads = 2, SwinWindowSize = 2, " +
                     "TextHiddenDim = 32, TextEncoderLayers = 1, TextEncoderHeads = 2, " +
                     "VocabSize = 64, MaxTextLength = 8, ProjectionDim = 4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "ASTModel" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Audio.Fingerprinting.", System.StringComparison.Ordinal))
+            {
+                // ASTModel owns a raw-waveform STFT frontend (400-sample
+                // window by default). The generic fingerprint fixture supplied
+                // a short feature tensor whose final axis was smaller than the
+                // analysis window, so MelSpectrogram indexed past the signal.
+                // Feed a real waveform and retain the complete mel -> patch ->
+                // transformer -> classifier path at public smoke scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputSize: 2048, outputSize: 4), " +
+                    "new AiDotNet.Models.Options.ASTModelOptions { StftWindowSize = 400, HopLength = 160, " +
+                    "NumMelBands = 32, TargetLength = 16, PatchSize = 4, NumClasses = 4, " +
+                    "EmbeddingDim = 32, NumLayers = 1, NumHeads = 4, FeedForwardDim = 128, " +
+                    "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Dessurt" && model.TypeParameterCount == 1)
             {
@@ -3791,6 +3846,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "CosyVoice2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // CosyVoice2 defaults to a 1024-wide, 14-layer codec LM. Its
+                // generated repeated-training probes therefore exceed both the
+                // 120-second test budget and the 16 GB runner once AdamW moments
+                // are materialized. Exercise the same embedding -> text encoder
+                // -> codec LM -> token-head graph through public options at the
+                // established codec-TTS smoke scale; production defaults remain
+                // unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options { TextEncoderDim = 32, " +
+                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, NumHeads = 2, " +
+                    "NumCodebooks = 1, CodebookSize = 16, VocabSize = 64, " +
+                    "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "CosyVoiceClone" && model.TypeParameterCount == 1)
             {
                 // CosyVoiceClone keeps the paper-scale supervised semantic-token encoder,
@@ -4579,12 +4654,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // 14-28 s and their cumulative footprint OOM-killed the "Generated Layers A-F" shard on
                 // the 16 GB runner (the shard died with a runner shutdown signal while ChatTTS was
                 // executing). Build the SAME codec-LM architecture at CI-smoke scale, mirroring the CSM /
-                // XTTSv2 reductions: 1 codebook x 16 head, 64-wide LLM, 1 encoder + 2 LLM layers, 4
-                // heads. The DVAE codec-LM structure is preserved; only width/depth/codebook shrink.
+                // XTTSv2 reductions: a four-token text sequence, 1 codebook x 16 head, 64-wide LLM,
+                // 1 encoder + 2 LLM layers, 4 heads. Keep the generated task/input contract as text
+                // generation: the first layer is an index-mode embedding, so treating its input as an
+                // 80-feature regression vector makes the inference-only fused-attention warmup and the
+                // decomposed tape-training path observe different tensor contracts.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 80, outputSize: 16), " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
                     "new AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions { NumCodebooks = 1, " +
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
@@ -6499,6 +6577,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        return tensor;");
             sb.AppendLine("    }");
         }
+        else if (model.ClassName == "ASTModel"
+                 && typeName.StartsWith(
+                     "AiDotNet.Audio.Fingerprinting.", System.StringComparison.Ordinal))
+        {
+            // Raw waveform batch long enough for the 400-sample STFT window.
+            // The reduced classifier emits one four-class row per waveform.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 2048 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
+            // AST reaches its tiny memorization floor quickly; extending the
+            // generic 50-to-200 comparison causes post-convergence Adam drift.
+            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+        }
         else if (model.ClassName == "Dessurt")
         {
             // Match the custom trainable image projection emitted above. The leading axis is an
@@ -8018,6 +8109,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 50;");
+        }
+
+        // CLIPA already uses a reduced 32-wide, one-layer dual-encoder fixture
+        // and float precision, but its training path remains expensive
+        // (24-31 seconds for the bounded training invariants). It does not
+        // enter the token-consuming paper-scale VLM branch above, so without
+        // this model-specific cap MoreData still runs the generic 50 + 200
+        // updates and necessarily exceeds the 120-second gate. One versus two
+        // updates preserves the extra-training comparison while bounding only
+        // this probe; every other CLIPA invariant retains its existing budget.
+        if (model.ClassName == "CLIPA")
+        {
+            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
         }
 
         // Heavy paper-scale models (see HeavyTrainingTimeoutClassNames): trim ONLY the many-iteration
@@ -10248,7 +10353,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "CSM" or "Bark" or "CosyVoice" or "CosyVoice3"
+        return className is "GPTSoVITS" or "CSM" or "Bark" or "CosyVoice" or "CosyVoice2" or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "IndexTTS" or "OuteTTS"
             or "KaniTTS" or "KaniTTS2" or "SeedTTSClone"
@@ -10279,6 +10384,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "Dia" => 32,
             "Bark" => 32,
             "CosyVoice" => 16,
+            "CosyVoice2" => 16,
             "CosyVoice3" => 16,
             "CosyVoiceClone" => 16,
             "Chatterbox" => 16,
