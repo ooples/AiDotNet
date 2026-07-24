@@ -109,6 +109,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     private readonly int _numPerceiverTokens;
     private readonly int _maxImagesInContext;
     private readonly int _numPerceiverLayers;
+    private readonly double _learningRate;
 
     #endregion
 
@@ -186,6 +187,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         _vocabularySize = 32000;
         _languageModelBackbone = LanguageModelBackbone.Chinchilla;
         _numPerceiverLayers = 6;
+        _learningRate = 1e-3;
 
         InferenceSession? visionEncoder = null;
         InferenceSession? languageModel = null;
@@ -233,7 +235,8 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         ITokenizer? tokenizer = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        FlamingoOptions? options = null)
+        FlamingoOptions? options = null,
+        double learningRate = 1e-3)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new FlamingoOptions();
@@ -253,10 +256,17 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         _vocabularySize = vocabularySize;
         _languageModelBackbone = languageModelBackbone;
         _numPerceiverLayers = numPerceiverLayers;
+        _learningRate = learningRate;
 
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = learningRate,
+                MaxGradientNorm = 1.0
+            });
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
         InitializeNativeLayers(channels);
@@ -1056,6 +1066,13 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     {
         var allParams = new List<T>();
 
+        foreach (var layer in _visionEncoderLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+                allParams.Add(layerParams[i]);
+        }
+
         foreach (var layer in _perceiverLayers)
         {
             var layerParams = layer.GetParameters();
@@ -1072,6 +1089,21 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             {
                 allParams.Add(layerParams[i]);
             }
+        }
+
+        foreach (var layer in _languageModelLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+                allParams.Add(layerParams[i]);
+        }
+
+        foreach (var layer in new[] { _patchEmbedding, _textTokenEmbedding, _outputProjection })
+        {
+            if (layer is null) continue;
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+                allParams.Add(layerParams[i]);
         }
 
         return new Vector<T>([.. allParams]);
@@ -1100,27 +1132,61 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         SetTrainingMode(false);
     }
 
+    /// <summary>
+    /// Resolve Flamingo's lazy attention projections before cloning so a fresh instance
+    /// receives the same materialized layer shapes and weights. Without this, a clone made
+    /// before the first forward can retain independently initialized lazy projections.
+    /// </summary>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        if (_useNativeMode && _imageSize > 0)
+        {
+            try
+            {
+                ResolveShapes(new Tensor<T>(new[] { 3, _imageSize, _imageSize }));
+            }
+            catch (ArgumentException)
+            {
+                // Preserve the base fallback for callers supplying a custom architecture.
+            }
+        }
+
+        if (_useNativeMode)
+        {
+            var copy = (FlamingoNeuralNetwork<T>)CreateNewInstance();
+            try { copy.ResolveShapes(new Tensor<T>(new[] { 3, _imageSize, _imageSize })); }
+            catch (ArgumentException) { }
+
+            for (int i = 0; i < Layers.Count && i < copy.Layers.Count; i++)
+            {
+                var source = Layers[i];
+                var destination = copy.Layers[i];
+                if (source.ParameterCount > 0 && source.ParameterCount == destination.ParameterCount)
+                    destination.SetParameters(source.GetParameters());
+            }
+
+            copy._visionPositionalEmbeddings = _visionPositionalEmbeddings?.Clone();
+            copy._perceiverQueries = _perceiverQueries?.Clone();
+            copy._textPositionalEmbeddings = _textPositionalEmbeddings?.Clone();
+            copy.SetTrainingMode(IsTrainingMode);
+            return copy;
+        }
+
+        return base.DeepCopy();
+    }
+
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
 
-        foreach (var layer in _perceiverLayers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount && offset + i < parameters.Length; i++)
-                {
-                    layerParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(layerParams);
-                offset += layerParamCount;
-            }
-        }
-
-        foreach (var layer in _gatedCrossAttentionLayers)
+        foreach (var layer in _visionEncoderLayers
+            .Concat(_perceiverLayers)
+            .Concat(_gatedCrossAttentionLayers)
+            .Concat(_languageModelLayers)
+            .Concat(new[] { _patchEmbedding, _textTokenEmbedding, _outputProjection }
+                .Where(layer => layer is not null)
+                .Cast<ILayer<T>>()))
         {
             int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
@@ -1229,7 +1295,8 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 _numPerceiverLayers,
                 _tokenizer,
                 freshOptimizer,
-                _lossFunction);
+                _lossFunction,
+                learningRate: _learningRate);
         }
         else
         {

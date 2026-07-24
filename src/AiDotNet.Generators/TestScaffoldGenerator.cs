@@ -2253,7 +2253,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // These models use reduced spatial sizes only in generated CI fixtures after float was
         // measured insufficient. Keep emitted inputs in lockstep with those fixture architectures;
         // each production options type retains its paper-faithful ImageSize default.
-        => className == "MiniGPT4" ? 28
+        => className == "FlamingoNeuralNetwork" ? 32
+         : className == "MiniGPT4" ? 28
          : className is "FLIP" or "Gemma3" or "InternVL2" or "InternVL25" or "InternVL3"
              or "OneFormer" or "Pix2Struct" or "SigLIP2" ? 32
          : IsPatchVisionModel(className) ? 112
@@ -2782,7 +2783,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName == "FinMA" && model.TypeParameterCount == 1)
+            if (model.ClassName == "FlamingoNeuralNetwork" && model.TypeParameterCount == 1)
+            {
+                // The native Flamingo constructor defaults to a 1024-d vision encoder, 2048-d
+                // language model, 24/32 layers, and 32k vocabulary. The generated fixture was
+                // therefore wiring cross-attention with incompatible full-scale dimensions. Keep
+                // the same native vision/perceiver/language topology at CI-smoke scale using the
+                // public constructor parameters; production defaults remain unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "embeddingDimension: 64, maxSequenceLength: 16, imageSize: 32, channels: 3, " +
+                    "numPerceiverTokens: 4, maxImagesInContext: 1, visionHiddenDim: 64, lmHiddenDim: 64, " +
+                    "numVisionLayers: 1, numLmLayers: 1, numHeads: 2, vocabularySize: 64, " +
+                    "numPerceiverLayers: 1, learningRate: 1e-5)";
+            }
+            else if (model.ClassName == "FinMA" && model.TypeParameterCount == 1)
             {
                 // FinMA's generated default previously instantiated the paper-scale 12-layer,
                 // 768-wide financial transformer and timed out in the 180-second memorization
@@ -10741,6 +10758,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             "BiomedCLIP" => true,
             "DFNCLIP" => true,
+            "FlamingoNeuralNetwork" => true,
             // SigLIP2 (Tschannen et al. 2025): ViT VisionEmbeddingDim=768 with a
             // deep vision+text encoder — ≳ 1 s per Adam step on CPU, so the
             // default training-iteration counts overflow the timeout and let
