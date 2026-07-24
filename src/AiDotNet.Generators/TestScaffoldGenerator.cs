@@ -3593,6 +3593,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MelChannels = 80, NumCodebooks = 1, CodebookSize = 80, MaxTextLength = 8, " +
                     "MaxMelLength = 8, DropoutRate = 0.0, LearningRate = 7.5e-5 })";
             }
+            else if (model.ClassName == "F5TTS" && model.TypeParameterCount == 1)
+            {
+                // F5-TTS uses the codec-LM helper (discrete token IDs), not the generic
+                // mel-regression TTS fixture. The paper defaults (1024-wide, 22 layers,
+                // 4096-token codec head) exhaust a 16-GB CPU runner during generated
+                // training probes. Preserve the text -> codec-LM -> token-head topology
+                // at bounded scale through the public options surface only.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions { NumCodebooks = 1, " +
+                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, " +
+                    "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    "DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "IndexTTS2" && model.TypeParameterCount == 1)
             {
                 // IndexTTS2's production defaults retain its paper-scale autoregressive
@@ -10441,7 +10458,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "CSM" or "Bark" or "FireRedTTS"
+        return className is "GPTSoVITS" or "CSM" or "Bark" or "FireRedTTS" or "F5TTS"
             or "CosyVoice" or "CosyVoice2" or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "IndexTTS" or "OuteTTS"
@@ -10478,6 +10495,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "CosyVoiceClone" => 16,
             "Chatterbox" => 16,
             "FireRedTTS" => 16,
+            "F5TTS" => 16,
             "GPTSoVITS" => 1024,
             _ => 1024,
         };
