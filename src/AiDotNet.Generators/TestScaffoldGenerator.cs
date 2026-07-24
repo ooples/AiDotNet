@@ -2782,7 +2782,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if ((model.ClassName == "Emu2" || model.ClassName == "Emu3") && model.TypeParameterCount == 1)
+            if (model.ClassName == "FinMA" && model.TypeParameterCount == 1)
+            {
+                // FinMA's generated default previously instantiated the paper-scale 12-layer,
+                // 768-wide financial transformer and timed out in the 180-second memorization
+                // probe. Use the public options at CI-smoke scale; FinMA now honors these values
+                // when constructing its layer stack, while production defaults remain unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 4, outputSize: 3), " +
+                    "new AiDotNet.Models.Options.FinMAOptions<double> { MaxSequenceLength = 16, " +
+                    "VocabularySize = 64, HiddenDimension = 32, NumAttentionHeads = 4, " +
+                    "IntermediateDimension = 64, NumLayers = 2, NumClasses = 3, NumAgents = 1, " +
+                    "DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName == "Emu2" || model.ClassName == "Emu3") && model.TypeParameterCount == 1)
             {
                 // Emu2/Emu3 production defaults are multi-billion-parameter unified VLMs. Their
                 // generated construction probes materialize the full cross-attention stack and OOM
