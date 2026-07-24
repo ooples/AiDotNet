@@ -176,7 +176,13 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         _graphLayers = graphLayers;
         _numClasses = numClasses;
         _maxNodes = maxNodes;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honor the model's configured LearningRate (the bare AdamOptimizer(this) ignored it and ran at Adam's
+        // 0.001) and enable gradient clipping so graph-conv training does not drift upward over more iterations
+        // (MoreData saw 200-iter loss 2.40 -> 2.82). Fully user-overridable via the optimizer parameter and
+        // LayoutGraphOptions.LearningRate. (#1789)
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
 
         // Route base tape training through the configured optimizer. Previously _optimizer was stored but
         // never used — TrainWithTape resolved the default base optimizer, so a caller-supplied optimizer

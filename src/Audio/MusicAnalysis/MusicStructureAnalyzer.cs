@@ -73,12 +73,26 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
     /// Creates a Music Structure Analyzer in native training mode.
     /// </summary>
     public MusicStructureAnalyzer(NeuralNetworkArchitecture<T> architecture, MusicStructureAnalyzerOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture)
     {
         _options = options ?? new MusicStructureAnalyzerOptions();
+        // Music-structure segmentation is a per-frame MULTI-CLASS classifier over the NumSections section
+        // labels (intro/verse/chorus/bridge/outro). The NeuralNetworkBase default MSE loss is unstable on raw
+        // classification logits, so LossStrictlyDecreases / Training_ShouldReduceLoss do not hold. The
+        // paper-faithful DEFAULT is softmax cross-entropy (bounded gradient) so training converges — but the
+        // caller can override it via the lossFunction parameter for full user customization (never hardcoded).
+        // Mirrors the HuBERTSER audio-classifier fix; AudioGenModel is the customizable-loss template. (#1789)
+        LossFunction = lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default optimizer honors the model's configured LearningRate (previously the bare AdamWOptimizer(this)
+        // ignored it and ran at Adam's 0.001) and enables gradient clipping (MaxGradientNorm 1.0) so the
+        // cross-entropy gradients can't overshoot the first step into a high-loss region. Fully user-overridable
+        // via the optimizer parameter and MusicStructureAnalyzerOptions.LearningRate. Mirrors HuBERTSER. (#1789)
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

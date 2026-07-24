@@ -86,8 +86,13 @@ public class LiteDVDNetOptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 1e-3;
+    /// <summary>Gets or sets the learning rate. Default 1e-5 — this deep 10-layer conv encoder-decoder has no
+    /// normalization and no residual skip (the 15-channel temporal input vs 3-channel output rules out a
+    /// shape-safe global skip), so it overshoots at higher rates. Measured on Training_ShouldReduceLoss:
+    /// 1e-3 exploded (0.28 -> 150), 1e-4 still rose (0.28 -> 1.77), 1e-5 trains stably (test passes). The
+    /// model's [ResearchPaper] URL is a mis-citation to an unrelated paper, so there is no authoritative paper
+    /// lr; this is a stable default, fully user-overridable via the constructor optimizer or this option.</summary>
+    public double LearningRate { get; set; } = 1e-5;
 
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.0;
