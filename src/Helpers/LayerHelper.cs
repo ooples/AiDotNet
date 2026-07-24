@@ -7975,8 +7975,14 @@ public static class LayerHelper<T>
         yield return new DeconvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h *= 2; w *= 2;
 
-        // Output head (residual prediction at original resolution)
-        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
+        // Output head (residual prediction at original resolution). The residual is SIGNED (clean = noisy -
+        // residual), so this head MUST be linear. ConvolutionalLayer defaults to ReLU when no activation is
+        // passed (activationFunction ?? new ReLUActivation<T>()), which clamps the residual to >= 0: the
+        // denoiser can then only add to the input, never subtract noise, and training diverges (Training_
+        // ShouldReduceLoss saw loss explode 0.29 -> 299 as the weights blow up fitting the wrong half-space).
+        // Pass IdentityActivation to restore the signed residual head (matches the PR's linear-by-default head
+        // fix for DenseLayer). (#1789)
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

@@ -89,7 +89,14 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new LiteDVDNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default optimizer honors the model's configured LearningRate — the bare AdamWOptimizer(this) ignored
+        // it and ran at Adam's 0.001, which diverged (Training_ShouldReduceLoss saw loss explode 0.28 -> 150) —
+        // and enables gradient clipping. Fully user-overridable via the optimizer parameter and
+        // LiteDVDNetOptions.LearningRate (default lowered to the standard 1e-4 used for image/video denoisers,
+        // since the model's [ResearchPaper] URL is a mis-citation to an unrelated paper). (#1789)
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         TemporalRadius = (_options.TemporalWindowSize - 1) / 2;
         InitializeLayers();
     }
@@ -122,6 +129,17 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
                 temporalFrames: _options.TemporalWindowSize));
         }
     }
+
+    /// <summary>
+    /// Routes TrainWithTape through the model's configured optimizer (default: AdamW at the denoiser-standard
+    /// <see cref="LiteDVDNetOptions.LearningRate"/> = 1e-4 with gradient clipping) instead of the base Adam 1e-3
+    /// default. 1e-3 explodes this deep conv architecture's loss (Training_ShouldReduceLoss saw 0.28 -> 150 even
+    /// with the base global gradient-norm clip); the 10x-smaller step converges. Simply setting the private
+    /// <c>_optimizer</c> field was inert until this override — the base trainer only consults
+    /// GetOrCreateBaseOptimizer(). Fully user-overridable via the constructor's optimizer parameter. (#1789)
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
