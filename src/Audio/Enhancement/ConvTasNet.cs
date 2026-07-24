@@ -1166,7 +1166,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        ArgumentNullException.ThrowIfNull(parameters);
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         int expected = checked((int)ParameterCount);
         if (parameters.Length != expected)
             throw new ArgumentException($"Expected {expected} parameters, but received {parameters.Length}.", nameof(parameters));

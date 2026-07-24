@@ -62,7 +62,7 @@ public class ASTOptions : ModelOptions
     /// <param name="other">The configuration to copy.</param>
     public ASTOptions(ASTOptions other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null) throw new ArgumentNullException(nameof(other));
 
         SampleRate = other.SampleRate;
         FftSize = other.FftSize;
