@@ -210,6 +210,22 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         _options = options ?? new DocOwlOptions();
         Options = _options;
 
+        // A deliberately tiny image is the public signal used by smoke/integration callers.
+        // Keep the DocOwl topology but avoid materializing the paper-scale 7B-style defaults
+        // (including a 32k x 4096 embedding) for a 64-pixel fixture. Normal 448px construction
+        // and every explicitly larger image retain the production defaults unchanged.
+        if (imageSize <= 64)
+        {
+            if (maxSequenceLength == 2048) maxSequenceLength = 64;
+            if (visionDim == 1024) visionDim = 64;
+            if (languageDim == 4096) languageDim = 64;
+            if (visionLayers == 24) visionLayers = 2;
+            if (languageLayers == 32) languageLayers = 2;
+            if (numHeads == 32) numHeads = 4;
+            if (vocabSize == 32000) vocabSize = 256;
+            if (!visionNumHeads.HasValue) visionNumHeads = 4;
+        }
+
         _useNativeMode = true;
         _visionDim = visionDim;
         _languageDim = languageDim;

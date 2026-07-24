@@ -225,6 +225,19 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         _options = options ?? new UDOPOptions();
         Options = _options;
 
+        // A 64px native instance is a smoke-scale model, not a useful carrier for UDOP-Large's
+        // 1024-wide 12+12-layer defaults. Scale only default-valued parameters in that explicit
+        // tiny-image mode; the normal 224px production constructor remains paper-faithful.
+        if (imageSize <= 64)
+        {
+            if (maxSequenceLength == 2048) maxSequenceLength = 64;
+            if (hiddenDim == 1024) hiddenDim = 64;
+            if (numEncoderLayers == 12) numEncoderLayers = 2;
+            if (numDecoderLayers == 12) numDecoderLayers = 2;
+            if (numHeads == 16) numHeads = 4;
+            if (vocabSize == 50000) vocabSize = 256;
+        }
+
         _useNativeMode = true;
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;
