@@ -336,11 +336,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (MoreData = 200 iterations) multiply that out well past the 120s per-test timeout on CPU.
         // Genuine foundation-scale diffusion compute, not a correctness bug — same heavy lane.
         "MGLDVSR",
-        // FireRedTTS: industry-scale FOUNDATION TTS (Guo 2024) — a 24-layer / 2048-dim LLM generating
-        // multi-codebook codec tokens AUTOREGRESSIVELY (50 frames/s) before the neural codec decoder.
-        // The autoregressive decode over a full utterance inherently exceeds the 120s per-test timeout
-        // on CPU. Genuine foundation-scale generative compute, not a correctness bug — same heavy lane.
-        "FireRedTTS",
         // Llasa (Ye et al. 2025): LLaMA-based foundation TTS over XCodec2 tokens. Its single-forward
         // tests pass, but even the TTS-branch smoke-capped MoreData (3+10 iters) exceeds the 120s gate at
         // this paper-scale codec-LM's per-step cost (verified: MoreData_ShouldNotDegrade times out at
@@ -2854,6 +2849,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
                     "NumLabels = 9, MaxSequenceLength = 8, LearningRate = 5e-5, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "FireRedTTS" && model.TypeParameterCount == 1)
+            {
+                // FireRedTTS production defaults are foundation-scale: an 8x1024 codec-token
+                // head behind a 2048-wide, 24-layer autoregressive decoder. SpeakerConsistency
+                // performs two complete forwards, so the generated fixture exceeds the CPU gate
+                // even though PredictCore correctly forces evaluation mode. Exercise the same
+                // embedding -> text encoder -> codec-LM -> token-head topology at smoke scale.
+                // Dropout stays disabled so the exact deterministic-speaker assertion remains
+                // meaningful; production defaults and inference behavior are unchanged.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions { NumCodebooks = 1, " +
+                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
+                    "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -10427,7 +10441,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "CSM" or "Bark" or "CosyVoice" or "CosyVoice2" or "CosyVoice3"
+        return className is "GPTSoVITS" or "CSM" or "Bark" or "FireRedTTS"
+            or "CosyVoice" or "CosyVoice2" or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "IndexTTS" or "OuteTTS"
             or "KaniTTS" or "KaniTTS2" or "SeedTTSClone"
@@ -10462,6 +10477,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "CosyVoice3" => 16,
             "CosyVoiceClone" => 16,
             "Chatterbox" => 16,
+            "FireRedTTS" => 16,
             "GPTSoVITS" => 1024,
             _ => 1024,
         };
