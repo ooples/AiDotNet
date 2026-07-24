@@ -11057,6 +11057,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // runner. Keep the InputShape context in lockstep with the reduced
             // ContextLength=64 the ctor uses.
             "MOMENT" => 64,
+            // LLMTime (Gruver et al. 2023) and MOIRAI (Woo et al. 2024) are built at CI-smoke scale by their
+            // constructor special-cases (ContextLength = 32) so the paper-scale decoder/encoder stacks fit the
+            // runner. Without matching entries here the fixture kept the paper context (the 512 default below),
+            // so the test fed a 512-element series into a model configured for 32 and every LLMTime test threw
+            // "Cannot reshape tensor with 512 elements to shape [1, 32, 1]". Same lockstep rule as TimeMoE /
+            // TimeLLM / MOMENT / Kronos above. (#1789)
+            "LLMTime" => 32,
+            "MOIRAI" => 32,
             "Sundial" => 2048,
             "Kairos" => 1024,
             "LagLlama" => 96,   // LagLlama paper default
