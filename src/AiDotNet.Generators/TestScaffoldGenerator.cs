@@ -11370,6 +11370,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 "MaxRank = 2 })";
         }
 
+        // DAGMA nonlinear's MLP adjacency weights are smaller than the linear
+        // fixture's default 0.3 pruning threshold. Keep the generated recovery
+        // probe sensitive to its learned nonlinear edges without changing the
+        // production default threshold or optimization implementation.
+        if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DAGMANonlinearTests")
+        {
+            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+                "EdgeThreshold = 0.05, SparsityPenalty = 0.01, MaxIterations = 1000, Seed = 42 })";
+        }
+
         // Determine base class and factory method based on category
         string baseClass;
         string factoryMethod;
