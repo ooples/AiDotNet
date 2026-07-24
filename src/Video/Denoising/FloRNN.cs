@@ -88,7 +88,14 @@ public class FloRNN<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new FloRNNOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
         InitializeLayers();
     }
 
@@ -133,7 +140,10 @@ public class FloRNN<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            if (_optimizer is not null)
+                TrainWithTape(input, expected, _optimizer);
+            else
+                TrainWithTape(input, expected);
         }
         finally
         {
