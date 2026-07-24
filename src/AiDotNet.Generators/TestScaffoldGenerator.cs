@@ -3823,6 +3823,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASROptions { EncoderDim = 32, " +
                     "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 64, VocabSize = 64 })";
             }
+            else if (model.ClassName == "ESPnetASR" && model.TypeParameterCount == 1)
+            {
+                // ESPnetASR's default Conformer/CTC fixture (512-wide, 12 layers,
+                // 5000-way vocabulary over a 30-second feature window) makes the
+                // generic MoreData probe exceed the CPU timeout. Exercise the same
+                // acoustic encoder -> CTC/attention head topology at CI scale only.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.Robust.ESPnetASROptions { SampleRate = 16000, " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, MaxTextLength = 8, " +
+                    "DropoutRate = 0.0, Language = \"en\" })";
+            }
             else if (model.ClassName == "AVHuBERT" && model.TypeParameterCount == 1)
             {
                 // AV-HuBERT's production defaults retain the paper's HuBERT-base
