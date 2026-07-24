@@ -370,7 +370,6 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-
         if (_spiralIndicesPerLevel.Count == 0)
         {
             // Auto-generate default spiral indices: each vertex references itself
@@ -389,11 +388,8 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         PropagateSpiralIndicesToLayers();
 
         Tensor<T> output = input;
-
         foreach (var layer in Layers)
-        {
             output = layer.Forward(output);
-        }
 
         return output;
     }
@@ -488,7 +484,10 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     public int PredictClass(Tensor<T> meshFeatures, int[,] meshSpiralIndices)
     {
         SetSpiralIndices(meshSpiralIndices);
-        var output = Forward(meshFeatures);
+        // Route through Predict so BatchNorm/Dropout run in evaluation mode.
+        // Forward() would leave them in training mode, producing input-independent
+        // outputs at inference time (same bug the Predict override already fixes).
+        var output = Predict(meshFeatures);
 
         var outputArray = output.ToArray();
         int predictedClass = 0;
@@ -519,7 +518,29 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException(
                 "Spiral indices must be set via SetSpiralIndices before calling Predict.");
         }
-        return Accelerate(input, () => Forward(input));
+
+        // Inference MUST run BatchNorm in eval mode (running stats), NOT training
+        // mode (per-forward batch stats). The default IsTrainingMode is true on
+        // construction, and this override bypasses the base PredictCore's
+        // SetTrainingMode(false) toggle — so without this, Predict computes batch
+        // statistics over the vertex axis. For a spatially-uniform mesh (every
+        // vertex identical, the ModelFamily invariant inputs), the per-channel
+        // batch variance is ~0, so (x - batchMean)/sqrt(var+eps) collapses every
+        // feature to 0 and the network emits a constant output independent of the
+        // input — breaking DifferentInputs_ShouldProduceDifferentOutputs and
+        // driving the BatchNorm backward's 1/var^1.5 term toward NaN. Eval mode
+        // divides by the running variance (initialized to 1), which passes the
+        // signal through.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            return Accelerate(input, () => Forward(input));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     /// <summary>
@@ -694,7 +715,8 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     public Vector<T> PredictProbabilities(Tensor<T> meshFeatures, int[,] meshSpiralIndices)
     {
         SetSpiralIndices(meshSpiralIndices);
-        var output = Forward(meshFeatures);
+        // Route through Predict so BatchNorm/Dropout run in evaluation mode.
+        var output = Predict(meshFeatures);
 
         var softmax = new SoftmaxActivation<T>();
         return softmax.Activate(output.ToVector());

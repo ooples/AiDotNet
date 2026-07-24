@@ -111,8 +111,15 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// </summary>
     public PSENet()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: InputType.TwoDimensional,
+            // PSENet (CVPR 2019) is an RGB scene-text detector: a ResNet/FPN backbone
+            // whose first convolution consumes 3-channel color images. Declare the input
+            // as ThreeDimensional with inputDepth:3 so GetInputShape() reports [3, H, W]
+            // and the first backbone conv resolves its InputDepth to 3. A TwoDimensional
+            // declaration forces InputDepth=1 (grayscale), which mismatches the 3-channel
+            // RGB tensors fed at inference/training ("Expected input depth 1, but got 3").
+            inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.BinaryClassification,
+            inputDepth: 3,
             inputHeight: 640, inputWidth: 640,
             outputSize: 7))
     {
@@ -131,7 +138,14 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
+        // PSENet's kernel-prediction heads output per-pixel maps that the paper trains with
+        // binary cross-entropy on the SIGMOID of the logits. PredictCore returns the raw linear
+        // conv output (no sigmoid), so a plain BinaryCrossEntropyLoss (which expects [0,1]
+        // probabilities) explodes as the logits drift during training (memorization loss
+        // 0.38 -> 18582). BinaryCrossEntropyWithLogitsLoss fuses the sigmoid into a numerically
+        // stable loss over raw logits — the paper-correct objective — keeping training bounded
+        // while leaving PredictCore's linear-logit output contract unchanged.
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new PSENetOptions();
         Options = _options;
@@ -175,7 +189,14 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
+        // PSENet's kernel-prediction heads output per-pixel maps that the paper trains with
+        // binary cross-entropy on the SIGMOID of the logits. PredictCore returns the raw linear
+        // conv output (no sigmoid), so a plain BinaryCrossEntropyLoss (which expects [0,1]
+        // probabilities) explodes as the logits drift during training (memorization loss
+        // 0.38 -> 18582). BinaryCrossEntropyWithLogitsLoss fuses the sigmoid into a numerically
+        // stable loss over raw logits — the paper-correct objective — keeping training bounded
+        // while leaving PredictCore's linear-logit output contract unchanged.
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new PSENetOptions();
         Options = _options;
@@ -479,6 +500,14 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int width = image.Shape[3];
 
         var normalized = new Tensor<T>(image._shape);
+        // ImageNet channel statistics are defined on the [0,1] pixel scale (mean 0.485 / std 0.229,
+        // Simonyan & Zisserman; He et al.). The input tensor is expected to ALREADY be in [0,1] — the
+        // /255 uint8→float conversion is the caller's ToTensor step (PyTorch convention: the model
+        // receives normalized-range tensors, transforms.Normalize is applied to [0,1] data). Applying
+        // /255 HERE as well double-scaled the input: any [0,1] image was crushed to ~[0,0.004] before
+        // the mean subtraction, so two very different constant pages (0.1 vs 0.9) both mapped to
+        // ~-2.11 and the deep ResNet+FPN+BN stack washed the <1 % residual to a bit-identical output
+        // (DifferentInputs_AfterTraining L2 = 0). Normalize on the [0,1] scale directly.
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 
@@ -493,7 +522,7 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                     for (int w = 0; w < width; w++)
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) / 255.0 - mean) / std);
+                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
                     }
                 }
             }
@@ -577,9 +606,14 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
+        // TrainWithTape runs forward+backward, applies global-norm gradient clipping
+        // (NeuralNetworkBase.ApplyGradientClipping) and then the optimizer step. The prior
+        // code ALSO called UpdateParameters(CollectGradients()) afterward — a second, raw,
+        // UNCLIPPED SGD step (params -= grads * 1e-4) on top of the already-applied optimizer
+        // update. That double/unclipped update diverged training on the deep ResNet+FPN stack
+        // (memorization loss 0.38 -> 18615). TrainWithTape owns the whole clipped optimizer
+        // step, matching every other native model (e.g. the Finance forecasting transformers).
         TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
         SetTrainingMode(false);
     }
 

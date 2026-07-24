@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -567,35 +568,42 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // VECTORIZED: Initialize parameters with scaled random values
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numClasses + _numClasses)));
-        T half = NumOps.FromDouble(0.5);
+        // Fill the ctor-allocated OWNED param tensors in place with scaled, centered uniform
+        // values: (random − 0.5) · sqrt(2 / (fan_in + fan_out)).
+        //
+        // A persistent trainable parameter MUST be an owned tensor, NOT a pool-rented
+        // Engine-op result. The prior code built each parameter via Engine.TensorSubtract /
+        // Engine.TensorMultiplyScalar, whose outputs come from AutoTensorCache.RentOrAllocate —
+        // a pooled rental. Under a TensorArena (the ModelFamily / integration test harness wraps
+        // every train step in one) the pool later re-rents that exact tensor object — same
+        // instance, same backing storage AND the same _shape array — to satisfy an unrelated
+        // allocation, silently mutating the transition matrix from [C, C] to whatever the next
+        // rental needed (e.g. [1, C·C]) mid-training. Every subsequent forward then failed with
+        // "Tensor shapes must match. Got [C] and [1, C]" / broadcast errors. RegisterTrainable-
+        // Parameter does not un-pool a rented tensor. Writing directly into the owned tensors the
+        // constructor already allocated (new Tensor<T>([...])) keeps the parameters out of the
+        // pool for their whole lifetime — the SGD/Adam step mutates them in place, preserving
+        // ownership. Mirrors how the other hand-written layers (DenseLayer, PointConvolutionLayer)
+        // initialize their weights.
+        double scale = Math.Sqrt(2.0 / (_numClasses + _numClasses));
+        var random = Random ?? RandomHelper.CreateSecureRandom();
 
-        // Initialize transition matrix: (random - 0.5) * scale
-        var transRandom = Tensor<T>.CreateRandom(_transitionMatrix.Length, 1).Reshape(_transitionMatrix._shape);
-        var transHalf = new Tensor<T>(_transitionMatrix._shape);
-        transHalf.Fill(half);
-        var transCentered = Engine.TensorSubtract(transRandom, transHalf);
-        _transitionMatrix = Engine.TensorMultiplyScalar(transCentered, scale);
+        FillCenteredUniform(_transitionMatrix, scale, random);
+        FillCenteredUniform(_startScores, scale, random);
+        FillCenteredUniform(_endScores, scale, random);
 
-        // Initialize start scores: (random - 0.5) * scale
-        var startRandom = Tensor<T>.CreateRandom(_startScores.Length, 1).Reshape(_startScores._shape);
-        var startHalf = new Tensor<T>(_startScores._shape);
-        startHalf.Fill(half);
-        var startCentered = Engine.TensorSubtract(startRandom, startHalf);
-        _startScores = Engine.TensorMultiplyScalar(startCentered, scale);
-
-        // Initialize end scores: (random - 0.5) * scale
-        var endRandom = Tensor<T>.CreateRandom(_endScores.Length, 1).Reshape(_endScores._shape);
-        var endHalf = new Tensor<T>(_endScores._shape);
-        endHalf.Fill(half);
-        var endCentered = Engine.TensorSubtract(endRandom, endHalf);
-        _endScores = Engine.TensorMultiplyScalar(endCentered, scale);
-
-        // Register after all reassignments so references are to final tensors
+        // Register after filling so references are to the final owned tensors.
         RegisterTrainableParameter(_transitionMatrix, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_startScores, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_endScores, PersistentTensorRole.Weights);
+    }
+
+    /// <summary>Writes (random − 0.5)·scale into every element of an owned tensor, in place.</summary>
+    private void FillCenteredUniform(Tensor<T> tensor, double scale, Random random)
+    {
+        var span = tensor.Data.Span;
+        for (int i = 0; i < span.Length; i++)
+            span[i] = NumOps.FromDouble((random.NextDouble() - 0.5) * scale);
     }
 
     /// <summary>
@@ -933,15 +941,19 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (_transitionMatrixGradient == null || _startScoresGradient == null || _endScoresGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Update using Engine tensor operations: param = param - lr * gradient
+        // Update IN PLACE (param -= lr * gradient). Reassigning to Engine.TensorSubtract's
+        // result would replace the owned parameter tensors with pool-rented ones, which the
+        // TensorArena can then re-rent out from under the layer mid-training (see
+        // InitializeParameters for the full failure mode). The in-place subtract preserves each
+        // parameter's owned storage.
         var scaledTransGrad = Engine.TensorMultiplyScalar(_transitionMatrixGradient, learningRate);
-        _transitionMatrix = Engine.TensorSubtract(_transitionMatrix, scaledTransGrad);
+        Engine.TensorSubtractInPlace(_transitionMatrix, scaledTransGrad);
 
         var scaledStartGrad = Engine.TensorMultiplyScalar(_startScoresGradient, learningRate);
-        _startScores = Engine.TensorSubtract(_startScores, scaledStartGrad);
+        Engine.TensorSubtractInPlace(_startScores, scaledStartGrad);
 
         var scaledEndGrad = Engine.TensorMultiplyScalar(_endScoresGradient, learningRate);
-        _endScores = Engine.TensorSubtract(_endScores, scaledEndGrad);
+        Engine.TensorSubtractInPlace(_endScores, scaledEndGrad);
     }
 
     /// <summary>
@@ -1350,14 +1362,30 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (parameters.Length != totalParams)
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
 
-        // VECTORIZED: Use Vector.Slice and Tensor.FromVector
+        // Copy the flat vector INTO the owned parameter tensors in place. Reassigning to
+        // Tensor.FromVector(...).Reshape(_transitionMatrix._shape) would (a) replace the owned
+        // tensors with new storage and (b) alias each new tensor's _shape array to the live
+        // parameter's array (Reshape reuses the array reference it is handed), reintroducing the
+        // pool/aliasing hazard InitializeParameters was fixed to avoid. In-place copy keeps the
+        // parameters owned with their own shapes.
         var transVec = parameters.Slice(0, transSize);
         var startVec = parameters.Slice(transSize, _numClasses);
         var endVec = parameters.Slice(transSize + _numClasses, _numClasses);
 
-        _transitionMatrix = Tensor<T>.FromVector(transVec).Reshape(_transitionMatrix._shape);
-        _startScores = Tensor<T>.FromVector(startVec).Reshape(_startScores._shape);
-        _endScores = Tensor<T>.FromVector(endVec).Reshape(_endScores._shape);
+        CopyVectorInto(_transitionMatrix, transVec);
+        CopyVectorInto(_startScores, startVec);
+        CopyVectorInto(_endScores, endVec);
+    }
+
+    /// <summary>Copies a flat vector into an owned tensor's storage in place (length must match).</summary>
+    private static void CopyVectorInto(Tensor<T> tensor, Vector<T> values)
+    {
+        var span = tensor.Data.Span;
+        if (span.Length != values.Length)
+            throw new ArgumentException(
+                $"Cannot copy {values.Length} values into a tensor with {span.Length} elements.", nameof(values));
+        for (int i = 0; i < span.Length; i++)
+            span[i] = values[i];
     }
 
     /// <summary>

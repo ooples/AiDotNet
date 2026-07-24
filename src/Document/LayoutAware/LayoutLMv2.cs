@@ -168,7 +168,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _visualBackboneChannels = visualBackboneChannels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -229,7 +229,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _visualBackboneChannels = visualBackboneChannels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -241,6 +241,25 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     }
 
     #endregion
+
+    private IOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperDefaultOptimizer()
+    {
+        // LayoutLMv2 Appendix B: Adam with lr=2e-5, weight decay=1e-2,
+        // and (beta1,beta2)=(0.9,0.999). AdamW expresses the cited decoupled
+        // weight-decay formulation while keeping every value user-overridable
+        // through the constructor's optimizer parameter.
+        var options = new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = 2e-5,
+            WeightDecay = 1e-2,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            UseAMSGrad = false,
+            UseAdaptiveLearningRate = false
+        };
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+    }
 
     #region Initialization
 
@@ -885,7 +904,11 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+                ?? throw new InvalidOperationException(
+                    "LayoutLMv2 training requires an optimizer implementing " +
+                    "IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
         }
         finally
         {

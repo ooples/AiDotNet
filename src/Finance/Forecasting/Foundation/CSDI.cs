@@ -686,11 +686,18 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
+        if (input.Length == 0) return input;
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        if (batchSize <= 0) batchSize = 1;
+        // Per-sample size is ALL non-batch elements, not just Shape[1]. The previous code used
+        // input.Shape[1], which for a rank-3+ input (e.g. [1, 8, 8]) dropped every axis beyond 1 and
+        // reshaped 64 elements into [1, 8] (8), throwing "Cannot reshape tensor with 64 elements to
+        // shape [1, 8]". Flattening to [batch, perSample] keeps every element and normalizes per
+        // sample over the whole sequence, regardless of rank.
+        int seqLen = input.Length / batchSize;
         if (seqLen <= 0) return input;
 
-        bool reshaped = input.Rank != 2;
+        bool reshaped = !(input.Rank == 2 && input.Shape[1] == seqLen);
         var flat = reshaped ? Engine.Reshape(input, new[] { batchSize, seqLen }) : input;
         var mean = Engine.ReduceMean(flat, new[] { 1 }, keepDims: true);
         var variance = Engine.ReduceVariance(flat, new[] { 1 }, keepDims: true);

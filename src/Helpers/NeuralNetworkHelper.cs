@@ -65,6 +65,7 @@ public static class NeuralNetworkHelper<T>
             NeuralNetworkTaskType.AudioProcessing => new MeanSquaredErrorLoss<T>(),
             NeuralNetworkTaskType.Translation => new CategoricalCrossEntropyLoss<T>(),
             NeuralNetworkTaskType.TokenClassification => new CategoricalCrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.Embedding => new CosineSimilarityLoss<T>(),
             _ => new MeanSquaredErrorLoss<T>() // Default to MSE for Custom or unknown types
         };
     }
@@ -99,6 +100,7 @@ public static class NeuralNetworkHelper<T>
             NeuralNetworkTaskType.SpeechRecognition => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.AudioProcessing => new IdentityActivation<T>(),
             NeuralNetworkTaskType.Translation => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
             _ => new SigmoidActivation<T>() // Default to sigmoid for Custom or unknown types
         };
     }
@@ -133,6 +135,7 @@ public static class NeuralNetworkHelper<T>
             NeuralNetworkTaskType.SpeechRecognition => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.AudioProcessing => new IdentityActivation<T>(),
             NeuralNetworkTaskType.Translation => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
             _ => new SigmoidActivation<T>() // Default to sigmoid for Custom or unknown types
         };
     }
@@ -185,6 +188,7 @@ public static class NeuralNetworkHelper<T>
             case NeuralNetworkTaskType.AudioProcessing:
             case NeuralNetworkTaskType.Custom:
             case NeuralNetworkTaskType.SequenceToSequence:
+            case NeuralNetworkTaskType.Embedding:
                 // No activation (identity)
                 break;
 

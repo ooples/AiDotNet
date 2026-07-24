@@ -374,48 +374,39 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> AggregateEdgeFeatures(Tensor<T> input, int[,] adjacency, int numEdges, int aggregatedSize)
     {
-        // Create result tensor [numEdges, aggregatedSize]
-        var result = TensorAllocator.Rent<T>([numEdges, aggregatedSize]);
+        // Build [self | neighbor_1 | ... | neighbor_N] by CONCATENATING along the feature
+        // axis rather than mutating a rented buffer via `result = TensorSetSlice(result,
+        // ...)` in a loop. The mutating SetSlice pattern does not compose with GraphMode /
+        // compiled-plan LAZY recording (active during tape/compiled training): each op
+        // records a lazy node and the reassign-a-buffer loop realizes to garbage/~0, which
+        // detonates downstream normalization into Inf/NaN — the same root cause fixed in
+        // SpiralNet's gather. Concat is one graph-clean op that realizes correctly under
+        // both eager and lazy execution.
+        var parts = new Tensor<T>[1 + NumNeighbors];
+        parts[0] = input; // self-features [numEdges, InputChannels]
 
-        // Step 1: Copy self-features (first InputChannels columns)
-        result = Engine.TensorSetSlice(result, input, [0, 0]);
-
-        // Step 2: Gather neighbor features for each neighbor position
         for (int n = 0; n < NumNeighbors; n++)
         {
-            int featureOffset = InputChannels * (1 + n);
-
-            // Create indices tensor for this neighbor position
+            // Per-edge neighbor index at this neighbor position + a validity mask that
+            // zeros out out-of-range neighbors (clamped to index 0, masked to 0 below).
             var neighborIndices = new int[numEdges];
-            for (int e = 0; e < numEdges; e++)
-            {
-                int idx = adjacency[e, n];
-                // Clamp invalid indices to 0 and we'll zero them out after
-                neighborIndices[e] = (idx >= 0 && idx < numEdges) ? idx : 0;
-            }
-
-            var indicesTensor = new Tensor<int>(neighborIndices, [numEdges]);
-
-            // Gather neighbor features using vectorized operation
-            var gathered = Engine.TensorGather(input, indicesTensor, axis: 0);
-
-            // Create mask for invalid neighbors and zero them out
             var maskData = new T[numEdges];
             for (int e = 0; e < numEdges; e++)
             {
                 int idx = adjacency[e, n];
-                maskData[e] = (idx >= 0 && idx < numEdges) ? NumOps.One : NumOps.Zero;
+                bool valid = idx >= 0 && idx < numEdges;
+                neighborIndices[e] = valid ? idx : 0;
+                maskData[e] = valid ? NumOps.One : NumOps.Zero;
             }
+
+            var indicesTensor = new Tensor<int>(neighborIndices, [numEdges]);
+            var gathered = Engine.TensorGather(input, indicesTensor, axis: 0);          // [E, C]
             var mask = new Tensor<T>(maskData, [numEdges, 1]);
-
-            // Apply mask (multiply gathered features by mask to zero out invalid neighbors)
-            gathered = Engine.TensorMultiply(gathered, Engine.TensorTile(mask, [1, InputChannels]));
-
-            // Set the gathered features into the result at the appropriate offset
-            result = Engine.TensorSetSlice(result, gathered, [0, featureOffset]);
+            parts[1 + n] = Engine.TensorMultiply(gathered, Engine.TensorTile(mask, [1, InputChannels]));
         }
 
-        return result;
+        // Concatenate the self + N neighbor slices → [numEdges, InputChannels*(1+NumNeighbors)].
+        return NumNeighbors == 0 ? parts[0] : Engine.Concat(parts, 1);
     }
 
     /// <summary>

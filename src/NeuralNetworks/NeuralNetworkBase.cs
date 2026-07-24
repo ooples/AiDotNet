@@ -3789,11 +3789,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                 var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
-                try {
-                    int _miss = 0; foreach (var pp in trainableParams) if (!allGrads.ContainsKey(pp)) _miss++;
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-                        $"[CHUNKED] engine={Engine.GetType().Name} nParams={trainableParams.Count} nGrads={allGrads.Count} missed={_miss}\n");
-                } catch { }
                 // Walk both the layer-collected params AND any network-
                 // level trainable tensors so the latter actually receive
                 // accumulated gradient updates.
@@ -6945,9 +6940,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var lossTensor = loss.ComputeTapeLoss(output, expected);
         LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-            $"[STREAMING-PATH-TAKEN] engine={Engine.GetType().Name}\n"); } catch { }
-
         // Sources = layer-owned trainable params + network-level extras
         // (cls/pos tokens, etc.), exactly the set the eager path optimizes.
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
@@ -6986,12 +6978,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // full weight set has to fit in RAM, which is what makes a model whose
             // gradients exceed memory trainable at all. The 8-bit StreamingAdam
             // epilogue runs inside the callback at each gradient's release point.
-            int _covOk = 0, _covMiss = 0;
             tape.ComputeGradientsStreaming(lossTensor, sources,
                 (source, grad) =>
                 {
-                    if (grad is null || grad.Length == 0) { _covMiss++; return; }
-                    _covOk++;
+                    if (grad is null || grad.Length == 0) return;
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -7000,8 +6990,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // next forward re-uploads current weights (parity with the eager/fused fixes).
                     if (Engine is DirectGpuTensorEngine _sg) _sg.InvalidateResidentWeightBuffer(source);
                 });
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-                $"[STREAMING clip=false] engine={Engine.GetType().Name} nSources={sources.Count} gradOk={_covOk} gradMiss={_covMiss}\n"); } catch { }
         }
         else if (twoPass)
         {
@@ -7174,8 +7162,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (_mixedPrecisionContext is null
             && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer, useStreamingDefaults))
         {
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-                $"[FUSED-PATH-TAKEN] engine={Engine.GetType().Name}\n"); } catch { }
             return;
         }
 
@@ -7602,11 +7588,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Passing sources directly can miss parameters when the tape backward
             // can't match view tensor references through the GradFn chain.
             var allGrads = tape.ComputeGradients(lossForBackward, sources: null);
-            try {
-                int _miss = 0; foreach (var pp in trainableParams) if (!allGrads.ContainsKey(pp)) _miss++;
-                System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-                    $"[EAGER] engine={Engine.GetType().Name} nParams={trainableParams.Count} nGrads={allGrads.Count} missed={_miss}\n");
-            } catch { }
             var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var param in trainableParams)
@@ -7905,8 +7886,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     {
                         if (trainable is null) continue;
                         var lyrType = trainable.GetType();
-                        var attr = (Attributes.LayerCategoryAttribute?)Attribute
-                            .GetCustomAttribute(lyrType, typeof(Attributes.LayerCategoryAttribute));
+                        // LayerCategoryAttribute intentionally allows multiple
+                        // declarations (for example Transformer + Attention).
+                        // GetCustomAttribute throws AmbiguousMatchException in
+                        // that valid case, which used to make PerStep diagnostics
+                        // crash precisely when detailed CI evidence was needed.
+                        var attr = Attribute
+                            .GetCustomAttributes(lyrType, typeof(Attributes.LayerCategoryAttribute))
+                            .OfType<Attributes.LayerCategoryAttribute>()
+                            .FirstOrDefault();
                         var cat = attr?.Category ?? Interfaces.LayerCategory.Other;
                         string name = lyrType.Name;
                         foreach (var p in trainable.GetTrainableParameters())
@@ -8104,8 +8092,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected, double learningRate)
     {
-        // Use the default optimizer (which respects configured LR) rather than creating a throwaway one
-        TrainWithTape(input, expected, optimizer: null);
+        if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), learningRate,
+                "Learning rate must be finite and positive.");
+
+        // A builder-supplied optimizer is the most explicit user choice and retains precedence.
+        // Otherwise create the model's persistent default Adam at the requested rate. The previous
+        // implementation discarded this argument and silently trained at Adam's global 1e-3 default;
+        // SpikingNeuralNetwork therefore ignored ReadoutLearningRate=5e-4 and drifted after longer
+        // training. Retaining the optimizer preserves Adam moments and the compiled fused path.
+        if (_baseTrainOptimizer is null ||
+            (!_baseTrainOptimizerExplicitlyConfigured &&
+             (_baseTrainOptimizerLearningRate is null ||
+              _baseTrainOptimizerLearningRate.Value != learningRate)))
+        {
+            _baseTrainOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = learningRate,
+                    UseAMSGrad = false,
+                });
+            _baseTrainOptimizerLearningRate = learningRate;
+        }
+
+        TrainWithTape(input, expected, _baseTrainOptimizer);
     }
 
     /// <summary>
@@ -8357,8 +8368,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// warmup-LR one) shifts the sum, so an unchanged checksum is a reliable
     /// "nothing was persisted" signal.
     /// </summary>
+    // Number of parameter elements the #1822 fused-persistence probe samples. The
+    // probe only needs to detect whether the fused step moved ANY live parameter, not
+    // an exact norm — so it samples a deterministic stride instead of every element.
+    private const int FusedChecksumTargetSamples = 1 << 16; // 65536
+
     private double FusedTrainableParamChecksum(IReadOnlyList<ITrainableLayer<T>> layers)
     {
+        // Bounded persistence probe (#1822). Summing ALL parameters is O(N) scalar
+        // generic ToDouble; at foundation scale (e.g. 385M params) that alone is
+        // several seconds on the CRITICAL first fused step — the exact cost that
+        // pushed GLaMM's GradientFlow invariant past its per-test timeout. We only
+        // need to know whether the fused kernel PERSISTED its update, so sample a
+        // deterministic stride: element 0 of EVERY trainable tensor (so every tensor
+        // is covered — Adam moves every trained param, flipping the checksum) plus a
+        // strided sweep of large tensors, capping total work at ~TargetSamples
+        // regardless of model size. Small tensors are fully covered (stride 1). The
+        // same indices are read before and after the step, so the != comparison
+        // remains valid. Bit-for-bit identical to the full sum for models below the
+        // cap; for larger models it's a faithful subset that still catches the
+        // silent-no-op the guard exists for.
+        long total = 0;
+        for (int li = 0; li < layers.Count; li++)
+            foreach (var p in layers[li].GetTrainableParameters())
+                if (p is not null) total += p.AsSpan().Length;
+        if (total == 0) return 0.0;
+
+        int stride = (int)System.Math.Max(1, total / FusedChecksumTargetSamples);
         double acc = 0.0;
         for (int li = 0; li < layers.Count; li++)
         {
@@ -8366,7 +8402,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 if (p is null) continue;
                 var span = p.AsSpan();
-                for (int i = 0; i < span.Length; i++)
+                for (int i = 0; i < span.Length; i += stride)
                 {
                     double v = NumOps.ToDouble(span[i]);
                     acc += v * v;
@@ -9321,6 +9357,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
+        _baseTrainOptimizerLearningRate = null;
     }
 
     /// <summary>
@@ -9328,6 +9365,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Lazily initialized on first use (Adam with default settings).
     /// </summary>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTrainOptimizer;
+
+    /// <summary>
+    /// Requested rate used to create the persistent optimizer for the learning-rate overload.
+    /// Null for the normal default path and for an explicitly configured user optimizer.
+    /// </summary>
+    private double? _baseTrainOptimizerLearningRate;
 
     /// <summary>
     /// True when the base-train optimizer was supplied explicitly via
@@ -10315,6 +10358,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (UseCopyOnWriteDeepCopy && TryDeepCopyCopyOnWrite(out var cowCopy))
             return cowCopy;
 
+        // Internal in-memory clone: open a persistence-guard InternalOperation scope for the remainder
+        // of this method so any nested sub-model PUBLIC Serialize()/Deserialize() calls do NOT trip the
+        // ModelPersistenceGuard license gate. Composite models copy their network-specific data by
+        // recursing into child models' public Serialize/Deserialize (e.g. GAN Generator/Discriminator,
+        // BiLSTMCRF), and DeepCopy's own serialize side (SerializeInternalUnchecked) only bypasses the
+        // gate for the TOP model — the nested child calls still hit EnforceBeforeSerialize at depth 0.
+        // Without this scope an internal clone counts as user persistence and throws
+        // LicenseRequiredException whenever the license server is unreachable (ValidationPending — #1802)
+        // or the trial is exhausted, which broke every composite-model Clone/MoreData test in CI. The COW
+        // fast path above shares tensors and never serializes, so it is intentionally left exempt. Covers
+        // both the large/custom-layer copy path (copies network-specific data) and the serialize
+        // roundtrip below; nested InternalOperation scopes are counter-based and compose safely.
+        using var _persistenceGuardScope = ModelPersistenceGuard.InternalOperation();
+
         // DeepCopy is a training-internal in-memory clone, not a user-facing
         // save/load. We route through the private SerializeInternalUnchecked /
         // DeserializeInternalUnchecked helpers rather than the public virtual
@@ -10439,6 +10496,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
                 largeBase.InvalidateParameterCountCache();
                 largeBase.SetTrainingMode(false);
+                // The per-layer parameter copy above skips non-trainable stochastic layers
+                // (DropoutLayer carries no parameters), so their RandomSeed must be transferred
+                // explicitly — see CopyLayerRandomSeedsTo.
+                CopyLayerRandomSeedsTo(largeBase);
                 return largeCopy;
             }
         }
@@ -10454,6 +10515,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // matching guard in the large/custom-layer copy path above.
             copyBase.DisableAutoStreaming();
             copyBase.DeserializeInternalUnchecked(serialized);
+            // Base LayerBase.Serialize does NOT persist the per-layer RandomSeed, so the
+            // serialize/deserialize roundtrip drops it. Transfer it (and the wired latch) so the
+            // clone's stochastic layers (DropoutLayer) reproduce the source's dropout stream — see
+            // CopyLayerRandomSeedsTo.
+            CopyLayerRandomSeedsTo(copyBase);
         }
         else
         {
@@ -10493,6 +10559,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // auto-enable so it does not re-Configure the process-wide singleton streaming pool owned by the
         // original (same guard the eager large/serialize paths use). Must run before any SetTrainingMode.
         copyBase.DisableAutoStreaming();
+
+        // Materialize the destination's lazy composite structure before taking
+        // the reflection snapshots. TransformerDecoderLayer creates its
+        // attention/FFN children on first shape resolution; without this pass
+        // the source walk contains those children while the fresh-clone walk
+        // contains only the empty parent. That mismatch rejected COW and sent
+        // AudioGen through the decoder's giant flat GetParameters concatenation.
+        int topLevelCount = Math.Min(_layers.Count, copyBase._layers.Count);
+        for (int i = 0; i < topLevelCount; i++)
+        {
+            if (_layers[i] is not LayerBase<T> srcTop
+                || copyBase._layers[i] is not LayerBase<T> dstTop
+                || dstTop is not TransformerDecoderLayer<T>
+                || dstTop.IsShapeResolved
+                || srcTop.ParameterCount <= 0)
+                continue;
+
+            int[] sourceInputShape = srcTop.GetInputShape();
+            if (sourceInputShape is not { Length: > 0 }
+                || !Array.TrueForAll(sourceInputShape, d => d > 0))
+                continue;
+
+            try { dstTop.ResolveStructureShapesOnly(sourceInputShape); }
+            catch (ArgumentException)
+            {
+                // The structural guards below retain the conservative eager
+                // fallback for layers that cannot accept the source shape.
+            }
+        }
 
         // Full-fidelity reflection walk: captures every trainable layer reachable from the model — both
         // those in the base _layers list AND those held in dedicated fields (e.g. a tabular transformer's
@@ -10576,7 +10671,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Share trainable tensors copy-on-write (privatizes on the first in-place write to either side).
             var sp = src.GetTrainableParameters();
             var dp = dst.GetTrainableParameters();
-            if (sp.Count != dp.Count)
+            bool shapeOnlyDestination = dp.Count == 0
+                && dst is LayerBase<T> dstShapeOnly
+                && dstShapeOnly.IsShapeResolved;
+            if (sp.Count != dp.Count && !shapeOnlyDestination)
             {
                 (copy as IDisposable)?.Dispose();
                 return false;
@@ -10586,7 +10684,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 var shared = new Tensor<T>[sp.Count];
                 for (int p = 0; p < sp.Count; p++)
                     shared[p] = (Tensor<T>)sp[p].CloneShared();
-                dst.SetTrainableParameters(shared);
+                try { dst.SetTrainableParameters(shared); }
+                catch (ArgumentException)
+                {
+                    (copy as IDisposable)?.Dispose();
+                    return false;
+                }
             }
 
             // Copy serialization EXTRAS (non-trainable trained state NOT in GetTrainableParameters —
@@ -10622,6 +10725,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // original (TOTEM Clone_AfterTraining). Round-trip through the SAME hooks the
         // eager serialize path uses, giving the clone an INDEPENDENT deep copy (a write
         // to either side cannot leak, unlike the shared layer tensors).
+        // InternalOperation scope: SerializeNetworkSpecificData / DeserializeNetworkSpecificData can recurse
+        // into a nested composite model's PUBLIC Serialize()/Deserialize() (GAN Generator/Discriminator,
+        // BiLSTMCRF, ...), which would otherwise trip the ModelPersistenceGuard license gate on this INTERNAL
+        // clone (LicenseRequiredException when the license server is unreachable or the trial is exhausted).
+        // This COW round-trip is the DEFAULT clone path (UseCopyOnWriteDeepCopy defaults true), so it needs
+        // the same guard as DeepCopy()'s serialize-roundtrip fallback — see that scope for the full rationale.
+        using (ModelPersistenceGuard.InternalOperation())
         using (var nsStream = new System.IO.MemoryStream())
         {
             var nsWriter = new System.IO.BinaryWriter(nsStream);
@@ -10637,7 +10747,81 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         copyBase.InvalidateParameterCountCache();
         copyBase.SetTrainingMode(false);
+
+        // Carry each layer's per-layer RandomSeed (and the one-shot wired latch) into the clone.
+        // The COW share above only re-binds TRAINABLE-layer tensors, so a non-trainable stochastic
+        // layer — chiefly DropoutLayer, whose mask derives from RandomSeed + a per-forward counter —
+        // would otherwise keep the fresh CreateNewInstance() seed and pick a divergent dropout
+        // stream, flaking clone-then-train trajectory invariants (the SpiralNet flake). No-op when
+        // the source layers are unseeded (production default).
+        CopyLayerRandomSeedsTo(copyBase);
         return true;
+    }
+
+    /// <summary>
+    /// Transfers each layer's <see cref="Layers.LayerBase{T}.RandomSeed"/> (and the one-shot
+    /// <see cref="_layerRandomSeedsWired"/> latch) from THIS network to a freshly built clone,
+    /// walking both layer graphs in lockstep including nested sub-layers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="DeepCopy"/> / <see cref="Clone"/> rebuild the clone via
+    /// <see cref="CreateNewInstance"/> (fresh, un-seeded layers) and transfer only trained
+    /// WEIGHTS — through the COW tensor share, the per-layer parameter copy, or a serialize
+    /// roundtrip. None of those carry the per-layer RandomSeed: the base
+    /// <see cref="Layers.LayerBase{T}.Serialize"/> does not write it, and the COW / parameter
+    /// walks only touch TRAINABLE layers. The layer whose RandomSeed actually matters —
+    /// <see cref="Layers.DropoutLayer{T}"/>, whose mask derives from RandomSeed + a per-forward
+    /// counter — is NON-trainable, so it is invisible to those walks. Without this copy a clone
+    /// falls back to an entropy-seeded dropout stream and its training trajectory diverges
+    /// run-to-run once unrelated tests advance the shared RNG (the SpiralNet clone-then-train
+    /// flake).
+    /// </para>
+    /// <para>
+    /// Walks the FULL <see cref="Layers"/> list (not just trainable layers) so dropout and other
+    /// stochastic non-trainable layers are covered, and copies the wired latch so the clone's
+    /// first training forward does not re-run <see cref="WireLayerRandomSeeds"/> and overwrite the
+    /// seeds just copied. No-op for layers whose RandomSeed is null (production default — never
+    /// seed-wired), so it never introduces determinism the source did not already have.
+    /// </para>
+    /// </remarks>
+    private void CopyLayerRandomSeedsTo(NeuralNetworkBase<T> destination)
+    {
+        var srcLayers = _layers;
+        var dstLayers = destination._layers;
+        int count = Math.Min(srcLayers.Count, dstLayers.Count);
+        for (int i = 0; i < count; i++)
+        {
+            CopyLayerRandomSeedRecursive(srcLayers[i], dstLayers[i]);
+        }
+
+        // Carry the one-shot wiring latch so the clone's first ForwardForTraining does not re-run
+        // WireLayerRandomSeeds and clobber the seeds copied above. When the source was not yet
+        // wired the latch stays false on both sides, so each wires identically (or not at all) from
+        // its shared Architecture.RandomSeed — preserving clone/source equivalence either way.
+        destination._layerRandomSeedsWired = _layerRandomSeedsWired;
+    }
+
+    /// <summary>
+    /// Copies <see cref="Layers.LayerBase{T}.RandomSeed"/> from <paramref name="src"/> to
+    /// <paramref name="dst"/> and recurses into their registered sub-layers in lockstep. Two
+    /// instances of the same runtime type built the same way expose matching sub-layer order, so
+    /// the walk pairs 1:1; the length guard tolerates any structural drift without throwing.
+    /// </summary>
+    private static void CopyLayerRandomSeedRecursive(ILayer<T> src, ILayer<T> dst)
+    {
+        if (src is not Layers.LayerBase<T> srcBase || dst is not Layers.LayerBase<T> dstBase)
+            return;
+
+        dstBase.RandomSeed = srcBase.RandomSeed;
+
+        var srcSubs = srcBase.GetSubLayers();
+        var dstSubs = dstBase.GetSubLayers();
+        int subCount = Math.Min(srcSubs.Count, dstSubs.Count);
+        for (int i = 0; i < subCount; i++)
+        {
+            CopyLayerRandomSeedRecursive(srcSubs[i], dstSubs[i]);
+        }
     }
 
     /// <summary>

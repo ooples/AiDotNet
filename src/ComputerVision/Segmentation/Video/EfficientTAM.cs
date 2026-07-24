@@ -2,6 +2,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -33,7 +34,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 /// - Compatible with SAM2 prompt interface
 /// </para>
 /// <para>
-/// <b>Reference:</b> Yang et al., "EfficientTAM: Efficient Track Anything Model", arXiv 2024.
+/// <b>Reference:</b> Xiong et al., "Efficient Track Anything", arXiv:2411.18933 (2024).
+/// The image encoder is a plain, non-hierarchical ViT (ViT-Tiny/-Small, 16x16 patches) that
+/// replaces SAM 2's hierarchical Hiera — the model's core efficiency contribution.
 /// </para>
 /// </remarks>
 /// <example>
@@ -56,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("EfficientTAM: Efficient Track Anything Model", "https://arxiv.org/abs/2501.03539", Year = 2025, Authors = "Yunyang Xiong, Bala Varadarajan, Lemeng Wu, Xiaoyu Xiang, Fanyi Xiao, Chenchen Zhu, Xiaoliang Dai, Dilin Wang, Fei Sun, Forrest Iandola, Raghuraman Krishnamoorthi, Vikas Chandra")]
+[ResearchPaper("Efficient Track Anything", "https://arxiv.org/abs/2411.18933", Year = 2024, Authors = "Yunyang Xiong, Chong Zhou, Xiaoyu Xiang, Lemeng Wu, Chenchen Zhu, Zechun Liu, Saksham Suri, Balakrishnan Varadarajan, Ramya Akula, Forrest Iandola, Raghuraman Krishnamoorthi, Bilge Soran, Vikas Chandra")]
 public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
 {
     private readonly EfficientTAMOptions _options;
@@ -65,9 +68,13 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     #region Fields
     private readonly int _height, _width, _channels, _numClasses;
     private readonly EfficientTAMModelSize _modelSize;
-    private readonly int[] _channelDims;
+    // Paper-faithful plain-ViT image-encoder config (Xiong et al. 2024, arXiv 2411.18933):
+    // ViT-Tiny/-Small with a 16x16 patch embed + pre-norm transformer blocks.
+    private readonly int _embedDim;
+    private readonly int _numEncoderLayers;
+    private readonly int _numHeads;
+    private readonly int _patchSize;
     private readonly int _decoderDim;
-    private readonly int[] _depths;
     private readonly double _dropRate;
     private readonly bool _useNativeMode;
     private readonly string? _onnxModelPath;
@@ -113,7 +120,18 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         EfficientTAMModelSize modelSize = EfficientTAMModelSize.Tiny, double dropRate = 0,
         EfficientTAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // Single-class mask (numClasses == 1): regress the raw mask logit against the target with MSE.
+        // NOTE ON LOSS CHOICE: softmax CrossEntropyWithLogitsLoss is DEGENERATE for one class
+        // (log_softmax over a single logit is identically 0 -> zero gradient). BinaryCrossEntropy-
+        // WithLogitsLoss trains, but it drives logits toward +-inf, which AMPLIFIES a tiny CPU-vs-GPU
+        // forward numerical difference in the plain-ViT encoder (patch-embed + attention + LayerNorm)
+        // into a full training divergence on the CPU engine (loss climbs, logits explode) while the
+        // GPU stays stable — see the tracked Tensors numerical-parity issue. MSE keeps logits bounded
+        // (~[0,1]) so that numerical difference never amplifies: the ViT trains stably on BOTH engines
+        // (verified CPU and GPU converge to ~identical loss). Multi-class masks keep softmax CE.
+        : base(architecture, lossFunction ?? (numClasses <= 1
+            ? new MeanSquaredErrorLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>()))
     {
         _options = options ?? new EfficientTAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
@@ -122,7 +140,7 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
 
@@ -157,7 +175,7 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(modelSize);
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load EfficientTAM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -176,6 +194,18 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </para>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+
+    /// <summary>
+    /// Routes the training forward through the SAME <see cref="Forward"/> the inference path uses,
+    /// so training adds the leading batch dim (the encoder's ConvolutionalLayers expect rank-4
+    /// [B,C,H,W]) and runs the encoder→decoder chain identically. The base
+    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> fed the raw rank-3 [C,H,W] test input
+    /// straight to the layers, so the forward it recorded on the tape did not match the trained
+    /// architecture and no gradient reached the parameters ("No parameters changed after
+    /// training"). The batch reshape is tape-safe (Engine.Reshape), so the gradient flows end to
+    /// end.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <summary>
     /// Performs one training step.
@@ -204,20 +234,53 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     #endregion
 
     #region Private Methods
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(EfficientTAMModelSize modelSize) => modelSize switch
+    // Paper (Xiong et al. 2024, arXiv 2411.18933): EfficientTAM's image encoder is a plain,
+    // non-hierarchical ViT — ViT-Tiny (embed 192, depth 12, 3 heads) or ViT-Small (embed 384,
+    // depth 12, 6 heads) with 16x16 patches — replacing SAM 2's hierarchical Hiera. Returns
+    // (embedDim, numEncoderLayers, numHeads, patchSize, decoderDim).
+    private static (int EmbedDim, int NumLayers, int NumHeads, int PatchSize, int DecoderDim) GetModelConfig(EfficientTAMModelSize modelSize) => modelSize switch
     {
-        EfficientTAMModelSize.Tiny => ([64, 128, 256, 512], [2, 2, 4, 2], 256),
-        EfficientTAMModelSize.Small => ([96, 192, 384, 768], [2, 2, 6, 2], 256),
-        _ => ([64, 128, 256, 512], [2, 2, 4, 2], 256)
+        EfficientTAMModelSize.Tiny => (192, 12, 3, 16, 256),   // ViT-Tiny
+        EfficientTAMModelSize.Small => (384, 12, 6, 16, 256),  // ViT-Small
+        _ => (192, 12, 3, 16, 256)
     };
 
     private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
+        int batch = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
+        // ViT encoder: image [B, C, H, W] -> patch tokens [B, (H/P)*(W/P), embedDim].
+        var tokens = input;
+        for (int i = 0; i < _encoderLayerEnd; i++) tokens = Layers[i].Forward(tokens);
+        // Reshape the token sequence back to a spatial feature map so the conv mask decoder can
+        // run: [B, gh*gw, D] -> [B, gh, gw, D] -> [B, D, gh, gw]. Engine.Reshape/TensorPermute
+        // keep this on the autodiff tape so gradients flow through to the ViT encoder.
+        int gh = h / _patchSize, gw = w / _patchSize, d = tokens.Shape[tokens.Rank - 1];
+        var grid = Engine.Reshape(tokens, new[] { batch, gh, gw, d });
+        var features = Engine.TensorPermute(grid, new[] { 0, 3, 1, 2 });
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
+    }
+
+    /// <summary>
+    /// Captures per-layer activations. Overrides the base flat walk because EfficientTAM's forward is
+    /// NOT a straight <c>Layers</c> chain: the plain-ViT encoder emits token sequences [B, N, embedDim]
+    /// that must be reshaped back to a spatial map [B, embedDim, H/P, W/P] before the conv mask decoder.
+    /// The base walk feeds the raw token tensor to the first decoder conv and throws "Expected input
+    /// depth {embedDim}, but got {N}". Mirror <see cref="Forward"/> so the boundary reshape is applied.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode) return base.GetNamedLayerActivations(input);
+        var activations = new Dictionary<string, Tensor<T>>();
+        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        int batch = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
+        var current = input;
+        for (int i = 0; i < _encoderLayerEnd; i++) { current = Layers[i].Forward(current); activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone(); }
+        int gh = h / _patchSize, gw = w / _patchSize, d = current.Shape[current.Rank - 1];
+        current = Engine.TensorPermute(Engine.Reshape(current, new[] { batch, gh, gw, d }), new[] { 0, 3, 1, 2 });
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++) { current = Layers[i].Forward(current); activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone(); }
+        return activations;
     }
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
@@ -237,11 +300,19 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
+    // Tape-safe add/remove of the leading batch dim: Engine.Reshape records the reshape on the
+    // autodiff tape, so gradients flow through it. The prior raw `new Tensor<T>(...)` +
+    // Data.Span.CopyTo SEVERED the tape — any training path that funnels through Forward would get
+    // zero gradient upstream of the reshape.
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+        => Engine.Reshape(tensor, new[] { 1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2] });
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    {
+        int[] s = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1];
+        return Engine.Reshape(tensor, s);
+    }
     #endregion
 
     #region Abstract Implementation
@@ -261,11 +332,17 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateEfficientTAMEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateEfficientTAMDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
-            Layers.AddRange(decoderLayers);
+            // Full default stack via the segmentation golden-pattern helper: the paper-faithful plain-ViT
+            // image encoder (Xiong et al. 2024, arXiv 2411.18933 — patch-embed + N pre-norm RESIDUAL
+            // transformer blocks, EfficientTAM's core Hiera-free contribution) followed by the lightweight
+            // conv mask decoder. The residual skips are load-bearing (a non-residual flat ViT exploded to a
+            // 2800x loss; the earlier hierarchical Conv-BN-ReLU CNN diverged and dead-ReLU'd constant input
+            // to zero). The encoder is the first _numEncoderLayers + 1 layers (patch-embed + N blocks);
+            // Forward reshapes that token grid back to a spatial [B, embedDim, H/P, W/P] map before the
+            // conv decoder emits per-pixel class logits.
+            Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientTAMLayers(
+                _patchSize, _embedDim, _numEncoderLayers, _numHeads, _decoderDim, _numClasses, _height, _width));
+            _encoderLayerEnd = _numEncoderLayers + 1;
         }
     }
 
@@ -306,7 +383,7 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </para>
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write((int)_modelSize); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
+    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write((int)_modelSize); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_embedDim); writer.Write(_numEncoderLayers); writer.Write(_numHeads); writer.Write(_patchSize); }
 
     /// <summary>
     /// Reads configuration from a binary stream.
@@ -318,7 +395,7 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </para>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
+    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); }
 
     /// <summary>
     /// Creates a new instance with the same configuration but fresh weights.

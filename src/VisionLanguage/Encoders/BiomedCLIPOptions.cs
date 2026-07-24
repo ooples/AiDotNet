@@ -21,6 +21,7 @@ public class BiomedCLIPOptions : ContrastiveEncoderOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public BiomedCLIPOptions(BiomedCLIPOptions other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
@@ -42,11 +43,11 @@ public class BiomedCLIPOptions : ContrastiveEncoderOptions
         ProjectionDim = other.ProjectionDim;
         Temperature = other.Temperature;
         DropoutRate = other.DropoutRate;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
+        ImageMean = other.ImageMean.ToArray();
+        ImageStd = other.ImageStd.ToArray();
         ImageEncoderModelPath = other.ImageEncoderModelPath;
         TextEncoderModelPath = other.TextEncoderModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new AiDotNet.Onnx.OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
         WarmUpSteps = other.WarmUpSteps;

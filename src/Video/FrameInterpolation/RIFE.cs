@@ -805,9 +805,9 @@ public class RIFE<T> : FrameInterpolationBase<T>
         var flowOffset = Engine.TensorMultiply(flowNHWC, scale);
         var grid = Engine.TensorAdd(baseGrid, flowOffset);
 
-        var imageNHWC = Engine.TensorPermute(image, [0, 2, 3, 1]);   // [B, H, W, C]
-        var warpedNHWC = Engine.GridSample(imageNHWC, grid);         // [B, H, W, C]
-        return Engine.TensorPermute(warpedNHWC, [0, 3, 1, 2]);       // [B, C, H, W]
+        // Engine.GridSample is NCHW (PyTorch convention): image is already [B, C, H, W],
+        // pass it directly. The grid is [B, H, W, 2] regardless of image layout.
+        return Engine.GridSample(image, grid);                      // [B, C, H, W]
     }
 
     private Tensor<T> BilinearUpsample(Tensor<T> input, int factor)

@@ -185,7 +185,10 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <param name="patchSize">The size of each square patch.</param>
     /// <param name="embeddingDim">The dimension of the embedding vector for each patch.</param>
     /// <param name="activationFunction">The activation function to apply (defaults to identity if null).</param>
-    /// <exception cref="ArgumentException">Thrown when image dimensions are not divisible by patch size.</exception>
+    /// <remarks>Images need not be an exact multiple of the patch size: both <see cref="Forward"/>
+    /// and <see cref="ForwardGpu"/> crop any partial-patch remainder rows/columns (to
+    /// <c>floor(H/patch)·patch × floor(W/patch)·patch</c>) before patchifying, so the two paths stay
+    /// consistent for non-patch-aligned inputs.</remarks>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor sets up the patch embedding layer with your image specifications.
@@ -285,13 +288,21 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
                 "channel count or pass an input with the expected channel dim.",
                 nameof(input));
 
-        if (_imageHeight % _patchSize != 0 || _imageWidth % _patchSize != 0)
-            throw new ArgumentException(
-                $"Image H/W ({_imageHeight}/{_imageWidth}) must be divisible by patchSize ({_patchSize}).",
-                nameof(input));
-
+        // Resolution-independent patchification: use only COMPLETE patches and drop any
+        // partial-patch remainder rows/columns (integer-floor), so the layer accepts ANY image
+        // size. A downstream resampler/pooling stage (e.g. Flamingo's Perceiver Resampler) maps
+        // the resulting variable-size patch grid to a fixed token count regardless of resolution —
+        // the resolution-independence Flamingo (Alayrac et al. 2022) builds on with its NFNet +
+        // Perceiver stack. The prior hard "H/W % patchSize == 0" requirement contradicted that: a
+        // 128×128 image with patchSize 14 (128/14 = 9 r 2) was rejected outright. Forward crops the
+        // input to _numPatchesHeight*_patchSize × _numPatchesWidth*_patchSize before patchifying.
         _numPatchesHeight = _imageHeight / _patchSize;
         _numPatchesWidth = _imageWidth / _patchSize;
+        if (_numPatchesHeight < 1 || _numPatchesWidth < 1)
+            throw new ArgumentException(
+                $"Image H/W ({_imageHeight}/{_imageWidth}) is smaller than patchSize ({_patchSize}); " +
+                "at least one full patch is required in each spatial dimension.",
+                nameof(input));
         _numPatches = _numPatchesHeight * _numPatchesWidth;
 
         // Only allocate + initialize weights if SetParameters / Deserialize
@@ -366,6 +377,50 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Recomputes the floor patch grid (<see cref="_numPatchesHeight"/>/<see cref="_numPatchesWidth"/>/
+    /// <see cref="_numPatches"/>) from the <b>live</b> 4D input <c>[B, C, H, W]</c> when — and only
+    /// when — that input safely describes an image of the layer's resolved configuration (same channel
+    /// count the projection weights were sized for, and at least one full patch per spatial dim). This
+    /// gives resolution-independence: <c>patchDim = channels·patchSize²</c> is invariant to H/W, so the
+    /// projection weights are reused unchanged across resolutions and only the patch COUNT N varies.
+    /// </summary>
+    /// <remarks>
+    /// If the live input does NOT describe a valid image of this config — wrong channel count, or a
+    /// spatial dim smaller than one patch — this returns WITHOUT touching the cached grid instead of
+    /// throwing. A multimodal model may route a non-image probe/token tensor (e.g. a <c>[1, N, D]</c>
+    /// sequence, normalized to <c>[1, 1, N, D]</c>) through the same PatchEmbedding after it resolved
+    /// on a real image; recomputing from — or hard-throwing on — that would break the cached config and
+    /// regress those models (Flamingo / LLaVA / ImageBind / GPT-4-Vision). Falling back to the grid
+    /// resolved at <see cref="OnFirstForward"/> keeps this path byte-identical to the pre-live-dim
+    /// behavior for such callers, while still recomputing for genuine variable-resolution images. The
+    /// resolve-time contract (reject sub-patch, crop non-divisible) is enforced once in
+    /// <see cref="OnFirstForward"/> / <c>ResolveFromShape</c> and is covered by the layer unit tests.
+    /// </remarks>
+    private void RefreshLivePatchGrid(Tensor<T> input)
+    {
+        if (input.Shape.Length < 4) return;
+
+        int liveChannels = input.Shape[1];
+        if (liveChannels != _channels) return;
+
+        int liveHeight = input.Shape[2];
+        int liveWidth = input.Shape[3];
+        int nh = liveHeight / _patchSize;
+        int nw = liveWidth / _patchSize;
+        if (nh < 1 || nw < 1)
+            throw new ArgumentException(
+                $"Image H/W ({liveHeight}/{liveWidth}) is smaller than patchSize ({_patchSize}); " +
+                "at least one full patch is required in each spatial dimension.",
+                nameof(input));
+
+        _imageHeight = liveHeight;
+        _imageWidth = liveWidth;
+        _numPatchesHeight = nh;
+        _numPatchesWidth = nw;
+        _numPatches = nh * nw;
+    }
+
+    /// <summary>
     /// Performs the forward pass of the patch embedding layer.
     /// </summary>
     /// <param name="input">The input tensor with shape [batch, channels, height, width].</param>
@@ -433,6 +488,24 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
             int height = input.Shape[rank - 2];
             int width = input.Shape[rank - 1];
             processInput = Engine.Reshape(input, new[] { flatBatch, channels, height, width });
+        }
+
+        // Recompute the patch grid from THIS input's live spatial dims (not the cached first-forward
+        // grid) so a later resolution change reshapes correctly. Validates channels + rejects
+        // sub-patch tensors; writes _numPatchesHeight/_numPatchesWidth/_numPatches for the crop,
+        // reshape, and output-shape steps below.
+        RefreshLivePatchGrid(processInput);
+
+        // Crop to complete patches (drop any partial-patch remainder rows/columns) so the split
+        // reshape below is exact for ANY input resolution — see OnFirstForward. Tape-tracked slice;
+        // a no-op when the image is already patch-aligned (the common case).
+        int cropHeight = _numPatchesHeight * _patchSize;
+        int cropWidth = _numPatchesWidth * _patchSize;
+        if (cropHeight != processInput.Shape[2] || cropWidth != processInput.Shape[3])
+        {
+            processInput = Engine.TensorSlice(processInput,
+                new[] { 0, 0, 0, 0 },
+                new[] { batchSize, _channels, cropHeight, cropWidth });
         }
 
         _lastInput = processInput;
@@ -747,7 +820,24 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
                 $"PatchEmbeddingLayer expects 3D [C,H,W] or 4D [B,C,H,W] input, got {shape.Length}D.", nameof(inputs));
         }
 
+        // Recompute the patch grid from THIS input's live spatial dims (mirrors the CPU Forward):
+        // ForwardGpu bypasses OnFirstForward, so without this it would reshape against the stale
+        // cached grid and fail / mis-truncate on a resolution change. Validates channels + rejects
+        // sub-patch tensors, and writes _numPatchesHeight/_numPatchesWidth/_numPatches for the crop,
+        // reshape, and output steps below.
+        RefreshLivePatchGrid(processInput);
+
         int patchDim = _channels * _patchSize * _patchSize;
+
+        // Crop any partial-patch remainder rows/columns to complete patches — the SAME contract as
+        // the CPU Forward (which crops to _numPatchesHeight/_numPatchesWidth * _patchSize), now using
+        // the freshly-recomputed live grid so CPU and GPU stay consistent for non-patch-aligned input.
+        int gpuCropHeight = _numPatchesHeight * _patchSize;
+        int gpuCropWidth = _numPatchesWidth * _patchSize;
+        if (gpuCropHeight != processInput.Shape[2])
+            processInput = gpuEngine.SliceGpu(processInput, 2, 0, gpuCropHeight);
+        if (gpuCropWidth != processInput.Shape[3])
+            processInput = gpuEngine.SliceGpu(processInput, 3, 0, gpuCropWidth);
 
         // GPU-resident patchify using Reshape and Permute
         // 1. Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]

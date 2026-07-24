@@ -90,16 +90,20 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        // Sample weights for Bayesian layers (required before each forward pass)
-        foreach (var bayesianLayer in Layers.OfType<IBayesianLayer<T>>())
+        try
         {
-            bayesianLayer.SampleWeights();
+            // BayesianDenseLayer samples through its tape-tracked
+            // reparameterization inside each training Forward. Pre-sampling
+            // here left an unconsumed epsilon behind whenever the compiled
+            // fused path completed without invoking the eager layer Forward;
+            // the next evaluation Predict then consumed stale training noise
+            // and diverged from an otherwise identical clone.
+            TrainWithTape(input, expectedOutput);
         }
-
-        TrainWithTape(input, expectedOutput);
-
-        SetTrainingMode(false);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

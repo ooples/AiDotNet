@@ -295,7 +295,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         }
         else
         {
-            logits = Predict(featuresTensor);
+            logits = ForwardToLogits(featuresTensor);
         }
 
         // Apply softmax to get probabilities
@@ -355,7 +355,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         }
         else
         {
-            logits = Predict(featuresTensor);
+            logits = ForwardToLogits(featuresTensor);
         }
 
         return ApplySoftmax(logits);
@@ -506,17 +506,27 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
     {
         ThrowIfDisposed();
 
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            return OnnxEncoder.Run(input);
-        }
+        // Predict returns per-genre PROBABILITIES (a classifier's public output is a non-negative,
+        // normalized class distribution — the AudioClassifier "class output must be non-negative"
+        // invariant). Internal probability paths (Classify / GetGenreProbabilities) call
+        // ForwardToLogits directly and softmax exactly ONCE, so they do NOT double-normalize
+        // (the failure mode the previous logits-returning revision was guarding against — #1789).
+        var logits = IsOnnxMode && OnnxEncoder is not null
+            ? OnnxEncoder.Run(input)
+            : ForwardToLogits(input);
+        // Softmax the logits into a non-negative, shape-preserving probability tensor. Use the
+        // tensor-softmax activation (Engine.Softmax) rather than ApplySoftmax/PostprocessOutput,
+        // which return / rebuild a genre-keyed dictionary and would change the output tensor shape.
+        return new AiDotNet.ActivationFunctions.SoftmaxActivation<T>().Activate(logits);
+    }
 
-        // Native mode: forward pass through the layers to per-genre LOGITS. Do NOT softmax here — the
-        // classification head is a LINEAR (identity) projection emitting logits, and every probability
-        // path (Classify / GetGenreProbabilities / PostprocessOutput) applies ApplySoftmax exactly once.
-        // Returning probabilities here (as a prior revision did) double-normalized the distribution —
-        // flattening confidence and sometimes shifting the top genre (#1789 review). ONNX mode above
-        // likewise returns raw logits, so both modes now hand callers a consistent logits tensor.
+    /// <summary>
+    /// Native forward pass through the layers to per-genre LOGITS (the linear/identity classification
+    /// head emits logits, un-normalized). Callers that need probabilities apply ApplySoftmax exactly
+    /// once; the tape-based training path (ForwardForTraining) also consumes these raw logits.
+    /// </summary>
+    private Tensor<T> ForwardToLogits(Tensor<T> input)
+    {
         var current = input;
         foreach (var layer in Layers)
         {

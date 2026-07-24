@@ -14,4 +14,10 @@ public class CosyVoiceCloneOptions : VoiceCloningOptions
         NumHeads = 8;
         DropoutRate = 0.1;
     }
+
+    /// <summary>Initializes an independent copy of an existing configuration.</summary>
+    public CosyVoiceCloneOptions(CosyVoiceCloneOptions other)
+        : base(other)
+    {
+    }
 }

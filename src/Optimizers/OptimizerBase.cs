@@ -346,9 +346,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         int configMax = Options.MaximumFeatures > 0 ? Options.MaximumFeatures : totalFeatures;
         int max = maxFeatures ?? Math.Min(configMax, totalFeatures);
 
-        // When neither MinimumFeatures nor MaximumFeatures is explicitly configured,
-        // use all features to avoid random subset selection that can break small-feature models.
-        if (Options.MinimumFeatures == 0 && Options.MaximumFeatures == 0)
+        // The no-selection path must preserve column order. Some optimizers resolve the
+        // default 0/0 bounds to totalFeatures/totalFeatures before reaching this helper;
+        // randomly enumerating all columns in that case trains against a permutation even
+        // though no feature selection was requested.
+        if ((Options.MinimumFeatures == 0 && Options.MaximumFeatures == 0)
+            || (min >= totalFeatures && max >= totalFeatures))
         {
             return Enumerable.Range(0, totalFeatures).ToList();
         }
@@ -633,8 +636,17 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 totalFeatures, Options.MinimumFeatures, Options.MaximumFeatures);
         }
 
-        // Step 2: Apply feature selection to the model BEFORE we check the cache
-        ApplyFeatureSelection(solution, selectedFeaturesIndices);
+        // Step 2: Apply feature selection to the model BEFORE we check the cache.
+        // Rank-3+ tensor inputs were already classified as non-flat above, but
+        // ApplyFeatureSelection can only inspect the first layer's declared
+        // shape. Dense-first sequence forecasters therefore slipped through and
+        // received flat per-sample indices (0..sequenceLength-1) as though they
+        // were tabular columns. Keep the actual-input-rank decision consistent
+        // for both model masking and data slicing.
+        if (!hasNonFlatInput)
+        {
+            ApplyFeatureSelection(solution, selectedFeaturesIndices);
+        }
 
         // Step 3: Generate cache key based on the selected features and check cache
         string cacheKey = GenerateCacheKey(solution, inputData);

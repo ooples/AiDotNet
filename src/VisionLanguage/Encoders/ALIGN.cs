@@ -219,7 +219,7 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         // (or 5 with dropout): Dense + LN + Dense + LN + [Dropout]. Vision
         // encoder lives in Layers, text encoder in TextEncoderLayers.
         int visionBlockSize = _options.DropoutRate > 0 ? 5 : 4;
-        int visionLayerCount = 2 + _options.NumVisionLayers * visionBlockSize;
+        int visionLayerCount = 4 + _options.NumVisionLayers * visionBlockSize;
         SplitDualStreamLayers(
             LayerHelper<T>.CreateDefaultALIGNLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
@@ -241,9 +241,12 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
             return OnnxImageEncoder.Run(input);
         SetTrainingMode(false);
         var current = PreprocessImage(input);
-        foreach (var layer in Layers)
-            current = layer.Forward(current);
-        return current;
+        // ALIGN's native prediction is the vision-side sequential graph.
+        // Enter the canonical eager executor explicitly so a configured or
+        // auto-detected foundation model gets per-layer materialize/release
+        // and inference scratch recycling.
+        TryAutoEnableWeightStreaming(isTrainingOverride: false);
+        return PredictEager(current);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -253,7 +256,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(PreprocessImage(input), expected);
+            // Honor the AdamW optimizer selected by the public constructor.
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
         }
         finally
         {
@@ -339,8 +343,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new ALIGN<T>(Architecture, mp, _options);
-        return new ALIGN<T>(Architecture, _options);
+            return new ALIGN<T>(Architecture, mp, new ALIGNOptions(_options));
+        return new ALIGN<T>(Architecture, new ALIGNOptions(_options));
     }
 
     private Tensor<T> TokenizeText(string text)

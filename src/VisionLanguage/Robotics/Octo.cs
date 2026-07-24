@@ -102,7 +102,12 @@ public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         _options = options ?? new OctoOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honor the configured (paper-aligned) learning rate. OctoOptions.LearningRate defaults to 1e-4
+        // — the AdamW rate Octo (Octo Model Team 2024) and VLA transformers train at — but the optimizer
+        // previously ignored it and used AdamW's built-in default (~1e-3), which overshoots and DIVERGES
+        // on the smaller-scale configurations (MoreData_ShouldNotDegrade: 200-iter loss > 50-iter loss).
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -290,6 +295,16 @@ public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         }
         else
         {
+            // Learnable input PROJECTION of the observation tokens, applied BEFORE the transformer
+            // backbone. Octo (Octo Model Team 2024) tokenizes observations via a patch/linear embedding
+            // and adds positional embeddings before the backbone; CreateDefaultRoboticsActionLayers omits
+            // that leading projection and starts with a LayerNorm. A LayerNorm removes each token's mean,
+            // so a CONSTANT observation input collapses to a position-only value INDEPENDENT of the input
+            // value — different observations (e.g. all-0.1 vs all-0.9) then produce identical embeddings
+            // and outputs (DifferentInputs / DifferentImages collapse). A learnable linear projection
+            // breaks that symmetry (Dense(x) differs for constant 0.1 vs 0.9), matching the paper's
+            // token-embedding stage.
+            Layers.Add(new DenseLayer<T>(_options.VisionDim, new IdentityActivation<T>() as IActivationFunction<T>));
             Layers.AddRange(
                 LayerHelper<T>.CreateDefaultRoboticsActionLayers(
                     _options.VisionDim,
@@ -309,7 +324,9 @@ public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     private void ComputeEncoderDecoderBoundary()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2;
+        // +1 leading input projection, +1 leading vision LayerNorm, + numVisionLayers blocks, + 2 for the
+        // MLP projection (Dense + LayerNorm) that bridges the vision encoder to the decoder.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2;
     }
 
     private Tensor<T> TokenizeText(string text)
@@ -340,7 +357,10 @@ public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        // Drive training with Octo's CONFIGURED optimizer (AdamW at OctoOptions.LearningRate, default the
+        // paper-aligned 1e-4). The 2-arg TrainWithTape used a built-in default rate (~1e-3) that overshot
+        // and diverged on the smaller configs (MoreData_ShouldNotDegrade: 200-iter loss > 50-iter loss).
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

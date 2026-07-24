@@ -317,7 +317,10 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
             var preprocessed = PreprocessTokens(input);
             int validatedSeqLen = preprocessed.Rank == 3 ? preprocessed.Shape[1] : preprocessed.Shape[0];
             var alignedExpected = PreprocessLabels(expected, validatedSeqLen);
-            TrainWithTape(preprocessed, alignedExpected);
+            // Use the model's configured optimizer. Falling back to NeuralNetworkBase's
+            // default Adam step ignores SpanBasedNEROptions.LearningRate (5e-5 for
+            // SpERT) and is large enough to make the generated memorization test diverge.
+            TrainWithTape(preprocessed, alignedExpected, _optimizer);
         }
         finally { SetTrainingMode(false); }
     }

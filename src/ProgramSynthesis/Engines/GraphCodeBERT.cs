@@ -82,6 +82,14 @@ public class GraphCodeBERT<T> : CodeModelBase<T>
             SynthesisType.Neural,
             ProgramLanguage.CSharp,
             CodeTask.Completion,
+            numEncoderLayers: 12,
+            numDecoderLayers: 0,
+            numHeads: 12,
+            modelDimension: 768,
+            feedForwardDimension: 3072,
+            maxSequenceLength: 512,
+            vocabularySize: 50265,
+            dropoutRate: 0.1,
             useDataFlow: true))
     {
     }
@@ -111,18 +119,14 @@ public class GraphCodeBERT<T> : CodeModelBase<T>
         ITokenizer? tokenizer = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), tokenizer)
     {
-        // AdamW (Loshchilov & Hutter 2019) at lr=1e-5 with weight decay 0.01 — the
-        // standard BERT/RoBERTa optimizer (see CodeBERT). With the final LayerNorm
-        // the blow-up is gone; decoupled weight decay keeps the weights (and loss)
-        // from drifting up on longer runs and AMSGrad shrinks the step near
-        // convergence.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        // GraphCodeBERT Appendix A uses Adam with a 2e-4 learning rate for
+        // pre-training. Callers retain complete control by supplying any
+        // IGradientBasedOptimizer through this constructor.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 1e-5,
-                WeightDecay = 0.01,
-                UseAMSGrad = true
+                InitialLearningRate = 2e-4
             });
         InitializeLayersCore();
     }

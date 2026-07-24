@@ -158,6 +158,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _lastCommitmentLoss = NumOps.Zero;
 
@@ -183,6 +184,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = null;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _lastCommitmentLoss = NumOps.Zero;
 
@@ -330,7 +332,10 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
-        // GPU-RESIDENT fast path — recon + commitment on a fused SGD plan. Safe
+        // Fused fast path — reconstruction + commitment using the model's configured
+        // optimizer. The paper default is Adam at 1e-3; callers may inject another
+        // supported optimizer, with unsupported custom optimizers falling through to
+        // the eager tape route below. Safe
         // now that VectorQuantize is fully traceable (argmin + gather + straight-
         // through + commitment loss all via engine ops) so each replay recomputes
         // from the CURRENT slot data instead of freezing the trace-batch argmin
@@ -367,11 +372,13 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
                         "the forward closure, violating its documented Fwd-then-Loss ordering.");
                 return Engine.TensorAdd(recon, commit);
             }
-            if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryResolveOptimizerConfig(
+                    _optimizer, out var optimizerType, out var learningRate,
+                    out var beta1, out var beta2, out var epsilon, out var weightDecay)
+                && AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
                     trainableLayers, input, target,
                     forward: ForwardCombined, computeLoss: ComputeLossCombined,
-                    optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
-                    learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
+                    optimizerType, learningRate, beta1, beta2, epsilon, weightDecay,
                     out T fusedLoss))
             {
                 LastLoss = fusedLoss;
@@ -405,15 +412,8 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         T lossValue = totalLoss.Length > 0 ? totalLoss[0] : NumOps.Zero;
         LastLoss = lossValue;
 
-        T lr = NumOps.FromDouble(0.001);
-        foreach (var param in trainableParams)
-        {
-            if (grads.TryGetValue(param, out var grad))
-            {
-                var update = Engine.TensorMultiplyScalar(grad, lr);
-                Engine.TensorSubtractInPlace(param, update);
-            }
-        }
+        var context = new TapeStepContext<T>(trainableParams, grads, lossValue);
+        _optimizer.Step(context);
     }
 
     /// <summary>

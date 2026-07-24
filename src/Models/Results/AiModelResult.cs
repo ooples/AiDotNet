@@ -3066,7 +3066,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Session-local inference state (populated lazily when used).
         private InferenceOptimizer<T>? _sequenceOptimizer;
         private NeuralNetworkBase<T>? _sequenceOptimizedNeuralModel;
-        private bool _sequenceInitialized;
+        private volatile bool _sequenceInitialized;
         private readonly object _sequenceLock = new();
 
         internal InferenceSequence(
@@ -3121,12 +3121,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 var optimized = EnsureSequenceOptimizationsInitialized(neuralModel);
                 if (optimized != null)
                 {
-                    var optimizedOutput = optimized.Predict(inputTensor);
-                    if (optimizedOutput is TOutput output)
+                    // Stateful inference models mutate their sequence-local KV cache during Predict.
+                    // Calls for different sequences can run concurrently, but calls on the same sequence
+                    // must be serialized so cache updates cannot race with one another or with Reset.
+                    lock (_sequenceLock)
                     {
-                        return _result.PreprocessingInfo?.IsTargetFitted == true
-                            ? _result.PreprocessingInfo.InverseTransformPredictions(output)
-                            : output;
+                        var optimizedOutput = optimized.Predict(inputTensor);
+                        if (optimizedOutput is TOutput output)
+                        {
+                            return _result.PreprocessingInfo?.IsTargetFitted == true
+                                ? _result.PreprocessingInfo.InverseTransformPredictions(output)
+                                : output;
+                        }
                     }
                 }
             }
@@ -3230,69 +3236,76 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
                 try
                 {
-                    if (_config != null)
+                    // Every sequence owns its optimizer and cache, but all sequences clone the same source
+                    // model. Model cloning resolves/serializes lazy layer state, which is not safe to enumerate
+                    // concurrently. Share the result-level optimization lock so independent sequence setup
+                    // cannot race either another sequence or stateless optimization of the same model.
+                    lock (_result._inferenceOptimizationLock)
                     {
-                        // If Multi-LoRA is in use, isolate per-sequence task selection by cloning and selecting task
-                        // before applying any further inference optimizations.
-                        NeuralNetworkBase<T> modelForSequence = model;
-                        bool hasMultiLoRATask = !string.IsNullOrWhiteSpace(_multiLoRATask);
-                        if (hasMultiLoRATask && _multiLoRATask is not null)
+                        if (_config != null)
                         {
-                            try
+                            // If Multi-LoRA is in use, isolate per-sequence task selection by cloning and selecting task
+                            // before applying any further inference optimizations.
+                            NeuralNetworkBase<T> modelForSequence = model;
+                            bool hasMultiLoRATask = !string.IsNullOrWhiteSpace(_multiLoRATask);
+                            if (hasMultiLoRATask && _multiLoRATask is not null)
                             {
-                                modelForSequence = (NeuralNetworkBase<T>)model.Clone();
+                                try
+                                {
+                                    modelForSequence = (NeuralNetworkBase<T>)model.Clone();
 
-                                // Shared with the serving batcher (AiDotNet.LoRA.LoRAAdapterSelection) so the
-                                // "switch every adapter layer to this task" logic lives in exactly one place.
-                                int appliedCount = AiDotNet.LoRA.LoRAAdapterSelection.SelectTask(modelForSequence, _multiLoRATask);
+                                    // Shared with the serving batcher (AiDotNet.LoRA.LoRAAdapterSelection) so the
+                                    // "switch every adapter layer to this task" logic lives in exactly one place.
+                                    int appliedCount = AiDotNet.LoRA.LoRAAdapterSelection.SelectTask(modelForSequence, _multiLoRATask);
 
-                                InferenceDiagnostics.RecordDecision(
-                                    area: "InferenceSession",
-                                    feature: "MultiLoRA",
-                                    enabled: appliedCount > 0,
-                                    reason: appliedCount > 0 ? $"Task={_multiLoRATask}" : $"NoMultiLoRAAdapters(Task={_multiLoRATask})");
+                                    InferenceDiagnostics.RecordDecision(
+                                        area: "InferenceSession",
+                                        feature: "MultiLoRA",
+                                        enabled: appliedCount > 0,
+                                        reason: appliedCount > 0 ? $"Task={_multiLoRATask}" : $"NoMultiLoRAAdapters(Task={_multiLoRATask})");
+                                }
+                                catch (Exception ex)
+                                {
+                                    InferenceDiagnostics.RecordException("InferenceSession", "MultiLoRA", ex, $"Task={_multiLoRATask};FallbackToBaseModel");
+                                    modelForSequence = model;
+                                }
                             }
-                            catch (Exception ex)
+
+                            // In a session, prefer causal masking defaults when user left it as Auto.
+                            var sessionConfig = _config.AttentionMasking == AiDotNet.Configuration.AttentionMaskingMode.Auto
+                                ? new AiDotNet.Configuration.InferenceOptimizationConfig
+                                {
+                                    EnableFlashAttention = _config.EnableFlashAttention,
+                                    EnableKVCache = _config.EnableKVCache,
+                                    EnablePagedKVCache = _config.EnablePagedKVCache,
+                                    PagedKVCacheBlockSize = _config.PagedKVCacheBlockSize,
+                                    MaxBatchSize = _config.MaxBatchSize,
+                                    KVCacheMaxSizeMB = _config.KVCacheMaxSizeMB,
+                                    KVCachePrecision = _config.KVCachePrecision,
+                                    KVCacheQuantization = _config.KVCacheQuantization,
+                                    UseSlidingWindowKVCache = _config.UseSlidingWindowKVCache,
+                                    KVCacheWindowSize = _config.KVCacheWindowSize,
+                                    EnableBatching = _config.EnableBatching,
+                                    SpeculativeDecoding = _config.SpeculativeDecoding.Clone(),
+                                    EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization,
+                                    AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal
+                                }
+                                : _config;
+
+                            var optimizer = new InferenceOptimizer<T>(sessionConfig);
+                            // Flow the user's speculative-decoding draft (builder ConfigureSpeculativeDecoding) into the
+                            // in-session optimizer so its SpeculativeDecoder uses the chosen draft instead of the default
+                            // N-gram; when none was supplied the optimizer falls back to the N-gram draft itself.
+                            if (_result.ServingDraftModel is { } sessionDraft)
                             {
-                                InferenceDiagnostics.RecordException("InferenceSession", "MultiLoRA", ex, $"Task={_multiLoRATask};FallbackToBaseModel");
-                                modelForSequence = model;
+                                optimizer.SetCustomDraftModel(sessionDraft);
                             }
+                            var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(modelForSequence, cloneModel: ReferenceEquals(modelForSequence, model));
+
+                            _sequenceOptimizer = optimizer;
+                            // If Multi-LoRA was requested, keep the per-sequence model even when no other optimizations apply.
+                            _sequenceOptimizedNeuralModel = anyApplied || !ReferenceEquals(modelForSequence, model) ? optimizedModel : null;
                         }
-
-                        // In a session, prefer causal masking defaults when user left it as Auto.
-                        var sessionConfig = _config.AttentionMasking == AiDotNet.Configuration.AttentionMaskingMode.Auto
-                            ? new AiDotNet.Configuration.InferenceOptimizationConfig
-                            {
-                                EnableFlashAttention = _config.EnableFlashAttention,
-                                EnableKVCache = _config.EnableKVCache,
-                                EnablePagedKVCache = _config.EnablePagedKVCache,
-                                PagedKVCacheBlockSize = _config.PagedKVCacheBlockSize,
-                                MaxBatchSize = _config.MaxBatchSize,
-                                KVCacheMaxSizeMB = _config.KVCacheMaxSizeMB,
-                                KVCachePrecision = _config.KVCachePrecision,
-                                KVCacheQuantization = _config.KVCacheQuantization,
-                                UseSlidingWindowKVCache = _config.UseSlidingWindowKVCache,
-                                KVCacheWindowSize = _config.KVCacheWindowSize,
-                                EnableBatching = _config.EnableBatching,
-                                SpeculativeDecoding = _config.SpeculativeDecoding.Clone(),
-                                EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization,
-                                AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal
-                            }
-                            : _config;
-
-                        var optimizer = new InferenceOptimizer<T>(sessionConfig);
-                        // Flow the user's speculative-decoding draft (builder ConfigureSpeculativeDecoding) into the
-                        // in-session optimizer so its SpeculativeDecoder uses the chosen draft instead of the default
-                        // N-gram; when none was supplied the optimizer falls back to the N-gram draft itself.
-                        if (_result.ServingDraftModel is { } sessionDraft)
-                        {
-                            optimizer.SetCustomDraftModel(sessionDraft);
-                        }
-                        var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(modelForSequence, cloneModel: ReferenceEquals(modelForSequence, model));
-
-                        _sequenceOptimizer = optimizer;
-                        // If Multi-LoRA was requested, keep the per-sequence model even when no other optimizations apply.
-                        _sequenceOptimizedNeuralModel = anyApplied || !ReferenceEquals(modelForSequence, model) ? optimizedModel : null;
                     }
                 }
                 catch (Exception ex)

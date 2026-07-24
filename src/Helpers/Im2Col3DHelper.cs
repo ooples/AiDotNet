@@ -73,25 +73,23 @@ internal static class Im2Col3DHelper
             throw new ArgumentException(
                 $"Im2Col3D output shape mismatch: expected [{rowsTotal}, {colsPerRow}], got [{m.Shape[0]}, {m.Shape[1]}].");
 
-        // x is laid out [B, CI, ID, IH, IW] row-major (NCDHW). Stride per axis:
-        //   stride_b   = CI · ID · IH · IW
-        //   stride_ci  = ID · IH · IW
-        //   stride_id  = IH · IW
-        //   stride_ih  = IW
-        //   stride_iw  = 1
-        long stride_b = (long)ci * id * ih * iw;
-        long stride_ci = (long)id * ih * iw;
-        long stride_id = (long)ih * iw;
-        long stride_ih = iw;
+        // Access the raw backing vectors through AiDotNet.Tensors' friend-assembly API.
+        // Views share this storage, so all indexing below honors their physical strides
+        // and offsets instead of using detached logical copies.
+        var xData = x.DataVector.GetDataArray();
+        var mData = m.DataVector.GetDataArray();
+        int[] xStrides = x.Strides.ToArray();
+        int[] mStrides = m.Strides.ToArray();
+        long xOffset = x.LogicalToStorageIndex(0);
+        long mOffset = m.LogicalToStorageIndex(0);
 
-        // m is row-major [rowsTotal, colsPerRow]. Stride per axis:
-        //   stride_row = colsPerRow
-        //   stride_col = 1
-        var xData = GetReadableDataArray(x);     // source (read-only)
-        var mData = GetWritableDataArray(m);     // destination (mutated in place)
-        long mLen = (long)rowsTotal * colsPerRow;
-        // Zero-fill m first — out-of-bounds positions stay zero.
-        Array.Clear(mData, 0, (int)Math.Min(mLen, int.MaxValue));
+        // Zero-fill only logical destination elements so views cannot clear unrelated storage.
+        for (int row = 0; row < rowsTotal; row++)
+        {
+            long mRow = mOffset + (long)row * mStrides[0];
+            for (int col = 0; col < colsPerRow; col++)
+                mData[mRow + (long)col * mStrides[1]] = default!;
+        }
 
         // For each output spatial position, copy the receptive field into the
         // corresponding row of m. Parallelizing over the batch+depth axis
@@ -102,8 +100,8 @@ internal static class Im2Col3DHelper
             int bi = bOdIdx / od;
             int ood = bOdIdx % od;
 
-            long xBaseB = bi * stride_b;
-            long mBaseB = ((long)bi * od + ood) * (long)oh * ow * colsPerRow;
+            long xBaseB = xOffset + (long)bi * xStrides[0];
+            long rowBase = ((long)bi * od + ood) * oh * ow;
             int srcD = ood * stride - padding;
 
             for (int ooh = 0; ooh < oh; ooh++)
@@ -112,13 +110,14 @@ internal static class Im2Col3DHelper
                 for (int oow = 0; oow < ow; oow++)
                 {
                     int srcW = oow * stride - padding;
-                    long mRow = mBaseB + ((long)ooh * ow + oow) * colsPerRow;
+                    long row = rowBase + (long)ooh * ow + oow;
+                    long mRow = mOffset + row * mStrides[0];
 
                     // Walk the receptive field.
                     long col = 0;
                     for (int cci = 0; cci < ci; cci++)
                     {
-                        long xBaseCi = xBaseB + cci * stride_ci;
+                        long xBaseCi = xBaseB + (long)cci * xStrides[1];
                         for (int dd = 0; dd < kd; dd++)
                         {
                             int srcDd = srcD + dd;
@@ -128,7 +127,7 @@ internal static class Im2Col3DHelper
                                 col += (long)kh * kw;
                                 continue;
                             }
-                            long xBaseD = xBaseCi + srcDd * stride_id;
+                            long xBaseD = xBaseCi + (long)srcDd * xStrides[2];
                             for (int hh = 0; hh < kh; hh++)
                             {
                                 int srcHh = srcH + hh;
@@ -137,13 +136,15 @@ internal static class Im2Col3DHelper
                                     col += kw;
                                     continue;
                                 }
-                                long xBaseH = xBaseD + srcHh * stride_ih;
+                                long xBaseH = xBaseD + (long)srcHh * xStrides[3];
                                 for (int ww = 0; ww < kw; ww++)
                                 {
                                     int srcWw = srcW + ww;
                                     if (srcWw >= 0 && srcWw < iw)
                                     {
-                                        mData[mRow + col] = xData[xBaseH + srcWw];
+                                        long mIndex = mRow + col * mStrides[1];
+                                        long xIndex = xBaseH + (long)srcWw * xStrides[4];
+                                        mData[mIndex] = xData[xIndex];
                                     }
                                     col++;
                                 }
@@ -183,15 +184,32 @@ internal static class Im2Col3DHelper
             throw new ArgumentException(
                 $"Col2Im3D gradient shape mismatch: expected [{rowsTotal}, {colsPerRow}], got [{m.Shape[0]}, {m.Shape[1]}].");
 
-        long stride_b = (long)ci * id * ih * iw;
-        long stride_ci = (long)id * ih * iw;
-        long stride_id = (long)ih * iw;
-        long stride_ih = iw;
+        var xData = x.DataVector.GetDataArray();
+        var mData = m.DataVector.GetDataArray();
+        int[] xStrides = x.Strides.ToArray();
+        int[] mStrides = m.Strides.ToArray();
+        long xOffset = x.LogicalToStorageIndex(0);
+        long mOffset = m.LogicalToStorageIndex(0);
 
-        var xData = GetWritableDataArray(x);     // destination (cleared + scatter-add)
-        var mData = GetReadableDataArray(m);     // source (read-only)
-        long xLen = (long)b * stride_b;
-        Array.Clear(xData, 0, (int)Math.Min(xLen, int.MaxValue));
+        // Clear only logical destination elements; x may be a view over larger storage.
+        for (int bi = 0; bi < b; bi++)
+        {
+            long xBaseB = xOffset + (long)bi * xStrides[0];
+            for (int cci = 0; cci < ci; cci++)
+            {
+                long xBaseCi = xBaseB + (long)cci * xStrides[1];
+                for (int dd = 0; dd < id; dd++)
+                {
+                    long xBaseD = xBaseCi + (long)dd * xStrides[2];
+                    for (int hh = 0; hh < ih; hh++)
+                    {
+                        long xBaseH = xBaseD + (long)hh * xStrides[3];
+                        for (int ww = 0; ww < iw; ww++)
+                            xData[xBaseH + (long)ww * xStrides[4]] = default!;
+                    }
+                }
+            }
+        }
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -202,7 +220,7 @@ internal static class Im2Col3DHelper
         // race-free without locks.
         Parallel.For(0, b, (bi) =>
         {
-            long xBaseB = bi * stride_b;
+            long xBaseB = xOffset + (long)bi * xStrides[0];
             for (int ood = 0; ood < od; ood++)
             {
                 int dstD = ood * stride - padding;
@@ -212,12 +230,13 @@ internal static class Im2Col3DHelper
                     for (int oow = 0; oow < ow; oow++)
                     {
                         int dstW = oow * stride - padding;
-                        long mRow = ((long)bi * od * oh * ow + (long)ood * oh * ow + (long)ooh * ow + oow) * colsPerRow;
+                        long row = (long)bi * od * oh * ow + (long)ood * oh * ow + (long)ooh * ow + oow;
+                        long mRow = mOffset + row * mStrides[0];
 
                         long col = 0;
                         for (int cci = 0; cci < ci; cci++)
                         {
-                            long xBaseCi = xBaseB + cci * stride_ci;
+                            long xBaseCi = xBaseB + (long)cci * xStrides[1];
                             for (int dd = 0; dd < kd; dd++)
                             {
                                 int srcDd = dstD + dd;
@@ -226,7 +245,7 @@ internal static class Im2Col3DHelper
                                     col += (long)kh * kw;
                                     continue;
                                 }
-                                long xBaseD = xBaseCi + srcDd * stride_id;
+                                long xBaseD = xBaseCi + (long)srcDd * xStrides[2];
                                 for (int hh = 0; hh < kh; hh++)
                                 {
                                     int srcHh = dstH + hh;
@@ -235,14 +254,15 @@ internal static class Im2Col3DHelper
                                         col += kw;
                                         continue;
                                     }
-                                    long xBaseH = xBaseD + srcHh * stride_ih;
+                                    long xBaseH = xBaseD + (long)srcHh * xStrides[3];
                                     for (int ww = 0; ww < kw; ww++)
                                     {
                                         int srcWw = dstW + ww;
                                         if (srcWw >= 0 && srcWw < iw)
                                         {
-                                            long xIdx = xBaseH + srcWw;
-                                            xData[xIdx] = numOps.Add(xData[xIdx], mData[mRow + col]);
+                                            long xIdx = xBaseH + (long)srcWw * xStrides[4];
+                                            long mIdx = mRow + col * mStrides[1];
+                                            xData[xIdx] = numOps.Add(xData[xIdx], mData[mIdx]);
                                         }
                                         col++;
                                     }
@@ -255,52 +275,4 @@ internal static class Im2Col3DHelper
         });
     }
 
-    /// <summary>
-    /// Extracts the contiguous backing array from a row-major Tensor. The
-    /// AiDotNet.Tensors contract guarantees the storage is a contiguous
-    /// T[] in row-major order; we use raw array indexing for the hot loops
-    /// because the per-element <c>Tensor[i]</c> accessor goes through a
-    /// virtual <c>NumericOperations</c> dispatch that is unacceptable in a
-    /// 32k+ iteration inner loop.
-    /// </summary>
-    private static T[] GetReadableDataArray<T>(Tensor<T> t)
-    {
-        var span = t.Data.Span;
-        // Tensor<T>.Data is a Memory<T>; the backing storage is always a
-        // managed T[] for AiDotNet.Tensors allocations. Recovering the
-        // array via MemoryMarshal.TryGetArray is the documented
-        // zero-copy path.
-        if (System.Runtime.InteropServices.MemoryMarshal.TryGetArray<T>(t.Data, out var seg)
-            && seg.Array is not null && seg.Offset == 0 && seg.Count == t.Length)
-        {
-            return seg.Array;
-        }
-        // Fallback: copy out — safe ONLY for read paths. Writable destinations
-        // must never use this (see GetWritableDataArray) because mutations would
-        // land in the detached copy and never reach the original tensor.
-        var copy = new T[t.Length];
-        span.CopyTo(copy);
-        return copy;
-    }
-
-    /// <summary>
-    /// Returns the backing array for a tensor that will be MUTATED in place
-    /// (Im2Col3D's <c>m</c> destination, Col2Im3D's <c>x</c> destination).
-    /// Unlike <see cref="GetReadableDataArray"/> there is no copy-out fallback:
-    /// if the tensor is not directly array-backed (offset 0, exact length) we
-    /// fail fast, because writing through a detached copy would silently discard
-    /// the Conv3D forward/backward results.
-    /// </summary>
-    private static T[] GetWritableDataArray<T>(Tensor<T> t)
-    {
-        if (System.Runtime.InteropServices.MemoryMarshal.TryGetArray<T>(t.Data, out var seg)
-            && seg.Array is not null && seg.Offset == 0 && seg.Count == t.Length)
-        {
-            return seg.Array;
-        }
-
-        throw new InvalidOperationException(
-            "Im2Col3DHelper requires array-backed (offset-0, full-length) writable tensors for " +
-            "destination buffers; a sliced or non-array-backed tensor would silently lose writes.");
-    }
 }

@@ -665,30 +665,33 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         for (int d = 0; d < batchDims; d++)
             flatBatch *= input.Shape[d];
 
-        Tensor<T> inputNHWC;
+        // Engine.GridSample is NCHW (PyTorch F.grid_sample convention, Tensors #777): input
+        // [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. Work in
+        // channels-first throughout and only permute at the boundary to match the caller's layout.
+        Tensor<T> inputNCHW;
         if (_inputHadChannel)
         {
             if (channelFirst)
             {
-                var inputNCHW = Engine.Reshape(input, [flatBatch, channelCount, _inputHeight, _inputWidth]);
-                // Via Engine so the gradient tape records the permute — direct
-                // .Transpose bypasses the tape and breaks backward through the
-                // spatial transformer's localization head.
-                inputNHWC = Engine.TensorPermute(inputNCHW, new[] { 0, 2, 3, 1 });
+                inputNCHW = Engine.Reshape(input, [flatBatch, channelCount, _inputHeight, _inputWidth]);
             }
             else
             {
-                inputNHWC = Engine.Reshape(input, [flatBatch, _inputHeight, _inputWidth, channelCount]);
+                var inputNHWC = Engine.Reshape(input, [flatBatch, _inputHeight, _inputWidth, channelCount]);
+                // Via Engine so the gradient tape records the permute — direct
+                // .Transpose bypasses the tape and breaks backward through the
+                // spatial transformer's localization head.
+                inputNCHW = Engine.TensorPermute(inputNHWC, new[] { 0, 3, 1, 2 });
             }
         }
         else
         {
-            inputNHWC = Engine.Reshape(input, [flatBatch, _inputHeight, _inputWidth, 1]);
+            inputNCHW = Engine.Reshape(input, [flatBatch, 1, _inputHeight, _inputWidth]);
         }
 
-        _lastInput = inputNHWC;
+        _lastInput = inputNCHW;
 
-        var channelSum = Engine.ReduceSum(inputNHWC, new[] { 3 }, keepDims: false);
+        var channelSum = Engine.ReduceSum(inputNCHW, new[] { 1 }, keepDims: false);
         var channelMean = Engine.TensorDivideScalar(channelSum, NumOps.FromDouble(channelCount));
         var flattenedInput = Engine.Reshape(channelMean, [flatBatch, _inputHeight * _inputWidth]);
         _lastFlattenedInput = flattenedInput;
@@ -709,15 +712,16 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         var theta = _lastTransformationMatrix;
         var grid = Engine.AffineGrid(theta, _outputHeight, _outputWidth);
-        var output = Engine.GridSample(inputNHWC, grid);
+        var output = Engine.GridSample(inputNCHW, grid);   // [B, C, outH, outW] (NCHW)
 
         _lastOutput = output;
 
         if (_inputHadChannel)
         {
+            // output is NCHW; channel-first callers keep it, channel-last callers get NHWC.
             Tensor<T> outputForReshape = _inputChannelFirst
-                ? Engine.TensorPermute(output, new[] { 0, 3, 1, 2 })
-                : output;
+                ? output
+                : Engine.TensorPermute(output, new[] { 0, 2, 3, 1 });
 
             var outShape = new int[batchDims + 3];
             for (int d = 0; d < batchDims; d++)
@@ -1263,31 +1267,32 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         for (int d = 0; d < batchDims; d++)
             flatBatch *= inputTensor.Shape[d];
 
-        // Convert to NHWC format
-        Tensor<T> inputNHWC;
+        // GridSampleGpu is NCHW (input [batch, C, H, W] -> output [batch, C, outH, outW]), matching the
+        // CPU Engine.GridSample. Work in channels-first; only permute channel-last callers at the boundary.
+        Tensor<T> inputNCHW;
         if (_inputHadChannel)
         {
             if (channelFirst)
             {
-                var inputNCHW = inputTensor.Reshape([flatBatch, channelCount, _inputHeight, _inputWidth]);
-                inputNHWC = inputNCHW.Transpose([0, 2, 3, 1]);
+                inputNCHW = inputTensor.Reshape([flatBatch, channelCount, _inputHeight, _inputWidth]);
             }
             else
             {
-                inputNHWC = inputTensor.Reshape([flatBatch, _inputHeight, _inputWidth, channelCount]);
+                var inputNHWC = inputTensor.Reshape([flatBatch, _inputHeight, _inputWidth, channelCount]);
+                inputNCHW = inputNHWC.Transpose([0, 3, 1, 2]);
             }
         }
         else
         {
-            inputNHWC = inputTensor.Reshape([flatBatch, _inputHeight, _inputWidth, 1]);
+            inputNCHW = inputTensor.Reshape([flatBatch, 1, _inputHeight, _inputWidth]);
         }
 
-        // Upload NHWC input to GPU for grid sampling
-        var inputNHWCGpu = gpuEngine.UploadToGpu(inputNHWC, GpuTensorRole.Activation);
+        // Upload NCHW input to GPU for grid sampling
+        var inputNCHWGpu = gpuEngine.UploadToGpu(inputNCHW, GpuTensorRole.Activation);
 
         // Step 2: Prepare flattened input for localization network (GPU-resident)
         // Reduce channel dimension and flatten for FC layers
-        var channelSum = Engine.ReduceSum(inputNHWC, new[] { 3 }, keepDims: false);
+        var channelSum = Engine.ReduceSum(inputNCHW, new[] { 1 }, keepDims: false);
         var channelMean = Engine.TensorDivideScalar(channelSum, NumOps.FromDouble(channelCount));
         var flattenedInput = channelMean.Reshape([flatBatch, _inputHeight * _inputWidth]);
 
@@ -1314,19 +1319,17 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // Step 5: Generate affine sampling grid on GPU (GPU-resident)
         var gridGpu = gpuEngine.AffineGridGpu(thetaGpu, flatBatch, _outputHeight, _outputWidth);
 
-        // Step 6: Sample from input using grid (GPU-resident)
-        var outputNHWCGpu = gpuEngine.GridSampleGpu(inputNHWCGpu, gridGpu, paddingMode: 0, alignCorners: false);
+        // Step 6: Sample from input using grid (GPU-resident). NCHW in -> NCHW out.
+        var outputNCHW = gpuEngine.GridSampleGpu(inputNCHWGpu, gridGpu, paddingMode: 0, alignCorners: false);
 
-        // Step 7: Convert output back to original format
-        // Download for shape handling (output format conversion)
-        var outputNHWC = outputNHWCGpu;
-
+        // Step 7: Convert output back to original format. output is NCHW; channel-first callers
+        // keep it, channel-last callers get NHWC.
         Tensor<T> outputTensor;
         if (_inputHadChannel)
         {
             Tensor<T> outputForReshape = _inputChannelFirst
-                ? outputNHWC.Transpose([0, 3, 1, 2])
-                : outputNHWC;
+                ? outputNCHW
+                : outputNCHW.Transpose([0, 2, 3, 1]);
 
             var outShape = new int[batchDims + 3];
             for (int d = 0; d < batchDims; d++)
@@ -1352,18 +1355,18 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 outShape[d] = _originalInputShape[d];
             outShape[batchDims] = _outputHeight;
             outShape[batchDims + 1] = _outputWidth;
-            outputTensor = outputNHWC.Reshape([flatBatch, _outputHeight, _outputWidth])
+            outputTensor = outputNCHW.Reshape([flatBatch, _outputHeight, _outputWidth])
                                      .Reshape(outShape);
         }
 
         // Cache for backward pass (training mode only)
         if (IsTrainingMode)
         {
-            _lastInput = inputNHWC;
+            _lastInput = inputNCHW;
             _lastFlattenedInput = flattenedInput;
             _lastLocalization1 = localization1Gpu;
             _lastTransformationMatrix = thetaGpu;
-            _lastOutput = outputNHWC;
+            _lastOutput = outputNCHW;
         }
 
         // Upload final output to GPU

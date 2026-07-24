@@ -64,7 +64,17 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public string Name => "NeuralFP";
 
     /// <inheritdoc />
-    public int FingerprintLength => _options.EmbeddingDim;
+    public int FingerprintLength => EffectiveEmbeddingDim;
+
+    /// <summary>
+    /// The single effective embedding width used CONSISTENTLY across the model — the projection-head
+    /// layers, the reported <see cref="FingerprintLength"/>, the <c>FrameCount</c>, and the metadata.
+    /// The architecture's <c>OutputSize</c> wins when the caller specified one (the head is built to
+    /// that width, see InitializeLayers); otherwise the option default. Reading it everywhere prevents
+    /// the model from EMITTING an OutputSize-wide embedding while REPORTING <c>_options.EmbeddingDim</c>,
+    /// which corrupted FrameCount and the fingerprint length whenever the two disagreed.
+    /// </summary>
+    private int EffectiveEmbeddingDim => Architecture.OutputSize > 0 ? Architecture.OutputSize : _options.EmbeddingDim;
 
     #endregion
 
@@ -150,7 +160,7 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             Duration = audio.Length / (double)_options.SampleRate,
             SampleRate = _options.SampleRate,
             Algorithm = "NeuralFP",
-            FrameCount = Math.Max(1, data.Length / Math.Max(1, _options.EmbeddingDim))
+            FrameCount = Math.Max(1, data.Length / Math.Max(1, EffectiveEmbeddingDim))
         };
     }
 
@@ -217,9 +227,14 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
+        // The embedding width is the architecture's OutputSize when the caller specified one (the
+        // generated test builds the model with outputSize = the expected fingerprint length); fall
+        // back to the option default otherwise. Honouring it keeps the projection head's width equal
+        // to the declared output dimensionality.
         else Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralFPLayers(
             numMels: _options.NumMels, baseFilters: _options.BaseFilters,
-            numConvBlocks: _options.NumConvBlocks, embeddingDim: _options.EmbeddingDim,
+            numConvBlocks: _options.NumConvBlocks,
+            embeddingDim: EffectiveEmbeddingDim,
             dropoutRate: _options.DropoutRate));
     }
 
@@ -227,7 +242,21 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        // A fingerprint is an INFERENCE embedding — it must be deterministic. IsTrainingMode is true
+        // on construction (so the model is ready to train), which leaves the encoder's DropoutLayer
+        // active; two Predict calls on the same clip would then draw different dropout masks and give
+        // different embeddings (breaking SimilarInputs_ProduceSimilarEmbeddings, where two near-equal
+        // inputs must map to near-equal vectors). Force inference mode for the forward, then restore.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -266,7 +295,7 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             Description = "Neural Audio Fingerprint for learned audio identification (Chang et al., 2021)",
             Complexity = _options.NumConvBlocks
         };
-        m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();
+        m.AdditionalInfo["EmbeddingDim"] = EffectiveEmbeddingDim.ToString();
         m.AdditionalInfo["BaseFilters"] = _options.BaseFilters.ToString();
         return m;
     }

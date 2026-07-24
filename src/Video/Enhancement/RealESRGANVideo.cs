@@ -90,6 +90,7 @@ public class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
         _options = options ?? new RealESRGANVideoOptions();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SetBaseTrainOptimizer(_optimizer);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

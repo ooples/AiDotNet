@@ -35,8 +35,10 @@ namespace AiDotNet.TextToSpeech.Latest;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "IndexTTS 2: Improved Zero-Shot Text-to-Speech",
-    "https://github.com/indexteam/IndexTTS"
+    "IndexTTS2: A Breakthrough in Emotionally Expressive and Duration-Controlled Auto-Regressive Zero-Shot Text-to-Speech",
+    "https://arxiv.org/abs/2506.21619",
+    Year = 2025,
+    Authors = "Siyi Zhou, Yiquan Zhou, Yi He, Xun Zhou, Jinchao Wang, Wei Deng, Jingchen Shu"
 )]
 public class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
 {
@@ -79,7 +81,7 @@ public class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new IndexTTS2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -176,7 +178,7 @@ public class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -271,9 +273,18 @@ public class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new IndexTTS2<T>(Architecture, mp, _options);
-        return new IndexTTS2<T>(Architecture, _options, _optimizer);
+            return new IndexTTS2<T>(Architecture, mp, new IndexTTS2Options(_options));
+        return new IndexTTS2<T>(Architecture, new IndexTTS2Options(_options));
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
 
     private void ThrowIfDisposed()
     {

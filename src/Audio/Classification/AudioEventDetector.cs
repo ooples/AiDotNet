@@ -537,13 +537,19 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
             return OnnxEncoder.Run(input);
         }
 
-        // Native mode: run through layers
+        // Native mode: run through layers to per-class logits, then apply a per-class SIGMOID.
+        // Sound event detection is a MULTI-LABEL task (Kong et al. 2020, "PANNs": each of the N
+        // events is independently present/absent), so the inference output is a per-class presence
+        // PROBABILITY in [0, 1] — not raw logits and not a softmax over mutually-exclusive classes.
+        // Training runs on the raw logits (ForwardForTraining walks the same layers WITHOUT this
+        // sigmoid, and the loss is applied to logits), the standard train-on-logits / predict-with-
+        // sigmoid pattern; this keeps the class scores non-negative and bounded at inference.
         var current = input;
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
-        return current;
+        return Engine.Sigmoid(current);
     }
 
     /// <summary>
@@ -827,15 +833,16 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
             }
         }
 
-        // Run through network
+        // Run through network. PredictCore already applies the per-class SIGMOID for this
+        // MULTI-LABEL task (each event is independently present/absent), so `output` is already
+        // per-class presence PROBABILITIES in [0, 1]. Copy them directly — re-applying a sigmoid
+        // here would compute sigmoid(sigmoid(x)) and flatten every native-mode / Detect* score.
         var output = Predict(input);
 
-        // Apply sigmoid for multi-label
         var scores = new T[ClassLabels.Count];
         for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
         {
-            double logit = NumOps.ToDouble(output[i]);
-            scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
+            scores[i] = output[i];
         }
 
         return scores;

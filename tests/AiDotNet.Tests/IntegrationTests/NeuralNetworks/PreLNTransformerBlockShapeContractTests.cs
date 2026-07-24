@@ -44,4 +44,28 @@ public sealed class PreLNTransformerBlockShapeContractTests
         Assert.Equal([-1, HiddenSize], network.Layers[1].GetInputShape());
         Assert.Equal([-1, HiddenSize], network.Layers[1].GetOutputShape());
     }
+
+    [Fact]
+    public void ConstructorKnownWidths_ParameterLayoutIsStableBeforeFirstForward()
+    {
+        const int sequenceLength = 4;
+        const int hiddenSize = 8;
+        var attention = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: sequenceLength,
+            embeddingDimension: hiddenSize,
+            numHeads: 4,
+            numKVHeads: 2);
+        var block = new PreLNTransformerBlock<float>(
+            hiddenSize: hiddenSize,
+            ffnDim: 16,
+            attention: attention,
+            gated: true);
+
+        var before = block.GetParameters();
+        block.Forward(new Tensor<float>([1, sequenceLength, hiddenSize]));
+        var after = block.GetParameters();
+
+        Assert.True(before.Length > 0);
+        Assert.Equal(before.Length, after.Length);
+    }
 }

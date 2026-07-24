@@ -91,6 +91,7 @@ public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
+        TryAutoEnableWeightStreaming();
     }
 
     public Chameleon(
@@ -108,6 +109,7 @@ public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         base.EmbeddingDim = _options.DecoderDim;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
+        TryAutoEnableWeightStreaming();
     }
 
     public int EmbeddingDimension => _options.DecoderDim;
@@ -355,10 +357,11 @@ public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+
+        // The native graph is the sequential Layers pipeline. Delegate to the
+        // canonical executor so foundation-scale instances actually perform
+        // per-layer streaming materialization/release and scratch recycling.
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -366,8 +369,14 @@ public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -387,6 +396,22 @@ public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    // Chameleon's lazy 4096-wide decoder reports few/no parameters before its
+    // first forward, which is too late for automatic weight streaming: that
+    // forward materializes the multi-billion-parameter stack. Provide a
+    // conservative structural estimate so native paper-scale instances engage
+    // streaming before AllocateLazyWeight is reached.
+    protected override long EstimateStructuralParameterCount()
+    {
+        if (!_useNativeMode)
+            return 0L;
+        long visionDim = _options.VisionDim;
+        long decoderDim = _options.DecoderDim;
+        long vision = (long)_options.NumVisionLayers * 12L * visionDim * visionDim;
+        long decoder = (long)_options.NumDecoderLayers * 12L * decoderDim * decoderDim;
+        return vision + decoder;
+    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {

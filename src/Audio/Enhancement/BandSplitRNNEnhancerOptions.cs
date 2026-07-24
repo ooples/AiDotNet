@@ -24,6 +24,30 @@ namespace AiDotNet.Audio.Enhancement;
 /// </remarks>
 public class BandSplitRNNEnhancerOptions : ModelOptions
 {
+    /// <summary>Initializes options with the paper-default Band-Split RNN configuration.</summary>
+    public BandSplitRNNEnhancerOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by deep-copying all enhancer settings.</summary>
+    public BandSplitRNNEnhancerOptions(BandSplitRNNEnhancerOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        SampleRate = other.SampleRate;
+        FFTSize = other.FFTSize;
+        HopLength = other.HopLength;
+        Variant = other.Variant;
+        NumBands = other.NumBands;
+        BandRnnHiddenSize = other.BandRnnHiddenSize;
+        NumRnnLayers = other.NumRnnLayers;
+        FusionDim = other.FusionDim;
+        NumFreqBins = other.NumFreqBins;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+    }
+
     #region Audio
 
     /// <summary>Gets or sets the expected audio sample rate in Hz.</summary>

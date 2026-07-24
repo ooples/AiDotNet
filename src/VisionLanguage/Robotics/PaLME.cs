@@ -376,22 +376,16 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         int b = bse.Shape[0];
         int s = bse.Shape[1];
         int e = bse.Shape[2];
-        var pooled = new Tensor<T>(new[] { b, e });
-        var src = bse.AsSpan();
-        var dst = pooled.AsWritableSpan();
-        T invS = NumOps.FromDouble(1.0 / Math.Max(1, s));
-        for (int bi = 0; bi < b; bi++)
-        {
-            for (int ei = 0; ei < e; ei++)
-            {
-                T sum = NumOps.Zero;
-                for (int si = 0; si < s; si++)
-                {
-                    sum = NumOps.Add(sum, src[bi * s * e + si * e + ei]);
-                }
-                dst[bi * e + ei] = NumOps.Multiply(sum, invS);
-            }
-        }
+        // Tape-aware mean over the sequence axis. The previous scalar span-write loop built `pooled` as a
+        // FRESH tensor via raw AsWritableSpan writes, disconnected from `bse`'s computation graph — it
+        // SEVERED the autodiff tape. Because ForwardForTraining pools its output through here, the loss was
+        // then computed on a detached tensor: no gradient reached the encoder layers or the patch-embed, so
+        // GradientFlow was zero and Training_ShouldChangeParameters / LossStrictlyDecreases collapsed.
+        // PaLM-E trains end-to-end (gradients flow through the multimodal projection + vision encoder,
+        // Driess et al. 2023 §3), so pooling MUST stay on the tape. Sum over the sequence axis (1) then
+        // scale by 1/s for the mean — both are differentiable Engine ops.
+        var summed = Engine.ReduceSum(bse, new[] { 1 }, keepDims: false); // [B, E]
+        var pooled = Engine.TensorMultiplyScalar(summed, NumOps.FromDouble(1.0 / Math.Max(1, s)));
         // Unbatched input → strip the synthetic batch axis we added in
         // TokenizeImageInput so the test sees a rank-1 [E] result.
         if (!wasBatched && b == 1)

@@ -289,8 +289,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         Tensor<T> depth;
         if (_useNativeMode)
         {
-            var features = EncodeImage(image);
-            depth = DecodeDepth(features);
+            depth = RunForward(image);
         }
         else
         {
@@ -396,6 +395,18 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Route training through the SAME EstimateDepth path as inference so the two
+        // cannot diverge (the base ForwardForTraining iterates the flat Layers list,
+        // which would feed the encoder's rank-3 token output straight into the decoder's
+        // rank-4 conv and skip the DPT reassemble). EstimateDepth adds/removes the batch
+        // dim and calls the tape-aware RunForward, so the GradientTape captures the full
+        // ViT encoder + DPT decoder and gradients reach every parameter.
+        return EstimateDepth(input);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -418,150 +429,93 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
 
     #region Private Methods
 
+    // Runs the full DINOv2 ViT encoder + DPT decoder in a single tape-aware pass so
+    // inference (PredictCore) and training (ForwardForTraining) share EXACTLY the same
+    // forward — there is no Predict-vs-train divergence. Every step is a layer.Forward
+    // or a tape-aware Engine op (Reshape / TensorPermute), so gradients flow end-to-end.
+    // Expects a batched image [B, C, H, W] and returns a depth map [B, 1, H, W].
+    private Tensor<T> RunForward(Tensor<T> image)
+    {
+        // The token grid is derived from the ACTUAL input spatial dims, not the model's
+        // configured _height/_width: the test harness runs at a reduced resolution
+        // (e.g. 32x32), so the encoder produces (H/P)*(W/P) tokens for THIS input and the
+        // reassemble must match. The DPT decoder upsamples by exactly the patch factor
+        // (four 2x upsamples = 16x = the patch size), so the output resolution tracks the
+        // input at any size.
+        int inputH = image.Shape[image.Rank - 2];
+        int inputW = image.Shape[image.Rank - 1];
+        int gridH = inputH / _patchSize;
+        int gridW = inputW / _patchSize;
+        var tokens = EncodeImage(image);                        // [B, N, numFeatures]
+        var featureMap = ReassembleTokensToMap(tokens, gridH, gridW); // [B, numFeatures, gridH, gridW]
+        return DecodeDepth(featureMap);                         // [B, 1, H, W]
+    }
+
+    // Encoder: patch-embed (Layers[0]) -> transformer blocks -> final LayerNorm, returning
+    // the token sequence [B, N, numFeatures]. Activations live INSIDE the layers
+    // (TransformerEncoderLayer's GELU MLP), so there is NO manual activation here — the
+    // previous ApplyGELU pass double-activated the conv layers AND severed the tape
+    // (Tensor.Transform is a scalar loop the autodiff graph can't see through).
     private Tensor<T> EncodeImage(Tensor<T> image)
     {
-        // Apply patch embedding (layer 0)
-        var features = Layers[0].Forward(image);
-        features = ApplyGELU(features);
-
-        // Apply encoder blocks (layers 1 to numEncoderBlocks)
-        int encoderEndIdx = 1 + _numEncoderBlocks;
-        for (int i = 1; i < Math.Min(encoderEndIdx, Layers.Count); i++)
+        var features = image;
+        int encoderEndIdx = _numEncoderBlocks + 1; // index of the encoder's final LayerNorm
+        for (int i = 0; i <= encoderEndIdx && i < Layers.Count; i++)
         {
             features = Layers[i].Forward(features);
-            features = ApplyGELU(features);
         }
-
         return features;
     }
 
-    private Tensor<T> DecodeDepth(Tensor<T> features)
+    // DPT "reassemble": turn the encoder token sequence [B, N, numFeatures] back into a
+    // 2-D feature map [B, numFeatures, gridH, gridW] (N == gridH*gridW; PatchEmbeddingLayer
+    // adds no CLS token). Uses tape-aware Engine.Reshape + TensorPermute so the operation
+    // is differentiable.
+    private Tensor<T> ReassembleTokensToMap(Tensor<T> tokens, int gridH, int gridW)
     {
-        // Apply decoder blocks
-        var decoded = features;
-        int decoderStartIdx = 1 + _numEncoderBlocks;
+        int batch = tokens.Shape[0];
+        int embed = tokens.Shape[tokens.Rank - 1];
+        // Token count actually produced by the patch embedding.
+        int n = tokens.Shape[1];
+        if (gridH <= 0 || gridW <= 0 || gridH * gridW != n)
+        {
+            // Fall back to a square grid inferred from the token count (covers any
+            // padding the PatchEmbeddingLayer applied to make the image patch-divisible).
+            int side = System.Math.Max(1, (int)System.Math.Round(System.Math.Sqrt(n)));
+            gridH = side;
+            gridW = System.Math.Max(1, n / side);
+        }
+        // [B, N, D] -> [B, gridH, gridW, D] -> [B, D, gridH, gridW]
+        var grid = Engine.Reshape(tokens, new[] { batch, gridH, gridW, embed });
+        return Engine.TensorPermute(grid, new[] { 0, 3, 1, 2 });
+    }
 
+    // Decoder: run the DPT conv/upsample stages on the reassembled feature map. The
+    // 1-channel sigmoid depth head is the last layer, so the output is already in [0, 1] —
+    // no manual sigmoid (which would sever the tape) is applied. Upsampling is done only by
+    // the UpsamplingLayers in the stack; the previous manual Upsample2x between layers
+    // double-upsampled and threw IndexOutOfRange in CpuEngine.Upsample.
+    private Tensor<T> DecodeDepth(Tensor<T> featureMap)
+    {
+        var decoded = featureMap;
+        int decoderStartIdx = _numEncoderBlocks + 2; // first layer after the encoder LayerNorm
         for (int i = decoderStartIdx; i < Layers.Count; i++)
         {
-            // Upsample between decoder stages
-            if (i > decoderStartIdx)
-            {
-                decoded = Upsample2x(decoded);
-            }
             decoded = Layers[i].Forward(decoded);
-            decoded = ApplyGELU(decoded);
         }
-
-        // Final upsample to match input resolution
-        while (decoded.Shape[2] < _height || decoded.Shape[3] < _width)
-        {
-            decoded = Upsample2x(decoded);
-        }
-
-        // Apply sigmoid to normalize depth to [0, 1]
-        decoded = ApplySigmoid(decoded);
-
         return decoded;
     }
 
-    private Tensor<T> Upsample2x(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-        int outHeight = height * 2;
-        int outWidth = width * 2;
-
-        var output = new Tensor<T>([batchSize, channels, outHeight, outWidth]);
-        var inputMemory = input.Data;
-        var outputMemory = output.Data;
-
-        // Parallel nearest-neighbor upsampling for efficiency
-        Parallel.For(0, batchSize * channels, idx =>
-        {
-            var inputData = inputMemory.Span;
-            var outputData = outputMemory.Span;
-            int b = idx / channels;
-            int c = idx % channels;
-            int inBaseIdx = (b * channels + c) * height * width;
-            int outBaseIdx = (b * channels + c) * outHeight * outWidth;
-
-            for (int h = 0; h < height; h++)
-            {
-                int outH = h * 2;
-                for (int w = 0; w < width; w++)
-                {
-                    int outW = w * 2;
-                    T val = inputData[inBaseIdx + h * width + w];
-
-                    // Write 2x2 block
-                    outputData[outBaseIdx + outH * outWidth + outW] = val;
-                    outputData[outBaseIdx + outH * outWidth + outW + 1] = val;
-                    outputData[outBaseIdx + (outH + 1) * outWidth + outW] = val;
-                    outputData[outBaseIdx + (outH + 1) * outWidth + outW + 1] = val;
-                }
-            }
-        });
-
-        return output;
-    }
-
-    private Tensor<T> ApplyGELU(Tensor<T> input)
-    {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            double c = Math.Sqrt(2.0 / Math.PI);
-            double gelu = 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
-            return NumOps.FromDouble(gelu);
-        });
-    }
-
-    private Tensor<T> ApplySigmoid(Tensor<T> input)
-    {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-x));
-            return NumOps.FromDouble(sigmoid);
-        });
-    }
-
-    private Tensor<T> ApplyGELUGradient(Tensor<T> gradient, Tensor<T> input)
-    {
-        return gradient.Transform((g, idx) =>
-        {
-            double x = Convert.ToDouble(input.Data.Span[idx]);
-            double c = Math.Sqrt(2.0 / Math.PI);
-            double inner = c * (x + 0.044715 * x * x * x);
-            double tanh_inner = Math.Tanh(inner);
-            double sech2 = 1.0 - tanh_inner * tanh_inner;
-            double d_inner = c * (1.0 + 3.0 * 0.044715 * x * x);
-            double grad = 0.5 * (1.0 + tanh_inner) + 0.5 * x * sech2 * d_inner;
-            return NumOps.Multiply(g, NumOps.FromDouble(grad));
-        });
-    }
-
-    private Tensor<T> ApplySigmoidGradient(Tensor<T> gradient, Tensor<T> output)
-    {
-        return gradient.Transform((g, idx) =>
-        {
-            double s = Convert.ToDouble(output.Data.Span[idx]);
-            double grad = s * (1.0 - s);
-            return NumOps.Multiply(g, NumOps.FromDouble(grad));
-        });
-    }
-
+    // Tape-aware batch add/remove. These MUST go through Engine.Reshape (not a raw
+    // new Tensor + Data.CopyTo, which severs the autodiff tape): RemoveBatchDimension is
+    // the LAST op of the training forward, so a severed tape there would stop the loss
+    // gradient from ever reaching the ViT/DPT parameters (zero-grad training collapse).
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         int c = tensor.Shape[0];
         int h = tensor.Shape[1];
         int w = tensor.Shape[2];
-
-        var result = new Tensor<T>([1, c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, new[] { 1, c, h, w });
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
@@ -569,10 +523,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         int c = tensor.Shape[1];
         int h = tensor.Shape[2];
         int w = tensor.Shape[3];
-
-        var result = new Tensor<T>([c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, new[] { c, h, w });
     }
 
     #endregion
@@ -600,6 +551,53 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
                 _width,
                 _numFeatures,
                 _numEncoderBlocks));
+        }
+
+        // EncodeImage / DecodeDepth split Layers positionally as
+        //   [0] = patch embed, [1 .. _numEncoderBlocks] = ViT encoder blocks,
+        //   [_numEncoderBlocks + 1] = encoder LayerNorm, [_numEncoderBlocks + 2 ..] = DPT decoder.
+        // InitializeLayers also accepts a caller-supplied Architecture.Layers, which never has to
+        // honor that contract. Validate it here so a reordered / custom layer list fails loudly
+        // instead of silently routing the wrong layers through the encoder/decoder split.
+        ValidateLayerContract();
+    }
+
+    /// <summary>
+    /// Verifies that <see cref="Layers"/> matches the positional contract the
+    /// <c>EncodeImage</c> / <c>DecodeDepth</c> split depends on. Throws if the count is too small or
+    /// the layer types at the encoder indices are wrong (e.g. a custom <c>Architecture.Layers</c>).
+    /// </summary>
+    private void ValidateLayerContract()
+    {
+        int encoderLnIdx = _numEncoderBlocks + 1;
+        int minLayers = encoderLnIdx + 2; // patch embed + encoder blocks + LayerNorm + >= 1 decoder layer
+        if (Layers.Count < minLayers)
+        {
+            throw new InvalidOperationException(
+                $"DepthAnythingV2 requires at least {minLayers} layers in the order " +
+                $"[patch embed, {_numEncoderBlocks} encoder blocks, LayerNorm, decoder...], but got " +
+                $"{Layers.Count}. The Encode/Decode split relies on this ordering.");
+        }
+        if (Layers[0] is not AiDotNet.NeuralNetworks.Layers.PatchEmbeddingLayer<T>)
+        {
+            throw new InvalidOperationException(
+                $"DepthAnythingV2 layer[0] must be a PatchEmbeddingLayer<T> (the ViT patch embedding), " +
+                $"but was {Layers[0].GetType().Name}.");
+        }
+        for (int i = 1; i <= _numEncoderBlocks; i++)
+        {
+            if (Layers[i] is not AiDotNet.NeuralNetworks.Layers.TransformerEncoderLayer<T>)
+            {
+                throw new InvalidOperationException(
+                    $"DepthAnythingV2 layer[{i}] must be a TransformerEncoderLayer<T> (ViT encoder block), " +
+                    $"but was {Layers[i].GetType().Name}.");
+            }
+        }
+        if (Layers[encoderLnIdx] is not AiDotNet.NeuralNetworks.Layers.LayerNormalizationLayer<T>)
+        {
+            throw new InvalidOperationException(
+                $"DepthAnythingV2 layer[{encoderLnIdx}] must be a LayerNormalizationLayer<T> " +
+                $"(the encoder output norm), but was {Layers[encoderLnIdx].GetType().Name}.");
         }
     }
 

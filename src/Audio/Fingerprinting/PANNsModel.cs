@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
@@ -47,6 +48,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly PANNsModelOptions _options;
     private readonly bool _useNativeMode;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Cached Hann window for the STFT preprocessing step. Built once on the
@@ -99,10 +101,13 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <summary>Initializes PANNs in native training / inference mode.</summary>
     public PANNsModel(
         NeuralNetworkArchitecture<T> architecture,
-        PANNsModelOptions? options = null)
-        : base(architecture)
+        PANNsModelOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PANNsModelOptions();
+        _optimizer = optimizer;
         ValidateOptions(_options);
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
@@ -126,12 +131,38 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             throw new ArgumentOutOfRangeException(nameof(o.HopLength), o.HopLength, "HopLength must be > 0.");
         if (o.NumMelBands <= 0)
             throw new ArgumentOutOfRangeException(nameof(o.NumMelBands), o.NumMelBands, "NumMelBands must be > 0.");
+        if (o.MinFrequency < 0.0 || double.IsNaN(o.MinFrequency) || double.IsInfinity(o.MinFrequency))
+            throw new ArgumentOutOfRangeException(nameof(o.MinFrequency), o.MinFrequency, "MinFrequency must be finite and >= 0.");
+        double nyquist = o.SampleRate / 2.0;
+        if (o.MaxFrequency <= o.MinFrequency || o.MaxFrequency > nyquist ||
+            double.IsNaN(o.MaxFrequency) || double.IsInfinity(o.MaxFrequency))
+            throw new ArgumentOutOfRangeException(nameof(o.MaxFrequency), o.MaxFrequency,
+                $"MaxFrequency must be finite, greater than MinFrequency, and <= Nyquist ({nyquist}).");
         if (o.NumClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(o.NumClasses), o.NumClasses, "NumClasses must be > 0.");
         if (o.EmbeddingDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(o.EmbeddingDim), o.EmbeddingDim, "EmbeddingDim must be > 0.");
+        if (o.BaseChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.BaseChannels), o.BaseChannels, "BaseChannels must be > 0.");
+        if (o.NumBlocks <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumBlocks), o.NumBlocks, "NumBlocks must be > 0.");
+        if (o.NumBlocks > 31)
+            throw new ArgumentOutOfRangeException(nameof(o.NumBlocks), o.NumBlocks, "NumBlocks cannot exceed 31 for int-sized tensor dimensions.");
+        int downsamplingBlocks = o.NumBlocks - 1; // CNN14's final block pools 1x1.
+        long finalChannelCount = (long)o.BaseChannels << downsamplingBlocks;
+        if (finalChannelCount > int.MaxValue)
+            throw new ArgumentException(
+                $"BaseChannels ({o.BaseChannels}) doubled across {o.NumBlocks} blocks exceeds the supported channel range.",
+                nameof(o.BaseChannels));
+        int minimumSpatialSize = 1 << downsamplingBlocks;
+        if (o.NumMelBands < minimumSpatialSize)
+            throw new ArgumentException(
+                $"NumMelBands ({o.NumMelBands}) must be at least {minimumSpatialSize} for {o.NumBlocks} PANNs blocks.",
+                nameof(o.NumMelBands));
         if (o.DropoutRate < 0.0 || o.DropoutRate >= 1.0)
             throw new ArgumentOutOfRangeException(nameof(o.DropoutRate), o.DropoutRate, "DropoutRate must be in [0, 1).");
+        if (o.HeadDropoutRate < 0.0 || o.HeadDropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(o.HeadDropoutRate), o.HeadDropoutRate, "HeadDropoutRate must be in [0, 1).");
     }
 
     #endregion
@@ -154,9 +185,13 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         else
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultPANNsLayers(
+                numMels: _options.NumMelBands,
+                baseChannels: _options.BaseChannels,
+                numBlocks: _options.NumBlocks,
                 numClasses: _options.NumClasses,
                 embeddingDim: _options.EmbeddingDim,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                headDropoutRate: _options.HeadDropoutRate));
         }
     }
 
@@ -171,34 +206,89 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        if (rawAudio.Shape.Length == 1)
-            rawAudio = Engine.Reshape(rawAudio, [1, rawAudio.Shape[0]]);
+        // The fused STFT / mel front end consumes a 1-D waveform per batch item:
+        // [batch, samples]. Callers (and the generated AudioNN test harness) may hand us a
+        // rank-1 [samples] clip, a rank-2 [batch, samples] batch, or a rank-3+ feature
+        // tensor. Collapse every non-batch axis into one samples axis so the STFT always
+        // sees its [batch, samples] contract — PANNs' front end is exactly a log-mel
+        // spectrogram over a 1-D waveform (Kong et al. 2020, §3). Without this a rank-3
+        // input runs past the STFT's 2-D assumption and throws IndexOutOfRangeException.
+        int rank = rawAudio.Shape.Length;
+        int batchSize = rank <= 1 ? 1 : rawAudio.Shape[0];
+        int samples = rawAudio.Length / System.Math.Max(1, batchSize);
+        if (samples <= 0)
+            throw new ArgumentException(
+                "PANNsModel audio preprocessing requires non-empty audio input.", nameof(rawAudio));
+        var flat = rawAudio.ToVector();
 
-        int batchSize = rawAudio.Shape[0];
+        // CNN14 applies AvgPool(2x2) in all but its final block, whose paper-canonical
+        // pool is 1x1. Both spectrogram axes must therefore survive /2^(blocks-1).
+        // A short test clip yields too few STFT frames (frames ~= samples/hop),
+        // collapsing the time axis under pooling ("Pool size 2x2 cannot exceed ..."). TILE
+        // the waveform (repeat it) up to the minimum length that yields >= minFrames frames
+        // so the time axis is fully populated with real signal — tiling, not zero-padding,
+        // keeps every frame input-dependent. Real PANNs runs on ~10 s clips (~1000 frames);
+        // tiling a short clip is a standard short-audio guard and preserves input sensitivity.
+        int hop = _options.HopLength, nFft = _options.StftWindowSize, numMels = _options.NumMelBands;
+        // Keep a 50% rounding margin over the strict minimum. For paper-default CNN14 this
+        // is 48 frames (48→24→12→6→3→1 through five 2x2 pools); reduced public-option
+        // variants scale the guard with their own depth instead of paying CNN14's full cost.
+        int downsamplingStages = _options.NumBlocks - 1;
+        int minFrames = 3 * (1 << Math.Max(0, downsamplingStages - 1));
+        long minSamplesLong = (long)(minFrames - 1) * hop + nFft;
+        if (minSamplesLong > int.MaxValue)
+            throw new InvalidOperationException("The configured PANNs depth and hop length require an audio tensor larger than Int32.MaxValue.");
+        int minSamples = (int)minSamplesLong;
+        int tiledSamples = System.Math.Max(samples, minSamples);
+        var tiled = new T[batchSize * tiledSamples];
+        for (int b = 0; b < batchSize; b++)
+            for (int s = 0; s < tiledSamples; s++)
+                tiled[b * tiledSamples + s] = flat[b * samples + (samples > 0 ? s % samples : 0)];
+        var waveform = new Tensor<T>(tiled, new[] { batchSize, tiledSamples });
 
-        _hannWindow ??= BuildHannWindow(_options.StftWindowSize);
+        _hannWindow ??= BuildHannWindow(nFft);
 
         var mel = Engine.MelSpectrogram(
-            input: rawAudio,
+            input: waveform,
             sampleRate: _options.SampleRate,
-            nFft: _options.StftWindowSize,
-            hopLength: _options.HopLength,
-            nMels: _options.NumMelBands,
-            fMin: NumOps.Zero,
-            fMax: NumOps.FromDouble(_options.SampleRate / 2.0),
+            nFft: nFft,
+            hopLength: hop,
+            nMels: numMels,
+            fMin: NumOps.FromDouble(_options.MinFrequency),
+            fMax: NumOps.FromDouble(_options.MaxFrequency),
             window: _hannWindow,
             powerToDb: true);
 
-        int numFrames = mel.Length / (batchSize * _options.NumMelBands);
-        return Engine.Reshape(mel, [batchSize, 1, numFrames, _options.NumMelBands]);
+        // CNN14 consumes a single-channel [batch, 1, time, mel] spectrogram image.
+        int numFrames = mel.Length / System.Math.Max(1, batchSize * numMels);
+        return Engine.Reshape(mel, [batchSize, 1, numFrames, numMels]);
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        var probabilities = new Tensor<T>(modelOutput._shape);
+        for (int i = 0; i < modelOutput.Length; i++)
+        {
+            double logit = NumOps.ToDouble(modelOutput[i]);
+            double probability;
+            if (logit >= 0.0)
+            {
+                probability = 1.0 / (1.0 + Math.Exp(-logit));
+            }
+            else
+            {
+                double exp = Math.Exp(logit);
+                probability = exp / (1.0 + exp);
+            }
+            probabilities[i] = NumOps.FromDouble(probability);
+        }
+        return probabilities;
+    }
 
     /// <summary>
     /// Builds a periodic Hann window of length <paramref name="windowSize"/>
-    /// as a <see cref="Tensor{T}"/>: <c>w[n] = 0.5·(1 − cos(2πn/(N−1)))</c>.
+    /// as a <see cref="Tensor{T}"/>: <c>w[n] = 0.5·(1 − cos(2πn/N))</c>.
     /// Generic in <typeparamref name="T"/> via the inherited NumOps.
     /// </summary>
     private Tensor<T> BuildHannWindow(int windowSize)
@@ -206,7 +296,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var window = new Tensor<T>([windowSize]);
         for (int n = 0; n < windowSize; n++)
         {
-            double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * n / (windowSize - 1)));
+            double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * n / windowSize));
             window[n] = NumOps.FromDouble(w);
         }
         return window;
@@ -223,12 +313,49 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var mel = PreprocessAudio(input);
         if (!_useNativeMode && OnnxEncoder is not null)
         {
-            return PostprocessOutput(OnnxEncoder.Run(mel));
+            // The released PANNs ONNX graph already terminates in sigmoid.
+            return OnnxEncoder.Run(mel);
         }
-        var hidden = mel;
-        foreach (var layer in Layers) hidden = layer.Forward(hidden);
-        return hidden;
+        // Inference embeddings must be deterministic. IsTrainingMode is true on construction, which
+        // leaves the CNN14 DropoutLayers active — so a freshly-cloned model (also constructed in
+        // training mode) and the original would draw different dropout masks and predict differently
+        // (Clone_ShouldProduceIdenticalOutput). Force inference mode for the forward, then restore.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var hidden = mel;
+            foreach (var layer in Layers) hidden = layer.Forward(hidden);
+            return PostprocessOutput(hidden);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
+
+    /// <summary>
+    /// The training forward MUST run over the same log-mel spectrogram front end as inference
+    /// (<see cref="PredictCore"/>), not the raw waveform. The base <c>ForwardForTraining</c> runs
+    /// the layer stack on its argument directly; without preprocessing, the raw [batch, samples]
+    /// waveform reaches the CNN14 conv stack, whose five 2x2 pooling stages then collapse the tiny
+    /// spatial extent ("Pool size (2x2) cannot exceed ..."), which failed every training-path
+    /// invariant (Training/GradientFlow/MoreData/…). Preprocess first (the tiled log-mel), then
+    /// delegate to the base so gradient checkpointing, seed-wiring and the autodiff tape are all
+    /// preserved — mirroring the other audio models' ForwardForTraining overrides (AudioMAE,
+    /// DeepFilterNet, …). This keeps the training and inference forwards consistent.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => base.ForwardForTraining(PreprocessAudio(input));
+
+    /// <summary>
+    /// Named-layer activations must run over the same log-mel front end as inference — the base
+    /// walk feeds its raw argument straight into the CNN14 conv stack, so the raw [batch, samples]
+    /// waveform's tiny spatial extent collapses under the five 2x2 pooling stages ("Pool size (2x2)
+    /// cannot exceed input spatial dimensions (2x1)"). Preprocess to the tiled log-mel first, then
+    /// delegate to the base walk, mirroring <see cref="PredictCore"/> / <see cref="ForwardForTraining"/>.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+        => base.GetNamedLayerActivations(PreprocessAudio(input));
 
     /// <summary>
     /// Classifies audio into AudioSet categories. Returns labels with
@@ -390,7 +517,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Cannot train in ONNX inference mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(input, expected); }
+        try { TrainWithTape(input, expected, _optimizer); }
         finally { SetTrainingMode(false); }
     }
 
@@ -429,12 +556,12 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
         _useNativeMode
-            ? new PANNsModel<T>(Architecture, _options)
+            ? new PANNsModel<T>(Architecture, new PANNsModelOptions(_options), lossFunction: LossFunction)
             // ONNX-backed instance: reuse the loaded model path so the
             // clone preserves its execution mode. Without this, Clone() of
             // an ONNX-mode PANNs silently downgrades to native and
             // changes inference behaviour.
-            : new PANNsModel<T>(Architecture, _modelPath!, _options);
+            : new PANNsModel<T>(Architecture, _modelPath!, new PANNsModelOptions(_options));
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() =>
@@ -445,11 +572,17 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["EmbeddingDim"] = _options.EmbeddingDim,
+                ["BaseChannels"] = _options.BaseChannels,
+                ["NumBlocks"] = _options.NumBlocks,
                 ["NumClasses"] = _options.NumClasses,
                 ["NumMelBands"] = _options.NumMelBands,
                 ["SampleRate"] = _options.SampleRate,
                 ["StftWindowSize"] = _options.StftWindowSize,
                 ["HopLength"] = _options.HopLength,
+                ["MinFrequency"] = _options.MinFrequency,
+                ["MaxFrequency"] = _options.MaxFrequency,
+                ["BlockDropoutRate"] = _options.DropoutRate,
+                ["HeadDropoutRate"] = _options.HeadDropoutRate,
             }
         };
 
@@ -464,6 +597,12 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         writer.Write(_options.NumClasses);
         writer.Write(_options.EmbeddingDim);
         writer.Write(_options.DropoutRate);
+        writer.Write(2); // format version for fields appended after the legacy payload
+        writer.Write(_options.BaseChannels);
+        writer.Write(_options.NumBlocks);
+        writer.Write(_options.MinFrequency);
+        writer.Write(_options.MaxFrequency);
+        writer.Write(_options.HeadDropoutRate);
     }
 
     /// <inheritdoc/>
@@ -482,6 +621,21 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         VerifyEqual(reader.ReadInt32(),  _options.NumClasses,     nameof(_options.NumClasses));
         VerifyEqual(reader.ReadInt32(),  _options.EmbeddingDim,   nameof(_options.EmbeddingDim));
         VerifyEqual(reader.ReadDouble(), _options.DropoutRate,    nameof(_options.DropoutRate));
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int version = reader.ReadInt32();
+            if (version >= 1)
+            {
+                VerifyEqual(reader.ReadInt32(), _options.BaseChannels, nameof(_options.BaseChannels));
+                VerifyEqual(reader.ReadInt32(), _options.NumBlocks, nameof(_options.NumBlocks));
+                if (version >= 2)
+                {
+                    VerifyEqual(reader.ReadDouble(), _options.MinFrequency, nameof(_options.MinFrequency));
+                    VerifyEqual(reader.ReadDouble(), _options.MaxFrequency, nameof(_options.MaxFrequency));
+                    VerifyEqual(reader.ReadDouble(), _options.HeadDropoutRate, nameof(_options.HeadDropoutRate));
+                }
+            }
+        }
     }
 
     private static void VerifyEqual<TValue>(TValue persisted, TValue current, string name)

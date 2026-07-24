@@ -90,15 +90,12 @@ public class Hippo<T> : ForecastingModelBase<T>
 
 
     #region Native Mode Fields
-    // Paper-faithful HiPPO stack (Gu et al. 2020): input embedding -> N diagonal
-    // state-space (S4D, HiPPO-LegS-initialized) layers with residual/norm/dropout
-    // -> mean-pool over time -> output head. See CreateDefaultHippoLayers.
-    private DenseLayer<T>? _inputEmbedding;
-    private LayerNormalizationLayer<T>? _inputNorm;
-    private List<S4DLayer<T>> _ssmLayers = new();
+    // Original-paper HiPPO-RNN cells followed by the end-state decoder.
+    private List<HippoMemoryCellLayer<T>> _memoryLayers = new();
     private List<LayerNormalizationLayer<T>> _blockNorms = new();
     private List<DropoutLayer<T>> _dropouts = new();
     private DenseLayer<T>? _outputProjection;
+    private bool _useCustomLayerStack;
     #endregion
 
     #region Shared Fields
@@ -114,10 +111,14 @@ public class Hippo<T> : ForecastingModelBase<T>
     private int _modelDimension;
     private int _stateDimension;
     private int _numLayers;
+    private int _memorySize;
     private string _hippoMethod;
     private string _discretizationMethod;
+    private int _initialTime;
+    private double _timeStep;
     private double _timescaleMin;
     private double _timescaleMax;
+    private bool _useGate;
     private bool _useNormalization;
     private int _numFeatures;
     #endregion
@@ -234,16 +235,23 @@ public class Hippo<T> : ForecastingModelBase<T>
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SetBaseTrainOptimizer(_optimizer);
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;
         _modelDimension = _options.ModelDimension;
-        _stateDimension = _options.StateDimension;
+        _stateDimension = _options.StateDimension < 0
+            ? _modelDimension
+            : _options.StateDimension;
         _numLayers = _options.NumLayers;
+        _memorySize = _options.MemorySize;
         _hippoMethod = _options.HippoMethod;
         _discretizationMethod = _options.DiscretizationMethod;
+        _initialTime = _options.InitialTime;
+        _timeStep = _options.TimeStep;
         _timescaleMin = _options.TimescaleMin;
         _timescaleMax = _options.TimescaleMax;
+        _useGate = _options.UseGate;
         _useNormalization = _options.UseNormalization;
         _numFeatures = 1;
     }
@@ -275,16 +283,23 @@ public class Hippo<T> : ForecastingModelBase<T>
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SetBaseTrainOptimizer(_optimizer);
 
         _contextLength = _options.ContextLength;
         _forecastHorizon = _options.ForecastHorizon;
         _modelDimension = _options.ModelDimension;
-        _stateDimension = _options.StateDimension;
+        _stateDimension = _options.StateDimension < 0
+            ? _modelDimension
+            : _options.StateDimension;
         _numLayers = _options.NumLayers;
+        _memorySize = _options.MemorySize;
         _hippoMethod = _options.HippoMethod;
         _discretizationMethod = _options.DiscretizationMethod;
+        _initialTime = _options.InitialTime;
+        _timeStep = _options.TimeStep;
         _timescaleMin = _options.TimescaleMin;
         _timescaleMax = _options.TimescaleMax;
+        _useGate = _options.UseGate;
         _useNormalization = _options.UseNormalization;
         _numFeatures = numFeatures;
 
@@ -318,11 +333,13 @@ public class Hippo<T> : ForecastingModelBase<T>
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
+            _useCustomLayerStack = true;
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
         }
         else if (_useNativeMode)
         {
+            _useCustomLayerStack = false;
             Layers.AddRange(LayerHelper<T>.CreateDefaultHippoLayers(
                 Architecture,
                 _contextLength,
@@ -330,8 +347,17 @@ public class Hippo<T> : ForecastingModelBase<T>
                 _modelDimension,
                 _stateDimension,
                 _numLayers,
+                _options.DropoutRate,
                 _useNormalization,
-                _numFeatures));
+                _numFeatures,
+                _memorySize,
+                _hippoMethod,
+                _discretizationMethod,
+                _initialTime,
+                _timeStep,
+                _timescaleMin,
+                _timescaleMax,
+                _useGate));
 
             ExtractLayerReferences();
         }
@@ -349,31 +375,20 @@ public class Hippo<T> : ForecastingModelBase<T>
     {
         // Idempotent: clear list-typed refs so a re-extract (after deserialize)
         // rebinds rather than appending a doubled stack.
-        _ssmLayers.Clear();
+        _memoryLayers.Clear();
         _blockNorms.Clear();
         _dropouts.Clear();
 
         // Layer order produced by CreateDefaultHippoLayers:
-        //   [InputEmbedding Dense] ([InputNorm]) { S4DLayer ([BlockNorm]) [Dropout] }×N [OutputHead Dense]
+        //   { HippoMemoryCell ([BlockNorm]) [Dropout] }×N [OutputHead Dense]
         var dense = Layers.OfType<DenseLayer<T>>().ToList();
-        _inputEmbedding = dense.FirstOrDefault();
         _outputProjection = dense.LastOrDefault();
 
-        _ssmLayers = Layers.OfType<S4DLayer<T>>().ToList();
+        _memoryLayers = Layers.OfType<HippoMemoryCellLayer<T>>().ToList();
         _dropouts = Layers.OfType<DropoutLayer<T>>().ToList();
 
         var norms = Layers.OfType<LayerNormalizationLayer<T>>().ToList();
-        if (_useNormalization && norms.Count > 0)
-        {
-            // First norm is the input norm; the rest are per-block norms.
-            _inputNorm = norms[0];
-            _blockNorms = norms.Skip(1).ToList();
-        }
-        else
-        {
-            _inputNorm = null;
-            _blockNorms = new List<LayerNormalizationLayer<T>>();
-        }
+        _blockNorms = _useNormalization ? norms : new List<LayerNormalizationLayer<T>>();
     }
 
     /// <summary>
@@ -389,8 +404,8 @@ public class Hippo<T> : ForecastingModelBase<T>
     {
         base.ValidateCustomLayers(layers);
 
-        if (layers.Count < 3)
-            throw new ArgumentException("HiPPO requires at least 3 layers (embedding, processing, output).");
+        if (layers.Count == 0)
+            throw new ArgumentException("A custom HiPPO architecture must contain at least one layer.");
     }
 
     #endregion
@@ -449,6 +464,12 @@ public class Hippo<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// HiPPO's recurrent state update depends on the current time step and is not a
+    /// static operation graph that can be compiled once and replayed safely.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <summary>
     /// Updates the model parameters using the optimizer (required override).
     /// </summary>
     /// <param name="gradients">Gradient vector (not used - layers handle gradients internally).</param>
@@ -483,10 +504,14 @@ public class Hippo<T> : ForecastingModelBase<T>
                 { "ModelDimension", _modelDimension },
                 { "StateDimension", _stateDimension },
                 { "NumLayers", _numLayers },
+                { "MemorySize", _memorySize },
                 { "HippoMethod", _hippoMethod },
                 { "DiscretizationMethod", _discretizationMethod },
+                { "InitialTime", _initialTime },
+                { "TimeStep", _timeStep },
                 { "TimescaleMin", _timescaleMin },
                 { "TimescaleMax", _timescaleMax },
+                { "UseGate", _useGate },
                 { "UseNormalization", _useNormalization },
                 { "UseNativeMode", _useNativeMode },
                 { "SupportsTraining", SupportsTraining }
@@ -505,7 +530,7 @@ public class Hippo<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new Hippo<T>(Architecture, _options);
+        return new Hippo<T>(Architecture, new HippoOptions<T>(_options), _numFeatures);
     }
 
     /// <summary>
@@ -529,6 +554,14 @@ public class Hippo<T> : ForecastingModelBase<T>
         writer.Write(_timescaleMin);
         writer.Write(_timescaleMax);
         writer.Write(_useNormalization);
+
+        // Keep the original HiPPO payload above byte-for-byte compatible.
+        // New recurrent-cell settings are append-only so older payloads can
+        // still be loaded with the paper defaults below.
+        writer.Write(_memorySize);
+        writer.Write(_initialTime);
+        writer.Write(_timeStep);
+        writer.Write(_useGate);
     }
 
     /// <summary>
@@ -552,6 +585,22 @@ public class Hippo<T> : ForecastingModelBase<T>
         _timescaleMin = reader.ReadDouble();
         _timescaleMax = reader.ReadDouble();
         _useNormalization = reader.ReadBoolean();
+
+        // These fields were appended after the original payload. Preserve
+        // the paper configuration when loading a model serialized before
+        // they existed.
+        _memorySize = 1;
+        _initialTime = 0;
+        _timeStep = 0.0;
+        _useGate = true;
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _memorySize = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _initialTime = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _timeStep = reader.ReadDouble();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _useGate = reader.ReadBoolean();
 
         // Re-bind cached layer references so a deserialized/cloned model runs on
         // the restored layers, not the construction-time random ones.
@@ -747,44 +796,28 @@ public class Hippo<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // input: [batch, contextLength, numFeatures]
-        int rank = input.Shape.Length;
-        int feat = input.Shape[rank - 1];
-        int seq = rank >= 2 ? input.Shape[rank - 2] : 1;
-        int batch = 1;
-        for (int d = 0; d < rank - 2; d++) batch *= input.Shape[d];
-        if (rank < 3) batch = 1;
-
-        // Embed each time step's features into the model dimension.
-        // Reshape to [batch*seq, features] so the Dense maps the feature axis
-        // (every Engine op below stays on the autodiff tape).
-        var x2d = Engine.Reshape(input, new[] { batch * seq, feat });
-        if (_inputEmbedding is not null)
-            x2d = _inputEmbedding.Forward(x2d);                 // [batch*seq, modelDim]
-        var x = Engine.Reshape(x2d, new[] { batch, seq, _modelDimension });
-
-        if (_inputNorm is not null)
-            x = _inputNorm.Forward(x);
-
-        // HiPPO state-space stack: each S4D layer evolves the polynomial state
-        // across the sequence, wrapped in a residual connection + norm + dropout.
-        for (int i = 0; i < _ssmLayers.Count; i++)
+        if (_useCustomLayerStack)
         {
-            var residual = x;
-            x = _ssmLayers[i].Forward(x);                       // [batch, seq, modelDim]
-            x = Engine.TensorAdd(x, residual);
+            var custom = input;
+            foreach (var layer in Layers) custom = layer.Forward(custom);
+            return custom;
+        }
+
+        var x = input;
+        for (int i = 0; i < _memoryLayers.Count; i++)
+        {
+            x = _memoryLayers[i].Forward(x);
             if (i < _blockNorms.Count)
                 x = _blockNorms[i].Forward(x);
             if (i < _dropouts.Count)
                 x = _dropouts[i].Forward(x);
         }
 
-        // Mean-pool the SSM output over time -> [batch, modelDim], then project
-        // to the forecast horizon.
-        var pooled = Engine.ReduceMean(x, new[] { 1 }, false);  // [batch, modelDim]
+        int sequenceAxis = x.Rank - 2;
+        var finalState = Engine.TensorSliceAxis(x, sequenceAxis, x.Shape[sequenceAxis] - 1);
         return _outputProjection is not null
-            ? _outputProjection.Forward(pooled)                 // [batch, forecastHorizon]
-            : pooled;
+            ? _outputProjection.Forward(finalState)
+            : finalState;
     }
 
     /// <summary>
@@ -991,153 +1024,6 @@ public class Hippo<T> : ForecastingModelBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Computes the HiPPO matrix for a given method.
-    /// </summary>
-    /// <param name="n">State dimension (polynomial order).</param>
-    /// <param name="method">HiPPO method (legs, legt, lagt, fourier).</param>
-    /// <returns>The N x N HiPPO matrix A.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The HiPPO matrix A defines how the polynomial
-    /// coefficients (state) evolve over time. Different methods give different
-    /// memory properties:
-    ///
-    /// <b>HiPPO-LegS (Legendre Scaled):</b>
-    /// A[i,j] = -sqrt(2i+1) * sqrt(2j+1) if i > j
-    /// A[i,i] = -(2i+1)
-    /// Creates a sliding window over recent history.
-    ///
-    /// <b>HiPPO-LegT (Legendre Translated):</b>
-    /// Similar but for fixed window [0, t].
-    ///
-    /// <b>HiPPO-LagT (Laguerre):</b>
-    /// Exponential decay - older events have less weight.
-    ///
-    /// These matrices are derived mathematically to ensure optimal
-    /// polynomial approximation of the input history.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ComputeHippoMatrix(int n, string method)
-    {
-        var A = new Tensor<T>(new[] { n, n });
-
-        if (method == "legs")
-        {
-            // HiPPO-LegS: Legendre polynomial basis with scaled measure
-            // A[i,j] = -sqrt(2i+1) * sqrt(2j+1) if i > j, -(2i+1) if i == j
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    double sqrtI = Math.Sqrt(2 * i + 1);
-                    double sqrtJ = Math.Sqrt(2 * j + 1);
-
-                    if (i > j)
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(-sqrtI * sqrtJ);
-                    }
-                    else if (i == j)
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(-(2 * i + 1));
-                    }
-                    else
-                    {
-                        A.Data.Span[i * n + j] = NumOps.Zero;
-                    }
-                }
-            }
-        }
-        else if (method == "legt")
-        {
-            // HiPPO-LegT: Translated Legendre for fixed window
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    double sqrtI = Math.Sqrt(2 * i + 1);
-                    double sqrtJ = Math.Sqrt(2 * j + 1);
-
-                    if (i >= j)
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(-sqrtI * sqrtJ);
-                    }
-                    else
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(sqrtI * sqrtJ * Math.Pow(-1, i - j));
-                    }
-                }
-            }
-        }
-        else if (method == "lagt")
-        {
-            // HiPPO-LagT: Laguerre with exponential decay
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    if (i > j)
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(-1.0);
-                    }
-                    else if (i == j)
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(-0.5);
-                    }
-                    else
-                    {
-                        A.Data.Span[i * n + j] = NumOps.Zero;
-                    }
-                }
-            }
-        }
-        else // Default to legs
-        {
-            return ComputeHippoMatrix(n, "legs");
-        }
-
-        return A;
-    }
-
-    /// <summary>
-    /// Computes the B vector for the HiPPO model.
-    /// </summary>
-    /// <param name="n">State dimension (polynomial order).</param>
-    /// <param name="method">HiPPO method.</param>
-    /// <returns>The input projection vector B.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The B vector defines how input values enter
-    /// the polynomial state space. For Legendre methods:
-    /// B[i] = sqrt(2i+1) - weights for projecting input onto each polynomial.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ComputeHippoBVector(int n, string method)
-    {
-        var B = new Tensor<T>(new[] { n });
-
-        if (method == "legs" || method == "legt")
-        {
-            // B[i] = sqrt(2i+1) for Legendre bases
-            for (int i = 0; i < n; i++)
-            {
-                B.Data.Span[i] = NumOps.FromDouble(Math.Sqrt(2 * i + 1));
-            }
-        }
-        else if (method == "lagt")
-        {
-            // B[i] = 1 for Laguerre
-            for (int i = 0; i < n; i++)
-            {
-                B.Data.Span[i] = NumOps.FromDouble(1.0);
-            }
-        }
-        else
-        {
-            return ComputeHippoBVector(n, "legs");
-        }
-
-        return B;
     }
 
     #endregion

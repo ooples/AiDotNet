@@ -515,6 +515,33 @@ public class Kronos<T> : TimeSeriesFoundationModelBase<T>
         return current;
     }
 
+    /// <summary>
+    /// Captures per-layer activations of the native forward. Mirrors <see cref="ForwardNative"/>'s
+    /// RevIN + flatten-to-[1, contextLength*numFeatures] preprocessing so the leading patch
+    /// ReshapeLayer receives the batched, flattened sequence it expects — the base walk fed the raw
+    /// [contextLength, numFeatures] input straight in and the ReshapeLayer threw on the mis-read axes.
+    /// </summary>
+    public override System.Collections.Generic.Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var activations = new System.Collections.Generic.Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode || Layers.Count == 0)
+            return activations;
+
+        var current = ApplyInstanceNormalization(input);
+        if (!(current.Rank == 2 && current.Shape[0] == 1))
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)

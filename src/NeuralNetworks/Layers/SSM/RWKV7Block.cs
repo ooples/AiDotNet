@@ -342,7 +342,12 @@ public partial class RWKV7Block<T> : LayerBase<T>
         InitializeProjection(_receptanceWeights);
         InitializeProjection(_keyWeights);
         InitializeProjection(_valueWeights);
-        InitializeProjection(_outputWeights);
+        // RWKV's reference initialization keeps the time-mix output projection
+        // at zero so each newly initialized block begins as an exact residual
+        // identity. A generic Xavier matrix here lets some otherwise-valid seeds
+        // amplify the recurrent state on the very first optimizer step, producing
+        // non-finite gradients before global clipping can act.
+        _outputWeights.Fill(NumOps.Zero);
 
         // v7: State evolution projections - initialized for stable decay
         InitializeProjection(_aWeights);
@@ -355,7 +360,11 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _groupNormBeta.Fill(NumOps.Zero);
 
         InitializeProjection(_channelKeyWeights);
-        InitializeProjection(_channelValueWeights);
+        // The channel-mix value projection is likewise zero-initialized in the
+        // reference RWKV recipe. The key path still receives gradients through
+        // this projection after the first update while the residual stream starts
+        // numerically stable.
+        _channelValueWeights.Fill(NumOps.Zero);
         InitializeProjection(_channelReceptanceWeights);
 
         _normGamma1.Fill(NumOps.One);
@@ -567,8 +576,14 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // positions as [batch*seqLen, modelDim], so NO per-timestep ops remain in time-mixing.
         var wkv2d = Engine.Reshape(wkvAll, new[] { bsl, _modelDimension });
         var normed2d = ApplyGroupNorm(wkv2d, bsl);
+        // These projections are paper-faithfully initialized to exactly zero, but
+        // they are trainable parameters. Keep an explicit graph dependency on the
+        // parameter so compilation cannot mistake the initial value for a static
+        // sparse inference constant and discard its backward path.
+        var trainableOutputWeights = Engine.Reshape(
+            _outputWeights, _outputWeights.Shape.ToArray());
         var output = Engine.Reshape(
-            Engine.TensorMatMul(normed2d, _outputWeights),
+            Engine.TensorMatMul(normed2d, trainableOutputWeights),
             new[] { batchSize, seqLen, _modelDimension });
 
         // Recurrent-state persistence. In TRAINING each sequence is independent and the carried state is
@@ -694,7 +709,11 @@ public partial class RWKV7Block<T> : LayerBase<T>
         var rGate = Engine.Sigmoid(Engine.TensorMatMul(Engine.Reshape(rIn, new[] { bsl, _modelDimension }), _channelReceptanceWeights)); // [bsl, modelDim]
         var kProj = Engine.TensorMatMul(Engine.Reshape(kIn, new[] { bsl, _modelDimension }), _channelKeyWeights); // [bsl, ffnDim]
         var kSiLU = Engine.TensorMultiply(kProj, Engine.Sigmoid(kProj));
-        var vProj = Engine.TensorMatMul(kSiLU, _channelValueWeights); // [bsl, modelDim]
+        // Preserve the trainable dependency for the other zero-initialized RWKV
+        // projection for the same reason as the time-mix output projection above.
+        var trainableChannelValueWeights = Engine.Reshape(
+            _channelValueWeights, _channelValueWeights.Shape.ToArray());
+        var vProj = Engine.TensorMatMul(kSiLU, trainableChannelValueWeights); // [bsl, modelDim]
         var y = Engine.TensorMultiply(rGate, vProj); // [bsl, modelDim]
 
         // Carry the channel token-shift cache only for the inference streaming

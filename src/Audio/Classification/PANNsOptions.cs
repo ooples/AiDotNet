@@ -29,6 +29,45 @@ namespace AiDotNet.Audio.Classification;
 /// </remarks>
 public class PANNsOptions : ModelOptions
 {
+    /// <summary>
+    /// Initializes options with the paper-default PANNs CNN14 configuration.
+    /// </summary>
+    public PANNsOptions()
+    {
+    }
+
+    /// <summary>
+    /// Creates an independent copy of an existing PANNs configuration.
+    /// </summary>
+    /// <param name="other">Configuration to copy.</param>
+    public PANNsOptions(PANNsOptions other)
+    {
+        if (other is null)
+        {
+            throw new ArgumentNullException(nameof(other));
+        }
+
+        SampleRate = other.SampleRate;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        NumMels = other.NumMels;
+        FMin = other.FMin;
+        FMax = other.FMax;
+        NumBlocks = other.NumBlocks;
+        BaseChannels = other.BaseChannels;
+        EmbeddingDim = other.EmbeddingDim;
+        DropoutRate = other.DropoutRate;
+        Threshold = other.Threshold;
+        WindowSize = other.WindowSize;
+        WindowOverlap = other.WindowOverlap;
+        CustomLabels = other.CustomLabels?.ToArray();
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        WarmUpSteps = other.WarmUpSteps;
+        LabelSmoothing = other.LabelSmoothing;
+    }
+
     #region Audio Preprocessing
 
     /// <summary>

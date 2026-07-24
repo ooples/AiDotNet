@@ -410,9 +410,9 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     /// for ChronosBolt extracts the median slice ([_forecastHorizon]) and
     /// drops every other quantile. Training target from
     /// <see cref="Predict"/> is the full raw head output (e.g.
-    /// [1, horizon, numQuantiles] = [1, 8, 4096] at smoke-test scale) —
+    /// [horizon, numQuantiles] = [8, 3] at smoke-test scale) —
     /// the two disagree and the MSE loss throws
-    /// "Tensor shapes must match. Got [4] and [1, 8, 4096]". Routing
+    /// "Tensor shapes must match. Got [8] and [8, 3]". Routing
     /// through ForwardNative keeps the training forward shape aligned
     /// with the target.
     /// </remarks>

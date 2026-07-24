@@ -176,8 +176,18 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _spatialDim = spatialDim;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4, UseAMSGrad = true });
+        // DocFormer fine-tuning uses AdamW at 2.5e-5 with no warm-up and a 1.0
+        // gradient-norm cap (Appalaraju et al., ICCV 2021, Table 1). Keep the
+        // optimizer injectable so callers can fully customize the training recipe.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 2.5e-5,
+                WeightDecay = 0.01,
+                UseAMSGrad = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -239,8 +249,18 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _spatialDim = spatialDim;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4, UseAMSGrad = true });
+        // DocFormer fine-tuning uses AdamW at 2.5e-5 with no warm-up and a 1.0
+        // gradient-norm cap (Appalaraju et al., ICCV 2021, Table 1). Keep the
+        // optimizer injectable so callers can fully customize the training recipe.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 2.5e-5,
+                WeightDecay = 0.01,
+                UseAMSGrad = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;

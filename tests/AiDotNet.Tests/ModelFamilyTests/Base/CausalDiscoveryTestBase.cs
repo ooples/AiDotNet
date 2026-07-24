@@ -534,6 +534,8 @@ public abstract class CausalDiscoveryTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
+        if (!GuaranteesDAG) return;
+
         var algo = CreateAlgorithm();
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
         var adj = graph.AdjacencyMatrix;

@@ -356,6 +356,7 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                 projectionDim: _options.ProjectionDim,
                 numEncoderLayers: _options.NumAudioEncoderLayers,
                 numAttentionHeads: _options.NumAudioAttentionHeads,
+                feedForwardDim: _options.AudioEmbeddingDim * 4,
                 numClasses: ClassLabels.Count,
                 dropoutRate: _options.DropoutRate));
     }
@@ -372,6 +373,10 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             c = l.Forward(c);
         return c;
     }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expected)

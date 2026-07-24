@@ -1,9 +1,11 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
@@ -176,21 +178,31 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         : base(CreateMinimalArchitecture(options))
     {
         _options = options ?? new SceneClassifierOptions();
-        _useNativeMode = false;
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;
         ClassLabels = _options.CustomScenes ?? StandardScenes;
 
-        // Initialize ONNX if path provided
-        if (_options.ModelPath is string modelPath && !string.IsNullOrEmpty(modelPath))
-        {
-            OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        }
-
         // Initialize feature extractors
         _melSpectrogram = CreateMelSpectrogram();
         _mfccExtractor = CreateMfccExtractor();
+
+        if (_options.ModelPath is string modelPath && !string.IsNullOrEmpty(modelPath))
+        {
+            // An ONNX model file was supplied → ONNX inference mode.
+            _useNativeMode = false;
+            OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        }
+        else
+        {
+            // No ONNX model supplied → NATIVE trainable mode. Previously this ctor left the model in a
+            // broken ONNX state (no encoder AND no trainable layers), so Train() threw "not supported in
+            // ONNX inference mode" and the model could neither train nor infer. Build the trainable stack
+            // (matching the native architecture ctor) so a from-options SceneClassifier can be trained.
+            _useNativeMode = true;
+            _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            InitializeLayers();
+        }
     }
 
     private static NeuralNetworkArchitecture<T> CreateMinimalArchitecture(SceneClassifierOptions? options)
@@ -314,6 +326,14 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         {
             Layers.Add(layer);
         }
+
+        // NOTE: no in-graph softmax layer is appended. The classification head emits LINEAR logits and
+        // every probability path (Classify / GetSceneProbabilities / PostprocessOutput) applies softmax
+        // exactly once, so PredictCore returns a consistent logits tensor in BOTH native and ONNX modes
+        // (the ONNX graph likewise has no trailing softmax). A prior revision added a SoftmaxActivation
+        // layer here, which double-softmaxed the native path — softmax(softmax(x)) flattens the
+        // distribution toward uniform and can shift the top scene (#1789 review). This mirrors the
+        // sibling GenreClassifier, which keeps the single softmax in the consumer paths.
     }
 
     #endregion
@@ -332,7 +352,9 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         var featureTensor = CreateFeatureTensor(featureStruct);
 
         // Get predictions
-        var output = Predict(featureTensor);
+        // Feed LOGITS (not the softmaxed Predict output) to ApplySoftmax so scene probabilities are
+        // softmaxed exactly once (PredictCore now returns probabilities for the inference contract).
+        var output = ForwardLogits(featureTensor);
         var probabilities = ApplySoftmax(output);
 
         // Find best prediction
@@ -391,7 +413,9 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 
         var featureStruct = ExtractFeaturesInternal(audio);
         var featureTensor = CreateFeatureTensor(featureStruct);
-        var output = Predict(featureTensor);
+        // Feed LOGITS (not the softmaxed Predict output) to ApplySoftmax so scene probabilities are
+        // softmaxed exactly once (PredictCore now returns probabilities for the inference contract).
+        var output = ForwardLogits(featureTensor);
         var probabilities = ApplySoftmax(output);
 
         return probabilities;
@@ -526,6 +550,25 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        // Classifier inference contract: Predict returns a NON-NEGATIVE class distribution
+        // (probabilities), per AudioClassifierTestBase.ClassOutput_ShouldBeNonNegative and the standard
+        // PyTorch convention (the forward/loss path uses raw logits; inference applies softmax). Training
+        // is unaffected — the tape forward (base ForwardForTraining) walks the layers directly and never
+        // calls PredictCore, so softmaxing here does NOT double-softmax the CrossEntropyWithLogits loss.
+        // The internal probability paths (Classify / GetSceneProbabilities) call ForwardLogits + a single
+        // ApplySoftmax, so they still softmax exactly once. softmax of the uniform rule-based fallback is
+        // a no-op, and the ONNX logits become probabilities too, keeping all three paths consistent.
+        return PostprocessOutput(ForwardLogits(input));
+    }
+
+    /// <summary>
+    /// Native forward to per-scene LOGITS (or the ONNX graph's logits, or the uniform rule-based
+    /// fallback). The linear classifier head is intentionally not soft-maxed here: <see cref="PredictCore"/>
+    /// softmaxes for inference and the training tape (base ForwardForTraining) consumes these logits
+    /// directly via CrossEntropyWithLogitsLoss.
+    /// </summary>
+    private Tensor<T> ForwardLogits(Tensor<T> input)
+    {
         if (IsOnnxMode && OnnxEncoder is not null)
         {
             return OnnxEncoder.Run(input);
@@ -534,7 +577,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         // Native mode - use layers
         if (!_useNativeMode || Layers.Count == 0)
         {
-            // Fallback to rule-based classification
+            // Fallback to rule-based classification (a uniform distribution; softmax leaves it unchanged).
             return ClassifyWithRulesAsTensor(input);
         }
 

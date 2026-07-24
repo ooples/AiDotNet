@@ -23,6 +23,36 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// </remarks>
 public class ConformerOptions : ModelOptions
 {
+    /// <summary>Initializes a Conformer configuration with paper-default settings.</summary>
+    public ConformerOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by deep-copying all Conformer settings.</summary>
+    public ConformerOptions(ConformerOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        SampleRate = other.SampleRate;
+        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        Variant = other.Variant;
+        EncoderDim = other.EncoderDim;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardExpansionFactor = other.FeedForwardExpansionFactor;
+        ConvKernelSize = other.ConvKernelSize;
+        NumMels = other.NumMels;
+        SubsamplingFactor = other.SubsamplingFactor;
+        VocabSize = other.VocabSize;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        LabelSmoothing = other.LabelSmoothing;
+        WarmupSteps = other.WarmupSteps;
+        Vocabulary = [.. other.Vocabulary];
+        Language = other.Language;
+    }
+
     #region Audio
 
     /// <summary>Gets or sets the expected audio sample rate in Hz.</summary>

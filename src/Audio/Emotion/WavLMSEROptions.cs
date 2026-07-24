@@ -22,6 +22,41 @@ namespace AiDotNet.Audio.Emotion;
 /// </remarks>
 public class WavLMSEROptions : ModelOptions
 {
+    /// <summary>Initializes WavLM-SER with the paper-scale base defaults.</summary>
+    public WavLMSEROptions()
+    {
+    }
+
+    /// <summary>Creates an independent copy of an existing option set.</summary>
+    /// <param name="other">The options to copy.</param>
+    public WavLMSEROptions(WavLMSEROptions other)
+    {
+        if (other is null)
+        {
+            throw new ArgumentNullException(nameof(other));
+        }
+
+        SampleRate = other.SampleRate;
+        NumMels = other.NumMels;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        Variant = other.Variant;
+        HiddenDim = other.HiddenDim;
+        NumLayers = other.NumLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardDim = other.FeedForwardDim;
+        FeatureEncoderDim = other.FeatureEncoderDim;
+        NumClasses = other.NumClasses;
+        EmotionLabels = (string[])other.EmotionLabels.Clone();
+        IncludeArousalValence = other.IncludeArousalValence;
+        FeatureLayerIndex = other.FeatureLayerIndex;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        DropoutRate = other.DropoutRate;
+    }
+
     #region Audio Preprocessing
 
     /// <summary>Gets or sets the expected audio sample rate in Hz.</summary>
@@ -90,6 +125,9 @@ public class WavLMSEROptions : ModelOptions
 
     /// <summary>Gets or sets the learning rate.</summary>
     public double LearningRate { get; set; } = 1e-5;
+
+    /// <summary>Gets or sets the decoupled AdamW weight decay.</summary>
+    public double WeightDecay { get; set; } = 0.01;
 
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.1;

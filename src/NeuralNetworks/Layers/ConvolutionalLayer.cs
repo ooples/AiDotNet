@@ -271,12 +271,12 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasReshaped4D;
 
     /// <summary>
-    /// Snapshot of the <c>_biases</c> reference at the moment
-    /// <see cref="_biasReshaped4D"/> was populated. A simple reference equality
-    /// check against the current <c>_biases</c> detects optimizer-driven
-    /// rebinds — the cache is invalidated in that case.
+    /// Snapshot of the <c>_biases</c> reference and mutation version at the moment
+    /// <see cref="_biasReshaped4D"/> was populated. Optimizers may either rebind the
+    /// tensor or update its storage in place, so both signals are required.
     /// </summary>
     private Tensor<T>? _biasReshaped4DSource;
+    private int _biasReshaped4DVersion = -1;
 
     /// <summary>
     /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass.
@@ -1257,19 +1257,20 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             Engine.Conv2DInto(_preAllocatedOutput, input4D, _kernels, Stride, Padding, dilation: 1);
             var output = _preAllocatedOutput;
 
-            // Reuse a cached rank-4 reshape view of _biases. Cache is keyed on
-            // the _biases reference: optimizer.Step rebinds to a new tensor →
-            // cache invalidates → fresh reshape. Within a single iteration the
-            // bias reference is stable, so this collapses 19 conv-layer reshape
-            // calls per Predict down to 1-per-bias-rebind. Each cache hit saves
+            // Reuse a cached rank-4 reshape of _biases. Cache by tensor identity
+            // and mutation version because optimizers may rebind the parameter or
+            // update its contents in place. Each cache hit saves
             // one Tensor allocation + DifferentiableOps.RecordUnary + AutoTracer
             // record per layer per forward. Tape-inactive guard at the branch
             // level (entered only when neither tape nor IsTrainingMode is set)
             // makes this safe — no GradFn needs to bind through the reshape.
-            if (!ReferenceEquals(_biasReshaped4DSource, _biases) || _biasReshaped4D is null)
+            if (!ReferenceEquals(_biasReshaped4DSource, _biases)
+                || _biasReshaped4D is null
+                || _biasReshaped4DVersion != _biases.Version)
             {
                 _biasReshaped4D = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
                 _biasReshaped4DSource = _biases;
+                _biasReshaped4DVersion = _biases.Version;
             }
             Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
 
@@ -1739,9 +1740,38 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         src.Slice(0, kernelLen).CopyTo(_kernels.Data.Span);
         src.Slice(kernelLen, biasLen).CopyTo(_biases.Data.Span);
 
+        // Span writes preserve tensor identity and do not advance Tensor.Version.
+        // Drop the materialized inference reshape so it cannot retain old values.
+        InvalidateBiasReshapeCache();
+
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_kernels);
         Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    internal override void CopyTrainableParametersFrom(IReadOnlyList<Tensor<T>> sources)
+    {
+        base.CopyTrainableParametersFrom(sources);
+        InvalidateBiasReshapeCache();
+    }
+
+    private void InvalidateBiasReshapeCache()
+    {
+        _biasReshaped4D = null;
+        _biasReshaped4DSource = null;
+        _biasReshaped4DVersion = -1;
+    }
+
+    /// <inheritdoc/>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+
+        // Parameter-buffer optimizers can update aliased bias storage without
+        // advancing this tensor view's Version. Rebuild the materialized reshape
+        // on the first inference forward after every training phase.
+        if (!isTraining)
+            InvalidateBiasReshapeCache();
     }
 
     /// <summary>

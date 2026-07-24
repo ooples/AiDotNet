@@ -888,10 +888,11 @@ promptTemplate:
     }
 
     /// <summary>
-    /// Thread 3 (IAiModelBuilder): the advanced <c>ConfigureAutoML(IAutoMLModel&lt;...&gt;)</c> overload must
-    /// NOT be declared on the IAiModelBuilder interface (adding it is a breaking change for every external
-    /// implementer), but it MUST remain a public method on the concrete AiModelBuilder — which is exactly
-    /// what the generated YAML applier dispatches against.
+    /// Thread 3 (IAiModelBuilder): the advanced <c>ConfigureAutoML(IAutoMLModel&lt;...&gt;)</c> overload must be
+    /// declared on BOTH the IAiModelBuilder interface AND the concrete AiModelBuilder. Every fluent
+    /// <c>Configure*</c> method belongs on the interface so it is callable through the interface abstraction
+    /// (and dispatched against by the generated YAML applier), and it must remain a public method on the
+    /// concrete builder.
     /// </summary>
     [Fact]
     public void ConfigureAutoML_IAutoMLModelOverload_IsOnBothInterfaceAndConcreteBuilder()

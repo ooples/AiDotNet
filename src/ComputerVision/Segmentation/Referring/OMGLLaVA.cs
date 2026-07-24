@@ -196,7 +196,7 @@ public class OMGLLaVA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -325,8 +325,11 @@ public class OMGLLaVA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new OMGLLaVA<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new OMGLLaVA<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+        ? new OMGLLaVA<T>(Architecture, optimizer: null, lossFunction: LossFunction,
+            numClasses: _numClasses, dropRate: _dropRate, options: new OMGLLaVAOptions(_options))
+        : new OMGLLaVA<T>(Architecture,
+            _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."),
+            _numClasses, new OMGLLaVAOptions(_options));
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

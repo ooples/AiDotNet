@@ -31,6 +31,35 @@ namespace AiDotNet.LossFunctions;
 [LossProperty(IsNonNegative = true, ZeroForIdentical = false, RequiresProbabilityInputs = false, TestInputFormat = LossTestInputFormat.RawLogits, ExpectedOutput = OutputType.Logits)]
 public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 {
+    private readonly int? _classAxis;
+
+    /// <summary>
+    /// Initializes cross-entropy with automatic class-axis inference.
+    /// </summary>
+    public CrossEntropyWithLogitsLoss()
+    {
+    }
+
+    /// <summary>
+    /// Initializes cross-entropy with an explicit class axis.
+    /// </summary>
+    /// <param name="classAxis">
+    /// The class dimension. Negative values are resolved from the end of the prediction shape,
+    /// matching the usual tensor-axis convention.
+    /// </param>
+    /// <remarks>
+    /// Use this overload when the model has a defined layout such as NCHW segmentation. Automatic
+    /// inference remains the parameterless default for sequence and classification callers whose
+    /// logits conventionally place classes on the final axis.
+    /// </remarks>
+    public CrossEntropyWithLogitsLoss(int classAxis)
+    {
+        _classAxis = classAxis;
+    }
+
+    /// <summary>Gets the explicitly configured class axis, or null when inference is enabled.</summary>
+    public int? ClassAxis => _classAxis;
+
     /// <summary>
     /// Calculates the Cross-Entropy loss from raw logits using log-sum-exp for stability.
     /// </summary>
@@ -75,15 +104,16 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     /// </summary>
     /// <param name="predicted">Raw logits.</param>
     /// <param name="actual">One-hot encoded target vector.</param>
-    /// <returns>Gradient: softmax(logits) - targets.</returns>
+    /// <returns>Gradient: softmax(logits) * sum(targets) - targets.</returns>
     /// <remarks>
     /// <para>
     /// The gradient of cross-entropy loss with respect to logits has the elegant form:
-    ///   d(loss)/d(logit_i) = softmax(logit_i) - target_i
+    ///   d(loss)/d(logit_i) = softmax(logit_i) * sum(target) - target_i
     ///
-    /// This is one of the key advantages of combining softmax and cross-entropy:
-    /// the gradient is simply the difference between the predicted probabilities
-    /// and the targets, which is both easy to compute and numerically stable.
+    /// For a one-hot target or normalized soft distribution, sum(target) = 1 and
+    /// this reduces to the familiar softmax(logit_i) - target_i form. Retaining
+    /// the target mass is necessary because <see cref="CalculateLoss"/> also
+    /// accepts weighted/non-normalized soft targets.
     /// </para>
     /// </remarks>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
@@ -100,18 +130,21 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 
         var expValues = new Vector<T>(predicted.Length);
         T sumExp = NumOps.Zero;
+        T targetMass = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
             expValues[i] = NumOps.Exp(NumOps.Subtract(predicted[i], maxLogit));
             sumExp = NumOps.Add(sumExp, expValues[i]);
+            targetMass = NumOps.Add(targetMass, actual[i]);
         }
 
-        // Gradient = softmax(logits) - targets
+        // Gradient = softmax(logits) * sum(targets) - targets.
+        // The target-mass factor is one for the usual one-hot/probability target.
         var derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
             T softmaxI = NumOps.Divide(expValues[i], sumExp);
-            derivative[i] = NumOps.Subtract(softmaxI, actual[i]);
+            derivative[i] = NumOps.Subtract(NumOps.Multiply(softmaxI, targetMass), actual[i]);
         }
 
         return derivative;
@@ -209,6 +242,22 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     private int ResolveClassAxis(Tensor<T> predicted, Tensor<T> target)
     {
         int rank = predicted.Shape.Length;
+        if (rank == 0)
+            throw new ArgumentException("Cross-entropy logits must have at least one dimension.", nameof(predicted));
+
+        if (_classAxis.HasValue)
+        {
+            int explicitAxis = _classAxis.Value < 0 ? rank + _classAxis.Value : _classAxis.Value;
+            if (explicitAxis < 0 || explicitAxis >= rank)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(_classAxis),
+                    _classAxis.Value,
+                    $"Class axis {_classAxis.Value} is outside logits rank {rank}.");
+            }
+            return explicitAxis;
+        }
+
         int defaultAxis = rank - 1;
 
         if (target.Shape.Length == rank - 1)

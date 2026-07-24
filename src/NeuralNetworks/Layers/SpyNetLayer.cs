@@ -41,7 +41,6 @@ public class SpyNetLayer<T> : LayerBase<T>
 {
     #region Fields
 
-    private readonly IEngine _engine;
     private readonly int _numLevels;
     // Non-readonly: lazy ctor leaves these = -1 until OnFirstForward.
     private int _inputChannels;
@@ -71,10 +70,8 @@ public class SpyNetLayer<T> : LayerBase<T>
     /// <param name="inputWidth">Width of input frames.</param>
     /// <param name="inputChannels">Number of input channels (typically 3 for RGB).</param>
     /// <param name="numLevels">Number of pyramid levels (default: 5).</param>
-    /// <param name="engine">Optional computation engine (CPU or GPU). If null, uses default CPU engine.</param>
     public SpyNetLayer(
-        int numLevels = 5,
-        IEngine? engine = null)
+        int numLevels = 5)
         : base([-1, -1, -1], [2, -1, -1])
     {
         // Reject numLevels <= 0 at construction. The pyramid loop below
@@ -88,7 +85,6 @@ public class SpyNetLayer<T> : LayerBase<T>
                 nameof(numLevels),
                 $"SpyNetLayer requires numLevels >= 1; got {numLevels}.");
 
-        _engine = engine ?? new CpuEngine();
         _inputHeight = -1; // resolved in OnFirstForward
         _inputWidth = -1;  // resolved in OnFirstForward
         _inputChannels = -1; // resolved in OnFirstForward (single-frame channels)
@@ -260,9 +256,16 @@ public class SpyNetLayer<T> : LayerBase<T>
         _cachedPyramid1.AddRange(pyramid1);
         _cachedPyramid2.AddRange(pyramid2);
 
-        // Initialize flow at coarsest level (zeros)
-        int coarseH = height >> (_numLevels - 1);
-        int coarseW = width >> (_numLevels - 1);
+        // Initialize flow at the coarsest level (zeros). Size it from the ACTUAL coarsest pyramid
+        // level rather than `height >> (_numLevels - 1)`: BuildPyramid's per-level halving rounds
+        // (e.g. ceil / floor of odd dims) independently of the shift, so the two can disagree by a
+        // pixel — leaving the initial flow mismatched with img1/img2 at the coarsest level and
+        // overrunning the warp/concat buffers (IndexOutOfRange in ConcatenateForModule on the
+        // BasicVSR++ second-order alignment path). Deriving from the pyramid keeps flow, img1 and
+        // warped2 exactly aligned at every level (finer levels already upsample flow to levelH/levelW).
+        var coarsestLevel = pyramid1[_numLevels - 1];
+        int coarseH = hasBatch ? coarsestLevel.Shape[2] : coarsestLevel.Shape[1];
+        int coarseW = hasBatch ? coarsestLevel.Shape[3] : coarsestLevel.Shape[2];
         var flowShape = hasBatch ? new[] { batch, 2, coarseH, coarseW } : new[] { 2, coarseH, coarseW };
         var flow = new Tensor<T>(flowShape);
 
@@ -831,21 +834,20 @@ public class SpyNetLayer<T> : LayerBase<T>
             }
         }
 
-        // Ensure image is in 4D format for GridSample
-        var image4D = image;
-        if (!hasBatch)
-        {
-            image4D = image.Reshape(new[] { 1, channels, height, width });
-        }
+        // Engine.GridSample is NCHW (PyTorch F.grid_sample convention, standardized in Tensors #777):
+        // input [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. SpyNet
+        // already works in channels-first [C, H, W], so pass the NCHW image directly — no permute. (An
+        // earlier revision permuted to NHWC because the engine was NHWC at the time; that flipped after
+        // #777, so the permute became backwards: it re-labelled the image's H dim as "channels", warping
+        // a 3-channel frame into a 2-"channel" tensor at the coarse 2×2 pyramid level, which made
+        // ConcatenateForModule read past its end → IndexOutOfRange. The grid is already in GridSample's
+        // [B, outH, outW, 2] layout with align-corners normalization, so it needs no change.)
+        var image4D = hasBatch ? image : image.Reshape(new[] { 1, channels, height, width });
+        var warped = Engine.GridSample(image4D, grid);                           // [B, C, H, W]
 
-        // Use IEngine.GridSample for hardware-accelerated bilinear sampling
-        var warped = _engine.GridSample(image4D, grid);
-
-        // Remove batch dimension if input didn't have it
+        // Remove batch dimension if input didn't have it.
         if (!hasBatch && warped.Rank == 4)
         {
-            // Use actual warped dimensions, not original image dimensions
-            // (GridSample output may differ from input at different pyramid levels)
             warped = warped.Reshape(new[] { warped.Shape[1], warped.Shape[2], warped.Shape[3] });
         }
 

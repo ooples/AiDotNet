@@ -231,74 +231,37 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         bool wasSingleSample = input.Rank == 1;
 
-        int batchSize;
-        Matrix<T> inputMatrix;
+        // Promote a single rank-1 [InputFeatures] sample to [1, InputFeatures] so the whole
+        // path is one uniform [batch, InputFeatures] dense op chain.
+        var input2d = wasSingleSample
+            ? Engine.Reshape(input, new[] { 1, InputFeatures })
+            : input;
 
+        int inputLen = input2d.Shape[1];
+        if (inputLen != InputFeatures)
+        {
+            throw new ArgumentException(
+                $"Input size {inputLen} does not match expected {InputFeatures}.");
+        }
+
+        // output = input @ Wᵀ = (W @ inputᵀ)ᵀ + bias, with W the sparse weight [Out, In].
+        // Built entirely from TAPE-TRACKED Engine ops: the sparse matmul auto-records via
+        // AiDotNet.Tensors #758 ISparseEngine.SparseMatMul (dense-gradient variant), so the
+        // gradient reaches the registered _weights / _biases. The prior implementation
+        // copied into Matrix<T> element by element and called the non-differentiable
+        // ISparseEngine.SpMM, detaching the tape — TapeGradient_ShouldReachAtLeastOne-
+        // TrainableParameter observed every parameter get a zero gradient.
+        var inputT = Engine.TensorTranspose(input2d);                        // [In, batch]
+        var outT = _engine.SparseMatMul(_weights, inputT);                   // [Out, batch]
+        var outBO = Engine.TensorTranspose(outT);                            // [batch, Out]
+        var biased = Engine.TensorBroadcastAdd(
+            outBO, Engine.Reshape(_biases, new[] { 1, OutputFeatures }));    // [batch, Out]
+        var activated = ApplyActivation(biased);
+
+        // Return a rank-1 [OutputFeatures] tensor for a rank-1 input to match its rank.
         if (wasSingleSample)
         {
-            // Single sample - validate input size
-            if (input.Shape[0] != InputFeatures)
-            {
-                throw new ArgumentException(
-                    $"Input size {input.Shape[0]} does not match expected {InputFeatures}.");
-            }
-
-            batchSize = 1;
-            inputMatrix = new Matrix<T>(1, InputFeatures);
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                inputMatrix[0, i] = input[i];
-            }
-        }
-        else
-        {
-            batchSize = input.Shape[0];
-            int inputLen = input.Shape[1];
-
-            if (inputLen != InputFeatures)
-            {
-                throw new ArgumentException(
-                    $"Input size {inputLen} does not match expected {InputFeatures}.");
-            }
-
-            inputMatrix = new Matrix<T>(batchSize, InputFeatures);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int i = 0; i < InputFeatures; i++)
-                {
-                    inputMatrix[b, i] = input[b, i];
-                }
-            }
-        }
-
-        // Transpose input for SpMM: output = W * X^T, then transpose back
-        var inputTransposed = TransposeMatrix(inputMatrix);
-
-        // Sparse matrix multiplication
-        var outputMatrix = _engine.SpMM(_weights, inputTransposed);
-
-        // Transpose back and add biases (output fully overwritten, safe to rent)
-        var output = TensorAllocator.Rent<T>([batchSize, OutputFeatures]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                output[b, o] = _numOps.Add(outputMatrix[o, b], _biases[o]);
-            }
-        }
-
-        // Apply activation function
-        var activated = ApplyActivation(output);
-
-        // Return 1D tensor for single sample input to match input rank
-        if (wasSingleSample)
-        {
-            var result = new Tensor<T>([OutputFeatures]);
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                result[o] = activated[0, o];
-            }
-            // Store _lastOutput with same rank as returned output for consistent backward pass
+            var result = Engine.Reshape(activated, new[] { OutputFeatures });
             _lastOutput = result;
             return result;
         }

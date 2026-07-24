@@ -4,6 +4,7 @@ using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -76,7 +77,7 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region Constructors
 
     public PANNs(NeuralNetworkArchitecture<T> architecture, string modelPath, PANNsOptions? options = null)
-        : base(architecture)
+        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -91,11 +92,22 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         InitializeLayers();
     }
 
-    public PANNs(NeuralNetworkArchitecture<T> architecture, PANNsOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+    public PANNs(
+        NeuralNetworkArchitecture<T> architecture,
+        PANNsOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PANNsOptions(); _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        if (_options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), "PANNs learning rate must be positive.");
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
@@ -159,7 +171,28 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         else Layers.AddRange(LayerHelper<T>.CreateDefaultPANNsLayers(numMels: _options.NumMels, baseChannels: _options.BaseChannels, numBlocks: _options.NumBlocks, embeddingDim: _options.EmbeddingDim, numClasses: ClassLabels.Count, dropoutRate: _options.DropoutRate));
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxEncoder is not null) return PostprocessOutput(OnnxEncoder.Run(input));
+        // PANNs (Kong et al., 2020) emits SIGMOID clip-wise probabilities, one per AudioSet tag —
+        // multi-label scores in [0,1], never negative. Route the raw head through PostprocessOutput
+        // (the sigmoid) so the public prediction is a probability regardless of whether the head is
+        // the sigmoid-terminated CNN14 factory or a linear-headed architecture the caller supplied.
+        // Force inference mode for the forward so the probabilities are deterministic (dropout off).
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return PostprocessOutput(c);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
@@ -167,7 +200,7 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -204,15 +237,15 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new PANNs<T>(Architecture, mp, _options);
-        return new PANNs<T>(Architecture, _options);
+            return new PANNs<T>(Architecture, mp, new PANNsOptions(_options));
+        return new PANNs<T>(Architecture, new PANNsOptions(_options), lossFunction: LossFunction);
     }
 
     #endregion
 
     #region Helpers
 
-    private T[] ClassifyWindow(Tensor<T> melSpec) { Tensor<T> output; if (IsOnnxMode && OnnxEncoder is not null) { var inp = new Tensor<T>([1, 1, melSpec.Shape[0], melSpec.Shape[1]]); for (int t = 0; t < melSpec.Shape[0]; t++) for (int f = 0; f < melSpec.Shape[1]; f++) inp[0, 0, t, f] = melSpec[t, f]; output = OnnxEncoder.Run(inp); } else if (_useNativeMode) { var inp = new Tensor<T>([melSpec.Length]); int idx = 0; for (int t = 0; t < melSpec.Shape[0]; t++) for (int f = 0; f < melSpec.Shape[1]; f++) inp[idx++] = melSpec[t, f]; output = Predict(inp); } else { throw new InvalidOperationException("No model available for classification. Provide an ONNX model path or use native training mode."); } var scores = new T[ClassLabels.Count]; for (int i = 0; i < Math.Min(output.Length, scores.Length); i++) scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(output[i])))); return scores; }
+    private T[] ClassifyWindow(Tensor<T> melSpec) { Tensor<T> output; if (IsOnnxMode && OnnxEncoder is not null) { var inp = new Tensor<T>([1, 1, melSpec.Shape[0], melSpec.Shape[1]]); for (int t = 0; t < melSpec.Shape[0]; t++) for (int f = 0; f < melSpec.Shape[1]; f++) inp[0, 0, t, f] = melSpec[t, f]; output = PostprocessOutput(OnnxEncoder.Run(inp)); } else if (_useNativeMode) { var inp = new Tensor<T>([melSpec.Length]); int idx = 0; for (int t = 0; t < melSpec.Shape[0]; t++) for (int f = 0; f < melSpec.Shape[1]; f++) inp[idx++] = melSpec[t, f]; output = Predict(inp); } else { throw new InvalidOperationException("No model available for classification. Provide an ONNX model path or use native training mode."); } var scores = new T[ClassLabels.Count]; for (int i = 0; i < Math.Min(output.Length, scores.Length); i++) scores[i] = output[i]; return scores; }
     private List<Tensor<T>> SplitIntoWindows(Tensor<T> audio) { var w = new List<Tensor<T>>(); int ws = (int)(_options.WindowSize * _options.SampleRate), hs = (int)(ws * (1 - _options.WindowOverlap)); if (hs <= 0) hs = 1; int ls = 0; for (int s = 0; s + ws <= audio.Length; s += hs) { var t = new Tensor<T>([ws]); for (int i = 0; i < ws; i++) t[i] = audio[s + i]; w.Add(t); ls = s + hs; } int rs = w.Count > 0 ? ls : 0, rem = audio.Length - rs; if (rem > ws / 10) { var t = new Tensor<T>([ws]); for (int i = 0; i < rem && i < ws; i++) t[i] = audio[rs + i]; w.Add(t); } else if (w.Count == 0 && audio.Length > 0) { var t = new Tensor<T>([ws]); for (int i = 0; i < audio.Length; i++) t[i] = audio[i]; w.Add(t); } return w; }
     private List<AudioEvent<T>> MergeEvents(List<AudioEvent<T>> events) { if (events.Count == 0) return events; var m = new List<AudioEvent<T>>(); foreach (var g in events.GroupBy(e => e.EventType)) { var sorted = g.OrderBy(e => e.StartTime).ToList(); var cur = sorted[0]; for (int i = 1; i < sorted.Count; i++) { var next = sorted[i]; if (next.StartTime <= cur.EndTime + 0.1) { double cc = NumOps.ToDouble(cur.Confidence), nc = NumOps.ToDouble(next.Confidence); cur = new AudioEvent<T> { EventType = cur.EventType, StartTime = cur.StartTime, EndTime = Math.Max(cur.EndTime, next.EndTime), Confidence = cc > nc ? cur.Confidence : next.Confidence, PeakTime = cc > nc ? cur.PeakTime : next.PeakTime }; } else { m.Add(cur); cur = next; } } m.Add(cur); } return m.OrderBy(e => e.StartTime).ToList(); }
     private Dictionary<string, EventStatistics<T>> ComputeEventStatistics(IReadOnlyList<AudioEvent<T>> events) { var s = new Dictionary<string, EventStatistics<T>>(); foreach (var g in events.GroupBy(e => e.EventType)) { var l = g.ToList(); s[g.Key] = new EventStatistics<T> { Count = l.Count, TotalDuration = l.Sum(e => e.Duration), AverageConfidence = NumOps.FromDouble(l.Average(e => NumOps.ToDouble(e.Confidence))), MaxConfidence = NumOps.FromDouble(l.Max(e => NumOps.ToDouble(e.Confidence))) }; } return s; }

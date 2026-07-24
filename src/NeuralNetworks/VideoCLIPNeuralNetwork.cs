@@ -99,8 +99,6 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     // Gradient checkpointing: cached frames from the last forward pass for backward recomputation
     private List<Tensor<T>>? _cachedTrainingFrames;
 
-    // Cached pre-normalized embedding for L2 normalization backward
-    private Vector<T>? _cachedPreNormEmbedding;
 
     #endregion
 
@@ -171,7 +169,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VideoCLIPOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
         Options = _options;
@@ -215,7 +213,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+            _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
             InitializeLayers();
         }
         catch
@@ -250,7 +248,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VideoCLIPOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
         Options = _options;
@@ -273,7 +271,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
         _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
 
         InitializeNativeLayers(channels);
     }
@@ -1098,16 +1096,21 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             pooled = Engine.Reshape(projected, [projected.Shape[^1]]);
         }
 
-        // Cache pre-normalized embedding for backward L2 norm Jacobian
+        // Paper-faithful contrastive training (Xu et al. 2021, §3.2): VideoCLIP average-pools the
+        // token sequence and contrasts the RAW pooled features with InfoNCE at temperature 1.0 — it
+        // does NOT L2-normalize the embeddings. We only normalize on the INFERENCE path (so the public
+        // similarity API returns cosine similarities). Normalizing on the TRAINING path additionally
+        // routes every gradient through the L2-norm Jacobian (I - yyᵀ)/‖x‖, whose 1/‖x‖ term produces a
+        // NaN gradient that drives the parameters to NaN on the first optimizer step (the batch's pooled
+        // embedding can sit near the origin for the random-init/random-target smoke fixture). Returning
+        // the un-normalized pooled features in training matches the paper and removes that NaN source;
+        // the encoder's LayerNorms keep the pooled features O(1) so the contrastive softmax stays stable.
         if (IsTrainingMode)
         {
-            int dim = pooled.Shape[0];
-            var preNorm = new Vector<T>(dim);
-            for (int i = 0; i < dim; i++) preNorm[i] = pooled[i];
-            _cachedPreNormEmbedding = preNorm;
+            return pooled;
         }
 
-        // L2 normalize via Engine ops
+        // L2 normalize via Engine ops (inference / similarity path only).
         return NormalizeTensor(pooled);
     }
 
@@ -1151,12 +1154,15 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             current = layer.Forward(current);
         }
 
-        // Take CLS token (row 0) as frame representation
-        // Extract first row from [seqLen, hiddenDim] → [hiddenDim]
+        // Take CLS token (row 0) as the frame representation. Use TAPE-TRACKED Engine ops
+        // (TensorNarrow + Reshape), NOT a raw Data.Span copy into a fresh Tensor: the raw copy
+        // produced a tensor with no GradFn, severing the ViT frame encoder from the gradient tape so
+        // its patch-embedding / attention / FFN weights received NO gradient and never trained — the
+        // opposite of the paper, where the frame encoder is learned end-to-end under the contrastive
+        // objective (Xu et al. 2021). Slicing row 0 through the Engine keeps the encoder on the tape.
         int hiddenDim = current.Shape[^1];
-        var clsData = new T[hiddenDim];
-        current.Data.Span.Slice(0, hiddenDim).CopyTo(clsData);
-        return new Tensor<T>(new[] { hiddenDim }, new Vector<T>(clsData));
+        var clsRow = Engine.TensorNarrow(current, 0, 0, 1); // [seqLen, hiddenDim] -> [1, hiddenDim]
+        return Engine.Reshape(clsRow, new[] { hiddenDim });
     }
 
     /// <summary>
@@ -1423,8 +1429,16 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         // Sum all elements to get ||x||^2
         var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
         var sumSquared = Engine.ReduceSum(squared, allAxes, keepDims: true);
-        // Add epsilon for numerical stability, then sqrt to get ||x||
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-12)));
+        // Add epsilon for numerical stability, then sqrt to get ||x||. The epsilon is 1e-6, NOT a
+        // token 1e-12: ||x||^2 is a sum of squares that is mathematically >= 0, but a parallel-BLAS
+        // reduction can return a slightly NEGATIVE value from summation-order rounding (~float32
+        // machine-eps x num_terms). With a 1e-12 floor that negative survives into sqrt -> NaN, which
+        // then poisons the whole embedding (VideoCLIP DifferentInputs_AfterTraining saw L2 distance =
+        // NaN on the parallel CI runner while passing locally). A 1e-6 floor keeps the radicand
+        // positive under that drift and bounds the 1/||x|| normalize backward as the single-pair
+        // contrastive objective drives the embedding norm toward zero, while staying negligible for a
+        // well-formed unit embedding (||x||^2 ~ dim).
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-6)));
         // Divide element-wise: x / ||x||
         return Engine.TensorBroadcastDivide(tensor, norm);
     }

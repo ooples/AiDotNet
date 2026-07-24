@@ -916,6 +916,64 @@ public class CausalForest<T> : CausalModelBase<T>
         return new CausalForest<T>(_numTrees, _maxDepth, _minSamplesLeaf, _maxFeatures, _honest, _honestFraction);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A fitted causal forest's predictive state is its tree ensemble, not
+    /// merely the propensity-coefficient vector returned by
+    /// <see cref="GetParameters"/>. Copy that state explicitly so a clone
+    /// cannot be marked fitted while containing no trees.
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        var copy = new CausalForest<T>(
+            _numTrees, _maxDepth, _minSamplesLeaf, _maxFeatures, _honest, _honestFraction)
+        {
+            NumFeatures = NumFeatures,
+            IsFitted = IsFitted,
+            FeatureNames = FeatureNames is null ? null : (string[])FeatureNames.Clone(),
+            _propensityCoefficients = CopyVector(_propensityCoefficients),
+            _cachedTreatment = CopyVector(_cachedTreatment),
+            _cachedOutcome = CopyVector(_cachedOutcome),
+            _cachedFeatures = CopyMatrix(_cachedFeatures),
+            _trees = _trees?.Select(CloneTree).ToList()
+        };
+
+        return copy;
+    }
+
+    private static CausalTree CloneTree(CausalTree source) =>
+        new()
+        {
+            IsLeaf = source.IsLeaf,
+            FeatureIndex = source.FeatureIndex,
+            Threshold = source.Threshold,
+            TreatmentEffect = source.TreatmentEffect,
+            NumSamples = source.NumSamples,
+            Left = source.Left is null ? null : CloneTree(source.Left),
+            Right = source.Right is null ? null : CloneTree(source.Right)
+        };
+
+    private static Vector<TValue>? CopyVector<TValue>(Vector<TValue>? source)
+    {
+        if (source is null) return null;
+        var copy = new Vector<TValue>(source.Length);
+        for (int i = 0; i < source.Length; i++)
+            copy[i] = source[i];
+        return copy;
+    }
+
+    private static Matrix<T>? CopyMatrix(Matrix<T>? source)
+    {
+        if (source is null) return null;
+        var copy = new Matrix<T>(source.Rows, source.Columns);
+        for (int row = 0; row < source.Rows; row++)
+        {
+            for (int column = 0; column < source.Columns; column++)
+                copy[row, column] = source[row, column];
+        }
+        return copy;
+    }
+
     /// <summary>
     /// Gets feature importance based on split frequency.
     /// </summary>

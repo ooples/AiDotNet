@@ -475,12 +475,26 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             return OnnxEncoder.Run(input);
         }
 
-        var current = input;
-        foreach (var layer in Layers)
+        // Force inference mode so the probabilities are deterministic (dropout off), then run the
+        // sigmoid via PostprocessOutput — AST (Gong et al. 2021) emits per-class sigmoid probabilities
+        // in [0,1] for multi-label audio-event detection. Without this the head returned raw logits, so
+        // Predict produced negative / >1 "class scores" (ClassOutput_ShouldBeNonNegative) and silence
+        // mapped to a non-silent RMS (SilenceIn_NearSilenceOut). Mirrors PANNs.PredictCore.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
         {
-            current = layer.Forward(current);
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            return PostprocessOutput(current);
         }
-        return current;
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     /// <inheritdoc/>
@@ -496,7 +510,7 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -647,9 +661,10 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new ASTOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AST<T>(Architecture, mp, _options);
-        return new AST<T>(Architecture, _options);
+            return new AST<T>(Architecture, mp, options);
+        return new AST<T>(Architecture, options);
     }
 
     #endregion

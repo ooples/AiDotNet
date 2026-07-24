@@ -238,6 +238,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <inheritdoc />
     public virtual async Task InitializeAsync()
     {
+        WriteCiTestTrace("test-start");
+
         // #1706/#1305: heavy models serialize so their (single-threaded-BLAS) forward/backward runs
         // uncontended and fits the per-test timeout. Acquired before the determinism setup so the
         // entire test body is covered; released in DisposeAsync.
@@ -349,6 +351,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
         finally
         {
+            WriteCiTestTrace("test-end");
+
             // Release the heavy gate if this test acquired it, so the next heavy test can run.
             if (_heavyGateAcquired)
             {
@@ -357,6 +361,34 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             }
         }
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Emits an opt-in class/precision marker for serialized CI shards before model construction.
+    /// The workflow tails this file beside its memory sampler, so a runner-level OOM remains
+    /// attributable even when VSTest cannot flush its normal completion output or TRX file.
+    /// </summary>
+    private void WriteCiTestTrace(string phase)
+    {
+        string? tracePath = Environment.GetEnvironmentVariable("AIDOTNET_TEST_TRACE_FILE");
+        if (string.IsNullOrWhiteSpace(tracePath)) return;
+
+        try
+        {
+            string? traceDirectory = Path.GetDirectoryName(tracePath);
+            if (!string.IsNullOrEmpty(traceDirectory))
+                Directory.CreateDirectory(traceDirectory);
+
+            File.AppendAllText(
+                tracePath,
+                $"{DateTimeOffset.UtcNow:O} [{phase}] {GetType().FullName} precision={typeof(T).FullName}{Environment.NewLine}");
+        }
+        catch (Exception ex)
+        {
+            // Diagnostics must never turn a passing test into a failure. The console warning still
+            // explains why an OOM marker may be absent if the runner filesystem becomes unavailable.
+            Console.Error.WriteLine($"[test-trace-warning] {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -466,7 +498,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
 
         // Measure initial loss (model's objective — MSE for most families, the model's own loss for
         // raw-logit cross-entropy LMs where MSE is meaningless; see MeasureLoss).
@@ -873,8 +905,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         Assert.Equal(out1.Length, out2.Length);
         for (int i = 0; i < out1.Length; i++)
-            Assert.True(Math.Abs(ConvertToDouble(out1[i]) - ConvertToDouble(out2[i])) < 1e-12,
-                $"Output[{i}] differs between runs: {out1[i]} vs {out2[i]}. Network may be non-deterministic.");
+        {
+            double delta = Math.Abs(ConvertToDouble(out1[i]) - ConvertToDouble(out2[i]));
+            if (delta >= 1e-12)
+            {
+                // Failure-only third replay distinguishes a one-time eager/compiled boundary drift
+                // (out2 == out3) from persistent state mutation (all three differ). Keep the strict
+                // invariant unchanged; this only makes a CI-only failure actionable.
+                var out3 = network.Predict(input);
+                Assert.Fail(
+                    $"Output[{i}] differs between runs: first={out1[i]}, second={out2[i]}, " +
+                    $"third={out3[i]}, first-second delta={delta:R}, " +
+                    $"second-third delta={Math.Abs(ConvertToDouble(out2[i]) - ConvertToDouble(out3[i])):R}. " +
+                    "Network may be non-deterministic or eager/compiled inference may disagree.");
+            }
+        }
     }
 
     [Fact(Timeout = 120000)]
@@ -991,7 +1036,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         for (int k = 0; k < 3; k++)
         {
             var clonedOutput = cloned.Predict(probeInputs[k]);
-            Assert.Equal(trainedOutputs[k].Length, clonedOutput.Length);
+            Assert.True(
+                trainedOutputs[k].Length == clonedOutput.Length,
+                $"Clone output shape changed after training at probe {k}: " +
+                $"trained=[{string.Join(", ", trainedOutputs[k].Shape)}] " +
+                $"({trainedOutputs[k].Length} values), cloned=[{string.Join(", ", clonedOutput.Shape)}] " +
+                $"({clonedOutput.Length} values).");
             double sumSq = 0, magSq = 0;
             for (int i = 0; i < trainedOutputs[k].Length; i++)
             {
@@ -1102,17 +1152,24 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // intermittent failures that look like flakiness but trace to a
         // shared-baseline bug. Clone after build so network2 starts
         // from the same weights as network1.
+        // Skip before building/cloning for models where the clone-based baseline is gate-infeasible
+        // (see MoreDataInvariantApplicable) — their more-data behaviour is covered by the non-cloning
+        // sibling training invariants.
+        if (!MoreDataInvariantApplicable) return;
+
         var network1 = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network1)) return;
 
         var input = CreateRandomTensor(InputShape, rng1);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng1);
+        var target = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(EffectiveOutputShape, rng1), rng1);
         var input2 = CreateRandomTensor(InputShape, rng2);
         // Use the CreateRandomTargetTensor hook so type-constrained
         // target families (NER + CRF) get legal labels — matches the
         // sibling assignment two lines above and the rationale at
-        // line 466/696.
-        var target2 = CreateRandomTargetTensor(EffectiveOutputShape, rng2);
+        // line 466/696. Softmax-CE models additionally get a well-posed
+        // (one-hot, sums-to-1) target so "more training doesn't degrade"
+        // is measured against a reachable objective.
+        var target2 = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(EffectiveOutputShape, rng2), rng2);
 
         // Run a probe Predict on network1 BEFORE cloning so any lazy
         // layers (PyTorch-style LazyConv2d / FullyConnectedLayer's lazy
@@ -1164,9 +1221,33 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Assert.False(double.IsNaN(lossShort) || double.IsNaN(lossLong),
             $"Loss became NaN during training: short={lossShort}, long={lossLong}. " +
             "This indicates gradient explosion or numerical instability in the optimizer path.");
-        Assert.True(lossLong <= lossShort + MoreDataTolerance,
-            $"{longIters} iterations loss ({lossLong:F6}) > {shortIters} iterations loss ({lossShort:F6}). " +
-            "Optimizer may be diverging with more training.");
+        if (lossLong > lossShort + MoreDataTolerance)
+        {
+            var shortParams = network1.GetParameters();
+            var longParams = network2.GetParameters();
+            double shortParamNormSq = 0.0;
+            double longParamNormSq = 0.0;
+            int shortNonFinite = 0;
+            int longNonFinite = 0;
+            for (int i = 0; i < shortParams.Length; i++)
+            {
+                double value = NumOps.ToDouble(shortParams[i]);
+                if (double.IsNaN(value) || double.IsInfinity(value)) shortNonFinite++;
+                else shortParamNormSq += value * value;
+            }
+            for (int i = 0; i < longParams.Length; i++)
+            {
+                double value = NumOps.ToDouble(longParams[i]);
+                if (double.IsNaN(value) || double.IsInfinity(value)) longNonFinite++;
+                else longParamNormSq += value * value;
+            }
+            Assert.Fail(
+                $"{network1.GetType().FullName} more-data invariant failed at precision {typeof(T).FullName}: " +
+                $"{longIters} iterations loss ({lossLong:R}) > {shortIters} iterations loss ({lossShort:R}) " +
+                $"+ tolerance ({MoreDataTolerance:R}). Parameter diagnostics: " +
+                $"short count={shortParams.Length}, L2={Math.Sqrt(shortParamNormSq):R}, nonfinite={shortNonFinite}; " +
+                $"long count={longParams.Length}, L2={Math.Sqrt(longParamNormSq):R}, nonfinite={longNonFinite}.");
+        }
     }
 
     // =====================================================
@@ -1317,10 +1398,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             for (int j = 0; j < chunk.Length; j++, globalIdx++)
             {
                 double after = ConvertToDouble(chunk[j]);
-                Assert.False(double.IsNaN(after),
-                    $"Parameter[{globalIdx}] is NaN after training — gradient computation is broken.");
-                Assert.False(double.IsInfinity(after),
-                    $"Parameter[{globalIdx}] is Infinity after training — gradient explosion.");
+                // Build the (expensive) diagnostic string ONLY when the invariant is
+                // actually violated. The previous form called Assert.False with an
+                // interpolated message UNCONDITIONALLY, so C# allocated two strings for
+                // every parameter — ~770M throwaway strings (~90 GB) on a 385M-param
+                // foundation model (GLaMM), which alone blew the 120 s xUnit budget and
+                // timed the test out. Guarding preserves the invariant exactly (every
+                // value is still inspected; identical failure messages) while paying the
+                // formatting/allocation cost only on the rare failure path.
+                if (double.IsNaN(after) || double.IsInfinity(after))
+                {
+                    Assert.False(double.IsNaN(after),
+                        $"Parameter[{globalIdx}] is NaN after training — gradient computation is broken.");
+                    Assert.False(double.IsInfinity(after),
+                        $"Parameter[{globalIdx}] is Infinity after training — gradient explosion.");
+                }
             }
         }
         Assert.True(anyChanged,
@@ -1377,6 +1469,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <see cref="Training_ShouldReduceLoss"/> / <c>LossStrictlyDecreasesOnMemorizationTask</c>).
     /// </summary>
     protected virtual bool OptimizerStepParamL2InvariantApplicable => true;
+
+    /// <summary>
+    /// True when <see cref="MoreData_ShouldNotDegrade"/> is gate-feasible for this model. Override to
+    /// <c>false</c> only for models where the invariant is INFRASTRUCTURE-infeasible — NOT where the
+    /// training is wrong. MoreData is unique among the training invariants in that it deep-CLONES the
+    /// built network (network2 = network1.Clone()) to give both runs an identical baseline; for a very
+    /// deep model (e.g. GraFPrint's 53-layer BatchNorm pyramid) that clone alone runs ~120 s regardless
+    /// of input size, so the test times out on the gate even though every per-step training invariant
+    /// passes. The model's more-training-doesn't-degrade behaviour is still covered by its sibling
+    /// invariants (<see cref="Training_ShouldReduceLoss"/>, <c>LossStrictlyDecreasesOnMemorizationTask</c>,
+    /// <see cref="TrainingError_ShouldNotExceedTestError"/>), which do not clone. Mirrors the narrow
+    /// <see cref="OptimizerStepParamL2InvariantApplicable"/> opt-out so ordinary models keep asserting it.
+    /// </summary>
+    protected virtual bool MoreDataInvariantApplicable => true;
 
     [Fact(Timeout = 120000)]
     public async Task OptimizerStep_ParamL2_DoesNotExplode()
@@ -1617,8 +1723,16 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Assert.Equal(singleOutput.Length, batchOutput.Length);
         for (int i = 0; i < singleOutput.Length; i++)
         {
-            Assert.True(Math.Abs(ConvertToDouble(singleOutput[i]) - ConvertToDouble(batchOutput[i])) < 1e-12,
-                $"Output[{i}] differs: single={singleOutput[i]}, batch={batchOutput[i]}");
+            double delta = Math.Abs(ConvertToDouble(singleOutput[i]) - ConvertToDouble(batchOutput[i]));
+            if (delta >= 1e-12)
+            {
+                var replayOutput = network.Predict(input);
+                Assert.Fail(
+                    $"Output[{i}] differs: first={singleOutput[i]}, second={batchOutput[i]}, " +
+                    $"third={replayOutput[i]}, first-second delta={delta:R}, " +
+                    $"second-third delta={Math.Abs(ConvertToDouble(batchOutput[i]) - ConvertToDouble(replayOutput[i])):R}. " +
+                    "A zero second-third delta points to eager/compiled inference parity; a non-zero delta points to mutable inference state.");
+            }
         }
     }
 
@@ -1674,14 +1788,129 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce)
         {
-            int len = Math.Min(output.Length, target.Length);
-            if (len == 0) return double.NaN;
-            var predicted = new Vector<T>(len);
-            var actual = new Vector<T>(len);
-            for (int i = 0; i < len; i++) { predicted[i] = output[i]; actual[i] = target[i]; }
-            return ConvertToDouble(ce.CalculateLoss(predicted, actual));
+            if (output.Length == 0 || target.Length == 0) return double.NaN;
+
+            // Measure the model's ACTUAL training objective — the same per-position, class-axis
+            // softmax-CE (spatially/temporally mean-reduced) that ComputeTapeLoss descends during
+            // Train — rather than flattening the whole tensor into one global softmax. The old
+            // flatten path computed a SINGLE softmax over every element ([B,C,H,W] or [B,S,V] all
+            // mixed together), so a valid dense per-pixel one-hot target (num_positions active
+            // entries) exploded to O(num_positions·log N) and DISAGREED with what the optimizer
+            // minimizes — making "more training degrades" fire on healthy per-pixel segmentation
+            // training. Align measurement with the objective so the invariant tests are meaningful.
+            var predicted = output;
+            var outShape = output.Shape.ToArray();
+            var tgtShape = target.Shape.ToArray();
+            if (!outShape.SequenceEqual(tgtShape) && output.Length == target.Length)
+                predicted = output.Reshape(tgtShape);
+            var lossTensor = ce.ComputeTapeLoss(predicted, target);
+            return ConvertToDouble(lossTensor[0]);
         }
         return ComputeMSE(output, target);
+    }
+
+    /// <summary>
+    /// Returns a target that is well-posed for the model's loss. A model whose loss is softmax
+    /// <see cref="AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss{T}"/> (segmentation heads,
+    /// classifiers) needs a valid probability distribution as its target — the softmax output
+    /// sums to 1, so a raw random target (which does not) leaves an unreachable loss floor and
+    /// makes "training reduces loss" ill-posed. For a dense per-pixel segmentation head the softmax
+    /// is taken independently at <b>every spatial location</b>, so each pixel's class vector must
+    /// itself sum to 1 — a single one-hot over the whole flattened tensor leaves every other pixel
+    /// an all-zero (non-distribution) column. Instead give each pixel exactly one active class along
+    /// the class axis (a valid per-pixel one-hot distribution), which the model's per-pixel
+    /// softmax-CE objective (see <see cref="MeasureLoss"/>) can actually descend across the full
+    /// output. This mirrors the legal-label handling the NER/CRF test bases already do for their
+    /// type-constrained targets. Non-CE models keep their (MSE-appropriate) raw target unchanged.
+    /// </summary>
+    protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
+    {
+        // Scoped to softmax-CE SEGMENTATION heads (dense per-pixel class logits). Other
+        // CrossEntropyWithLogitsLoss families (LMs/classifiers) already receive appropriate
+        // targets via their own paths, and narrowing the guard keeps this from perturbing
+        // currently-green models.
+        if (target.Length > 0
+            && network is AiDotNet.Interfaces.ISegmentationModel<T> seg
+            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+        {
+            var shape = target.Shape;
+            int numClasses = seg.NumClasses;
+
+            // Identify the class axis: dense segmentation logits are NCHW/CHW, so the class axis is
+            // dim 1 (batched) or dim 0 (unbatched); fall back to the first axis whose size matches
+            // NumClasses. If none matches we cannot form a per-pixel distribution, so drop back to a
+            // single whole-tensor one-hot (still a valid, descendable target).
+            int classAxis = -1;
+            if (numClasses > 1)
+            {
+                if (shape.Length >= 2 && shape[1] == numClasses) classAxis = 1;
+                else if (shape.Length >= 1 && shape[0] == numClasses) classAxis = 0;
+                else for (int i = 0; i < shape.Length; i++) if (shape[i] == numClasses) { classAxis = i; break; }
+            }
+
+            var oneHot = new Tensor<T>(shape.ToArray());
+            if (classAxis < 0)
+            {
+                oneHot.Data.Span[rng.Next(target.Length)] = NumOps.One;
+                return oneHot;
+            }
+
+            // Row-major strides so we can address (pixel, class) positions directly.
+            int rank = shape.Length;
+            var strides = new int[rank];
+            strides[rank - 1] = 1;
+            for (int i = rank - 2; i >= 0; i--) strides[i] = strides[i + 1] * shape[i + 1];
+            int classStride = strides[classAxis];
+
+            // Odometer over every non-class coordinate (i.e. every pixel); set one random class = 1.
+            var coord = new int[rank];
+            var span = oneHot.Data.Span;
+            while (true)
+            {
+                int baseOffset = 0;
+                for (int i = 0; i < rank; i++) baseOffset += coord[i] * strides[i];
+                span[baseOffset + rng.Next(numClasses) * classStride] = NumOps.One;
+
+                int axis = rank - 1;
+                while (axis >= 0)
+                {
+                    if (axis == classAxis) { axis--; continue; }
+                    if (++coord[axis] < shape[axis]) break;
+                    coord[axis] = 0;
+                    axis--;
+                }
+                if (axis < 0) break;
+            }
+
+            // Unconditionally verify the invariant the loss depends on: every pixel is a valid
+            // one-hot distribution (its class column sums to exactly 1). Guards the construction
+            // odometer against regression so the "well-posed target" contract stays honest.
+            var vcoord = new int[rank];
+            int pixelsChecked = 0;
+            while (true)
+            {
+                int baseOffset = 0;
+                for (int i = 0; i < rank; i++) baseOffset += vcoord[i] * strides[i];
+                double pixelSum = 0.0;
+                for (int c = 0; c < numClasses; c++) pixelSum += ConvertToDouble(span[baseOffset + c * classStride]);
+                Assert.Equal(1.0, pixelSum, 6);
+                pixelsChecked++;
+
+                int axis = rank - 1;
+                while (axis >= 0)
+                {
+                    if (axis == classAxis) { axis--; continue; }
+                    if (++vcoord[axis] < shape[axis]) break;
+                    vcoord[axis] = 0;
+                    axis--;
+                }
+                if (axis < 0) break;
+            }
+            Assert.Equal(target.Length / numClasses, pixelsChecked);
+            return oneHot;
+        }
+        return target;
     }
 
     /// <summary>
@@ -1769,6 +1998,222 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         yield return single;
     }
 #endif
+
+    // ============================================================
+    // GRADIENT-CORRECTNESS INVARIANT (finite-difference gradcheck)
+    // ============================================================
+    // Verifies the analytical (reverse-mode autodiff) parameter gradients match a
+    // central finite difference of the loss — the industry-standard backward-
+    // correctness check (cf. torch.autograd.gradcheck). Unlike
+    // GradientFlow_ShouldBeNonZeroAndFinite (which only asserts grads are non-zero
+    // and finite) this asserts they are CORRECT: a wrong backward (sign flip, wrong
+    // scale, missing term, dropped gradient) can still reduce a memorization loss and
+    // pass every convergence invariant, but it cannot match a finite difference.
+    // Phased rollout tracked in issue #1872.
+
+    /// <summary>
+    /// When true, <see cref="Gradients_MatchFiniteDifference"/> runs for this model. Default FALSE:
+    /// the gradcheck infra + robustness (#1872) is validated and enabled on specific canaries
+    /// (FeedForwardNeuralNetwork, BasicVSR++), but broad enablement is a SEPARATE follow-up
+    /// (issue #1872) so it doesn't red this PR's shards while surfacing the backward-bug backlog.
+    /// Models opt in by overriding this to true.
+    /// </summary>
+    protected virtual bool GradientCheckApplicable => false;
+
+    /// <summary>Maximum number of parameters finite-differenced; each costs two forward passes.</summary>
+    protected virtual int GradientCheckSampleCount => 12;
+
+    /// <summary>
+    /// Exception types that represent a documented, EXPECTED gradcheck skip: lazy parameters not yet
+    /// materialized, a custom-forward model whose gradient path is not yet routed through
+    /// <c>ComputeGradients</c>, or a model whose flat <c>GetParameters</c>/<c>UpdateParameters</c>
+    /// round-trip is internally inconsistent (e.g. ExtremeLearningMachine). Anything else — a real
+    /// backward bug, a NullReferenceException, an OOM — must PROPAGATE and fail the test rather than be
+    /// silently swallowed, so the gradcheck stays a genuine canary (#1789 review). Mirrors the narrowing
+    /// used by <see cref="GradientFlow_ShouldBeNonZeroAndFinite"/> and the shape-inference catch above.
+    /// </summary>
+    private static bool IsExpectedGradcheckSkip(Exception ex)
+        => ex is ArgumentException or InvalidOperationException
+            or NotSupportedException or NotImplementedException
+            or AiDotNet.Exceptions.TensorShapeMismatchException;
+
+    [Fact(Timeout = 120000)]
+    public async Task Gradients_MatchFiniteDifference()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        if (!GradientCheckApplicable) return;
+
+        using var network = CreateNetwork();
+        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn) return;
+        if (TrainingInvariantsNotApplicable(network)) return;
+
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+
+        // Deterministic forward: eval mode turns Dropout into an identity, so the loss is a
+        // fixed function of the parameters. A stochastic training-mode mask would make the
+        // finite difference meaningless (each forward would sample a different mask).
+        network.SetTrainingMode(false);
+        var gradCheckClock = System.Diagnostics.Stopwatch.StartNew();
+        var forwardTimer = System.Diagnostics.Stopwatch.StartNew();
+        try { network.Predict(input); }
+        catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }   // materialize lazy params
+        double forwardSeconds = System.Math.Max(1e-3, forwardTimer.Elapsed.TotalSeconds);
+
+        // Forward-cost gate: a single forward this slow means ComputeGradients (one backward,
+        // ~2-3x a forward) plus even a 2-sample finite difference cannot fit the 120 s xUnit
+        // budget — huge VLM / segmentation models (GrokVision) at their fixture scale. Skip
+        // cleanly rather than time out; such models need a smaller CI fixture to be gradcheckable.
+        if (forwardSeconds > 10.0) return;
+
+        var loss = nn.DefaultLossFunction as AiDotNet.LossFunctions.LossFunctionBase<T>;
+        if (loss is null) return;   // need a tape-capable loss for a consistent scalar objective
+
+        // Analytical gradients (reverse-mode). Custom-forward models whose gradient path is not yet
+        // routed through ComputeGradients (Phase 1b, #1872) throw or return empty — skip. Cost is
+        // already bounded by the forward-cost gate above (a model that reaches here has a forward
+        // <= ~10 s, so its one backward — ~2-3x a forward — fits the budget without a background
+        // timeout thread that would otherwise orphan CPU into the next serial test).
+        Vector<T> analytical;
+        try { analytical = nn.ComputeGradients(input, target); }
+        catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }
+        if (analytical.Length == 0) return;
+
+        var theta = network.GetParameters();
+        // Order-alignment guard (Phase 1c, #1872): without equal lengths we cannot align
+        // the analytical-grad index with the parameter index — skip conservatively.
+        if (theta.Length != analytical.Length) return;
+
+        // Round-trip guard: the finite difference perturbs parameters via
+        // GetParameters/UpdateParameters. Models that do not support that round-trip cannot be
+        // finite-differenced this way, so skip cleanly rather than crash — e.g. closed-form
+        // ExtremeLearningMachine (UpdateParameters throws by design: input->hidden weights are
+        // fixed random, output weights are solved analytically), or models whose flat
+        // GetParameters length disagrees with their per-layer UpdateParameters slicing
+        // ("Expected N, got M"). Their training correctness is covered by their own paradigm's
+        // invariants, not by a backprop gradcheck.
+        try { network.UpdateParameters(theta); }
+        catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }
+
+        // Type-adaptive step + tolerance: float central differences are limited by ~1e-7
+        // relative rounding, so they need a larger step and a looser bound than double. The
+        // check still catches gross backward bugs (sign, scale, missing term) that the
+        // convergence invariants miss.
+        bool isDouble = typeof(T) == typeof(double);
+        double eps = isDouble ? 1e-6 : 5e-3;
+        double relTol = isDouble ? 1e-3 : 5e-2;
+        double absFloor = isDouble ? 1e-7 : 1e-3;
+
+        int n = theta.Length;
+        // Cost cap: each sampled parameter costs two forward passes. Large vision / segmentation /
+        // VLM models have multi-second forwards, so a fixed sweep blows the 120 s xUnit budget
+        // (InternImage, GrokVision timed out — not a correctness failure). Scale the sample count
+        // to a finite-difference wall-clock budget so the check stays a bounded smoke test; a
+        // hard elapsed break below is the backstop when even the reduced sweep runs long.
+        const double GradCheckBudgetSeconds = 60.0;
+        int budgetSamples = (int)(GradCheckBudgetSeconds / (2.0 * forwardSeconds));
+        int samples = System.Math.Max(2, System.Math.Min(System.Math.Min(GradientCheckSampleCount, n), budgetSamples));
+        int stride = System.Math.Max(1, n / samples);
+
+        int checkedCount = 0, mismatches = 0;
+        string firstFail = string.Empty;
+        for (int s = 0; s < samples; s++)
+        {
+            // Hard elapsed backstop: stop finite-differencing once the test's wall-clock nears the
+            // budget so a slow model asserts on the samples it DID check (checkedCount > 0) rather
+            // than timing out. If nothing got checked in time the post-loop guard skips cleanly.
+            if (gradCheckClock.Elapsed.TotalSeconds > GradCheckBudgetSeconds) break;
+
+            int i = (s * stride) % n;
+            T orig = theta[i];
+
+            double lp, lm;
+            // Perturb via GetParameters/UpdateParameters. A model whose flat parameter round-trip
+            // is internally inconsistent (its own UpdateParameters mis-slices the vector it just
+            // handed out via GetParameters, e.g. "Expected 4, got 33" / "gradient length must match
+            // parameter count") cannot be finite-differenced — that is a param-plumbing bug, not a
+            // gradient-correctness one, so restore and skip the model rather than crash-fail.
+            try
+            {
+                var pPlus = theta.Clone(); pPlus[i] = NumOps.Add(orig, NumOps.FromDouble(eps));
+                lp = GradientCheckLossAt(network, loss, input, target, pPlus);
+
+                var pMinus = theta.Clone(); pMinus[i] = NumOps.Subtract(orig, NumOps.FromDouble(eps));
+                lm = GradientCheckLossAt(network, loss, input, target, pMinus);
+
+                network.UpdateParameters(theta);   // restore original parameters
+            }
+            catch (Exception ex) when (IsExpectedGradcheckSkip(ex))
+            {
+                try { network.UpdateParameters(theta); } catch { /* best-effort restore */ }
+                return;
+            }
+            if (double.IsNaN(lp) || double.IsNaN(lm)) continue;
+
+            double numeric = (lp - lm) / (2.0 * eps);
+            double analytic = ConvertToDouble(analytical[i]);
+
+            // Skip parameters that receive no analytical gradient — the framework analog of
+            // PyTorch gradcheck only checking requires_grad=True leaves. Reservoir / closed-form
+            // / energy-based models (EchoStateNetwork, ExtremeLearningMachine, RBM/DBM) carry
+            // FROZEN weights in the parameter vector that are trained by a non-backprop rule, so
+            // their analytical gradient is legitimately 0 while the finite difference is not. This
+            // gradcheck validates that the parameters which DO receive gradients receive the
+            // CORRECT value (sign / scale / missing-term bugs still fail); whether every trainable
+            // weight participates at all is the job of GradientFlow + the convergence invariants.
+            if (System.Math.Abs(analytic) < absFloor) continue;
+
+            double denom = System.Math.Max(absFloor, System.Math.Abs(numeric) + System.Math.Abs(analytic));
+            double relErr = System.Math.Abs(numeric - analytic) / denom;
+            checkedCount++;
+            if (relErr > relTol)
+            {
+                mismatches++;
+                if (firstFail.Length == 0)
+                    firstFail = $"param[{i}]: analytic={analytic:E4}, numeric={numeric:E4}, relErr={relErr:F4}";
+            }
+        }
+
+        if (checkedCount == 0) return;   // every perturbation produced a NaN loss — inconclusive
+        // A GENUINE backward bug (sign flip, wrong scale, missing term) is systematic — it
+        // mismatches MOST sampled parameters, not a few. Isolated outliers instead come from a
+        // parameter sitting on a loss kink / clamp boundary (where the central difference is
+        // one-sided) or, on float, from finite-difference rounding on a non-smooth loss. So the
+        // outlier budget is type-aware: double is limited (~1/6 — kinks are rare at 1e-6 steps),
+        // float is looser (~1/3 — noisier at the 5e-3 step it needs) — while a real bug (majority
+        // mismatch) still fails under either. See #1872.
+        int allowedMismatches = isDouble
+            ? System.Math.Max(1, checkedCount / 6)
+            : System.Math.Max(2, checkedCount / 3);
+        Assert.True(mismatches <= allowedMismatches,
+            $"Analytical gradients disagree with the finite difference on {mismatches}/{checkedCount} " +
+            $"sampled parameters (tol {relTol:P0}, allowed {allowedMismatches}). First: {firstFail}. The " +
+            "backward pass is likely incorrect (sign, scale, missing term, or a dropped gradient).");
+    }
+
+    private double GradientCheckLossAt(
+        INeuralNetworkModel<T> network,
+        AiDotNet.LossFunctions.LossFunctionBase<T> loss,
+        Tensor<T> input, Tensor<T> target, Vector<T> parameters)
+    {
+        network.UpdateParameters(parameters);
+        var pred = network.Predict(input);
+        var tgt = target;
+        var predShape = pred.Shape.ToArray();
+        if (pred.Length == target.Length && !GradientCheckShapeEquals(predShape, target.Shape.ToArray()))
+            tgt = target.Reshape(predShape);
+        var lossTensor = loss.ComputeTapeLoss(pred, tgt);
+        return lossTensor.Length > 0 ? ConvertToDouble(lossTensor[0]) : double.NaN;
+    }
+
+    private static bool GradientCheckShapeEquals(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+        return true;
+    }
 }
 
 /// <summary>

@@ -109,34 +109,34 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         int newW = w / 2;
         int newSeqLen = newH * newW;
 
-        // Reshape to spatial and concatenate 2x2 patches
-        var merged = new Tensor<T>([batch, newSeqLen, dim * 4]);
-
-        for (int b = 0; b < batch; b++)
+        // Gather the four interleaved spatial grids and concatenate their
+        // channels. TensorGather/TensorConcatenate are tape-tracked; a manual
+        // element copy here would detach the reduction branch in compiled
+        // training and prevent gradients from reaching the preceding stage.
+        var topLeft = new Tensor<int>([newSeqLen]);
+        var topRight = new Tensor<int>([newSeqLen]);
+        var bottomLeft = new Tensor<int>([newSeqLen]);
+        var bottomRight = new Tensor<int>([newSeqLen]);
+        for (int i = 0; i < newH; i++)
         {
-            for (int i = 0; i < newH; i++)
+            for (int j = 0; j < newW; j++)
             {
-                for (int j = 0; j < newW; j++)
-                {
-                    int newIdx = i * newW + j;
-
-                    // Get 4 patch indices from original grid
-                    int idx0 = (2 * i) * w + (2 * j);         // Top-left
-                    int idx1 = (2 * i) * w + (2 * j + 1);     // Top-right
-                    int idx2 = (2 * i + 1) * w + (2 * j);     // Bottom-left
-                    int idx3 = (2 * i + 1) * w + (2 * j + 1); // Bottom-right
-
-                    // Concatenate channels from 4 patches
-                    for (int d = 0; d < dim; d++)
-                    {
-                        merged[b, newIdx, d] = input[b, idx0, d];
-                        merged[b, newIdx, dim + d] = input[b, idx1, d];
-                        merged[b, newIdx, 2 * dim + d] = input[b, idx2, d];
-                        merged[b, newIdx, 3 * dim + d] = input[b, idx3, d];
-                    }
-                }
+                int newIdx = i * newW + j;
+                topLeft[newIdx] = (2 * i) * w + (2 * j);
+                topRight[newIdx] = (2 * i) * w + (2 * j + 1);
+                bottomLeft[newIdx] = (2 * i + 1) * w + (2 * j);
+                bottomRight[newIdx] = (2 * i + 1) * w + (2 * j + 1);
             }
         }
+
+        var merged = Engine.TensorConcatenate(
+            [
+                Engine.TensorGather(input, topLeft, axis: 1),
+                Engine.TensorGather(input, topRight, axis: 1),
+                Engine.TensorGather(input, bottomLeft, axis: 1),
+                Engine.TensorGather(input, bottomRight, axis: 1)
+            ],
+            axis: 2);
 
         // Apply layer normalization
         var normalized = _norm.Forward(merged);

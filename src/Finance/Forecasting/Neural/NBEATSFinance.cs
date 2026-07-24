@@ -226,7 +226,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         NBEATSModelOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), options?.GradientClipNorm ?? 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -242,7 +242,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -277,7 +277,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         NBEATSModelOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), options?.GradientClipNorm ?? 1.0)
     {
         options ??= new NBEATSModelOptions<T>();
         _options = options;
@@ -288,7 +288,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -457,7 +457,15 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        base.Train(input, target);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, target, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
@@ -520,20 +528,27 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new NBEATSModelOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            NumStacks = _numStacks,
-            NumBlocksPerStack = _numBlocksPerStack,
-            HiddenLayerSize = _hiddenSize,
-            NumHiddenLayers = _numHiddenLayers,
-            PolynomialDegree = _polynomialDegree,
-            UseInterpretableBasis = _useInterpretableBasis,
-            ShareWeightsInStack = _shareWeightsInStack
-        };
+        return new NBEATSFinance<T>(Architecture, new NBEATSModelOptions<T>(_options));
+    }
 
-        return new NBEATSFinance<T>(Architecture, options);
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        bool clipGradients = _options.GradientClipNorm > 0.0;
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                BatchSize = _options.BatchSize,
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.OptimizerBeta1,
+                Beta2 = _options.OptimizerBeta2,
+                Epsilon = _options.OptimizerEpsilon,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = clipGradients,
+                MaxGradientNorm = _options.GradientClipNorm,
+            });
     }
 
     /// <summary>

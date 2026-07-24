@@ -1,8 +1,14 @@
 name: Fix Commit Messages
 
 on:
+  # Only at PR creation — NOT on every synchronize. Rewriting already-pushed commits
+  # requires a force-push, which on an active PR overrides in-flight local work and
+  # orphans the in-progress CI run's commit (showing it "cancelled"), so CI never
+  # completes. Commits are now auto-fixed at commit time by the local .githooks/commit-msg
+  # hook (so they land compliant and this fires as a no-op anyway); the commitlint.yml
+  # check still enforces compliance non-destructively for anyone without the hook enabled.
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened]
 
 permissions:
   contents: write

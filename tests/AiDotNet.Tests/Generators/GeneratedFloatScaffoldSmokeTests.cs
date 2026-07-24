@@ -71,10 +71,35 @@ public class GeneratedFloatScaffoldSmokeTests
         // #1680 review: a bare count check still passes if the float path regresses to a single accidental
         // model. Pin the roster by name — a known auto-generated opt-in must resolve to <float>, and a stable
         // auto-generated opt-out must resolve to <double>. WhisperLargeV3 is a Fp32TestClassNames opt-in with
-        // no manual scaffold (so it IS auto-generated); ABINet is a stable auto-generated double model not in
-        // any float roster. If the float rewrite silently stops floating the Whisper/ASR family, this fails.
+        // no manual scaffold (so it IS auto-generated). LayoutGraph is a stable auto-generated J-M model,
+        // outside the resource-bound A-I/N-Z shard ranges and not in any explicit float roster, so it remains
+        // the double control. If either precision route silently regresses, this test fails.
+        Assert.Contains(floatScaffolds, t => t.Name == "ABINetTests");
         Assert.Contains(floatScaffolds, t => t.Name == "WhisperLargeV3Tests");
-        Assert.Contains(doubleScaffolds, t => t.Name == "ABINetTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "CIFEncoderTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "BasicVSRTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "OuteTTSTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "AmphionTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "CLAPModelTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "DiaTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "MATCHATests");
+        Assert.Contains(floatScaffolds, t => t.Name == "CUPSTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "ContextNetTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "CodeSwitchingASRTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "Chirp2Tests");
+        Assert.Contains(floatScaffolds, t => t.Name == "FlowDiffuserTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "FLIPTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "Gemma3Tests");
+        Assert.Contains(floatScaffolds, t => t.Name == "MemFlowTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "MiniGPT4Tests");
+        Assert.Contains(floatScaffolds, t => t.Name == "SpeechGPTTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PixelLMTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "OpenCLIPTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PointTransformerV3Tests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PyramidNERTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PerVFITests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PIDNetTests");
+        Assert.Contains(doubleScaffolds, t => t.Name == "LayoutGraphTests");
     }
 
     [Fact]

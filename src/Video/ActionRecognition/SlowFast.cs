@@ -228,6 +228,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SetBaseTrainOptimizer(_optimizer);
         _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
         _customFastLayers = customFastLayers;
         _customFusionLayers = customFusionLayers;
@@ -842,6 +843,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         {
             _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         }
+        SetBaseTrainOptimizer(_optimizer);
 
         // Clear custom layer references (not serialized)
         _customFastLayers = null;

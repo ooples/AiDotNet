@@ -320,6 +320,38 @@ public class DropoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Refreshes the mask tensor captured by a fused compiled-training plan without
+    /// replacing the tensor reference embedded in that plan.
+    /// </summary>
+    /// <remarks>
+    /// A compiled plan traces <see cref="Forward"/> once and replays the resulting
+    /// graph. Replacing <see cref="_dropoutMask"/> on a later call cannot affect that
+    /// graph because it still owns the original tensor reference. Mutating the
+    /// captured tensor in place gives each replay a fresh deterministic mask while
+    /// preserving the compiled graph and its optimizer state.
+    /// </remarks>
+    internal void RefreshCompiledTrainingMask()
+    {
+        if (!IsTrainingMode || _dropoutMask is null || _dropoutMask.Length == 0)
+            return;
+
+        ulong counter = AdvanceSeedCounter();
+        int? perCallSeed = RandomSeed.HasValue
+            ? DeriveSeed32(RandomSeed.Value, counter)
+            : (int?)null;
+
+        using var refreshedMask = Engine.TensorDropoutMask<T>(
+            _dropoutMask._shape, _dropoutRate, _scale, perCallSeed);
+        if (refreshedMask.Length != _dropoutMask.Length)
+            throw new InvalidOperationException(
+                $"Compiled dropout mask length changed from {_dropoutMask.Length} to {refreshedMask.Length}.");
+
+        refreshedMask.AsSpan().CopyTo(_dropoutMask.AsWritableSpan());
+        _dropoutMask.IncrementVersion();
+        Engine.InvalidatePersistentTensor(_dropoutMask);
+    }
+
+    /// <summary>
     /// Updates the parameters of the layer based on the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for parameter updates.</param>

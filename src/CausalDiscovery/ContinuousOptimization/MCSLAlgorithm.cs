@@ -64,8 +64,12 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
     public MCSLAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyOptions(options);
-        _learningRateValue = options?.LearningRate ?? 0.001;
-        _innerIterations = options?.InnerIterations ?? 30;
+        // Paper (Ng et al. 2021, §4) trains each augmented-Lagrangian subproblem with
+        // Adam at learning rate 3e-2 for ~1000 steps. Plain SGD at 1e-3 for 30 steps
+        // (the previous defaults) never moves the weights before the penalty rho
+        // escalates, collapsing every edge to zero.
+        _learningRateValue = options?.LearningRate ?? 0.03;
+        _innerIterations = options?.InnerIterations ?? 100;
         if (options?.MaxPenalty is { } maxPenalty) _rhoMax = maxPenalty;
     }
 
@@ -77,77 +81,105 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
 
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
-        // For small problems, suggest higher learning rate but don't override explicit config
-        double effectiveLr = _learningRateValue;
-
         var X = StandardizeData(data);
 
-        // Initialize W from pairwise OLS and M (mask logits) = 0
+        // Initialize W = 0 and M (mask logits U) = 0, matching NOTEARS and the paper.
+        // A dense OLS/correlation warm start biases the learned mask toward spurious
+        // strongly-correlated pairs (e.g. two effects of a common cause) and prevents
+        // recovery of the true sparse structure — the mask locks onto whichever edges
+        // start large. Growing the edges from zero lets the L1 + acyclicity terms
+        // select the correct sparse DAG, exactly as the sibling NOTEARS solver does.
         var W = new Matrix<T>(d, d);
-        var M = new Matrix<T>(d, d); // mask logits, initialized to zero
+        var M = new Matrix<T>(d, d);
 
-        // Initialize W from covariance
-        var (_, initGrad) = ComputeL2Loss(X, W);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (i != j)
-                    W[i, j] = NumOps.Negate(initGrad[i, j]); // rough OLS initialization
+        // Fixed temperature. The paper uses tau = 0.2 throughout (not annealed):
+        // a small constant temperature keeps sigmoid(U/tau) close to a hard {0,1}
+        // mask while remaining differentiable.
+        const double tau = 0.2;
 
-        T lr = NumOps.FromDouble(effectiveLr);
-        double rho = 1.0, alpha = 0.0, prevH = double.MaxValue;
+        // Augmented-Lagrangian schedule following the paper: rho0 = 10^(-ceil(0.3 d)),
+        // gamma = 0.25, alpha0 = 0. rho only escalates when the acyclicity constraint
+        // fails to make sufficient progress.
+        double rho = Math.Pow(10.0, -Math.Ceiling(0.3 * d));
+        double alpha = 0.0, prevH = double.MaxValue;
+        const double gamma = 0.25;
+
+        // Adam optimizer state (paper trains each subproblem with Adam). Adam's
+        // per-coordinate step normalization is essential here: when rho grows large
+        // the raw acyclicity gradient dominates, and plain SGD either stalls (tiny
+        // lr) or explodes (large lr). Adam keeps a stable ~lr-sized step regardless.
+        double lr = _learningRateValue;
+        const double beta1 = 0.9, beta2 = 0.999, epsAdam = 1e-8;
+        var mW = new double[d, d];
+        var vW = new double[d, d];
+        var mM = new double[d, d];
+        var vM = new double[d, d];
+        int adamT = 0;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
         {
-            // Temperature annealing: tau starts at 1.0, decreases to 0.1
-            double tau = Math.Max(0.1, Math.Pow(0.95, outerIter));
-
             for (int innerIter = 0; innerIter < _innerIterations; innerIter++)
             {
-                // Compute effective adjacency: W_eff[i,j] = W[i,j] * sigmoid(M[i,j] / tau)
+                adamT++;
+
+                // Effective adjacency: W_eff[i,j] = W[i,j] * sigmoid(M[i,j] / tau)
                 var Weff = new Matrix<T>(d, d);
                 var mask = new Matrix<T>(d, d);
-
                 for (int i = 0; i < d; i++)
                     for (int j = 0; j < d; j++)
                     {
-                        double mVal = NumOps.ToDouble(M[i, j]) / tau;
-                        double sigmoidVal = Sigmoid(mVal);
+                        double sigmoidVal = Sigmoid(NumOps.ToDouble(M[i, j]) / tau);
                         mask[i, j] = NumOps.FromDouble(sigmoidVal);
                         Weff[i, j] = NumOps.Multiply(W[i, j], mask[i, j]);
                     }
 
-                // Loss and constraint on W_eff
-                var (loss, lossGrad) = ComputeL2Loss(X, Weff);
+                // Loss and acyclicity constraint on W_eff
+                var (_, lossGrad) = ComputeL2Loss(X, Weff);
                 var (h, hGrad) = ComputeNOTEARSConstraint(Weff);
+                double augCoeff = alpha + rho * h;
 
-                T augCoeff = NumOps.FromDouble(alpha + rho * h);
+                double biasCorr1 = 1.0 - Math.Pow(beta1, adamT);
+                double biasCorr2 = 1.0 - Math.Pow(beta2, adamT);
 
-                // Total gradient w.r.t. W_eff
-                var totalGrad = new Matrix<T>(d, d);
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                        totalGrad[i, j] = NumOps.Add(lossGrad[i, j],
-                                          NumOps.Multiply(augCoeff, hGrad[i, j]));
-
-                // Chain rule: dL/dW = dL/dWeff * mask, dL/dM = dL/dWeff * W * sigmoid'(M/tau) / tau
                 for (int i = 0; i < d; i++)
                     for (int j = 0; j < d; j++)
                     {
                         if (i == j) continue;
 
-                        T gradW = NumOps.Multiply(totalGrad[i, j], mask[i, j]);
-                        W[i, j] = NumOps.Subtract(W[i, j], NumOps.Multiply(lr, gradW));
+                        double wVal = NumOps.ToDouble(W[i, j]);
+                        double maskVal = NumOps.ToDouble(mask[i, j]);
 
-                        // Sigmoid derivative: sigmoid(x) * (1 - sigmoid(x)) / tau
-                        double sigVal = NumOps.ToDouble(mask[i, j]);
-                        double sigmoidDeriv = sigVal * (1.0 - sigVal) / tau;
-                        T gradM = NumOps.Multiply(totalGrad[i, j],
-                                  NumOps.Multiply(W[i, j], NumOps.FromDouble(sigmoidDeriv)));
-                        M[i, j] = NumOps.Subtract(M[i, j], NumOps.Multiply(lr, gradM));
+                        // Gradient w.r.t. W_eff = loss grad + augmented acyclicity grad
+                        // plus an L1 sparsity subgradient on the effective edge
+                        // (paper penalizes lambda * ||g_tau(U)||_1).
+                        double gEff = NumOps.ToDouble(lossGrad[i, j])
+                                    + augCoeff * NumOps.ToDouble(hGrad[i, j])
+                                    + Lambda1 * Math.Sign(wVal * maskVal);
+
+                        // Chain rule to the underlying parameters:
+                        //   dL/dW = gEff * mask
+                        //   dL/dM = gEff * W * sigmoid'(M/tau)/tau,  sigmoid' = s(1-s)
+                        double gradW = gEff * maskVal;
+                        double gradM = gEff * wVal * (maskVal * (1.0 - maskVal) / tau);
+
+                        // Adam step for W
+                        mW[i, j] = beta1 * mW[i, j] + (1.0 - beta1) * gradW;
+                        vW[i, j] = beta2 * vW[i, j] + (1.0 - beta2) * gradW * gradW;
+                        double mHatW = mW[i, j] / biasCorr1;
+                        double vHatW = vW[i, j] / biasCorr2;
+                        W[i, j] = NumOps.FromDouble(wVal - lr * mHatW / (Math.Sqrt(vHatW) + epsAdam));
+
+                        // Adam step for M (mask logits)
+                        mM[i, j] = beta1 * mM[i, j] + (1.0 - beta1) * gradM;
+                        vM[i, j] = beta2 * vM[i, j] + (1.0 - beta2) * gradM * gradM;
+                        double mHatM = mM[i, j] / biasCorr1;
+                        double vHatM = vM[i, j] / biasCorr2;
+                        double mCur = NumOps.ToDouble(M[i, j]);
+                        M[i, j] = NumOps.FromDouble(mCur - lr * mHatM / (Math.Sqrt(vHatM) + epsAdam));
                     }
             }
 
-            // Evaluate constraint
+            // Evaluate acyclicity on the masked weights and update the multipliers.
             var Wfinal = new Matrix<T>(d, d);
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
@@ -156,19 +188,19 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
 
             var (hVal, _) = ComputeNOTEARSConstraint(Wfinal);
             alpha += rho * hVal;
-            if (hVal > 0.25 * prevH) rho = Math.Min(rho * 10, _rhoMax);
+            if (hVal > gamma * prevH) rho = Math.Min(rho * 10.0, _rhoMax);
             prevH = hVal;
 
             if (hVal < HTolerance || rho >= _rhoMax) break;
         }
 
-        // Final: hard mask and threshold
+        // Final effective adjacency using the learned soft mask, then prune by weight.
         var maskedW = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
-                double maskVal = Sigmoid(NumOps.ToDouble(M[i, j]) / 0.1);
+                double maskVal = Sigmoid(NumOps.ToDouble(M[i, j]) / tau);
                 maskedW[i, j] = NumOps.Multiply(W[i, j], NumOps.FromDouble(maskVal));
             }
 

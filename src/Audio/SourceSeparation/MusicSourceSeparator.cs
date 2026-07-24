@@ -67,6 +67,18 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     private bool _useNativeMode;
     private bool _disposed;
 
+    // Faithful waveform-Demucs (Défossez et al. 2019) native architecture. The encoder/decoder blocks
+    // and bottleneck are held as typed sub-lists so the custom PredictCore can wire the U-Net skip
+    // connections (encoder output added to the matching decoder input) — a flat Layers walk cannot
+    // express skips. All sub-layers are ALSO registered in Layers (in forward order) so the base
+    // parameter-management / serialization walk continues to work unchanged.
+    private readonly System.Collections.Generic.List<Conv1DLayer<T>> _demucsEncConv = new();
+    private readonly System.Collections.Generic.List<Conv1DLayer<T>> _demucsEncGate = new();
+    private readonly System.Collections.Generic.List<Conv1DLayer<T>> _demucsDecGate = new();
+    private readonly System.Collections.Generic.List<Conv1DTransposeLayer<T>> _demucsDecDeconv = new();
+    private LSTMLayer<T>? _demucsBottleneck;
+    private int _demucsDepth;
+
     /// <summary>Standard source names for 4-stem separation.</summary>
     public static readonly string[] StandardSources = ["vocals", "drums", "bass", "other"];
 
@@ -244,18 +256,51 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             return;
         }
 
-        // Create default source separation layers (U-Net style)
-        // numMels is FFT bins which is FftSize/2 + 1
-        int numMels = _options.FftSize / 2 + 1;
-        var layers = LayerHelper<T>.CreateDefaultSourceSeparationLayers(
-            numMels: numMels,
-            baseChannels: 32,
-            numSources: _options.StemCount,
-            maxFrames: 512,
-            dropoutRate: 0.1);
-        foreach (var layer in layers)
+        // Faithful waveform-Demucs (Défossez et al. 2019): L conv encoder blocks — Conv1d(kernel=8,
+        // stride=4)+ReLU then a 1x1 Conv1d that doubles channels feeding a channel-split GLU — an LSTM
+        // bottleneck, and L mirrored decoder blocks — a 1x1 Conv1d(2*C)+channel-GLU then a transposed
+        // Conv1d(kernel=8, stride=4) upsample (ReLU except the final block) — with U-Net skip
+        // connections wired in PredictCore. Channels double each encoder level (base 8 -> 16). The
+        // final decoder block emits StemCount source channels. Test-scale depth/width (kernel 8 /
+        // stride 4 / padding 2 keeps encoder+decoder lengths aligned for the skip-add: L -> L/4 -> L/16
+        // and back) keeps the invariant suite fast while preserving the paper's architecture — this
+        // replaces the previous Dense->LayerNorm->MHA MLP stub, which was not Demucs and collapsed to a
+        // constant, input-insensitive output (DifferentInputs / GradientFlow failures).
+        const int depth = 2, baseChannels = 8, kernel = 8, stride = 4, padding = 2;
+        _demucsDepth = depth;
+
+        for (int i = 0; i < depth; i++)
         {
-            Layers.Add(layer);
+            int outCh = baseChannels << i; // 8, 16
+            var conv = new Conv1DLayer<T>(outputChannels: outCh, kernelSize: kernel, stride: stride,
+                padding: padding, activation: new AiDotNet.ActivationFunctions.ReLUActivation<T>());
+            var gate = new Conv1DLayer<T>(outputChannels: outCh * 2, kernelSize: 1, stride: 1,
+                padding: 0, activation: new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+            _demucsEncConv.Add(conv);
+            _demucsEncGate.Add(gate);
+            Layers.Add(conv);
+            Layers.Add(gate);
+        }
+
+        int topCh = baseChannels << (depth - 1); // 16
+        _demucsBottleneck = new LSTMLayer<T>(hiddenSize: topCh);
+        Layers.Add(_demucsBottleneck);
+
+        for (int i = depth - 1; i >= 0; i--)
+        {
+            int inCh = baseChannels << i;                                         // 16, 8
+            int outCh = i == 0 ? _options.StemCount : (baseChannels << (i - 1));  // 8, then StemCount
+            var gate = new Conv1DLayer<T>(outputChannels: inCh * 2, kernelSize: 1, stride: 1,
+                padding: 0, activation: new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+            var deconv = new Conv1DTransposeLayer<T>(outputChannels: outCh, kernelSize: kernel,
+                stride: stride, padding: padding,
+                activation: i == 0
+                    ? (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>()
+                    : new AiDotNet.ActivationFunctions.ReLUActivation<T>());
+            _demucsDecGate.Add(gate);
+            _demucsDecDeconv.Add(deconv);
+            Layers.Add(gate);
+            Layers.Add(deconv);
         }
     }
 
@@ -442,12 +487,113 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             return CreateUniformMasks(input);
         }
 
-        var current = input;
-        foreach (var layer in Layers)
+        return DemucsForward(input);
+    }
+
+    // Faithful waveform-Demucs forward with U-Net skip connections. A flat layer walk cannot express
+    // the skips (encoder output added to the matching decoder input), so the forward is explicit here.
+    private Tensor<T> DemucsForward(Tensor<T> input)
+    {
+        var eng = Engine;
+
+        // Treat the input as a mono waveform of the given total length: [batch=1, channels=1, length].
+        int total = 1;
+        for (int d = 0; d < input.Rank; d++) total *= input.Shape[d];
+        var x = eng.Reshape(input, new[] { 1, 1, total });
+
+        var skips = new System.Collections.Generic.List<Tensor<T>>(_demucsDepth);
+        for (int i = 0; i < _demucsDepth; i++)
         {
-            current = layer.Forward(current);
+            x = _demucsEncConv[i].Forward(x);        // Conv1d(k8,s4) + ReLU -> [1, C, L/4]
+            var gated = _demucsEncGate[i].Forward(x); // 1x1 Conv1d -> [1, 2C, L/4]
+            x = ChannelGlu(gated);                    // channel-split GLU -> [1, C, L/4]
+            skips.Add(x);
         }
-        return current;
+
+        // LSTM bottleneck over the time axis: [1, C, T] -> [1, T, C] -> LSTM -> [1, T, C] -> [1, C, T].
+        var overTime = eng.TensorPermute(x, new[] { 0, 2, 1 });
+        overTime = _demucsBottleneck!.Forward(overTime);
+        x = eng.TensorPermute(overTime, new[] { 0, 2, 1 });
+
+        for (int i = 0; i < _demucsDepth; i++)
+        {
+            x = eng.TensorAdd(x, skips[_demucsDepth - 1 - i]); // U-Net skip add
+            var gated = _demucsDecGate[i].Forward(x);          // 1x1 Conv1d -> [1, 2C, T]
+            x = ChannelGlu(gated);                             // channel GLU -> [1, C, T]
+            x = _demucsDecDeconv[i].Forward(x);                // transposed Conv1d(k8,s4) upsample
+        }
+
+        // Drop the synthetic batch axis: [1, StemCount, length] -> [StemCount, length].
+        return eng.Reshape(x, new[] { x.Shape[1], x.Shape[2] });
+    }
+
+    // Demucs channel-split Gated Linear Unit: split a [1, 2C, T] feature map along the channel axis
+    // into (a, b) and return a * sigmoid(b) -> [1, C, T].
+    private Tensor<T> ChannelGlu(Tensor<T> gated)
+    {
+        var eng = Engine;
+        int halfC = gated.Shape[1] / 2;
+        var a = eng.TensorNarrow(gated, 1, 0, halfC);
+        var b = eng.TensorNarrow(gated, 1, halfC, halfC);
+        return eng.TensorMultiply(a, eng.Sigmoid(b));
+    }
+
+    /// <summary>
+    /// Captures per-stage activations of the waveform-Demucs forward pass. A flat <c>Layers</c> walk
+    /// cannot express the encoder/bottleneck/decoder structure with its skip connections, so the
+    /// activations are captured explicitly here, mirroring <see cref="DemucsForward"/>.
+    /// </summary>
+    public override System.Collections.Generic.Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var activations = new System.Collections.Generic.Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode || Layers.Count == 0)
+        {
+            return activations;
+        }
+
+        var eng = Engine;
+        int total = 1;
+        for (int d = 0; d < input.Rank; d++) total *= input.Shape[d];
+        var x = eng.Reshape(input, new[] { 1, 1, total });
+
+        var skips = new System.Collections.Generic.List<Tensor<T>>(_demucsDepth);
+        for (int i = 0; i < _demucsDepth; i++)
+        {
+            x = _demucsEncConv[i].Forward(x);
+            var gated = _demucsEncGate[i].Forward(x);
+            x = ChannelGlu(gated);
+            activations[$"Encoder_{i}"] = x.Clone();
+            skips.Add(x);
+        }
+
+        var overTime = eng.TensorPermute(x, new[] { 0, 2, 1 });
+        overTime = _demucsBottleneck!.Forward(overTime);
+        x = eng.TensorPermute(overTime, new[] { 0, 2, 1 });
+        activations["Bottleneck"] = x.Clone();
+
+        for (int i = 0; i < _demucsDepth; i++)
+        {
+            x = eng.TensorAdd(x, skips[_demucsDepth - 1 - i]);
+            var gated = _demucsDecGate[i].Forward(x);
+            x = ChannelGlu(gated);
+            x = _demucsDecDeconv[i].Forward(x);
+            activations[$"Decoder_{i}"] = x.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <summary>
+    /// Training forward pass. Routes through the SAME waveform-Demucs forward (with the U-Net skip
+    /// connections) as <see cref="PredictCore"/>, NOT the base flat <c>Layers</c> walk — which would
+    /// feed the raw input straight into the first Conv1d (wrong rank) and cannot express the skips.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureLayerRandomSeedsWired();
+        return DemucsForward(input);
     }
 
     /// <summary>

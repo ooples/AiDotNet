@@ -28,6 +28,7 @@ public class VocoderOptions : TtsModelOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public VocoderOptions(VocoderOptions other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

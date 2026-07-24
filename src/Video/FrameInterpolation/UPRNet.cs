@@ -403,9 +403,9 @@ public class UPRNet<T> : FrameInterpolationBase<T>
         }
         var grid = Engine.TensorAdd(baseGrid, Engine.TensorMultiply(flowNHWC, scale));
 
-        var featNHWC = Engine.TensorPermute(features, new[] { 0, 2, 3, 1 }); // [B, h, w, C]
-        var warpedNHWC = Engine.GridSample(featNHWC, grid);                  // [B, h, w, C]
-        return Engine.TensorPermute(warpedNHWC, new[] { 0, 3, 1, 2 });       // [B, C, h, w]
+        // Engine.GridSample is NCHW (PyTorch convention): features are already [B, C, h, w],
+        // pass them directly. The grid is [B, h, w, 2] regardless of image layout.
+        return Engine.GridSample(features, grid);                            // [B, C, h, w]
     }
 
     /// <summary>

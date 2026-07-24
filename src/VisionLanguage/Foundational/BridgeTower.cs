@@ -194,10 +194,10 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
                 ? Math.Max(1, _options.NumVisionLayers / Math.Max(1, _options.NumBridgeLayers))
                 : 1;
         int numVisionBridges =
-            _options.NumVisionLayers > 0 ? (_options.NumVisionLayers / bridgeInterval) : 0;
+            _options.NumVisionLayers > 1 ? ((_options.NumVisionLayers - 1) / bridgeInterval) : 0;
         int bridgeCrossAttnLayers = _options.DropoutRate > 0 ? 3 : 2; // MHA + LN + optional Dropout
         int visionLayerEnd =
-            1
+            2
             + _options.NumVisionLayers * blockSize
             + numVisionBridges * bridgeCrossAttnLayers
             + (_options.VisionDim != _options.FusionDim ? 1 : 0);
@@ -210,7 +210,8 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
             _options.NumTextLayers,
             _options.NumBridgeLayers,
             _options.NumHeads,
-            _options.DropoutRate
+            _options.DropoutRate,
+            _options.PatchSize
         );
 
         int idx = 0;
@@ -355,9 +356,10 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptions = new BridgeTowerOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BridgeTower<T>(Architecture, mp, _options);
-        return new BridgeTower<T>(Architecture, _options);
+            return new BridgeTower<T>(Architecture, mp, cloneOptions);
+        return new BridgeTower<T>(Architecture, cloneOptions);
     }
 
     private void ThrowIfDisposed()

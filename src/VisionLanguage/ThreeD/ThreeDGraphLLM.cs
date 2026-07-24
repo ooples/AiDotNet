@@ -352,7 +352,10 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
         {
             Layers.AddRange(
                 LayerHelper<T>.CreateDefaultPointCloudVLMLayers(
-                    512,
+                    // Was hard-coded 512; drive the encoder's vision-token dim from the configured
+                    // VisionDim so the encoder, the declared option, and the post-embedding token
+                    // input all agree (mirrors the LEOVL fix; see AiDotNet.Tensors#775 context).
+                    _options.VisionDim,
                     _options.DecoderDim,
                     _options.NumVisionLayers,
                     _options.NumDecoderLayers,

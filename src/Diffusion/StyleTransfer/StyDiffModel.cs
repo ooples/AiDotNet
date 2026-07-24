@@ -62,7 +62,7 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null, UNetNoisePredictor<T>? predictor = null,
         StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
-        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
+        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear, Seed = 42 },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
     {
         _conditioner = conditioner;
@@ -92,6 +92,12 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // The structure-mismatch clone path shares the source's exact weight
+        // tensors through DiffusionModelBase's model-level COW group. Detach
+        // before writing so direct SetParameters calls preserve clone
+        // independence just as Train and SetParameterChunks do.
+        EnsureOwnWeights();
+
         int pc = checked((int)_predictor.ParameterCount);
         int vc = checked((int)_vae.ParameterCount);
         long expectedTotal = (long)pc + vc;
@@ -108,21 +114,38 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
+        var optionsCopy = new DiffusionModelOptions<T>((DiffusionModelOptions<T>)Options);
+
         // Fast path: O(1) copy-on-write share when the default clone is structurally identical
         // (the common foundation-scale case the COW lever targets — no re-materialization/OOM).
-        var clone = new StyDiffModel<T>(conditioner: _conditioner, seed: null);
+        var clone = new StyDiffModel<T>(
+            architecture: Architecture,
+            options: optionsCopy,
+            scheduler: Scheduler,
+            conditioner: _conditioner,
+            seed: null);
         if (clone.TryShareParametersFrom(this)) return clone;
         // Structure mismatch ⇒ custom architecture/predictor/VAE the default clone can't reproduce;
         // rebuild faithfully from this instance's configuration so the clone is observationally
         // identical instead of throwing on a parameter-count mismatch.
-        return new StyDiffModel<T>(
+        var rebuilt = new StyDiffModel<T>(
             architecture: Architecture,
-            options: (DiffusionModelOptions<T>)Options,
+            options: new DiffusionModelOptions<T>((DiffusionModelOptions<T>)Options),
             scheduler: Scheduler,
             predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             seed: null);
+        // The cloned sub-models have the same materialized structure as the source. Bind the rebuilt
+        // model to the exact same Tensor objects through DiffusionModelBase's reference-counted COW
+        // path, rather than creating new CloneShared tensor wrappers. The wrappers preserve values but
+        // have independent tensor identity/version state, so the CPU packed-weight cache can take a
+        // different cold path in the clone; DDIM compounds that small first-step reduction difference
+        // across its denoising loop (the Linux CI failure was 3.43e-5). ShareWeightsFrom preserves both
+        // values and inference-cache identity while EnsureOwnWeights still detaches either model before
+        // training or SetParameters, keeping clone independence.
+        rebuilt.ShareWeightsFrom(this);
+        return rebuilt;
     }
 
     public override ModelMetadata<T> GetModelMetadata()

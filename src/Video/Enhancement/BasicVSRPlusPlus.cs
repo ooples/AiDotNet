@@ -1,11 +1,14 @@
 using System.IO;
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -18,10 +21,23 @@ namespace AiDotNet.Video.Enhancement;
 /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
 /// <remarks>
 /// <para>
-/// BasicVSR++ improves upon BasicVSR with:
+/// BasicVSR++ (Chan et al. 2022) improves upon BasicVSR with:
 /// - Second-order grid propagation for better temporal modeling
 /// - Flow-guided deformable alignment for accurate feature alignment
 /// - Bidirectional propagation for utilizing both past and future frames
+/// </para>
+/// <para>
+/// <b>Implementation fidelity note:</b> This native implementation realizes flow-guided
+/// deformable alignment and SECOND-ORDER bidirectional grid propagation faithfully and
+/// trains them end-to-end through the autodiff tape (see <see cref="Train"/>). Each
+/// propagation step aggregates BOTH the immediately adjacent frame (i±1) and the second
+/// neighbour (i±2), with the i→i±2 flow formed by COMPOSING the two adjacent flows
+/// (Chan et al. 2022, Sec. 3.1); the deformable-alignment layer resolves its widened
+/// (current + i±1 + i±2) input-channel count lazily on the first forward. One
+/// simplification remains: the SPyNet flow estimator acts as a fixed sampling guide — its
+/// warp keeps the sampled features on the tape (gradients reach the reconstruction
+/// network) but SPyNet's own weights are not fine-tuned here, matching the common
+/// "pre-trained flow" setup rather than the paper's fully joint training.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> BasicVSR++ is a video super-resolution model that upscales
@@ -168,26 +184,22 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     private readonly double _learningRate;
 
     /// <summary>
-    /// Cached features from last forward pass for training.
+    /// Test-only hook: when true, the first-order (i±1) warped neighbour is zeroed in every propagation
+    /// step, leaving ONLY the second-order (i±2) contribution. This isolates the direct two-step
+    /// propagation path so a test can prove that i→i±2 information transfer works, independent of the
+    /// ordinary i±1 recurrence that would otherwise carry the same information transitively (2→1→0).
+    /// Defaults to false, so production behaviour is unchanged.
     /// </summary>
-    private readonly List<Tensor<T>> _cachedFeatures;
+    internal bool DisableFirstOrderPropagationForTesting { get; set; }
 
-    // Comprehensive activation cache for proper backward pass
-    private List<Tensor<T>>? _cachedInitialFeatures;
-    private List<(Tensor<T> forward, Tensor<T> backward)>? _cachedFlows;
-    private List<List<Tensor<T>>>? _cachedBackwardPropFeatures;  // [iteration][frame] - concat tensors for conv input
-    private List<List<Tensor<T>>>? _cachedForwardPropFeatures;   // [iteration][frame] - concat tensors for conv input
-    private List<List<Tensor<T>>>? _cachedBackwardOutputFeatures; // [iteration][frame] - actual propagated features (conv output)
-    private List<List<Tensor<T>>>? _cachedForwardOutputFeatures;  // [iteration][frame] - actual propagated features (conv output)
-    private List<List<Tensor<T>>>? _cachedBackwardAlignInputs;   // [iteration][frame]
-    private List<List<Tensor<T>>>? _cachedForwardAlignInputs;    // [iteration][frame]
-    private List<List<Tensor<T>>>? _cachedBackwardAlignOutputs;  // [iteration][frame]
-    private List<List<Tensor<T>>>? _cachedForwardAlignOutputs;   // [iteration][frame]
-    private List<List<Tensor<T>>>? _cachedResidualInputs;        // [frame][block]
-    private List<List<Tensor<T>>>? _cachedResidualOutputs;       // [frame][block]
-    private List<List<Tensor<T>>>? _cachedUpsampleInputs;        // [frame][layer]
-    private List<Tensor<T>>? _cachedOutputConvInputs;            // [frame]
-    private int _cachedNumFrames;
+    /// <summary>
+    /// Test-only hook: if set, invoked for each frame index during BACKWARD propagation with that frame's
+    /// deformable-alignment input tensor [current | first-order warp | second-order warp] (channel-axis
+    /// concatenation). Lets a test record and inspect the second-order channel slice
+    /// (<c>[2·numFeatures, 3·numFeatures)</c>) to verify it responds to a two-step-away perturbation.
+    /// Null in production, so it adds no overhead there.
+    /// </summary>
+    internal Action<int, Tensor<T>>? BackwardAlignInputRecorder { get; set; }
 
     #endregion
 
@@ -300,7 +312,6 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         _backwardConvs = [];
         _forwardConvs = [];
         _upsampleLayers = [];
-        _cachedFeatures = [];
 
         InitializeNativeLayers(architecture);
     }
@@ -364,7 +375,6 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         _backwardConvs = [];
         _forwardConvs = [];
         _upsampleLayers = [];
-        _cachedFeatures = [];
 
         try
         {
@@ -467,13 +477,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        var result = EnhanceVideo(input);
-
-        // Clear activation caches after inference to avoid retaining large tensors
-        // that are only needed for backward pass during training.
-        ClearActivationCache();
-
-        return result;
+        return EnhanceVideo(input);
     }
 
     /// <inheritdoc/>
@@ -482,15 +486,50 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
+        var loss = LossFunction as LossFunctionBase<T>
+            ?? throw new InvalidOperationException(
+                "BasicVSR++ tape training requires a LossFunctionBase<T> (Charbonnier by default).");
+
+        // BasicVSR++ is a RECURRENT architecture: the same alignment/propagation
+        // layers are reapplied across frames and propagation iterations, and the
+        // reconstruction is assembled by stacking per-frame outputs. The generic
+        // sequential layer-chain forward (NeuralNetworkBase.ForwardForTraining) does
+        // not model this — it would feed SPyNet a single frame and throw
+        // ("expects two stacked frames"). Instead we drive the model's real forward
+        // (EnhanceVideo) through the autodiff tape so gradients reach every
+        // trainable layer, exactly as PyTorch's loss.backward() would over the
+        // recurrent graph. This is the paper's end-to-end training of the
+        // reconstruction network under the Charbonnier objective (Chan et al. 2022).
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
+            T learningRate = NumOps.FromDouble(_learningRate);
+
+            LastLoss = TapeTrainingStep<T>.Step(
+                trainableLayers,
+                input,
+                expectedOutput,
+                learningRate,
+                forward: EnhanceVideo,
+                computeLoss: (prediction, target) => loss.ComputeTapeLoss(prediction, target));
         }
         finally
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// BasicVSR++ is recurrent, so the generic sequential <see cref="NeuralNetworkBase{T}.ForwardForTraining"/>
+    /// (which would feed SPyNet a single frame and throw) does not model it. Route the tape forward
+    /// through the real recurrent <see cref="EnhanceVideo"/> so that <see cref="NeuralNetworkBase{T}.ComputeGradients"/>
+    /// — and the finite-difference gradient check built on it (#1872) — trace the true computation graph.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return _useNativeMode ? EnhanceVideo(input) : base.ForwardForTraining(input);
     }
 
     #endregion
@@ -500,101 +539,110 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     private Tensor<T> EnhanceVideoNative(Tensor<T> frames)
     {
         int numFrames = frames.Shape[0];
-        int channels = frames.Shape[1];
-        int height = frames.Shape[2];
-        int width = frames.Shape[3];
 
-        int outHeight = height * _scaleFactor;
-        int outWidth = width * _scaleFactor;
-
-        var outputFrames = new Tensor<T>([numFrames, channels, outHeight, outWidth]);
-
-        // Clear and initialize activation caches for backward pass
-        ClearActivationCache();
-        _cachedNumFrames = numFrames;
-        _cachedInitialFeatures = [];
-        _cachedResidualInputs = [];
-        _cachedResidualOutputs = [];
-        _cachedUpsampleInputs = [];
-        _cachedOutputConvInputs = [];
-
-        // Extract initial features for all frames (with caching)
-        var frameFeatures = new List<Tensor<T>>();
+        // --- 1. Shallow feature extraction per frame (tape-differentiable) ---
+        // FeatExtract lifts each RGB frame [C, H, W] into the numFeatures feature
+        // space that every downstream stage operates in.
+        var frameFeatures = new List<Tensor<T>>(numFrames);
         for (int i = 0; i < numFrames; i++)
         {
-            var frame = ExtractFrameBatch(frames, i);
-            var feat = FeatExtract.Forward(frame);
-            frameFeatures.Add(feat);
-            _cachedInitialFeatures.Add(feat);
+            var frame = ExtractFrameTape(frames, i);
+            frameFeatures.Add(FeatExtract.Forward(frame));
         }
 
-        // Compute optical flows between adjacent frames (with caching)
+        // --- 2. Optical flow between adjacent frames (motion guidance) ---
+        // SPyNet estimates the flow between each adjacent pair; the flow is used
+        // only to warp features toward their neighbours. As in Chan et al. 2022,
+        // where the flow network is pre-trained and the reconstruction network is
+        // what the training objective optimizes, the flow acts as a fixed sampling
+        // guide — but the warped FEATURES stay on the autodiff tape (via
+        // Engine.GridSample), so their gradients reach the layers that produced them.
         var flows = ComputeFlows(frames, numFrames);
-        _cachedFlows = flows;
 
-        // Bidirectional propagation with second-order grid (with caching)
-        var propagatedFeatures = BidirectionalPropagationWithCache(frameFeatures, flows, numFrames);
+        // --- 3. Flow-guided bidirectional grid propagation ---
+        var propagated = BidirectionalPropagation(frameFeatures, flows, numFrames);
 
-        // Process each frame through residual blocks and upsampling (with caching)
+        // --- 4. Per-frame reconstruction: residual blocks -> upsample -> head ---
+        var outputFrames = new List<Tensor<T>>(numFrames);
         for (int i = 0; i < numFrames; i++)
         {
-            var feat = propagatedFeatures[i];
-            var frameResidualInputs = new List<Tensor<T>>();
-            var frameResidualOutputs = new List<Tensor<T>>();
+            var feat = propagated[i];
 
-            // Apply residual blocks with caching
             foreach (var block in _residualBlocks)
-            {
-                frameResidualInputs.Add(feat);
                 feat = block.Forward(feat);
-                frameResidualOutputs.Add(feat);
-            }
-            _cachedResidualInputs.Add(frameResidualInputs);
-            _cachedResidualOutputs.Add(frameResidualOutputs);
 
-            // Upsampling with caching
-            var frameUpsampleInputs = new List<Tensor<T>>();
             foreach (var upsample in _upsampleLayers)
-            {
-                frameUpsampleInputs.Add(feat);
                 feat = upsample.Forward(feat);
-            }
-            _cachedUpsampleInputs.Add(frameUpsampleInputs);
 
-            // Cache output conv input
-            _cachedOutputConvInputs.Add(feat);
-
-            // Final output convolution
-            var output = OutputConv.Forward(feat);
-
-            // Store in output tensor
-            StoreFrameBatch(outputFrames, output, i);
+            outputFrames.Add(OutputConv.Forward(feat));
         }
 
-        return outputFrames;
+        // --- 5. Stack the per-frame outputs into [numFrames, C, H*scale, W*scale] ---
+        // TensorStack keeps every frame's reconstruction on the tape, so a loss over
+        // the assembled clip backpropagates into every layer above. (The previous
+        // implementation copied each frame into a fresh tensor with StoreFrameBatch,
+        // severing the graph and leaving Train() with no gradient path — which is why
+        // it needed the hand-rolled backward pass this rewrite removes.)
+        return Engine.TensorStack(outputFrames.ToArray(), axis: 0);
     }
 
     /// <summary>
-    /// Clears all activation caches.
+    /// Extracts frame <paramref name="frameIndex"/> from a [frames, C, H, W] clip as a
+    /// tape-differentiable [C, H, W] slice.
     /// </summary>
-    private void ClearActivationCache()
+    private Tensor<T> ExtractFrameTape(Tensor<T> frames, int frameIndex)
+        => Engine.TensorSliceAxis(frames, axis: 0, index: frameIndex);
+
+    /// <summary>
+    /// Concatenates two feature maps along the channel axis on the autodiff tape.
+    /// Handles both [C, H, W] (rank 3) and [batch, C, H, W] (rank 4) layouts.
+    /// </summary>
+    private Tensor<T> ConcatenateFeaturesTape(Tensor<T> feat1, Tensor<T> feat2)
     {
-        _cachedFeatures.Clear();
-        _cachedInitialFeatures = null;
-        _cachedFlows = null;
-        _cachedBackwardPropFeatures = null;
-        _cachedForwardPropFeatures = null;
-        _cachedBackwardOutputFeatures = null;
-        _cachedForwardOutputFeatures = null;
-        _cachedBackwardAlignInputs = null;
-        _cachedForwardAlignInputs = null;
-        _cachedBackwardAlignOutputs = null;
-        _cachedForwardAlignOutputs = null;
-        _cachedResidualInputs = null;
-        _cachedResidualOutputs = null;
-        _cachedUpsampleInputs = null;
-        _cachedOutputConvInputs = null;
+        int channelAxis = feat1.Rank == 4 ? 1 : 0;
+        return Engine.TensorConcatenate(new[] { feat1, feat2 }, channelAxis);
     }
+
+    /// <summary>
+    /// Three-input channel-axis concatenation on the tape — used by second-order propagation to fuse the
+    /// current feature with its first-order (i±1) and second-order (i±2) warped neighbours.
+    /// </summary>
+    private Tensor<T> ConcatenateFeaturesTape(Tensor<T> feat1, Tensor<T> feat2, Tensor<T> feat3)
+    {
+        int channelAxis = feat1.Rank == 4 ? 1 : 0;
+        return Engine.TensorConcatenate(new[] { feat1, feat2, feat3 }, channelAxis);
+    }
+
+    /// <summary>
+    /// Composes two optical-flow fields into the two-hop flow used by second-order propagation (Chan et
+    /// al. 2022): the flow from frame i to frame i±2 is <paramref name="baseFlow"/> (i→i±1) followed by
+    /// <paramref name="nextFlow"/> (i±1→i±2). At pixel p the composed displacement is
+    /// baseFlow(p) + nextFlow(p + baseFlow(p)) — sample the second hop at the location the first hop lands
+    /// on, then add the two hops. Flows are FIXED sampling guides (their values are not differentiated,
+    /// exactly like the single-hop flows), so composition runs on the materialized data — matching how
+    /// <see cref="BuildFlowGrid"/> already reads <c>flow.Data.Span</c> directly.
+    /// </summary>
+    private Tensor<T> ComposeFlow(Tensor<T> baseFlow, Tensor<T> nextFlow)
+    {
+        // Warp the second-hop flow into the first frame's grid (bilinear grid-sample), then add the
+        // first-hop flow. WarpFeatureTape treats the [2, H, W] flow field exactly like a 2-channel
+        // feature map, so p+baseFlow(p) sampling is reused verbatim.
+        var warpedNext = WarpFeatureTape(nextFlow, baseFlow);
+        var composed = new Tensor<T>(baseFlow._shape);
+        var b = baseFlow.Data.Span;
+        var w = warpedNext.Data.Span;
+        var c = composed.Data.Span;
+        int len = c.Length;
+        for (int i = 0; i < len; i++)
+            c[i] = NumOps.Add(b[i], w[i]);
+        return composed;
+    }
+
+    /// <summary>
+    /// A zero feature map matching <paramref name="template"/>'s shape — the second-order slot for an edge
+    /// frame that has no i±2 neighbour, so the alignment input keeps a constant channel count.
+    /// </summary>
+    private static Tensor<T> ZerosLike(Tensor<T> template) => new Tensor<T>(template._shape);
 
     private List<(Tensor<T> forward, Tensor<T> backward)> ComputeFlows(Tensor<T> frames, int numFrames)
     {
@@ -602,13 +650,11 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
         for (int i = 0; i < numFrames - 1; i++)
         {
-            var frame1 = ExtractFrameBatch(frames, i);
-            var frame2 = ExtractFrameBatch(frames, i + 1);
+            var frame1 = ExtractFrameTape(frames, i);
+            var frame2 = ExtractFrameTape(frames, i + 1);
 
-            // Forward flow: frame i -> frame i+1
+            // Forward flow: frame i -> frame i+1; backward flow: frame i+1 -> frame i.
             var forwardFlow = FlowEstimator.EstimateFlow(frame1, frame2);
-
-            // Backward flow: frame i+1 -> frame i
             var backwardFlow = FlowEstimator.EstimateFlow(frame2, frame1);
 
             flows.Add((forwardFlow, backwardFlow));
@@ -617,56 +663,65 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         return flows;
     }
 
+    /// <summary>
+    /// Flow-guided bidirectional propagation (Chan et al. 2022). For each propagation
+    /// iteration, features are propagated backward (last -> first) and then forward
+    /// (first -> last). Each step warps the neighbouring frame's feature along the
+    /// optical flow, refines the alignment with a deformable-convolution alignment
+    /// layer, and fuses it with the current feature through a propagation conv. Every
+    /// operation runs through tape-aware Engine ops (grid sample, concat, conv) so the
+    /// whole recurrent graph is differentiable end-to-end.
+    /// </summary>
     private List<Tensor<T>> BidirectionalPropagation(
         List<Tensor<T>> features,
         List<(Tensor<T> forward, Tensor<T> backward)> flows,
         int numFrames)
     {
-        var propagatedFeatures = new List<Tensor<T>>();
+        var propagatedFeatures = new List<Tensor<T>>(features);
 
-        // Initialize with original features
-        for (int i = 0; i < numFrames; i++)
-        {
-            propagatedFeatures.Add(features[i]);
-        }
-
-        // Multiple propagation iterations (second-order grid propagation)
         for (int iter = 0; iter < _numPropagations; iter++)
         {
-            // Backward propagation (from last to first)
+            // Backward propagation (last -> first): SECOND-ORDER grid propagation (Chan et al. 2022,
+            // Sec. 3.1). Each frame aggregates BOTH its immediate successor (i+1) and its second successor
+            // (i+2). GridSample maps a target pixel p to source p + flow[p], so aligning frame i+1 onto
+            // frame i uses the forward flow i -> i+1 (flows[i].forward); the second-order warp of i+2 uses
+            // the paper's COMPOSITION of the two adjacent forward flows (i -> i+1 then i+1 -> i+2). At the
+            // tail edge (no i+2) the second-order slot is zero-filled so the alignment layer always sees
+            // the same channel count (current + first-order + second-order = 3 * numFeatures, resolved
+            // lazily on the deformable-alignment layer's first forward).
             var backwardFeats = new List<Tensor<T>>(propagatedFeatures);
             for (int i = numFrames - 2; i >= 0; i--)
             {
-                // Warp feature from frame i+1 to frame i using backward flow
-                var warpedFeat = WarpFeatureBatch(backwardFeats[i + 1], flows[i].backward);
-
-                // Concatenate current and warped features
-                var concat = ConcatenateFeaturesBatch(propagatedFeatures[i], warpedFeat);
-
-                // Apply deformable alignment
-                var aligned = _backwardAlignments[iter].Forward(concat);
-
-                // Fuse with propagation conv
-                concat = ConcatenateFeaturesBatch(propagatedFeatures[i], aligned);
-                backwardFeats[i] = _backwardConvs[iter].Forward(concat);
+                var warp1 = WarpFeatureTape(backwardFeats[i + 1], flows[i].forward);
+                var warp2 = (i + 2 < numFrames)
+                    ? WarpFeatureTape(backwardFeats[i + 2], ComposeFlow(flows[i].forward, flows[i + 1].forward))
+                    : ZerosLike(warp1);
+                // Test-only isolation: zero the first-order slot so the only route by which a two-step-away
+                // frame reaches this one is the second-order (i+2) warp above.
+                if (DisableFirstOrderPropagationForTesting) warp1 = ZerosLike(warp1);
+                var alignInput = ConcatenateFeaturesTape(propagatedFeatures[i], warp1, warp2);
+                BackwardAlignInputRecorder?.Invoke(i, alignInput);
+                var aligned = _backwardAlignments[iter].Forward(alignInput);
+                var fuseInput = ConcatenateFeaturesTape(propagatedFeatures[i], aligned);
+                backwardFeats[i] = _backwardConvs[iter].Forward(fuseInput);
             }
 
-            // Forward propagation (from first to last)
+            // Forward propagation (first -> last): mirror the second-order pass over predecessors i-1 and
+            // i-2. Aligning frame i-1 onto frame i uses the backward flow i -> i-1 (flows[i-1].backward,
+            // since flows[i-1] = (i-1 -> i, i -> i-1)); the i -> i-2 flow composes flows[i-1].backward with
+            // flows[i-2].backward. The head edge (no i-2) zero-fills the second-order slot.
             var forwardFeats = new List<Tensor<T>>(backwardFeats);
             for (int i = 1; i < numFrames; i++)
             {
-                // Warp feature from frame i-1 to frame i using forward flow
-                var warpedFeat = WarpFeatureBatch(forwardFeats[i - 1], flows[i - 1].forward);
-
-                // Concatenate current and warped features
-                var concat = ConcatenateFeaturesBatch(backwardFeats[i], warpedFeat);
-
-                // Apply deformable alignment
-                var aligned = _forwardAlignments[iter].Forward(concat);
-
-                // Fuse with propagation conv
-                concat = ConcatenateFeaturesBatch(backwardFeats[i], aligned);
-                forwardFeats[i] = _forwardConvs[iter].Forward(concat);
+                var warp1 = WarpFeatureTape(forwardFeats[i - 1], flows[i - 1].backward);
+                var warp2 = (i - 2 >= 0)
+                    ? WarpFeatureTape(forwardFeats[i - 2], ComposeFlow(flows[i - 1].backward, flows[i - 2].backward))
+                    : ZerosLike(warp1);
+                if (DisableFirstOrderPropagationForTesting) warp1 = ZerosLike(warp1);
+                var alignInput = ConcatenateFeaturesTape(backwardFeats[i], warp1, warp2);
+                var aligned = _forwardAlignments[iter].Forward(alignInput);
+                var fuseInput = ConcatenateFeaturesTape(backwardFeats[i], aligned);
+                forwardFeats[i] = _forwardConvs[iter].Forward(fuseInput);
             }
 
             propagatedFeatures = forwardFeats;
@@ -676,287 +731,66 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     }
 
     /// <summary>
-    /// Performs bidirectional propagation with caching of all intermediate activations
-    /// for proper gradient computation during backward pass.
+    /// Warps <paramref name="feature"/> along an optical-flow field using bilinear grid
+    /// sampling on the autodiff tape. The flow is a fixed sampling guide (its own values
+    /// are not differentiated), but the sampled feature stays on the tape so gradients
+    /// flow back to whatever produced it.
     /// </summary>
-    private List<Tensor<T>> BidirectionalPropagationWithCache(
-        List<Tensor<T>> features,
-        List<(Tensor<T> forward, Tensor<T> backward)> flows,
-        int numFrames)
+    private Tensor<T> WarpFeatureTape(Tensor<T> feature, Tensor<T> flow)
     {
-        // Initialize caches for propagation
-        _cachedBackwardPropFeatures = [];
-        _cachedForwardPropFeatures = [];
-        _cachedBackwardOutputFeatures = [];
-        _cachedForwardOutputFeatures = [];
-        _cachedBackwardAlignInputs = [];
-        _cachedForwardAlignInputs = [];
-        _cachedBackwardAlignOutputs = [];
-        _cachedForwardAlignOutputs = [];
-
-        var propagatedFeatures = new List<Tensor<T>>();
-
-        // Initialize with original features
-        for (int i = 0; i < numFrames; i++)
-        {
-            propagatedFeatures.Add(features[i]);
-        }
-
-        // Multiple propagation iterations (second-order grid propagation)
-        for (int iter = 0; iter < _numPropagations; iter++)
-        {
-            var iterBackwardPropFeatures = new List<Tensor<T>>();
-            var iterForwardPropFeatures = new List<Tensor<T>>();
-            var iterBackwardAlignInputs = new List<Tensor<T>>();
-            var iterForwardAlignInputs = new List<Tensor<T>>();
-            var iterBackwardAlignOutputs = new List<Tensor<T>>();
-            var iterForwardAlignOutputs = new List<Tensor<T>>();
-
-            // Initialize lists with placeholder tensors for proper indexing
-            for (int i = 0; i < numFrames; i++)
-            {
-                iterBackwardPropFeatures.Add(new Tensor<T>([1]));
-                iterForwardPropFeatures.Add(new Tensor<T>([1]));
-                iterBackwardAlignInputs.Add(new Tensor<T>([1]));
-                iterForwardAlignInputs.Add(new Tensor<T>([1]));
-                iterBackwardAlignOutputs.Add(new Tensor<T>([1]));
-                iterForwardAlignOutputs.Add(new Tensor<T>([1]));
-            }
-
-            // Initialize boundary frames that won't be processed in the loops
-            // Frame numFrames-1 is not processed in backward propagation
-            iterBackwardPropFeatures[numFrames - 1] = propagatedFeatures[numFrames - 1];
-            iterBackwardAlignInputs[numFrames - 1] = propagatedFeatures[numFrames - 1];
-            iterBackwardAlignOutputs[numFrames - 1] = propagatedFeatures[numFrames - 1];
-
-            // Backward propagation (from last to first)
-            var backwardFeats = new List<Tensor<T>>(propagatedFeatures);
-            for (int i = numFrames - 2; i >= 0; i--)
-            {
-                // Warp feature from frame i+1 to frame i using backward flow
-                var warpedFeat = WarpFeatureBatch(backwardFeats[i + 1], flows[i].backward);
-
-                // Concatenate current and warped features
-                var alignInput = ConcatenateFeaturesBatch(propagatedFeatures[i], warpedFeat);
-                iterBackwardAlignInputs[i] = alignInput;
-
-                // Apply deformable alignment
-                var aligned = _backwardAlignments[iter].Forward(alignInput);
-                iterBackwardAlignOutputs[i] = aligned;
-
-                // Fuse with propagation conv
-                var propInput = ConcatenateFeaturesBatch(propagatedFeatures[i], aligned);
-                iterBackwardPropFeatures[i] = propInput;
-                backwardFeats[i] = _backwardConvs[iter].Forward(propInput);
-            }
-
-            // Forward propagation (from first to last)
-            var forwardFeats = new List<Tensor<T>>(backwardFeats);
-
-            // Frame 0 is not processed in forward propagation
-            iterForwardPropFeatures[0] = backwardFeats[0];
-            iterForwardAlignInputs[0] = backwardFeats[0];
-            iterForwardAlignOutputs[0] = backwardFeats[0];
-
-            for (int i = 1; i < numFrames; i++)
-            {
-                // Warp feature from frame i-1 to frame i using forward flow
-                var warpedFeat = WarpFeatureBatch(forwardFeats[i - 1], flows[i - 1].forward);
-
-                // Concatenate current and warped features
-                var alignInput = ConcatenateFeaturesBatch(backwardFeats[i], warpedFeat);
-                iterForwardAlignInputs[i] = alignInput;
-
-                // Apply deformable alignment
-                var aligned = _forwardAlignments[iter].Forward(alignInput);
-                iterForwardAlignOutputs[i] = aligned;
-
-                // Fuse with propagation conv
-                var propInput = ConcatenateFeaturesBatch(backwardFeats[i], aligned);
-                iterForwardPropFeatures[i] = propInput;
-                forwardFeats[i] = _forwardConvs[iter].Forward(propInput);
-            }
-
-            // Cache this iteration's activations
-            _cachedBackwardPropFeatures.Add(iterBackwardPropFeatures);
-            _cachedForwardPropFeatures.Add(iterForwardPropFeatures);
-            _cachedBackwardOutputFeatures.Add(backwardFeats.ToList());
-            _cachedForwardOutputFeatures.Add(forwardFeats.ToList());
-            _cachedBackwardAlignInputs.Add(iterBackwardAlignInputs);
-            _cachedForwardAlignInputs.Add(iterForwardAlignInputs);
-            _cachedBackwardAlignOutputs.Add(iterBackwardAlignOutputs);
-            _cachedForwardAlignOutputs.Add(iterForwardAlignOutputs);
-
-            propagatedFeatures = forwardFeats;
-        }
-
-        return propagatedFeatures;
-    }
-
-    private Tensor<T> WarpFeatureBatch(Tensor<T> feature, Tensor<T> flow)
-    {
-        // Warp feature using optical flow (bilinear sampling)
         bool hasBatch = feature.Rank == 4;
-        int batch = hasBatch ? feature.Shape[0] : 1;
-        int channels = hasBatch ? feature.Shape[1] : feature.Shape[0];
         int height = hasBatch ? feature.Shape[2] : feature.Shape[1];
         int width = hasBatch ? feature.Shape[3] : feature.Shape[2];
 
-        var warped = new Tensor<T>(feature._shape);
+        // Sampling grid in GridSample's [batch, H, W, 2] normalized-coordinate layout.
+        var grid = BuildFlowGrid(flow, height, width);
 
-        for (int b = 0; b < batch; b++)
+        // Engine.GridSample is NCHW (PyTorch F.grid_sample convention, Tensors #777): input
+        // [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. Features
+        // are already channels-first, so pass them directly — no permute.
+        var feature4D = hasBatch ? feature : Engine.TensorExpandDims(feature, 0);
+        var warped = Engine.GridSample(feature4D, grid);
+
+        return hasBatch ? warped : Engine.TensorSqueeze(warped, axis: 0);
+    }
+
+    /// <summary>
+    /// Builds a GridSample sampling grid [1, H, W, 2] from a [2, H, W] (or [1, 2, H, W])
+    /// optical-flow field. Grid coordinates are normalized to [-1, 1] via
+    /// grid = (pixel + flow) * 2 / (size - 1) - 1, matching SPyNet's warp convention.
+    /// </summary>
+    private Tensor<T> BuildFlowGrid(Tensor<T> flow, int height, int width)
+    {
+        var grid = new Tensor<T>(new[] { 1, height, width, 2 });
+
+        T widthNorm = NumOps.FromDouble(width > 1 ? 2.0 / (width - 1) : 0.0);
+        T heightNorm = NumOps.FromDouble(height > 1 ? 2.0 / (height - 1) : 0.0);
+        T one = NumOps.One;
+        int plane = height * width;
+
+        // Flow channel 0 = dx, channel 1 = dy (channels-first [2, H, W]); a leading
+        // batch dim of 1 leaves these per-pixel offsets unchanged.
+        for (int h = 0; h < height; h++)
         {
-            for (int h = 0; h < height; h++)
+            for (int w = 0; w < width; w++)
             {
-                for (int w = 0; w < width; w++)
-                {
-                    // Get flow at this position
-                    int flowIdxX = hasBatch
-                        ? b * 2 * height * width + h * width + w
-                        : h * width + w;
-                    int flowIdxY = hasBatch
-                        ? b * 2 * height * width + height * width + h * width + w
-                        : height * width + h * width + w;
+                int pixel = h * width + w;
+                T dx = flow.Data.Span[pixel];
+                T dy = flow.Data.Span[plane + pixel];
 
-                    double dx = NumOps.ToDouble(flow.Data.Span[flowIdxX]);
-                    double dy = NumOps.ToDouble(flow.Data.Span[flowIdxY]);
+                T srcX = NumOps.Add(NumOps.FromDouble(w), dx);
+                T srcY = NumOps.Add(NumOps.FromDouble(h), dy);
 
-                    double srcX = w + dx;
-                    double srcY = h + dy;
+                T gridX = NumOps.Subtract(NumOps.Multiply(srcX, widthNorm), one);
+                T gridY = NumOps.Subtract(NumOps.Multiply(srcY, heightNorm), one);
 
-                    // Bilinear sample for each channel
-                    for (int c = 0; c < channels; c++)
-                    {
-                        T value = BilinearSampleBatch(feature, b, c, srcY, srcX, hasBatch, height, width, channels);
-                        int outIdx = hasBatch
-                            ? b * channels * height * width + c * height * width + h * width + w
-                            : c * height * width + h * width + w;
-                        warped.Data.Span[outIdx] = value;
-                    }
-                }
+                int gridIdx = pixel * 2;
+                grid.Data.Span[gridIdx] = gridX;
+                grid.Data.Span[gridIdx + 1] = gridY;
             }
         }
 
-        return warped;
-    }
-
-    private T BilinearSampleBatch(Tensor<T> tensor, int b, int c, double h, double w, bool hasBatch, int height, int width, int channels)
-    {
-        int h0 = (int)Math.Floor(h);
-        int w0 = (int)Math.Floor(w);
-        int h1 = h0 + 1;
-        int w1 = w0 + 1;
-
-        // Clamp to valid range (compatible with .NET Framework 4.7.1)
-        h0 = Math.Max(0, Math.Min(h0, height - 1));
-        h1 = Math.Max(0, Math.Min(h1, height - 1));
-        w0 = Math.Max(0, Math.Min(w0, width - 1));
-        w1 = Math.Max(0, Math.Min(w1, width - 1));
-
-        double hWeight = h - Math.Floor(h);
-        double wWeight = w - Math.Floor(w);
-
-        T v00 = GetValue(tensor, b, c, h0, w0, hasBatch, height, width, channels);
-        T v01 = GetValue(tensor, b, c, h0, w1, hasBatch, height, width, channels);
-        T v10 = GetValue(tensor, b, c, h1, w0, hasBatch, height, width, channels);
-        T v11 = GetValue(tensor, b, c, h1, w1, hasBatch, height, width, channels);
-
-        T top = NumOps.Add(
-            NumOps.Multiply(v00, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v01, NumOps.FromDouble(wWeight)));
-        T bottom = NumOps.Add(
-            NumOps.Multiply(v10, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v11, NumOps.FromDouble(wWeight)));
-
-        return NumOps.Add(
-            NumOps.Multiply(top, NumOps.FromDouble(1 - hWeight)),
-            NumOps.Multiply(bottom, NumOps.FromDouble(hWeight)));
-    }
-
-    private T GetValue(Tensor<T> tensor, int b, int c, int h, int w, bool hasBatch, int height, int width, int channels)
-    {
-        int idx = hasBatch
-            ? b * channels * height * width + c * height * width + h * width + w
-            : c * height * width + h * width + w;
-        return tensor.Data.Span[idx];
-    }
-
-    private Tensor<T> ConcatenateFeaturesBatch(Tensor<T> feat1, Tensor<T> feat2)
-    {
-        bool hasBatch = feat1.Rank == 4;
-        int batch = hasBatch ? feat1.Shape[0] : 1;
-        int c1 = hasBatch ? feat1.Shape[1] : feat1.Shape[0];
-        int c2 = hasBatch ? feat2.Shape[1] : feat2.Shape[0];
-        int height = hasBatch ? feat1.Shape[2] : feat1.Shape[1];
-        int width = hasBatch ? feat1.Shape[3] : feat1.Shape[2];
-
-        var outShape = hasBatch
-            ? new[] { batch, c1 + c2, height, width }
-            : new[] { c1 + c2, height, width };
-        var output = new Tensor<T>(outShape);
-
-        int pixelsPerChannel = height * width;
-
-        for (int b = 0; b < batch; b++)
-        {
-            // Copy feat1 channels
-            for (int c = 0; c < c1; c++)
-            {
-                int srcOffset = hasBatch ? b * c1 * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = hasBatch ? b * (c1 + c2) * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    output.Data.Span[dstOffset + i] = feat1.Data.Span[srcOffset + i];
-                }
-            }
-
-            // Copy feat2 channels
-            for (int c = 0; c < c2; c++)
-            {
-                int srcOffset = hasBatch ? b * c2 * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = hasBatch ? b * (c1 + c2) * pixelsPerChannel + (c1 + c) * pixelsPerChannel : (c1 + c) * pixelsPerChannel;
-
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    output.Data.Span[dstOffset + i] = feat2.Data.Span[srcOffset + i];
-                }
-            }
-        }
-
-        return output;
-    }
-
-    private Tensor<T> ExtractFrameBatch(Tensor<T> frames, int frameIndex)
-    {
-        int channels = frames.Shape[1];
-        int height = frames.Shape[2];
-        int width = frames.Shape[3];
-
-        var frame = new Tensor<T>([channels, height, width]);
-        int frameSize = channels * height * width;
-        int srcOffset = frameIndex * frameSize;
-
-        for (int i = 0; i < frameSize; i++)
-        {
-            frame.Data.Span[i] = frames.Data.Span[srcOffset + i];
-        }
-
-        return frame;
-    }
-
-    private void StoreFrameBatch(Tensor<T> output, Tensor<T> frame, int frameIndex)
-    {
-        int channels = output.Shape[1];
-        int height = output.Shape[2];
-        int width = output.Shape[3];
-        int frameSize = channels * height * width;
-        int dstOffset = frameIndex * frameSize;
-
-        for (int i = 0; i < frameSize; i++)
-        {
-            output.Data.Span[dstOffset + i] = frame.Data.Span[i];
-        }
+        return grid;
     }
 
     #endregion
@@ -999,240 +833,54 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
     #endregion
 
-    #region Training Methods
-
-    private Tensor<T> ComputeLossGradient(Tensor<T> output, Tensor<T> target)
-    {
-        var gradient = new Tensor<T>(output._shape);
-
-        for (int i = 0; i < output.Length; i++)
-        {
-            T diff = NumOps.Subtract(output.Data.Span[i], target.Data.Span[i]);
-            // Charbonnier loss gradient: diff / sqrt(diff^2 + epsilon^2)
-            double d = NumOps.ToDouble(diff);
-            double eps = 1e-6;
-            double grad = d / Math.Sqrt(d * d + eps * eps);
-            gradient.Data.Span[i] = NumOps.FromDouble(grad);
-        }
-
-        return gradient;
-    }
+    #region Named Activations
 
     /// <summary>
-    /// Splits a gradient tensor at a concatenation point along the channel dimension.
+    /// Captures intermediate activations from BasicVSR++'s real recurrent forward pass
+    /// for inspection/debugging. The generic base implementation chains every layer in
+    /// <c>Layers</c> sequentially, which is invalid here: the first layer is SPyNet,
+    /// which needs two stacked frames and rejects a single RGB frame. This override runs
+    /// the true forward — per-frame feature extraction, flow-guided bidirectional
+    /// propagation, and reconstruction — and records the meaningful stage outputs.
     /// </summary>
-    private (Tensor<T> first, Tensor<T> second) SplitConcatenatedGradient(
-        Tensor<T> gradient, int firstChannels, int secondChannels)
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
-        bool hasBatch = gradient.Rank == 4;
-        int batch = hasBatch ? gradient.Shape[0] : 1;
-        int height = hasBatch ? gradient.Shape[2] : gradient.Shape[1];
-        int width = hasBatch ? gradient.Shape[3] : gradient.Shape[2];
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
 
-        var firstShape = hasBatch
-            ? new[] { batch, firstChannels, height, width }
-            : new[] { firstChannels, height, width };
-        var secondShape = hasBatch
-            ? new[] { batch, secondChannels, height, width }
-            : new[] { secondChannels, height, width };
+        var activations = new Dictionary<string, Tensor<T>>();
+        int numFrames = input.Shape[0];
 
-        var firstGrad = new Tensor<T>(firstShape);
-        var secondGrad = new Tensor<T>(secondShape);
-
-        int pixelsPerChannel = height * width;
-
-        for (int b = 0; b < batch; b++)
+        // Shallow feature extraction per frame.
+        var frameFeatures = new List<Tensor<T>>(numFrames);
+        for (int i = 0; i < numFrames; i++)
         {
-            // Copy first channels
-            for (int c = 0; c < firstChannels; c++)
-            {
-                int srcOffset = hasBatch
-                    ? b * (firstChannels + secondChannels) * pixelsPerChannel + c * pixelsPerChannel
-                    : c * pixelsPerChannel;
-                int dstOffset = hasBatch
-                    ? b * firstChannels * pixelsPerChannel + c * pixelsPerChannel
-                    : c * pixelsPerChannel;
-
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    firstGrad.Data.Span[dstOffset + i] = gradient.Data.Span[srcOffset + i];
-                }
-            }
-
-            // Copy second channels
-            for (int c = 0; c < secondChannels; c++)
-            {
-                int srcOffset = hasBatch
-                    ? b * (firstChannels + secondChannels) * pixelsPerChannel + (firstChannels + c) * pixelsPerChannel
-                    : (firstChannels + c) * pixelsPerChannel;
-                int dstOffset = hasBatch
-                    ? b * secondChannels * pixelsPerChannel + c * pixelsPerChannel
-                    : c * pixelsPerChannel;
-
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    secondGrad.Data.Span[dstOffset + i] = gradient.Data.Span[srcOffset + i];
-                }
-            }
+            var feat = FeatExtract.Forward(ExtractFrameTape(input, i));
+            frameFeatures.Add(feat);
+            activations[$"FeatExtract_Frame{i}"] = feat.Clone();
         }
 
-        return (firstGrad, secondGrad);
-    }
+        // Flow-guided bidirectional propagation.
+        var flows = ComputeFlows(input, numFrames);
+        if (flows.Count > 0)
+            activations["Flow_Forward_0"] = flows[0].forward.Clone();
 
-    /// <summary>
-    /// Backward pass through bilinear warping operation.
-    /// Computes gradients with respect to input features and optical flow.
-    /// </summary>
-    private (Tensor<T> featureGrad, Tensor<T> flowGrad) WarpBackward(
-        Tensor<T> outputGrad, Tensor<T> flow, Tensor<T> inputFeature)
-    {
-        bool hasBatch = outputGrad.Rank == 4;
-        int batch = hasBatch ? outputGrad.Shape[0] : 1;
-        int channels = hasBatch ? outputGrad.Shape[1] : outputGrad.Shape[0];
-        int height = hasBatch ? outputGrad.Shape[2] : outputGrad.Shape[1];
-        int width = hasBatch ? outputGrad.Shape[3] : outputGrad.Shape[2];
+        var propagated = BidirectionalPropagation(frameFeatures, flows, numFrames);
+        for (int i = 0; i < numFrames; i++)
+            activations[$"Propagated_Frame{i}"] = propagated[i].Clone();
 
-        var featureGrad = new Tensor<T>(inputFeature._shape);
-        var flowGrad = new Tensor<T>(flow._shape);
-
-        for (int b = 0; b < batch; b++)
+        // Per-frame reconstruction output.
+        for (int i = 0; i < numFrames; i++)
         {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Get flow at this position
-                    int flowIdxX = hasBatch
-                        ? b * 2 * height * width + h * width + w
-                        : h * width + w;
-                    int flowIdxY = hasBatch
-                        ? b * 2 * height * width + height * width + h * width + w
-                        : height * width + h * width + w;
-
-                    double dx = NumOps.ToDouble(flow.Data.Span[flowIdxX]);
-                    double dy = NumOps.ToDouble(flow.Data.Span[flowIdxY]);
-
-                    double srcX = w + dx;
-                    double srcY = h + dy;
-
-                    // Compute bilinear interpolation weights and their gradients
-                    int x0 = (int)Math.Floor(srcX);
-                    int y0 = (int)Math.Floor(srcY);
-                    int x1 = x0 + 1;
-                    int y1 = y0 + 1;
-
-                    // Clamp to valid range
-                    int x0c = Math.Max(0, Math.Min(x0, width - 1));
-                    int x1c = Math.Max(0, Math.Min(x1, width - 1));
-                    int y0c = Math.Max(0, Math.Min(y0, height - 1));
-                    int y1c = Math.Max(0, Math.Min(y1, height - 1));
-
-                    double wx = srcX - x0;
-                    double wy = srcY - y0;
-
-                    // Bilinear weights
-                    double w00 = (1 - wx) * (1 - wy);
-                    double w01 = wx * (1 - wy);
-                    double w10 = (1 - wx) * wy;
-                    double w11 = wx * wy;
-
-                    for (int c = 0; c < channels; c++)
-                    {
-                        int outIdx = hasBatch
-                            ? b * channels * height * width + c * height * width + h * width + w
-                            : c * height * width + h * width + w;
-
-                        double grad = NumOps.ToDouble(outputGrad.Data.Span[outIdx]);
-
-                        // Distribute gradient to input feature positions
-                        int idx00 = hasBatch
-                            ? b * channels * height * width + c * height * width + y0c * width + x0c
-                            : c * height * width + y0c * width + x0c;
-                        int idx01 = hasBatch
-                            ? b * channels * height * width + c * height * width + y0c * width + x1c
-                            : c * height * width + y0c * width + x1c;
-                        int idx10 = hasBatch
-                            ? b * channels * height * width + c * height * width + y1c * width + x0c
-                            : c * height * width + y1c * width + x0c;
-                        int idx11 = hasBatch
-                            ? b * channels * height * width + c * height * width + y1c * width + x1c
-                            : c * height * width + y1c * width + x1c;
-
-                        // Add gradient contribution to feature gradient
-                        featureGrad.Data.Span[idx00] = NumOps.Add(featureGrad.Data.Span[idx00],
-                            NumOps.FromDouble(grad * w00));
-                        featureGrad.Data.Span[idx01] = NumOps.Add(featureGrad.Data.Span[idx01],
-                            NumOps.FromDouble(grad * w01));
-                        featureGrad.Data.Span[idx10] = NumOps.Add(featureGrad.Data.Span[idx10],
-                            NumOps.FromDouble(grad * w10));
-                        featureGrad.Data.Span[idx11] = NumOps.Add(featureGrad.Data.Span[idx11],
-                            NumOps.FromDouble(grad * w11));
-
-                        // Compute gradient with respect to flow
-                        // d/dx: gradient of bilinear interpolation w.r.t. x coordinate
-                        double v00 = NumOps.ToDouble(GetValue(inputFeature, b, c, y0c, x0c, hasBatch, height, width, channels));
-                        double v01 = NumOps.ToDouble(GetValue(inputFeature, b, c, y0c, x1c, hasBatch, height, width, channels));
-                        double v10 = NumOps.ToDouble(GetValue(inputFeature, b, c, y1c, x0c, hasBatch, height, width, channels));
-                        double v11 = NumOps.ToDouble(GetValue(inputFeature, b, c, y1c, x1c, hasBatch, height, width, channels));
-
-                        // dOutput/dx = (v01 - v00) * (1 - wy) + (v11 - v10) * wy
-                        double dOutDx = (v01 - v00) * (1 - wy) + (v11 - v10) * wy;
-                        // dOutput/dy = (v10 - v00) * (1 - wx) + (v11 - v01) * wx
-                        double dOutDy = (v10 - v00) * (1 - wx) + (v11 - v01) * wx;
-
-                        flowGrad.Data.Span[flowIdxX] = NumOps.Add(flowGrad.Data.Span[flowIdxX],
-                            NumOps.FromDouble(grad * dOutDx));
-                        flowGrad.Data.Span[flowIdxY] = NumOps.Add(flowGrad.Data.Span[flowIdxY],
-                            NumOps.FromDouble(grad * dOutDy));
-                    }
-                }
-            }
+            var feat = propagated[i];
+            foreach (var block in _residualBlocks)
+                feat = block.Forward(feat);
+            foreach (var upsample in _upsampleLayers)
+                feat = upsample.Forward(feat);
+            activations[$"Output_Frame{i}"] = OutputConv.Forward(feat).Clone();
         }
 
-        return (featureGrad, flowGrad);
-    }
-
-    /// <summary>
-    /// Accumulates gradient values into a target tensor.
-    /// </summary>
-    private void AccumulateGradient(Tensor<T> target, Tensor<T> source)
-    {
-        if (target.Length != source.Length)
-        {
-            throw new ArgumentException(
-                $"Tensor size mismatch: target has {target.Length} elements, source has {source.Length}");
-        }
-
-        for (int i = 0; i < target.Length; i++)
-        {
-            target.Data.Span[i] = NumOps.Add(target.Data.Span[i], source.Data.Span[i]);
-        }
-    }
-
-    private void UpdateAllParameters()
-    {
-        T lr = NumOps.FromDouble(_learningRate);
-
-        FeatExtract.UpdateParameters(lr);
-        OutputConv.UpdateParameters(lr);
-
-        foreach (var block in _residualBlocks)
-        {
-            block.UpdateParameters(lr);
-        }
-
-        foreach (var layer in _upsampleLayers)
-        {
-            layer.UpdateParameters(lr);
-        }
-
-        for (int i = 0; i < _numPropagations; i++)
-        {
-            _backwardAlignments[i].UpdateParameters(lr);
-            _forwardAlignments[i].UpdateParameters(lr);
-            _backwardConvs[i].UpdateParameters(lr);
-            _forwardConvs[i].UpdateParameters(lr);
-        }
+        return activations;
     }
 
     #endregion
@@ -1244,12 +892,24 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     {
         ClearLayers();
 
+        // Mirror InitializeNativeLayers' construction order exactly so the flat
+        // Layers list is consistent with the sub-list distribution (and with the
+        // GetParameters/UpdateParameters ordering below): flow estimator, feature
+        // extraction, residual blocks, then per-iteration [backward align, forward
+        // align, backward conv, forward conv], upsampling, and the output head.
+        // Residual blocks were previously omitted here, and the alignment/conv
+        // layers were grouped instead of interleaved — leaving Layers out of sync
+        // with the model's actual structure whenever this ran.
         if (_flowEstimator is not null) Layers.Add(_flowEstimator);
         if (_featExtract is not null) Layers.Add(_featExtract);
-        foreach (var layer in _backwardAlignments) Layers.Add(layer);
-        foreach (var layer in _forwardAlignments) Layers.Add(layer);
-        foreach (var layer in _backwardConvs) Layers.Add(layer);
-        foreach (var layer in _forwardConvs) Layers.Add(layer);
+        foreach (var block in _residualBlocks) Layers.Add(block);
+        for (int i = 0; i < _numPropagations; i++)
+        {
+            if (i < _backwardAlignments.Count) Layers.Add(_backwardAlignments[i]);
+            if (i < _forwardAlignments.Count) Layers.Add(_forwardAlignments[i]);
+            if (i < _backwardConvs.Count) Layers.Add(_backwardConvs[i]);
+            if (i < _forwardConvs.Count) Layers.Add(_forwardConvs[i]);
+        }
         foreach (var layer in _upsampleLayers) Layers.Add(layer);
         if (_outputConv is not null) Layers.Add(_outputConv);
     }
@@ -1259,144 +919,42 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     #region Serialization
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Distributes the flat parameter vector across the trainable layers in the SAME order the base
+    /// <see cref="NeuralNetworkBase{T}.GetParameters"/> collects them — the canonical <c>Layers</c>
+    /// order (flow estimator -> feature extraction -> residual blocks -> per-iteration [backward align,
+    /// forward align, backward conv, forward conv] -> upsampling -> output conv). The previous override
+    /// used a different feature -> residuals -> flow ordering, so a GetParameters/UpdateParameters
+    /// round-trip wrote each slice into the wrong layer.
+    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
 
+        // Validate the flat vector length UP FRONT against the total trainable parameter count (the exact
+        // set this loop consumes). A mismatched vector must RAISE rather than silently applying a partial
+        // (corrupt) update via an early break — mirrors the sibling VideoCLIP / SelfOrganizingMap
+        // UpdateParameters overrides (#1789 review).
+        long expected = 0;
+        foreach (var layer in Layers)
+            if (layer.SupportsTraining) expected += layer.ParameterCount;
+        if (parameters.Length != expected)
+            throw new ArgumentException(
+                $"Expected {expected} parameters (sum over trainable layers), got {parameters.Length}.",
+                nameof(parameters));
+
         int offset = 0;
-
-        // Update feature extraction
-        if (_featExtract != null)
+        foreach (var layer in Layers)
         {
-            var featParams = _featExtract.GetParameters();
-            if (offset + featParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(featParams.Length);
-                for (int i = 0; i < featParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _featExtract.SetParameters(newParams);
-                offset += featParams.Length;
-            }
-        }
-
-        // Update residual blocks
-        foreach (var block in _residualBlocks)
-        {
-            var blockParams = block.GetParameters();
-            if (offset + blockParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(blockParams.Length);
-                for (int i = 0; i < blockParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                block.SetParameters(newParams);
-                offset += blockParams.Length;
-            }
-        }
-
-        // Update flow estimator
-        if (_flowEstimator != null)
-        {
-            var flowParams = _flowEstimator.GetParameters();
-            if (offset + flowParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(flowParams.Length);
-                for (int i = 0; i < flowParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _flowEstimator.SetParameters(newParams);
-                offset += flowParams.Length;
-            }
-        }
-
-        // Update propagation layers
-        for (int propIdx = 0; propIdx < _numPropagations; propIdx++)
-        {
-            if (propIdx < _backwardAlignments.Count)
-            {
-                var layerParams = _backwardAlignments[propIdx].GetParameters();
-                if (offset + layerParams.Length <= parameters.Length)
-                {
-                    var newParams = new Vector<T>(layerParams.Length);
-                    for (int i = 0; i < layerParams.Length; i++)
-                        newParams[i] = parameters[offset + i];
-                    _backwardAlignments[propIdx].SetParameters(newParams);
-                    offset += layerParams.Length;
-                }
-            }
-            if (propIdx < _forwardAlignments.Count)
-            {
-                var layerParams = _forwardAlignments[propIdx].GetParameters();
-                if (offset + layerParams.Length <= parameters.Length)
-                {
-                    var newParams = new Vector<T>(layerParams.Length);
-                    for (int i = 0; i < layerParams.Length; i++)
-                        newParams[i] = parameters[offset + i];
-                    _forwardAlignments[propIdx].SetParameters(newParams);
-                    offset += layerParams.Length;
-                }
-            }
-            if (propIdx < _backwardConvs.Count)
-            {
-                var layerParams = _backwardConvs[propIdx].GetParameters();
-                if (offset + layerParams.Length <= parameters.Length)
-                {
-                    var newParams = new Vector<T>(layerParams.Length);
-                    for (int i = 0; i < layerParams.Length; i++)
-                        newParams[i] = parameters[offset + i];
-                    _backwardConvs[propIdx].SetParameters(newParams);
-                    offset += layerParams.Length;
-                }
-            }
-            if (propIdx < _forwardConvs.Count)
-            {
-                var layerParams = _forwardConvs[propIdx].GetParameters();
-                if (offset + layerParams.Length <= parameters.Length)
-                {
-                    var newParams = new Vector<T>(layerParams.Length);
-                    for (int i = 0; i < layerParams.Length; i++)
-                        newParams[i] = parameters[offset + i];
-                    _forwardConvs[propIdx].SetParameters(newParams);
-                    offset += layerParams.Length;
-                }
-            }
-        }
-
-        // Update upsampling layers
-        foreach (var layer in _upsampleLayers)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update output convolution
-        if (_outputConv != null)
-        {
-            var outParams = _outputConv.GetParameters();
-            if (offset + outParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(outParams.Length);
-                for (int i = 0; i < outParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _outputConv.SetParameters(newParams);
-                offset += outParams.Length;
-            }
+            if (!layer.SupportsTraining || layer.ParameterCount == 0)
+                continue;
+            int count = checked((int)layer.ParameterCount);
+            var slice = new Vector<T>(count);
+            for (int i = 0; i < count; i++)
+                slice[i] = parameters[offset + i];
+            layer.UpdateParameters(slice);
+            offset += count;
         }
     }
 

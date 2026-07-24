@@ -1,3 +1,4 @@
+using AiDotNet.Onnx;
 using AiDotNet.VisionLanguage.Encoders;
 
 namespace AiDotNet.VisionLanguage.InstructionTuned;
@@ -25,10 +26,10 @@ public class InternVL3Options : InstructionTunedVLMOptions
         MaxGenerationLength = other.MaxGenerationLength;
         DropoutRate = other.DropoutRate;
         ArchitectureType = other.ArchitectureType;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
+        ImageMean = other.ImageMean.ToArray();
+        ImageStd = other.ImageStd.ToArray();
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
         InstructionArchitectureType = other.InstructionArchitectureType;

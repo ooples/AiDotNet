@@ -74,25 +74,29 @@ public class HippoOptions<T> : TimeSeriesRegressionOptions<T>
         ForecastHorizon = other.ForecastHorizon;
         ModelDimension = other.ModelDimension;
         StateDimension = other.StateDimension;
+        MemorySize = other.MemorySize;
         NumLayers = other.NumLayers;
         DropoutRate = other.DropoutRate;
         HippoMethod = other.HippoMethod;
         DiscretizationMethod = other.DiscretizationMethod;
+        InitialTime = other.InitialTime;
+        TimeStep = other.TimeStep;
         TimescaleMin = other.TimescaleMin;
         TimescaleMax = other.TimescaleMax;
+        UseGate = other.UseGate;
         UseNormalization = other.UseNormalization;
     }
 
     /// <summary>
     /// Gets or sets the context length (input sequence length).
     /// </summary>
-    /// <value>The context length, defaulting to 512.</value>
+    /// <value>The context length, defaulting to 1024 (the original implementation's LegS l_max).</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> How many past time steps the model can look at.
     /// HiPPO's polynomial projection allows efficient handling of long sequences.
     /// </para>
     /// </remarks>
-    public int ContextLength { get; set; } = 512;
+    public int ContextLength { get; set; } = 1024;
 
     /// <summary>
     /// Gets or sets the forecast horizon (prediction length).
@@ -118,7 +122,7 @@ public class HippoOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the state dimension (N in the paper).
     /// </summary>
-    /// <value>The state dimension, defaulting to 64.</value>
+    /// <value>-1 by default, which resolves to ModelDimension (256 in the paper configuration).</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> The dimension of the HiPPO state (polynomial order).
     /// The HiPPO matrix A is N x N. Larger N = more accurate history approximation
@@ -128,28 +132,34 @@ public class HippoOptions<T> : TimeSeriesRegressionOptions<T>
     /// More terms = more accurate, but more work to compute.
     /// </para>
     /// </remarks>
-    public int StateDimension { get; set; } = 64;
+    public int StateDimension { get; set; } = -1;
+
+    /// <summary>
+    /// Gets or sets the number of independent polynomial memories in each recurrent cell.
+    /// </summary>
+    /// <value>The original HiPPO-RNN default, 1.</value>
+    public int MemorySize { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the number of HiPPO layers.
     /// </summary>
-    /// <value>The number of layers, defaulting to 4.</value>
+    /// <value>The original HiPPO-RNN experiment default, 1.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> How many HiPPO blocks are stacked.
     /// More layers = deeper model = more capacity for complex patterns.
     /// </para>
     /// </remarks>
-    public int NumLayers { get; set; } = 4;
+    public int NumLayers { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the dropout rate for regularization.
     /// </summary>
-    /// <value>The dropout rate, defaulting to 0.1.</value>
+    /// <value>The original HiPPO-RNN experiment default, 0.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Dropout helps prevent overfitting.
     /// </para>
     /// </remarks>
-    public double DropoutRate { get; set; } = 0.1;
+    public double DropoutRate { get; set; } = 0.0;
 
     /// <summary>
     /// Gets or sets the HiPPO method for state matrix initialization.
@@ -194,37 +204,54 @@ public class HippoOptions<T> : TimeSeriesRegressionOptions<T>
     public string DiscretizationMethod { get; set; } = "bilinear";
 
     /// <summary>
+    /// Gets or sets the initial time index used by the scale-invariant LegS recurrence.
+    /// </summary>
+    /// <value>The paper implementation default, 0, which uses its exact first-step projection.</value>
+    public int InitialTime { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets the LTI discretization step. Zero selects the official measure-specific default
+    /// (0.01 for LegT and 1.0 for LagT); LegS derives its step from the time index.
+    /// </summary>
+    public double TimeStep { get; set; } = 0.0;
+
+    /// <summary>
     /// Gets or sets the minimum timescale for the SSM.
     /// </summary>
-    /// <value>The minimum timescale, defaulting to 0.001.</value>
+    /// <value>Zero by default, meaning no lower clamp on the paper recurrence.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Controls the finest temporal resolution the model
     /// can represent. Smaller values capture faster dynamics but may be unstable.
     /// This is the Δt_min parameter in discretization.
     /// </para>
     /// </remarks>
-    public double TimescaleMin { get; set; } = 0.001;
+    public double TimescaleMin { get; set; } = 0.0;
 
     /// <summary>
     /// Gets or sets the maximum timescale for the SSM.
     /// </summary>
-    /// <value>The maximum timescale, defaulting to 0.1.</value>
+    /// <value>Positive infinity by default, meaning no upper clamp on the paper recurrence.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Controls the longest temporal dependency the model
     /// can capture efficiently. Larger values capture slower trends but may be
     /// less sensitive to fast changes. This is the Δt_max parameter.
     /// </para>
     /// </remarks>
-    public double TimescaleMax { get; set; } = 0.1;
+    public double TimescaleMax { get; set; } = double.PositiveInfinity;
+
+    /// <summary>
+    /// Gets or sets whether the recurrent hidden update uses the paper's standard sigmoid gate.
+    /// </summary>
+    public bool UseGate { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether to use normalization between HiPPO layers.
     /// </summary>
-    /// <value>True to use layer normalization; false otherwise. Default: true.</value>
+    /// <value>The original one-layer HiPPO-RNN experiment default, false.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Layer normalization helps stabilize training
     /// by keeping activations in a reasonable range. Generally recommended.
     /// </para>
     /// </remarks>
-    public bool UseNormalization { get; set; } = true;
+    public bool UseNormalization { get; set; } = false;
 }

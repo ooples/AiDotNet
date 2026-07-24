@@ -584,6 +584,35 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             RegisterSubLayer(_feedForward2);
             RegisterSubLayer(_norm2);
 
+            // Propagate a deterministic per-sublayer init seed derived from THIS layer's
+            // wired RandomSeed. The sublayers are constructed HERE, at first-forward — long
+            // after the model-construction LayerInitializationSeedScope (a ThreadStatic set
+            // during the constructor chain) has moved on, and often on a DIFFERENT thread
+            // (the fused/compiled training path traces the forward off the construction
+            // thread). Their own AssignInitializationSeedFromScope therefore finds no active
+            // scope, so their weight init falls back to the process-shared, order-dependent
+            // RandomHelper.ThreadSafeRandom — making the SAME architecture at the SAME
+            // architecture.RandomSeed produce DIFFERENT sublayer weights depending on how much
+            // unrelated work advanced that shared RNG first (e.g. a preceding training test's
+            // dropout-mask draws on the same xUnit worker). That silently breaks weight-init
+            // reproducibility and flips tight training-trajectory invariants purely on
+            // execution order (GLaMM LossStrictlyDecreasesOnMemorizationTask: passes in
+            // isolation, fails after any training test ran first). Seeding each sublayer from
+            // this layer's RandomSeed makes the lazy init deterministic and order-independent
+            // for every TransformerEncoderLayer-based model (ViT / SAM / DINO / BERT / VLMs).
+            // When RandomSeed is null (production default — no seed requested) the sublayers
+            // stay unseeded, preserving the existing "reproducible iff a seed was requested"
+            // contract.
+            if (RandomSeed.HasValue)
+            {
+                var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value);
+                _selfAttention.RandomSeed = subSeedRng.Next();
+                _norm1.RandomSeed = subSeedRng.Next();
+                _feedForward1.RandomSeed = subSeedRng.Next();
+                _feedForward2.RandomSeed = subSeedRng.Next();
+                _norm2.RandomSeed = subSeedRng.Next();
+            }
+
             // Eagerly resolve sub-layers using the known embedding size so their
             // ParameterCount reflects real weights immediately. Without this,
             // SetParameters dispatch (which slices by ParameterCount) sees 0 for

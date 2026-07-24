@@ -269,7 +269,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         ChronosFinanceOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _lastTokenMin = NumOps.Zero;
         _lastTokenRange = NumOps.Zero;
@@ -288,7 +288,8 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
@@ -322,7 +323,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         ChronosFinanceOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         options ??= new ChronosFinanceOptions<T>();
         _options = options;
@@ -336,7 +337,8 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = null;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
@@ -519,15 +521,57 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        if (target.Length != _forecastHorizon)
+            throw new ArgumentException(
+                $"Chronos training targets must contain exactly {_forecastHorizon} future values, got {target.Length}.",
+                nameof(target));
+
+        // Chronos is trained as a token language model, not by differentiating through
+        // argmax detokenization. Quantize the future values on the context's scale and
+        // supervise the raw vocabulary logits with cross-entropy (Ansari et al., 2024).
+        CaptureTokenScale(input);
+        var tokenTargets = QuantizeUsingCapturedScale(target)
+            .Reshape(new[] { 1, _forecastHorizon });
+        base.Train(input, tokenTargets);
+    }
+
+    /// <summary>
+    /// Tape-connected Chronos training forward: context tokens to the final horizon's
+    /// vocabulary logits. Inference still uses sampling/argmax detokenization.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        var logits = Forward(Tokenize(input));
+
+        if (logits.Rank == 3)
+        {
+            int sequenceLength = logits.Shape[1];
+            if (sequenceLength < _forecastHorizon)
+                throw new ArgumentException(
+                    $"Chronos input produces {sequenceLength} token positions, fewer than forecast horizon {_forecastHorizon}.",
+                    nameof(input));
+            return Engine.TensorSlice(
+                logits,
+                new[] { 0, sequenceLength - _forecastHorizon, 0 },
+                new[] { logits.Shape[0], _forecastHorizon, logits.Shape[2] });
+        }
+
+        if (logits.Rank == 2)
+        {
+            int sequenceLength = logits.Shape[0];
+            if (sequenceLength < _forecastHorizon)
+                throw new ArgumentException(
+                    $"Chronos input produces {sequenceLength} token positions, fewer than forecast horizon {_forecastHorizon}.",
+                    nameof(input));
+            var sliced = Engine.TensorSlice(
+                logits,
+                new[] { sequenceLength - _forecastHorizon, 0 },
+                new[] { _forecastHorizon, logits.Shape[1] });
+            return Engine.Reshape(sliced, new[] { 1, _forecastHorizon, logits.Shape[1] });
+        }
+
+        throw new InvalidOperationException(
+            $"Chronos training expects rank-2 or rank-3 vocabulary logits, got rank {logits.Rank}.");
     }
 
     /// <inheritdoc/>
@@ -657,6 +701,11 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         _hasTokenScale = reader.ReadBoolean();
         _lastTokenMin = NumOps.FromDouble(reader.ReadDouble());
         _lastTokenRange = NumOps.FromDouble(reader.ReadDouble());
+
+        // Base deserialization replaces the Layers collection with newly deserialized
+        // layer instances. Refresh Chronos' typed layer references so inference uses
+        // those restored weights rather than the constructor's discarded random layers.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -969,6 +1018,18 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     private Tensor<T> Tokenize(Tensor<T> values)
     {
         CaptureTokenScale(values);
+        return QuantizeUsingCapturedScale(values);
+    }
+
+    /// <summary>
+    /// Quantizes values using the most recently captured context scale. Targets use this
+    /// path so their bins are expressed in the same vocabulary coordinate system as input.
+    /// </summary>
+    private Tensor<T> QuantizeUsingCapturedScale(Tensor<T> values)
+    {
+        if (!_hasTokenScale)
+            throw new InvalidOperationException("Chronos token scale has not been initialized.");
+
         var min = _lastTokenMin;
         var range = _lastTokenRange;
 

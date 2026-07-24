@@ -132,7 +132,6 @@ public partial class Mamba2Block<T> : LayerBase<T>
     private Tensor<T>? _lastDeltaPreSoftplus;
     private Tensor<T>? _lastB;
     private Tensor<T>? _lastC;
-    private Tensor<T>? _lastHiddenStates;
     private Tensor<T>? _lastNormInput;
     private int[]? _originalInputShape;
 
@@ -495,137 +494,255 @@ public partial class Mamba2Block<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
+        // Dispatch to the configured chunked SSD path when a chunk size is set and the sequence is long
+        // enough to have more than one timestep. The chunked path computes each chunk's contribution with
+        // the semiseparable (block-parallel) matrix form and carries the recurrent state between chunks,
+        // so _chunkSize now has a real effect on the computation. It is numerically equivalent to the
+        // sequential scan below (validated to machine precision), which is retained as the reference used
+        // by the equivalence test and as the fallback for the degenerate single-timestep case.
+        if (_chunkSize >= 1 && seqLen > 1)
+            return SSDForwardChunked(x, delta, b, c, batchSize, seqLen, _chunkSize);
 
-        // Pre-compute A = -exp(A_log) per head: [numHeads]
-        var negAPerHead = new T[_numHeads];
-        for (int hi = 0; hi < _numHeads; hi++)
-        {
-            negAPerHead[hi] = NumOps.Negate(NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_aLog[hi]))));
-        }
+        return SSDForwardSequential(x, delta, b, c, batchSize, seqLen);
+    }
 
-        // D per head expanded: [numHeads, headDim]
-        var dExpanded = new Tensor<T>(new[] { _numHeads, _headDimension });
-        for (int hi = 0; hi < _numHeads; hi++)
-        {
-            for (int d = 0; d < _headDimension; d++)
-                dExpanded[new[] { hi, d }] = _dParam[hi];
-        }
-        var D1D = dExpanded.Reshape(_innerDimension);
-        var D2D = D1D.Reshape(1, _innerDimension);
-
-        // Hidden state: [batch, numHeads, headDim, stateDim]
-        var hiddenState = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _stateDimension });
-
-        // Store hidden states for backward: [batch, seqLen+1, numHeads, headDim, stateDim]
-        var allHiddenStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _innerDimension, _stateDimension });
-
-        // Process in chunks of _chunkSize (Mamba-2 SSD structure).
-        // Within each chunk, tokens are processed sequentially with the SSM recurrence.
-        // Chunk boundaries allow state snapshots for efficient backward pass.
-        // Flat-buffer scan. The previous loop indexed every tensor with the
-        // multi-dimensional indexer (tensor[new[]{bi,hi,di,n}]), which allocates a
-        // fresh int[] on EVERY read/write. Across seqLen × numHeads × headDim ×
-        // stateDim that was billions of array allocations — the scan timed out at
-        // paper scale. Index the backing buffers directly with precomputed flat
-        // offsets, and read the full x/delta/B/C tensors in place instead of
-        // slicing them per step (the per-step GetSliceAlongDimension + Rent of
-        // y_t/h_flat are gone too).
-        var xSpan = x.Data.Span;              // [batch, seqLen, innerDim]
-        var deltaSpan = delta.Data.Span;      // [batch, seqLen, numHeads]
-        var bSpan = b.Data.Span;              // [batch, seqLen, stateDim]
-        var cSpan = c.Data.Span;              // [batch, seqLen, stateDim]
-        var hsSpan = hiddenState.Data.Span;   // [batch, numHeads, headDim, stateDim]
-        var ahsSpan = allHiddenStates.Data.Span; // [batch, seqLen+1, innerDim, stateDim]
-        var outSpan = output.Data.Span;       // [batch, seqLen, innerDim]
-        int sd = _stateDimension;
+    private Tensor<T> SSDForwardSequential(
+        Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c,
+        int batchSize, int seqLen)
+    {
+        // Tape-aware selective scan. The previous body was a scalar .Data.Span nested loop that wrote a
+        // rented output buffer — it SEVERED the autodiff tape, so under tape training every Mamba2 block
+        // was FROZEN (verified: block activations were byte-identical before/after training; only the
+        // output projection learned, and over many iterations it memorized the constant target and
+        // collapsed input-sensitivity — DifferentInputs_AfterTraining L2 ~= 0). Express the recurrence
+        //   aBar_t = exp(dt_t * (-exp(A))),  h_t = aBar_t (.) h_{t-1} + (dt_t (.) x_t) (x) B_t,
+        //   y_t    = sum_n (C_t (.) h_t) + D (.) x_t
+        // through tape-aware Engine ops so gradients flow to every selective projection.
         int innerDim = _innerDimension;
+        int sd = _stateDimension;
 
+        // Constant [numHeads, headDim] ones to REPEAT a per-head value across its head's channels
+        // (per-head -> per-inner-dim). A plain constant — not a differentiated leaf — so a scalar fill
+        // here severs no gradient path.
+        var onesHD = new Tensor<T>(new[] { _numHeads, _headDimension });
+        var onesHDSpan = onesHD.Data.Span;
+        for (int i = 0; i < onesHDSpan.Length; i++) onesHDSpan[i] = NumOps.One;
+
+        // negAExp[1, innerDim] = repeat(-exp(A_log), headDim); dExp[1, innerDim] = repeat(D, headDim).
+        var negAExpRow = Engine.Reshape(
+            Engine.TensorBroadcastMultiply(
+                Engine.Reshape(Engine.TensorNegate(Engine.TensorExp(_aLog)), new[] { _numHeads, 1 }), onesHD),
+            new[] { 1, innerDim });
+        var dExpRow = Engine.Reshape(
+            Engine.TensorBroadcastMultiply(Engine.Reshape(_dParam, new[] { _numHeads, 1 }), onesHD),
+            new[] { 1, innerDim });
+
+        // h_0 = 0 : [batch, innerDim, stateDim] (initial recurrent state, a constant).
+        var h = new Tensor<T>(new[] { batchSize, innerDim, sd });
+
+        var ySteps = new List<Tensor<T>>(seqLen);
         for (int t = 0; t < seqLen; t++)
         {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                int btInner = (bi * seqLen + t) * innerDim;   // x/output [bi, t, *]
-                int btState = (bi * seqLen + t) * sd;         // B/C [bi, t, *]
-                int btHead = (bi * seqLen + t) * _numHeads;   // delta [bi, t, *]
+            var xT = Engine.Reshape(Engine.TensorSliceAxis(x, axis: 1, index: t), new[] { batchSize, innerDim });
+            var deltaHeads = Engine.Reshape(Engine.TensorSliceAxis(delta, axis: 1, index: t), new[] { batchSize, _numHeads });
+            var bT = Engine.Reshape(Engine.TensorSliceAxis(b, axis: 1, index: t), new[] { batchSize, sd });
+            var cT = Engine.Reshape(Engine.TensorSliceAxis(c, axis: 1, index: t), new[] { batchSize, sd });
 
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-                    T dt = deltaSpan[btHead + hi];
-                    T aBar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Multiply(dt, negAPerHead[hi]))));
-                    T dVal = _dParam[hi];
+            // dt_t expanded per-head -> per-inner-dim: [B, numHeads, 1] * ones[numHeads, headDim] -> [B, innerDim].
+            var deltaExp = Engine.Reshape(
+                Engine.TensorBroadcastMultiply(Engine.Reshape(deltaHeads, new[] { batchSize, _numHeads, 1 }), onesHD),
+                new[] { batchSize, innerDim });
 
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatD = dimStart + di;
-                        T x_val = xSpan[btInner + flatD];
-                        // hiddenState[bi, hi, di, *]
-                        int hsBase = (((bi * _numHeads + hi) * _headDimension) + di) * sd;
-                        // allHiddenStates[bi, t+1, flatD, *]
-                        int ahsBase = (((bi * (seqLen + 1) + (t + 1)) * innerDim) + flatD) * sd;
-                        T yAccum = NumOps.Zero;
+            // aBar_t = exp(dt_t * (-exp(A))) : [B, innerDim].
+            var aBar = Engine.TensorExp(Engine.TensorBroadcastMultiply(deltaExp, negAExpRow));
 
-                        for (int n = 0; n < sd; n++)
-                        {
-                            T hPrev = hsSpan[hsBase + n];
-                            T bVal = bSpan[btState + n];
+            // h_t = aBar_t (.) h_{t-1} + (dt_t (.) x_t) (x) B_t : [B, innerDim, stateDim].
+            var term1 = Engine.TensorBroadcastMultiply(Engine.Reshape(aBar, new[] { batchSize, innerDim, 1 }), h);
+            var dtx = Engine.TensorMultiply(deltaExp, xT);
+            var term2 = Engine.TensorBroadcastMultiply(
+                Engine.Reshape(dtx, new[] { batchSize, innerDim, 1 }),
+                Engine.Reshape(bT, new[] { batchSize, 1, sd }));
+            h = Engine.TensorAdd(term1, term2);
 
-                            // h_new = A_bar * h_prev + dt * B * x
-                            T hNew = NumOps.Add(
-                                NumOps.Multiply(aBar, hPrev),
-                                NumOps.Multiply(dt, NumOps.Multiply(bVal, x_val)));
-                            hsSpan[hsBase + n] = hNew;
-                            ahsSpan[ahsBase + n] = hNew;
-
-                            // y += C * h
-                            yAccum = NumOps.Add(yAccum, NumOps.Multiply(cSpan[btState + n], hNew));
-                        }
-
-                        // D skip connection
-                        outSpan[btInner + flatD] = NumOps.Add(yAccum, NumOps.Multiply(dVal, x_val));
-                    }
-                }
-            }
+            // y_t = sum_n (C_t (.) h_t) + D (.) x_t : [B, innerDim].
+            var cH = Engine.TensorBroadcastMultiply(Engine.Reshape(cT, new[] { batchSize, 1, sd }), h);
+            var ySsm = Engine.ReduceSum(cH, new[] { 2 }, keepDims: false);
+            var yT = Engine.TensorAdd(ySsm, Engine.TensorBroadcastMultiply(xT, dExpRow));
+            ySteps.Add(Engine.Reshape(yT, new[] { batchSize, 1, innerDim }));
         }
 
-        _lastHiddenStates = allHiddenStates;
-        return output;
+        // Assemble [batch, seqLen, innerDim] from the per-timestep outputs.
+        return Engine.TensorConcatenate(ySteps.ToArray(), 1);
     }
+
+    /// <summary>
+    /// Chunked semiseparable SSD. Partitions the sequence into chunks of <paramref name="chunkSize"/> and,
+    /// for each chunk, computes the intra-chunk contribution with the block-parallel semiseparable matrix
+    /// form (a lower-triangular decay-weighted C·Bᵀ "attention" times the input) while carrying the
+    /// recurrent state h between chunks via the efficient recurrent form. This is what makes the configured
+    /// chunk size actually affect the computation. It is numerically identical to
+    /// <see cref="SSDForwardSequential"/> (validated to machine precision by the SSD-equivalence test), and
+    /// every op is tape-aware, so gradients still reach every selective projection, <c>_aLog</c> and
+    /// <c>_dParam</c>. Decays are handled in log space (segment sums of dt·(−exp(A)) ≤ 0) so the
+    /// intra-chunk decay matrix exp(cumA_t − cumA_j) stays bounded and never overflows.
+    /// </summary>
+    private Tensor<T> SSDForwardChunked(
+        Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c,
+        int batchSize, int seqLen, int chunkSize)
+    {
+        int innerDim = _innerDimension;
+        int sd = _stateDimension;
+        int numHeads = _numHeads;
+        int headDim = _headDimension;
+
+        // ones[H, headDim] repeats a per-head value across its head's channels (used for the D-term row).
+        var onesHD = new Tensor<T>(new[] { numHeads, headDim });
+        { var s = onesHD.Data.Span; for (int i = 0; i < s.Length; i++) s[i] = NumOps.One; }
+
+        // Eb[b, h, c] = 1 when channel c belongs to head h (c / headDim == h), else 0. Multiplying a
+        // [B, L, H] per-head tensor by this via a batched matmul expands it to [B, L, innerDim] — the
+        // rank-3-safe equivalent of repeat-interleave across head channels.
+        var eb = new Tensor<T>(new[] { batchSize, numHeads, innerDim });
+        {
+            var s = eb.Data.Span; int idx = 0;
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int h = 0; h < numHeads; h++)
+                    for (int ch = 0; ch < innerDim; ch++)
+                        s[idx++] = (ch / headDim == h) ? NumOps.One : NumOps.Zero;
+        }
+
+        // negAHeads[H] = -exp(A_log); dExpRow[1, innerDim] = repeat(D, headDim) for the y += D (.) x term.
+        var negAHeads = Engine.TensorNegate(Engine.TensorExp(_aLog));                    // [H]
+        var negAHeadsRow = Engine.Reshape(negAHeads, new[] { 1, 1, numHeads });
+        var dExpRow = Engine.Reshape(
+            Engine.TensorBroadcastMultiply(Engine.Reshape(_dParam, new[] { numHeads, 1 }), onesHD),
+            new[] { 1, 1, innerDim });
+
+        // Carried recurrent state h_in : [B, innerDim, sd], starts at zero.
+        var hIn = new Tensor<T>(new[] { batchSize, innerDim, sd });
+
+        var yChunks = new List<Tensor<T>>();
+        for (int s0 = 0; s0 < seqLen; s0 += chunkSize)
+        {
+            int ln = Math.Min(chunkSize, seqLen - s0);
+
+            var xc = Engine.TensorNarrow(x, dim: 1, start: s0, length: ln);              // [B, ln, innerDim]
+            var dc = Engine.TensorNarrow(delta, dim: 1, start: s0, length: ln);          // [B, ln, H]
+            var bc = Engine.TensorNarrow(b, dim: 1, start: s0, length: ln);              // [B, ln, sd]
+            var cc = Engine.TensorNarrow(c, dim: 1, start: s0, length: ln);              // [B, ln, sd]
+
+            // logA[b, t, h] = dt * (-exp(A))  (<= 0).
+            var logA = Engine.TensorBroadcastMultiply(dc, negAHeadsRow);                 // [B, ln, H]
+
+            // cumA[b, t, h] = inclusive prefix sum over time = TrilOnes[ln, ln] @ logA.
+            var trilOnes = BuildBatchedLowerTriOnes(batchSize, ln);                      // [B, ln, ln]
+            var cumA = Engine.BatchMatMul(trilOnes, logA);                               // [B, ln, H]
+
+            // Per-head lower-triangular decay L[bh, t, j] = exp(cumA_t - cumA_j) for t >= j, else 0.
+            var cumAbh = Engine.Reshape(Engine.TensorPermute(cumA, new[] { 0, 2, 1 }),
+                new[] { batchSize * numHeads, ln });                                     // [B*H, ln]
+            var decayDiff = Engine.TensorBroadcastSubtract(
+                Engine.Reshape(cumAbh, new[] { batchSize * numHeads, ln, 1 }),
+                Engine.Reshape(cumAbh, new[] { batchSize * numHeads, 1, ln }));          // [B*H, ln, ln]
+            var trilMask = BuildBatchedLowerTriOnes(batchSize * numHeads, ln);          // [B*H, ln, ln] (0/1)
+            var lDecay = Engine.TensorMultiply(Engine.TensorExp(decayDiff), trilMask);   // [B*H, ln, ln]
+
+            // G[b, t, j] = C_t . B_j (dot over sd), shared across heads; tile it to [B*H, ln, ln].
+            var g = Engine.BatchMatMul(cc, Engine.TensorPermute(bc, new[] { 0, 2, 1 }));  // [B, ln, ln]
+            var onesHrow = new Tensor<T>(new[] { 1, numHeads, 1 });
+            { var s = onesHrow.Data.Span; for (int i = 0; i < s.Length; i++) s[i] = NumOps.One; }
+            var gTiled = Engine.Reshape(
+                Engine.TensorBroadcastMultiply(Engine.Reshape(g, new[] { batchSize, 1, ln * ln }), onesHrow),
+                new[] { batchSize * numHeads, ln, ln });                                 // [B*H, ln, ln]
+            var mMat = Engine.TensorMultiply(lDecay, gTiled);                            // [B*H, ln, ln]
+
+            // dtx[b, t, c] = (dt expanded per channel) * x.
+            var dexp = Engine.BatchMatMul(dc, eb);                                       // [B, ln, innerDim]
+            var dtx = Engine.TensorMultiply(dexp, xc);                                   // [B, ln, innerDim]
+            var dtxHead = Engine.Reshape(
+                Engine.TensorPermute(Engine.Reshape(dtx, new[] { batchSize, ln, numHeads, headDim }),
+                    new[] { 0, 2, 1, 3 }),
+                new[] { batchSize * numHeads, ln, headDim });                            // [B*H, ln, headDim]
+
+            // y_intra = M @ dtxHead : [B*H, ln, headDim] -> [B, ln, innerDim].
+            var yIntraHead = Engine.BatchMatMul(mMat, dtxHead);                          // [B*H, ln, headDim]
+            var yIntra = Engine.Reshape(
+                Engine.TensorPermute(Engine.Reshape(yIntraHead, new[] { batchSize, numHeads, ln, headDim }),
+                    new[] { 0, 2, 1, 3 }),
+                new[] { batchSize, ln, innerDim });                                      // [B, ln, innerDim]
+
+            // Carried-state contribution: y_carry[b,t,c] = exp(cumA[b,t,h(c)]) * (C_t . h_in[c,:]).
+            var cumACh = Engine.BatchMatMul(cumA, eb);                                   // [B, ln, innerDim]
+            var pCh = Engine.TensorExp(cumACh);
+            var cDotH = Engine.BatchMatMul(cc, Engine.TensorPermute(hIn, new[] { 0, 2, 1 })); // [B, ln, innerDim]
+            var yCarry = Engine.TensorMultiply(pCh, cDotH);
+
+            // y_chunk = y_intra + y_carry + D (.) x.
+            var yChunk = Engine.TensorAdd(
+                Engine.TensorAdd(yIntra, yCarry),
+                Engine.TensorBroadcastMultiply(xc, dExpRow));
+            yChunks.Add(yChunk);
+
+            // Carry state to the next chunk:
+            //   h_end[c,n] = exp(cumA_last[c]) * h_in[c,n] + sum_j exp(cumA_last[c]-cumA_j[c]) * dtx[j,c] * b_j[n]
+            var cumALast = Engine.Reshape(Engine.TensorSliceAxis(cumA, axis: 1, index: ln - 1),
+                new[] { batchSize, 1, numHeads });                                       // [B, 1, H]
+            var cumALastCh = Engine.BatchMatMul(cumALast, eb);                           // [B, 1, innerDim]
+            var decayFull = Engine.TensorExp(Engine.Reshape(cumALastCh, new[] { batchSize, innerDim, 1 }));
+            var w = Engine.TensorExp(Engine.TensorBroadcastSubtract(cumALastCh, cumACh)); // [B, ln, innerDim]
+            var wdtx = Engine.TensorMultiply(w, dtx);                                     // [B, ln, innerDim]
+            var contrib = Engine.BatchMatMul(Engine.TensorPermute(wdtx, new[] { 0, 2, 1 }), bc); // [B, innerDim, sd]
+            hIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(decayFull, hIn), contrib);
+        }
+
+        return Engine.TensorConcatenate(yChunks.ToArray(), 1);                            // [B, seqLen, innerDim]
+    }
+
+    /// <summary>
+    /// Builds a constant [batch, n, n] lower-triangular ones matrix (1 where column ≤ row, else 0),
+    /// identical across the batch axis. Used both as the prefix-sum operator and as the causal decay mask.
+    /// A plain constant (not a differentiated leaf), so filling it with a scalar loop severs no gradient.
+    /// </summary>
+    private Tensor<T> BuildBatchedLowerTriOnes(int batch, int n)
+    {
+        var t = new Tensor<T>(new[] { batch, n, n });
+        var span = t.Data.Span;
+        int idx = 0;
+        for (int bi = 0; bi < batch; bi++)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    span[idx++] = (j <= i) ? NumOps.One : NumOps.Zero;
+        return t;
+    }
+
+    // Test-only hooks: expose both SSD paths so the equivalence test can verify the chunked semiseparable
+    // form matches the sequential reference on random inputs. They call the private forwards directly.
+    internal Tensor<T> DebugSSDSequential(Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c, int batch, int seq)
+        => SSDForwardSequential(x, delta, b, c, batch, seq);
+
+    internal Tensor<T> DebugSSDChunked(Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c, int batch, int seq, int chunk)
+        => SSDForwardChunked(x, delta, b, c, batch, seq, chunk);
 
     /// <summary>
     /// Applies RMS normalization to the SSD output.
     /// </summary>
+    // Tape-aware RMS norm over the channel (inner) axis:
+    //   rms[b, t]      = sqrt(mean_d(input^2) + eps)
+    //   output[b,t,d]  = gamma[d] * input[b,t,d] / rms[b,t] + beta[d]
+    // Built from differentiable Engine ops so the gradient flows to gamma/beta AND to
+    // the SSD scan output upstream. The previous scalar indexer body severed the tape:
+    // gamma/beta received no gradient and the whole pre-norm path was frozen.
     private Tensor<T> ApplyRMSNorm(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-        T epsilon = NumOps.FromDouble(1e-6);
+        var sq = Engine.TensorMultiply(input, input);                          // [b, s, d]
+        var meanSq = Engine.ReduceMean(sq, new[] { 2 }, keepDims: true);       // [b, s, 1]
+        var rms = Engine.TensorSqrt(Engine.TensorAddScalar(meanSq, NumOps.FromDouble(1e-6)));
+        var normalized = Engine.TensorBroadcastDivide(input, rms);             // [b, s, d]
 
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                // Compute RMS
-                T sumSq = NumOps.Zero;
-                for (int d = 0; d < _innerDimension; d++)
-                {
-                    T val = input[new[] { bi, t, d }];
-                    sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
-                }
-                T rms = NumOps.Sqrt(NumOps.Add(
-                    NumOps.Divide(sumSq, NumOps.FromDouble(_innerDimension)), epsilon));
-
-                for (int d = 0; d < _innerDimension; d++)
-                {
-                    T normalized = NumOps.Divide(input[new[] { bi, t, d }], rms);
-                    output[new[] { bi, t, d }] = NumOps.Add(
-                        NumOps.Multiply(_normGamma[d], normalized),
-                        _normBeta[d]);
-                }
-            }
-        }
-
-        return output;
+        var gammaR = Engine.Reshape(_normGamma, new[] { 1, 1, _innerDimension });
+        var betaR = Engine.Reshape(_normBeta, new[] { 1, 1, _innerDimension });
+        var scaled = Engine.TensorBroadcastMultiply(normalized, gammaR);
+        return Engine.TensorBroadcastAdd(scaled, betaR);
     }
 
     /// <summary>
@@ -797,32 +914,43 @@ public partial class Mamba2Block<T> : LayerBase<T>
     /// <summary>
     /// Depthwise causal Conv1D forward using explicit per-element computation.
     /// </summary>
+    // Tape-aware causal depthwise 1-D convolution over the time axis:
+    //   output[b, t, d] = bias[d] + Σ_k weights[d, k] * input[b, t - k, d]   (t - k >= 0)
+    // Built entirely from differentiable Engine ops so the gradient flows back to the
+    // conv weights/bias AND to the input (the input projection). The previous body was
+    // a scalar indexer loop that produced a fresh detached tensor and severed the tape.
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
+        Tensor<T>? acc = null;
+        for (int k = 0; k < _convKernelSize; k++)
         {
-            for (int t = 0; t < seqLen; t++)
+            // shifted[b, t, d] = input[b, t - k, d] for t - k >= 0, else 0 (causal left pad).
+            Tensor<T> shifted;
+            if (k == 0)
             {
-                for (int d = 0; d < _innerDimension; d++)
-                {
-                    T sum = _convBias[d];
-                    for (int k = 0; k < _convKernelSize; k++)
-                    {
-                        int srcT = t - k;
-                        if (srcT >= 0)
-                        {
-                            sum = NumOps.Add(sum,
-                                NumOps.Multiply(_convWeights[new[] { d, k }], input[new[] { bi, srcT, d }]));
-                        }
-                    }
-                    output[new[] { bi, t, d }] = sum;
-                }
+                shifted = input;
             }
+            else if (k >= seqLen)
+            {
+                continue; // fully shifted out of range: contributes nothing.
+            }
+            else
+            {
+                var narrowed = Engine.TensorNarrow(input, 1, 0, seqLen - k);          // [b, seqLen-k, d]
+                var pad = new Tensor<T>(new[] { batchSize, k, _innerDimension });     // constant zero left-pad
+                shifted = Engine.TensorConcatenate(new[] { pad, narrowed }, axis: 1); // [b, seqLen, d]
+            }
+
+            // weights[:, k] -> [1, 1, innerDim] to broadcast over batch and time.
+            var wK = Engine.Reshape(
+                Engine.TensorNarrow(_convWeights, 1, k, 1),
+                new[] { 1, 1, _innerDimension });
+            var term = Engine.TensorBroadcastMultiply(shifted, wK);
+            acc = acc is null ? term : Engine.TensorAdd(acc, term);
         }
 
-        return output;
+        var biasReshaped = Engine.Reshape(_convBias, new[] { 1, 1, _innerDimension });
+        return Engine.TensorBroadcastAdd(acc!, biasReshaped);
     }
 
     /// <summary>
@@ -895,35 +1023,12 @@ public partial class Mamba2Block<T> : LayerBase<T>
         return Engine.TensorAdd(sig, xSigOneMinusSig);
     }
 
-    private static Tensor<T> SliceTensor(Tensor<T> input, int axis, int start, int length)
-    {
-        var shape = (int[])input._shape.Clone();
-        shape[axis] = length;
-        var output = new Tensor<T>(shape);
-        var indices = new int[input.Shape.Length];
-        SliceTensorRecursive(input, output, indices, 0, axis, start, length);
-        return output;
-    }
-
-    private static void SliceTensorRecursive(
-        Tensor<T> input, Tensor<T> output, int[] indices,
-        int dim, int axis, int start, int length)
-    {
-        if (dim == indices.Length)
-        {
-            var outIndices = (int[])indices.Clone();
-            var inIndices = (int[])indices.Clone();
-            inIndices[axis] += start;
-            output[outIndices] = input[inIndices];
-            return;
-        }
-        int limit = dim == axis ? length : input.Shape[dim];
-        for (int i = 0; i < limit; i++)
-        {
-            indices[dim] = i;
-            SliceTensorRecursive(input, output, indices, dim + 1, axis, start, length);
-        }
-    }
+    // Tape-aware slice. Engine.TensorNarrow records a differentiable op so the gradient
+    // flows back through the branch split into the input projection. The previous body
+    // was a scalar indexer copy that produced a fresh detached tensor and severed the
+    // tape, so neither the input projection nor the input received any gradient.
+    private Tensor<T> SliceTensor(Tensor<T> input, int axis, int start, int length)
+        => Engine.TensorNarrow(input, axis, start, length);
 
     #endregion
 
@@ -1055,7 +1160,6 @@ public partial class Mamba2Block<T> : LayerBase<T>
         _lastDeltaPreSoftplus = null;
         _lastB = null;
         _lastC = null;
-        _lastHiddenStates = null;
         _lastNormInput = null;
         _originalInputShape = null;
         _inputProjectionWeightsGradient = null;

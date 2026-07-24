@@ -183,28 +183,11 @@ jobs:
       - name: Build for CodeQL (net10.0)
         run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
 
-      - name: Select CodeQL upload mode
-        id: codeql_upload
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          CHANGED_FILES: ${{ github.event.pull_request.changed_files || 0 }}
-        run: |
-          # 250-changed-files heuristic: very large PRs produce SARIF that repeatedly hits GitHub's
-          # code-scanning upload size/rate limits (and the upload adds little signal on a sweeping
-          # change), so skip the upload on those and keep it on for normal-sized PRs. Not a hard API
-          # constant — tune if GitHub's limits change.
-          if [[ "$EVENT_NAME" == "pull_request" && "$CHANGED_FILES" -gt 250 ]]; then
-            echo "mode=never" >> "$GITHUB_OUTPUT"
-          else
-            echo "mode=always" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
         with:
           category: "/language:csharp"
-          upload: ${{ steps.codeql_upload.outputs.mode }}
+          upload: always
 
   # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
   build:
@@ -713,29 +696,58 @@ jobs:
           # perpetually red, like Integration C / NeuralNetworks A-L before their
           # splits. Split A-M → A-F + G-M so each serial half finishes under the
           # timeout. Gap-free + non-overlapping: union == the old A-M set.
-          - name: ModelFamily - Generated Layers A-F
+          # A-F was a single serial $heavyShard that OOM-killed the runner (shutdown signal
+          # ~2.5 min in) — it is DENSE with full-scale codec-LM TTS models (Amphion, AudioLM,
+          # Bark, ChatTTS, Chatterbox, CosyVoice*, ...) whose per-model peak (~2.6 GB weights +
+          # Adam state) stacks past the 16 GB envelope even serialized. Split A-F → A-C + D-F so
+          # each serial half holds fewer heavy models at once. Gap-free + non-overlapping: union == A-F.
+          - name: ModelFamily - Generated Layers A-C
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F)
-          - name: ModelFamily - Generated Layers G-M
+              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C)
+          - name: ModelFamily - Generated Layers D-F
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
+              (FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F)
+          # G-M was a single serial shard that ran the full 45-min job timeout and got
+          # CANCELLED before finishing (dense with heavy segmentation/foundation models,
+          # e.g. Mask2Former). Split G-M → G-I + J-M so each serial half finishes under the
+          # timeout. Gap-free + non-overlapping: union == G-M.
+          - name: ModelFamily - Generated Layers G-I
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I)
+          - name: ModelFamily - Generated Layers J-M
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
           # N-Z was a single serial $heavyShard whose ~835 default-gate scaffold
           # methods ran the full 45-min job timeout and got CANCELLED before
           # finishing — perpetually red, like Integration C / NeuralNetworks A-L
-          # before their splits. Split N-Z → N-S + T-Z so each serial half
-          # finishes under the timeout. Gap-free + non-overlapping: union == N-Z.
-          - name: ModelFamily - Generated Layers N-S
+          # before their splits. Split N-Z → N-S + T-Z; N-S itself was STILL a
+          # 55-min timeout (dense with the SAM / segmentation family: ODISE, OMGSeg,
+          # OneFormer, SAM/SAM21/SAMHQ, SegFormer, SegMamba, SwinUNETR, ...), so split
+          # N-S again → N-P + Q-S. Gap-free + non-overlapping: union == N-S.
+          - name: ModelFamily - Generated Layers N-P
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O|FullyQualifiedName~Generated.P|FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.R|FullyQualifiedName~Generated.S)
+              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O|FullyQualifiedName~Generated.P)
+          - name: ModelFamily - Generated Layers Q-S
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.R|FullyQualifiedName~Generated.S)
           - name: ModelFamily - Generated Layers T-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -804,7 +816,7 @@ jobs:
             # smoke tests for models now owned by ModelFamily.NeuralNetworks.
             # Keep its integration-only models in this shard, but do not run
             # duplicate model-family invariants a second time under Integration.
-            filter: 'Category!=GPU&Category!=Stress&Category!=ModelFamilyDuplicate&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.N|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.O)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=ModelFamilyDuplicate&Category!=SerialPerf&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.N|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.O)'
           - name: Integration P-Q
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -821,6 +833,15 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.T|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.U|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.V|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.W|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.X|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Y|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Z)'
+          # Dedicated SERIAL lane for single-process perf/memory guards (CpuToWallRatio,
+          # MemoryBudget). Tagged Category=SerialPerf and excluded from Integration N-O above,
+          # they run ALONE here so no sibling collection contends for CPU/memory and invalidates
+          # the measurement — keeps the assertions at full strength (no bound relaxation). Tiny
+          # (2 classes), so a whole shard is cheap.
+          - name: Integration - Serial Perf
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category=SerialPerf&Category!=GPU'
           # =====================================================================
           # TOP-LEVEL TEST NAMESPACES that no shard covered (distinct from the
           # UnitTests.* and IntegrationTests.* trees).
@@ -965,9 +986,12 @@ jobs:
             'ModelFamily - Diffusion Stable',
             'ModelFamily - Diffusion Step-Sync',
             'ModelFamily - Diffusion T-Z',
-            'ModelFamily - Generated Layers A-F',
-            'ModelFamily - Generated Layers G-M',
-            'ModelFamily - Generated Layers N-S',
+            'ModelFamily - Generated Layers A-C',
+            'ModelFamily - Generated Layers D-F',
+            'ModelFamily - Generated Layers G-I',
+            'ModelFamily - Generated Layers J-M',
+            'ModelFamily - Generated Layers N-P',
+            'ModelFamily - Generated Layers Q-S',
             'ModelFamily - Generated Layers T-Z',
             'ModelFamily - NeuralNetworks A-F',
             'ModelFamily - NeuralNetworks G-L',
@@ -1018,6 +1042,7 @@ jobs:
             'Integration R',
             'Integration S',
             'Integration T-Z',
+            'Integration - Serial Perf',
             'TopLevel - FederatedLearning',
             'TopLevel - Audio/Onnx/Tokenization'
           )
@@ -1058,9 +1083,14 @@ jobs:
             # matrix entries.
             Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
           }
+          # Detailed VSTest output still prints individual tests only on completion with the current
+          # xUnit adapter. The opt-in AIDOTNET_TEST_TRACE_FILE below is written by every source-generated
+          # test constructor before its model/component factory runs and streamed by the sampler, so an OOM has
+          # an attributable [test-start] class marker in the live log.
+          $consoleVerbosity = if ($serializeShard) { 'detailed' } else { 'normal' }
           $dotnetArgs += @(
             '--logger', 'trx;LogFileName=test-results.trx',
-            '--logger', 'console;verbosity=normal',
+            '--logger', "console;verbosity=$consoleVerbosity",
             '--results-directory', $results,
             '--blame-hang-timeout', '5min',
             '--blame-hang-dump-type', 'none'
@@ -1106,12 +1136,55 @@ jobs:
             $env:DOTNET_gcServer = '0'
             Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
           }
+
+          # Background memory sampler (serialized heavy shards only). These shards OOM-kill the
+          # runner with a shutdown signal BEFORE dotnet flushes TRX/console output, so the post-test
+          # snapshot below never runs and we lose the high-water mark. Sample MemAvailable every 2 s
+          # and write it straight to the step's LIVE log — GitHub ingests stdout continuously, so the
+          # LAST sample before a runner kill survives even though the process tree is torn down. It
+          # interleaves chronologically with xUnit's streamed per-test "Passed <Model>.<Test>" lines,
+          # so the last test printed just before the memory cliff identifies the model that blew the
+          # 16 GB envelope.
+          #
+          # Implemented as a background PowerShell RUNSPACE (not Start-Process): the runspace runs in
+          # THIS pwsh process, so its [Console] writes go to the same stdout handle GitHub Actions
+          # captures (a Start-Process grandchild's stdout was NOT captured — it produced zero output).
+          # [Console]::Out is thread-safe and flushed per line, so samples stream immediately.
+          $memSampler = $null
+          if ($serializeShard) {
+            $testTrace = Join-Path $results 'active-test.trace'
+            $env:AIDOTNET_TEST_TRACE_FILE = $testTrace
+            $memSampler = [powershell]::Create()
+            [void]$memSampler.AddScript({
+              param($tracePath)
+              $traceLineCount = 0
+              while ($true) {
+                if (Test-Path $tracePath) {
+                  $traceLines = @(Get-Content -Path $tracePath)
+                  while ($traceLineCount -lt $traceLines.Count) {
+                    [Console]::Out.WriteLine($traceLines[$traceLineCount])
+                    $traceLineCount++
+                  }
+                }
+                $avail = ((Select-String -Path /proc/meminfo -Pattern '^MemAvailable:').Line -replace '\s+', ' ').Trim()
+                [Console]::Out.WriteLine("[memdiag $([DateTime]::UtcNow.ToString('HH:mm:ss'))] $avail")
+                [Console]::Out.Flush()
+                Start-Sleep -Seconds 2
+              }
+            })
+            [void]$memSampler.AddArgument($testTrace)
+            [void]$memSampler.BeginInvoke()
+            Write-Host "Heavy shard: started live test-start + memory sampler (runspace)"
+          }
+
           & dotnet @dotnetArgs
+          $exitCode = $LASTEXITCODE
+
+          if ($memSampler) { try { $memSampler.Stop(); $memSampler.Dispose() } catch {} }
 
           # Post-test resource snapshot. If the runner survives this point,
           # the test step finished naturally and the snapshot tells us what
           # the high-water mark looked like.
-          $exitCode = $LASTEXITCODE
           Write-Host "=== Post-test resource snapshot ==="
           Write-Host "Memory:"
           free -h

@@ -140,6 +140,28 @@ public class DistanceBasedAnomalyDetectionTests
         AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
+    [Fact(Timeout = 120000)]
+    public Task COF_ScoresRectangularQueryAgainstTrainingDistanceMatrix()
+    {
+        var detector = new COFDetector<double>(k: 5);
+        detector.Fit(CreateTestData());
+        var query = new Matrix<double>(new[,]
+        {
+            { 1.1, 2.2 },
+            { 1.3, 2.4 },
+            { 90.0, 90.0 }
+        });
+
+        var scores = detector.ScoreAnomalies(query);
+
+        Assert.Equal(query.Rows, scores.Length);
+        for (int i = 0; i < scores.Length; i++)
+            Assert.True(!double.IsNaN(scores[i]) && !double.IsInfinity(scores[i]),
+                $"COF score {i} was {scores[i]}.");
+
+        return Task.CompletedTask;
+    }
+
     #endregion
 
     #region INFLODetector Tests

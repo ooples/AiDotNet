@@ -123,22 +123,12 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Tape-based forward + backward + parameter update path that all
-        // other NeuralNetworkBase consumers use. Without this delegation,
-        // Train() was a no-op and downstream tests that expect parameters
-        // to change after Train (LossStrictlyDecreasesOnMemorizationTask,
-        // Training_ShouldChangeParameters, OptimizerStep_ParamL2_DoesNotExplode,
-        // TrainingError_ShouldNotExceedTestError) all fail with "loss
-        // didn't decrease" / "parameters unchanged" diagnostics.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        // Keep Hawk on the shared training entry point. Besides the real tape/optimizer
+        // step, the base path performs canonical batch promotion, first-step LSUV,
+        // optimizer persistence, OOM recovery, and fused-compiled training when eligible.
+        // Calling TrainWithTape directly skipped those contracts and made the unbatched
+        // recurrence numerically unstable on its second FP32 update.
+        base.Train(input, expectedOutput);
     }
 
     public override void UpdateParameters(Vector<T> gradients)

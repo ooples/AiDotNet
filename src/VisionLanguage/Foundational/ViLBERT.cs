@@ -112,7 +112,13 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         _options = options ?? new ViLBERTOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;
@@ -190,6 +196,27 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         return CosineSimilarity(imageEmb, textEmb);
     }
 
+    /// <summary>
+    /// ViLBERT accepts THREE input contracts (Faster-RCNN region features
+    /// <c>[N, VisionDim]</c>, raw image <c>[C, H, W]</c>, and text token ids
+    /// <c>[seq]</c>) and routes each to a different stream by
+    /// <see cref="RunStreamForInput"/>. No single architecture-declared input shape
+    /// represents all three, so the base <see cref="NeuralNetworkBase{T}.ResolveLazyLayerShapes"/>
+    /// walk — which seeds from one architecture input shape and propagates it through the
+    /// layer list — mis-resolves the first stream layer's lazy shape (e.g. it pins the
+    /// vision stream's leading LayerNorm gamma to the architecture's hidden dim while a
+    /// region-feature forward feeds VisionDim, throwing
+    /// "Gamma shape (H) does not match ... input shape (N, VisionDim)"). Skip the eager
+    /// walk: every lazy layer resolves correctly from its REAL input on the first Forward
+    /// (the pre-#1688 behaviour). ParameterCount likewise resolves on first forward — the
+    /// model-family tests warm up with a Predict before reading it.
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+        // Intentionally a no-op — see remarks. ViLBERT's input-polymorphic streams cannot
+        // be shape-walked from a single architecture input; lazy layers self-resolve on Forward.
+    }
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
@@ -204,6 +231,13 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         }
         else
         {
+            // Lu et al. 2019, reference BertImageEmbeddings: Faster R-CNN region features are
+            // projected from v_feature_size to v_hidden_size before LayerNorm. Without this learned
+            // embedding, LayerNorm erases a uniform feature-level shift and the visual stream maps
+            // distinct region tensors to bit-identical outputs.
+            Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
+                _options.VisionDim,
+                (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>()));
             Layers.AddRange(
                 LayerHelper<T>.CreateDefaultDualStreamFusionLayers(
                     _options.VisionDim,
@@ -213,7 +247,13 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
                     _options.NumTextLayers,
                     _options.NumFusionLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    numVisionHeads: _options.NumVisionHeads,
+                    numTextHeads: _options.NumTextHeads,
+                    numFusionHeads: _options.NumFusionHeads,
+                    visionIntermediateDim: _options.VisionIntermediateDim,
+                    textIntermediateDim: _options.TextIntermediateDim,
+                    fusionIntermediateDim: _options.FusionIntermediateDim
                 )
             );
             ComputeDualStreamBoundaries();
@@ -314,8 +354,16 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     private void ComputeDualStreamBoundaries()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        // Payloads written before the paper-faithful visual embedding fix start directly with
+        // LayerNorm; current models start with Dense(featureDim -> visionDim), then LayerNorm.
+        // Derive the prefix from the deserialized layer graph so old models remain loadable.
+        int visionPrefix = Layers.Count > 0
+            && Layers[0] is AiDotNet.NeuralNetworks.Layers.DenseLayer<T>
+                ? 2
+                : 1;
         _visionLayerEnd =
-            1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.FusionDim ? 1 : 0);
+            visionPrefix + _options.NumVisionLayers * lpb
+            + (_options.VisionDim != _options.FusionDim ? 1 : 0);
         _textLayerEnd =
             _visionLayerEnd
             + 1
@@ -367,7 +415,8 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     {
         int rank = input.Shape.Length;
         int lastDim = rank > 0 ? input.Shape[rank - 1] : 0;
-        bool isRegionFeatures = rank >= 2 && lastDim == _options.VisionDim;
+        bool isRegionFeatures = rank >= 2
+            && (lastDim == _options.VisualFeatureDim || lastDim == _options.VisionDim);
         bool isImage = rank >= 3 && !isRegionFeatures;
         var c = input;
         bool ranVisionStream;
@@ -409,8 +458,14 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
@@ -439,7 +494,8 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         var activations = new Dictionary<string, Tensor<T>>();
         int rank = input.Shape.Length;
         int lastDim = rank > 0 ? input.Shape[rank - 1] : 0;
-        bool isRegionFeatures = rank >= 2 && lastDim == _options.VisionDim;
+        bool isRegionFeatures = rank >= 2
+            && (lastDim == _options.VisualFeatureDim || lastDim == _options.VisionDim);
         bool isImage = rank >= 3 && !isRegionFeatures;
         var current = input;
         int streamStart,
@@ -525,6 +581,13 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         writer.Write(_options.NumTextLayers);
         writer.Write(_options.NumFusionLayers);
         writer.Write(_options.NumHeads);
+        writer.Write(_options.VisualFeatureDim);
+        writer.Write(_options.NumVisionHeads);
+        writer.Write(_options.NumTextHeads);
+        writer.Write(_options.NumFusionHeads);
+        writer.Write(_options.VisionIntermediateDim);
+        writer.Write(_options.TextIntermediateDim);
+        writer.Write(_options.FusionIntermediateDim);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -541,6 +604,16 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         _options.NumTextLayers = reader.ReadInt32();
         _options.NumFusionLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
+        if (reader.BaseStream.Length - reader.BaseStream.Position >= sizeof(int) * 7)
+        {
+            _options.VisualFeatureDim = reader.ReadInt32();
+            _options.NumVisionHeads = reader.ReadInt32();
+            _options.NumTextHeads = reader.ReadInt32();
+            _options.NumFusionHeads = reader.ReadInt32();
+            _options.VisionIntermediateDim = reader.ReadInt32();
+            _options.TextIntermediateDim = reader.ReadInt32();
+            _options.FusionIntermediateDim = reader.ReadInt32();
+        }
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
         if (_useNativeMode)
@@ -550,8 +623,8 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ViLBERT<T>(Architecture, mp, _options);
-        return new ViLBERT<T>(Architecture, _options);
+            return new ViLBERT<T>(Architecture, mp, new ViLBERTOptions(_options));
+        return new ViLBERT<T>(Architecture, new ViLBERTOptions(_options));
     }
 
     private void ThrowIfDisposed()

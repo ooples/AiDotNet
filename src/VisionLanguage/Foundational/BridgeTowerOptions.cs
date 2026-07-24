@@ -43,6 +43,7 @@ public class BridgeTowerOptions : FoundationalVLMOptions
         NumBridgeLayers = other.NumBridgeLayers;
         BridgeDim = other.BridgeDim;
         UseBidirectionalBridges = other.UseBidirectionalBridges;
+        PatchSize = other.PatchSize;
     }
 
     /// <summary>Gets or sets the number of bridge connection layers.</summary>
@@ -53,6 +54,9 @@ public class BridgeTowerOptions : FoundationalVLMOptions
 
     /// <summary>Gets or sets whether to use bi-directional bridges.</summary>
     public bool UseBidirectionalBridges { get; set; } = true;
+
+    /// <summary>Gets or sets the square visual patch size used by the ViT stem.</summary>
+    public int PatchSize { get; set; } = 16;
 
     public BridgeTowerOptions()
     {

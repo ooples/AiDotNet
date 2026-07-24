@@ -76,7 +76,7 @@ public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new IndexTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -155,7 +155,8 @@ public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -180,7 +181,7 @@ public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -237,6 +238,18 @@ public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
         writer.Write(_options.HopSize);
         writer.Write(_options.CodecFrameRate);
         writer.Write(_options.MaxTextLength);
+        // Appended fields keep the original prefix readable and preserve every
+        // user option that affects IndexTTS construction, inference, or training.
+        writer.Write(_options.VocabSize);
+        writer.Write(_options.MaxCodecFrames);
+        writer.Write(_options.SpeakerEmbeddingDim);
+        writer.Write(_options.FftSize);
+        writer.Write(_options.HiddenDim);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.MaxMelLength);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.WeightDecay);
+        writer.Write(_options.LanguageModelName ?? string.Empty);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -258,6 +271,21 @@ public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
         _options.HopSize = reader.ReadInt32();
         _options.CodecFrameRate = reader.ReadInt32();
         _options.MaxTextLength = reader.ReadInt32();
+        // These fields were appended after the legacy payload. Older saved
+        // models end here and retain the constructor defaults for them.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _options.VocabSize = reader.ReadInt32();
+            _options.MaxCodecFrames = reader.ReadInt32();
+            _options.SpeakerEmbeddingDim = reader.ReadInt32();
+            _options.FftSize = reader.ReadInt32();
+            _options.HiddenDim = reader.ReadInt32();
+            _options.NumDecoderLayers = reader.ReadInt32();
+            _options.MaxMelLength = reader.ReadInt32();
+            _options.LearningRate = reader.ReadDouble();
+            _options.WeightDecay = reader.ReadDouble();
+            _options.LanguageModelName = reader.ReadString();
+        }
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -270,7 +298,7 @@ public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
             return new IndexTTS<T>(Architecture, mp, _options);
-        return new IndexTTS<T>(Architecture, _options, _optimizer);
+        return new IndexTTS<T>(Architecture, _options);
     }
 
     private void ThrowIfDisposed()
@@ -278,6 +306,17 @@ public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (_disposed)
             throw new ObjectDisposedException(GetType().FullName ?? nameof(IndexTTS<T>));
     }
+
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            }
+        );
 
     protected override void Dispose(bool disposing)
     {

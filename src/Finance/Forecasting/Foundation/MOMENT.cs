@@ -801,6 +801,33 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <summary>
+    /// Captures per-layer activations of the native forward pass. Mirrors
+    /// <see cref="ForwardNative"/>'s RevIN + rank-1 → [1, N] promotion so the first
+    /// ReshapeLayer (which expects <c>contextLength</c> elements per sample) receives a
+    /// batched tensor, rather than the base walk feeding the raw rank-1 input straight in.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode || Layers.Count == 0)
+            return activations;
+
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <summary>
     /// Runs the encoder portion only (patches + transformer stack), stopping
     /// before the forecast / reconstruction / classification head.
     /// </summary>

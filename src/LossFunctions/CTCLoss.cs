@@ -33,7 +33,7 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 [LossCategory(LossCategory.Classification)]
 [LossTask(LossTask.TextGeneration)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Probabilities)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Probabilities, ApiShape = LossApiShape.Sequence)]
 public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
 {
     private readonly int _blankIndex;

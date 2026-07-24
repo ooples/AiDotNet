@@ -44,6 +44,11 @@ namespace AiDotNet.Finance.Base;
 /// </remarks>
 public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialModel<T>
 {
+    /// <summary>
+    /// Gets the model-specific optimizer used by the common tape training path.
+    /// A null value retains the neural-network default optimizer.
+    /// </summary>
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => null;
     #region Execution Mode
 
     /// <summary>
@@ -530,7 +535,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, TrainingOptimizer);
         }
         finally
         {

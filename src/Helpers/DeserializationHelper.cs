@@ -1,9 +1,11 @@
 global using System.Reflection;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 
 namespace AiDotNet.Helpers;
 
 public static class DeserializationHelper
 {
+
     /// <summary>
     /// Structured marker exception thrown by an explicit-branch constructor
     /// lookup when the expected constructor signature is not present on the
@@ -230,6 +232,20 @@ public static class DeserializationHelper
             }
 
             instance = ctor.Invoke(new object[0]);
+        }
+        else if (genericDef == typeof(CifAlignmentLayer<>))
+        {
+            int encoderDim = TryGetInt(additionalParams, "EncoderDim")
+                ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (encoderDim <= 0)
+            {
+                throw new InvalidOperationException(
+                    "CifAlignmentLayer requires a positive EncoderDim in metadata or input shape.");
+            }
+
+            double threshold = TryGetDouble(additionalParams, "Threshold") ?? 1.0;
+            double tailThreshold = TryGetDouble(additionalParams, "TailThreshold") ?? 0.5;
+            instance = new CifAlignmentLayer<T>(encoderDim, threshold, tailThreshold);
         }
         else if (genericDef == typeof(TabNetEncoderLayer<>))
         {
@@ -665,6 +681,25 @@ public static class DeserializationHelper
         {
             instance = CreateCrossAttentionLayer<T>(type, inputShape, additionalParams);
         }
+        else if (genericDef == typeof(STCConnectorLayer<>))
+        {
+            instance = CreateSTCConnectorLayer<T>(additionalParams);
+        }
+        else if (genericDef == typeof(HippoMemoryCellLayer<>))
+        {
+            instance = new HippoMemoryCellLayer<T>(
+                hiddenSize: TryGetInt(additionalParams, "HiddenSize") ?? 256,
+                inputSize: TryGetInt(additionalParams, "InputSize") ?? inputShape[^1],
+                memoryOrder: TryGetInt(additionalParams, "MemoryOrder") ?? -1,
+                memorySize: TryGetInt(additionalParams, "MemorySize") ?? 1,
+                measure: TryGetString(additionalParams, "Measure") ?? "legs",
+                discretization: TryGetString(additionalParams, "Discretization") ?? "bilinear",
+                initialTime: TryGetInt(additionalParams, "InitialTime") ?? 0,
+                timeStep: TryGetDouble(additionalParams, "TimeStep") ?? 0.0,
+                timescaleMin: TryGetDouble(additionalParams, "TimescaleMin") ?? 0.0,
+                timescaleMax: TryGetDouble(additionalParams, "TimescaleMax") ?? double.PositiveInfinity,
+                useGate: TryGetBool(additionalParams, "UseGate") ?? true);
+        }
         else if (genericDef == typeof(TransformerEncoderLayer<>))
         {
             // The current TransformerEncoderLayer<T> constructor is (numHeads, feedForwardDim);
@@ -838,11 +873,14 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(GraphConvolutionalLayer<>))
         {
-            // GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction, bool implicitIdentityWhenUnset)
-            int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
+            // Graph tensors may include leading batch/node axes, so the feature
+            // width is always the final axis.
+            int inputFeatures = inputShape[inputShape.Length - 1];
+            int outputFeatures = outputShape[outputShape.Length - 1];
+            bool useBias = TryGetBool(additionalParams, "UseBias") ?? true;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
 
             // Reconstruct with implicitIdentityWhenUnset: true so a deserialized /
@@ -853,19 +891,46 @@ public static class DeserializationHelper
             // simply overwrites the fallback. Direct construction via the 3-arg
             // ctor keeps the strict "a GCN requires a graph" contract (Kipf &
             // Welling 2017) that the layer's unit tests assert.
-            var ctor4 = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType, typeof(bool) });
-            if (ctor4 is not null)
+            // Prefer the full constructor so the serialized bias policy is
+            // restored exactly. The four/three-argument fallbacks retain
+            // compatibility with older layer assemblies.
+            var ctor6 = type.GetConstructor(new Type[]
             {
-                instance = ctor4.Invoke(new object?[] { inputFeatures, outputFeatures, activation, true });
+                typeof(int), typeof(int), activationFuncType, typeof(bool),
+                typeof(bool), initStrategyType
+            });
+            if (ctor6 is not null)
+            {
+                instance = ctor6.Invoke(new object?[]
+                {
+                    inputFeatures, outputFeatures, activation, true, useBias, null
+                });
             }
             else
             {
-                var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
-                if (ctor is null)
+                var ctor4 = type.GetConstructor(new Type[]
                 {
-                    throw new MissingLayerCtorException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
+                    typeof(int), typeof(int), activationFuncType, typeof(bool)
+                });
+                if (ctor4 is not null)
+                {
+                    instance = ctor4.Invoke(new object?[]
+                    {
+                        inputFeatures, outputFeatures, activation, true
+                    });
                 }
-                instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
+                else
+                {
+                    var ctor = type.GetConstructor(new Type[]
+                    {
+                        typeof(int), typeof(int), activationFuncType
+                    });
+                    if (ctor is null)
+                    {
+                        throw new MissingLayerCtorException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
+                    }
+                    instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
+                }
             }
         }
         else if (genericDef == typeof(GraphSAGELayer<>))
@@ -1062,6 +1127,32 @@ public static class DeserializationHelper
             int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
             int dilation = TryGetInt(additionalParams, "Dilation") ?? 1;
             instance = new WaveNetResidualBlockLayer<T>(channels, kernelSize, dilation);
+        }
+        else if (genericDef == typeof(DepthwiseConv1DLayer<>))
+        {
+            // DepthwiseConv1DLayer(channels, kernelSize, multiplier, stride, padding) — fully
+            // reconstructable from metadata; SetParameters restores the kernel/bias.
+            int channels = TryGetInt(additionalParams, "Channels")
+                ?? (outputShape.Length > 0 ? outputShape[0] : 1);
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int multiplier = TryGetInt(additionalParams, "Multiplier") ?? 1;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int padding = TryGetInt(additionalParams, "Padding") ?? ((kernelSize - 1) / 2);
+            instance = new DepthwiseConv1DLayer<T>(channels, kernelSize, multiplier, stride, padding);
+        }
+        else if (genericDef == typeof(CitrinetBlockLayer<>))
+        {
+            // CitrinetBlockLayer(channels, kernelSize, numSubBlocks, seReductionRatio, dropoutRate,
+            // stride) — fully reconstructable from metadata; SetParameters restores the inner
+            // depthwise/pointwise convs, BNs, and SE in TrainableSubLayers order.
+            int channels = TryGetInt(additionalParams, "Channels")
+                ?? (outputShape.Length > 0 ? outputShape[0] : 1);
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int numSubBlocks = TryGetInt(additionalParams, "NumSubBlocks") ?? 5;
+            int seReductionRatio = TryGetInt(additionalParams, "SeReductionRatio") ?? 8;
+            double dropoutRate = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            instance = new CitrinetBlockLayer<T>(channels, kernelSize, numSubBlocks, seReductionRatio, dropoutRate, stride);
         }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
@@ -1498,21 +1589,25 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(PoolingLayer<>))
         {
-            // PoolingLayer(int inputDepth, int inputHeight, int inputWidth, int poolSize, int stride, PoolingType type)
+            // PoolingLayer's only constructor is the lazy (int poolSize, int stride, PoolingType type)
+            // overload — the input depth/height/width are resolved on first forward, NOT ctor args.
+            // The previous lookup asked for a 6-arg (inputDepth, inputHeight, inputWidth, poolSize,
+            // stride, type) ctor that does not exist, so GetConstructor returned null, the branch
+            // threw MissingLayerCtorException, and the generic reflection fallback rebuilt the layer
+            // with the ctor's DEFAULT PoolingType.Max — silently converting every Average-pooling
+            // layer to Max pooling on Clone/serialize round-trip (#1221 class). Max ≥ Average on the
+            // non-negative post-ReLU activations, so a cloned CNN (PANNs CNN14, ResNet, VGG, …) drifts
+            // and saturates. Use the real 3-arg ctor so the persisted pooling type is honored.
             int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
             int stride = TryGetInt(additionalParams, "Stride") ?? 2;
             PoolingType poolingType = TryGetEnum<PoolingType>(additionalParams, "PoolingType") ?? PoolingType.Max;
-            // inputShape format: [batch, depth, height, width] (NCHW format)
-            int inputDepth = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
-            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
-            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(PoolingType) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(PoolingType) });
             if (ctor is null)
             {
-                throw new MissingLayerCtorException($"Cannot find PoolingLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find PoolingLayer constructor (int poolSize, int stride, PoolingType type).");
             }
-            instance = ctor.Invoke(new object[] { inputDepth, inputHeight, inputWidth, poolSize, stride, poolingType });
+            instance = ctor.Invoke(new object[] { poolSize, stride, poolingType });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.UpsamplingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.UpsamplingLayer`1")))
@@ -2126,7 +2221,9 @@ public static class DeserializationHelper
                 ?? throw new InvalidOperationException($"{genericDef.Name} requires 'HiddenSize' metadata.");
             int ffPln = TryGetInt(additionalParams, "FfnDim")
                 ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
-            bool gatedPln = TryGetBool(additionalParams, "Gated") ?? false;
+            bool gatedPln = TryGetBool(additionalParams, "Gated")
+                ?? TryGetBool(additionalParams, "UseGatedSwiGLU")
+                ?? false;
             var activationFuncTypePln = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? ffnActivationPln = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncTypePln);
 
@@ -2964,7 +3061,61 @@ public static class DeserializationHelper
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { headCount, headDimension, activation, null });
+        var attention = (MultiHeadAttentionLayer<T>)ctor.Invoke(
+            new object?[] { headCount, headDimension, activation, null });
+        attention.UseCausalMask = TryGetBool(additionalParams, "UseCausalMask") ?? false;
+
+        string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
+        if (!string.IsNullOrWhiteSpace(positionalEncoding)
+            && Enum.TryParse<Enums.PositionalEncodingType>(
+                positionalEncoding, ignoreCase: true, out var positionalType)
+            && positionalType != Enums.PositionalEncodingType.None)
+        {
+            double ropeTheta = TryGetDouble(additionalParams, "RopeTheta") ?? 10000.0;
+            int maxSequenceLength =
+                TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
+            attention.ConfigurePositionalEncoding(
+                positionalType, ropeTheta, maxSequenceLength);
+        }
+
+        return attention;
+    }
+
+    /// <summary>
+    /// Reconstructs an <see cref="STCConnectorLayer{T}"/> from the metadata persisted by
+    /// <c>STCConnectorLayer.GetMetadata</c>. All RegStage, Conv3D, and MLP weights travel in the
+    /// flat parameter vector; the metadata reconstructs the complete connector structure first.
+    /// </summary>
+    private static object CreateSTCConnectorLayer<T>(Dictionary<string, object>? additionalParams)
+    {
+        int visionDim = TryGetInt(additionalParams, "VisionDim")
+            ?? TryGetInt(additionalParams, "Dim")
+            ?? 0;
+        int decoderDim = TryGetInt(additionalParams, "DecoderDim") ?? visionDim;
+        int patchesHeight = TryGetInt(additionalParams, "PatchesHeight") ?? 0;
+        int patchesWidth = TryGetInt(additionalParams, "PatchesWidth") ?? 0;
+        if (visionDim <= 0 || decoderDim <= 0 || patchesHeight <= 0 || patchesWidth <= 0)
+        {
+            throw new InvalidOperationException(
+                "STCConnectorLayer deserialization requires positive VisionDim/Dim, DecoderDim, PatchesHeight, and PatchesWidth metadata.");
+        }
+
+        int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 2;
+        int stride = TryGetInt(additionalParams, "Stride") ?? 2;
+        int padding = TryGetInt(additionalParams, "Padding") ?? 1;
+        int stageDepth = TryGetInt(additionalParams, "StageDepth") ?? 4;
+        int mlpDepth = TryGetInt(additionalParams, "MlpDepth") ?? 2;
+
+        return new STCConnectorLayer<T>(
+            visionDim,
+            decoderDim,
+            patchesHeight,
+            patchesWidth,
+            kernelSize,
+            stride,
+            padding,
+            stageDepth,
+            mlpDepth);
     }
 
     private static object CreateCrossAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
@@ -3424,6 +3575,15 @@ public static class DeserializationHelper
                 return b;
             if (bool.TryParse(value.ToString() ?? string.Empty, out bool parsed))
                 return parsed;
+        }
+        return null;
+    }
+
+    private static string? TryGetString(Dictionary<string, object>? parameters, string key)
+    {
+        if (parameters != null && parameters.TryGetValue(key, out var value) && value != null)
+        {
+            return value as string ?? value.ToString();
         }
         return null;
     }

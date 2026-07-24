@@ -248,10 +248,12 @@ public class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+
+        // The native CogVLM graph is the ordinary sequential Layers pipeline.
+        // Use the canonical base executor so Predict enters evaluation mode and,
+        // for foundation-scale configurations, applies weight-streaming
+        // materialize/release and per-layer inference scratch recycling.
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -332,9 +334,10 @@ public class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptions = new CogVLMOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CogVLM<T>(Architecture, mp, _options);
-        return new CogVLM<T>(Architecture, _options);
+            return new CogVLM<T>(Architecture, mp, cloneOptions);
+        return new CogVLM<T>(Architecture, cloneOptions);
     }
 
     private void ThrowIfDisposed()

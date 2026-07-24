@@ -928,7 +928,10 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         var flat = reshaped ? Engine.Reshape(input, new[] { numSamples, n }) : input;
 
         // RFFT returns interleaved [re0, im0, re1, im1, ..., re(halfN-1), im(halfN-1)],
-        // shape [B, halfN * 2] = [B, n + 2].
+        // shape [B, halfN * 2] = [B, n + 2]. Tape-tracked: gradients flow back through the DFT to the
+        // raw input, so the frequency branch trains end-to-end alongside the time branch. (The earlier
+        // StopGradient detour that dodged the Engine.IRFFT length-1 adjoint crash — AiDotNet.Tensors#779
+        // / #1856 — is removed now that 0.114.1 fixes it.)
         var rfft = Engine.RFFT(flat);
         var complexPairs = Engine.Reshape(rfft, new[] { numSamples, halfN, 2 });
 

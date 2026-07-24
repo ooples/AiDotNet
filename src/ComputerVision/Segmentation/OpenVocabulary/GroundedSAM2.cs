@@ -66,16 +66,31 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 
     #region Fields
     private readonly int _height, _width, _channels, _numClasses;
-    private readonly int[] _channelDims;
     private readonly int _decoderDim;
-    private readonly int[] _depths;
     private readonly double _dropRate;
     private readonly bool _useNativeMode;
     private readonly string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _disposed;
-    private int _encoderLayerEnd;
+
+    // Native image->mask pipeline configuration (paper-backed, sourced from GroundedSAM2Options).
+    private readonly int _patchSize;
+    private readonly int _visionDim;
+    private readonly int _numEncoderLayers;
+    private readonly int _numDecoderLayers;
+    private readonly int _numHeads;
+
+    // Layer-index boundaries into the flat Layers list for the structured Forward pass:
+    //   [0]                          : patch-embedding conv -> [B, visionDim, H/p, W/p]
+    //   [1 .. _maskConvIndex)        : positional encoding + encoder/decoder transformer blocks (token space)
+    //   [_maskConvIndex]             : 1x1 conv -> numClasses mask logits at token-grid resolution
+    //   [_upsampleIndex]             : upsample by patchSize -> full input resolution
+    private int _encoderLayerEnd;    // encoder boundary, retained for serialization round-trip compatibility
+    private int _maskConvIndex;
+    private int _upsampleIndex;
+    private bool _customLayers;
+    private bool _lazyShapesWarmed;
     #endregion
 
     #region Properties
@@ -121,9 +136,12 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [112, 224, 448, 896];
-        _depths = [2, 3, 16, 3];
-        _decoderDim = 256;
+        _decoderDim = _options.DecoderDim > 0 ? _options.DecoderDim : 256;
+        _visionDim = _options.VisionDim > 0 ? _options.VisionDim : 256;
+        _numEncoderLayers = _options.NumVisionLayers > 0 ? _options.NumVisionLayers : 6;
+        _numDecoderLayers = _options.NumDecoderLayers > 0 ? _options.NumDecoderLayers : 6;
+        _numHeads = _options.NumHeads > 0 ? _options.NumHeads : 8;
+        _patchSize = _options.PatchSize > 0 ? _options.PatchSize : 16;
         InitializeLayers();
     }
 
@@ -157,9 +175,12 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [112, 224, 448, 896];
-        _depths = [2, 3, 16, 3];
-        _decoderDim = 256;
+        _decoderDim = _options.DecoderDim > 0 ? _options.DecoderDim : 256;
+        _visionDim = _options.VisionDim > 0 ? _options.VisionDim : 256;
+        _numEncoderLayers = _options.NumVisionLayers > 0 ? _options.NumVisionLayers : 6;
+        _numDecoderLayers = _options.NumDecoderLayers > 0 ? _options.NumDecoderLayers : 6;
+        _numHeads = _options.NumHeads > 0 ? _options.NumHeads : 8;
+        _patchSize = _options.PatchSize > 0 ? _options.PatchSize : 16;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load GroundedSAM2 ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -208,11 +229,48 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     #region Private Methods
     private Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        // Native GroundedSAM2 is an image -> pixel-mask model: it takes an RGB image [C,H,W] / [B,C,H,W]
+        // and returns per-pixel class logits [B, numClasses, H, W] (matching the ONNX contract). The image
+        // is tokenized by a patch-embedding conv, refined by the encoder/decoder transformer stack in token
+        // space, then projected back to a spatial mask and upsampled to the input resolution. The previous
+        // body forwarded the raw input straight into the token transformers, which required a pre-tokenized
+        // [B, tokens, dim] tensor and never produced pixel-level masks — inconsistent with ONNX mode.
+        if (input.Rank != 3 && input.Rank != 4)
+            throw new ArgumentException(
+                "GroundedSAM2 expects an image tensor [C, H, W] or [B, C, H, W].", nameof(input));
+
+        bool unbatched = input.Rank == 3;
+        var x = unbatched ? AddBatchDimension(input) : input;   // [B, C, H, W]
+
+        // A user-supplied custom layer stack is run straight through without the structured reshapes.
+        if (_customLayers)
+        {
+            var custom = x;
+            foreach (var layer in Layers) custom = layer.Forward(custom);
+            return unbatched ? RemoveBatchDimension(custom) : custom;
+        }
+
+        // 1. Patch embedding -> [B, visionDim, gridH, gridW].
+        var feat = Layers[0].Forward(x);
+        int b = feat.Shape[0], d = feat.Shape[1], gh = feat.Shape[2], gw = feat.Shape[3];
+
+        // 2. Flatten the spatial grid to a token sequence [B, gridH*gridW, visionDim] (tape-aware).
+        var tokens = Engine.Reshape(Engine.TensorPermute(feat, new[] { 0, 2, 3, 1 }), new[] { b, gh * gw, d });
+
+        // 3. Positional encoding (Layers[1]) + encoder + decoder transformer blocks, all in token space
+        //    (everything between the patch conv and the mask head).
+        for (int i = 1; i < _maskConvIndex; i++)
+            tokens = Layers[i].Forward(tokens);
+
+        // 4. Reshape the refined tokens back to a spatial feature map [B, visionDim, gridH, gridW].
+        var spatial = Engine.TensorPermute(Engine.Reshape(tokens, new[] { b, gh, gw, d }), new[] { 0, 3, 1, 2 });
+
+        // 5. Mask head: 1x1 conv -> numClasses logits at grid resolution, then upsample by patchSize to the
+        //    full input resolution.
+        var maskLogits = Layers[_maskConvIndex].Forward(spatial);   // [B, numClasses, gridH, gridW]
+        maskLogits = Layers[_upsampleIndex].Forward(maskLogits);    // [B, numClasses, H, W]
+
+        return unbatched ? RemoveBatchDimension(maskLogits) : maskLogits;
     }
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
@@ -253,15 +311,69 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     {
         if (!_useNativeMode) { ClearLayers(); return; }
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
-        else
         {
-            var encoderLayers = LayerHelper<T>.CreateGroundedSAM2EncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateGroundedSAM2DecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
-            Layers.AddRange(decoderLayers);
+            Layers.AddRange(Architecture.Layers);
+            _customLayers = true;
+            return;
         }
+
+        // Grounded SAM = Grounding DINO + SAM (both transformer). The default image->mask pipeline
+        // (patch-embedding tokenizer -> positional encoding -> ViT encoder + mask-decoder transformer
+        // stack -> mask head + upsample) is built by LayerHelper, exactly like every other model's default
+        // layers; all fixed dimensions, head counts and depths come from GroundedSAM2Options.
+        Layers.AddRange(LayerHelper<T>.CreateGroundedSAM2Layers(
+            visionDim: _visionDim,
+            numHeads: _numHeads,
+            numEncoderLayers: _numEncoderLayers,
+            numDecoderLayers: _numDecoderLayers,
+            patchSize: _patchSize,
+            numClasses: _numClasses,
+            imageHeight: _height,
+            imageWidth: _width,
+            dropRate: _dropRate));
+
+        // The mask head is always the last two layers (mask conv + upsample); everything between the patch
+        // conv (index 0) and it runs in token space. Indexing the head from the end keeps this correct
+        // regardless of how many dropout layers the drop-rate inserted among the transformer blocks.
+        _encoderLayerEnd = 2 + _numEncoderLayers;   // encoder boundary in the no-dropout default (serialized)
+        _upsampleIndex = Layers.Count - 1;
+        _maskConvIndex = Layers.Count - 2;
+    }
+
+    /// <summary>
+    /// Resolves every lazy layer's shape by running ONE dummy image through the custom <see cref="Forward"/>.
+    /// GroundedSAM2's forward is not a plain sequential walk of <c>Layers</c> — it reshapes between the
+    /// patch-embedding conv (spatial) and the transformer stack (token space) and back before the mask
+    /// head. The base per-layer shape inference walks the layers in order and would feed the conv's spatial
+    /// output straight into the first transformer ("embedding dimension (2) does not match weight dimension
+    /// (256)"). Running one eval-mode warm forward at the real [C, H, W] page shape materializes every lazy
+    /// weight through the correct reshape path (mirrors UDOP's override).
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesWarmed) return;
+        _lazyShapesWarmed = true;
+        if (!_useNativeMode || _customLayers) return;
+
+        var dummy = new Tensor<T>([_channels, _height, _width]);
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try { _ = Forward(dummy); }
+        catch { /* best-effort; a real forward failure surfaces on the actual Train/Predict */ }
+        finally { if (wasTraining) SetTrainingMode(true); }
+    }
+
+    /// <summary>
+    /// Training forward. Routes through the SAME custom <see cref="Forward"/> as inference (patch embed ->
+    /// token-space transformer stack -> mask head, with the spatial&lt;-&gt;token reshapes), NOT the base
+    /// sequential walk over <c>Layers</c>. The base walk would feed the patch conv's spatial output
+    /// straight into the first transformer and throw an embedding-dimension mismatch; sharing Forward keeps
+    /// the train and inference graphs identical and every op tape-tracked.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureLayerRandomSeedsWired();
+        return Forward(input);
     }
 
     /// <summary>
@@ -301,7 +413,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
+    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); }
 
     /// <summary>
     /// Reads configuration from a binary stream.
@@ -313,7 +425,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
+    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); }
 
     /// <summary>
     /// Creates a new instance with the same configuration but fresh weights.

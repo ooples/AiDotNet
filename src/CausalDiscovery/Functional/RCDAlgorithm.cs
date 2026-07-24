@@ -51,7 +51,29 @@ namespace AiDotNet.CausalDiscovery.Functional;
 public class RCDAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold;
-    private readonly double _independenceCutoff;
+
+    /// <summary>
+    /// Cutoff on the SCALE-FREE confounding ratio that triggers the "remaining variables are
+    /// confounded" stop. For the selected (most-exogenous) candidate the ratio is
+    /// <c>Σⱼ min(0, DiffMI(best, j))² / Σⱼ DiffMI(best, j)²</c> — the fraction of the candidate's
+    /// squared direction-evidence (DirectLiNGAM entropy criterion) that indicates it is actually an
+    /// EFFECT of some other variable rather than a cause.
+    /// <para>
+    /// This replaces the previous absolute <c>Σ min(0, DiffMI)²</c> sum, whose magnitude (≈ 1e-8–1e-4
+    /// on standardized residuals) never approached the 0.05 cutoff, so the stop was dead code. A clean
+    /// root scores ≈ 0 (all direction-evidence points outward); a latently-confounded set has no clean
+    /// root, so even the best candidate carries substantial wrong-way evidence (≈ 0.5 for a symmetric
+    /// common-cause pair). Being a ratio in [0, 1] it needs no per-dataset rescaling, which is exactly
+    /// the scale mismatch the raw sum suffered.
+    /// </para>
+    /// <para>
+    /// Sourced from the dedicated <see cref="CausalDiscoveryOptions.ConfoundingEvidenceCutoff"/>
+    /// (default <c>0.05</c> = tolerate ≤ 5% wrong-way evidence before declaring confounding). See the
+    /// RCD calibration tests, which verify a clean LiNGAM DAG scores well under the cutoff while a
+    /// latent-confounder structure scores well over it.
+    /// </para>
+    /// </summary>
+    private readonly double _confoundingScoreCutoff;
 
     /// <inheritdoc/>
     public override string Name => "RCD";
@@ -68,8 +90,20 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     public RCDAlgorithm(CausalDiscoveryOptions? options = null)
     {
         _threshold = options?.EdgeThreshold ?? 0.1;
-        // Dedicated independence cutoff for MI-based test (decoupled from EdgeThreshold)
-        _independenceCutoff = options?.SignificanceLevel ?? 0.05;
+        // Scale-free confounding ratio in [0, 1] (see _confoundingScoreCutoff doc): the fraction of
+        // the best candidate's squared direction-evidence that points the wrong way. Default 0.05 =
+        // tolerate up to 5% wrong-way evidence before declaring the remaining variables confounded.
+        double confoundingCutoff = options?.ConfoundingEvidenceCutoff ?? 0.05;
+        // The cutoff is compared against a ratio in [0, 1]; NaN would make the stop condition
+        // (ratio > cutoff) always false (silently disabling confounding detection), and a value < 0
+        // or > 1 would make it always/never trigger. Reject anything outside the valid range at the
+        // options boundary rather than letting it distort discovery.
+        if (double.IsNaN(confoundingCutoff) || confoundingCutoff < 0.0 || confoundingCutoff > 1.0)
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                $"{nameof(CausalDiscoveryOptions.ConfoundingEvidenceCutoff)} must be a finite value in " +
+                $"[0, 1]; got {confoundingCutoff}.");
+        _confoundingScoreCutoff = confoundingCutoff;
     }
 
     /// <inheritdoc/>
@@ -103,31 +137,39 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             int bestVar = -1;
             double bestScore = double.MaxValue;
 
-            // Cache pairwise MI scores within each round to avoid recomputation
-            var miCache = new Dictionary<(int, int), double>();
+            // Find the MOST EXOGENOUS variable among remaining using the DirectLiNGAM / RCD
+            // criterion (Shimizu et al. 2011 DirectLiNGAM; Maeda & Shimizu 2020 RCD): the
+            // exogenous variable is the one whose regression RESIDUALS of the other variables are
+            // most INDEPENDENT of it. For each candidate, regress every other remaining variable
+            // on the candidate and measure the mutual information between the candidate and each
+            // residual r_j = x_j - reg(x_j ~ x_candidate). A true root leaves those residuals
+            // independent of it (score ~0); a descendant does not.
+            //
+            // NOTE: scoring RAW pairwise MI between the candidate and the other variables (the
+            // previous implementation) is wrong — a root cause has HIGH raw MI with its
+            // descendants because it drives them, so raw-MI minimisation systematically selects a
+            // LEAF and inverts the causal order, leaving the true directed edges undetected.
+            // Score each candidate by the DirectLiNGAM entropy criterion: for every other
+            // variable j, DiffMutualInfo(candidate, j) > 0 iff candidate → j (candidate is the
+            // cause). Accumulate min(0, DiffMI)² — the squared EVIDENCE that the candidate is an
+            // EFFECT of some j. The exogenous variable has no such evidence (score ≈ 0), so we
+            // pick the argmin. This uses Hyvärinen's max-entropy differential-entropy
+            // approximation, which detects the non-Gaussian dependence that identifies causal
+            // direction even for near-collinear variables (a histogram MI cannot).
             foreach (int candidate in remaining)
             {
-                // Compute total mutual information of this variable's residuals with all others
-                double totalMI = 0;
+                double effectEvidence = 0;   // Σ min(0, DiffMI)²  — squared WRONG-WAY (effect) evidence
                 foreach (int other in remaining)
                 {
                     if (other == candidate) continue;
-                    var key = (Math.Min(candidate, other), Math.Max(candidate, other));
-                    if (!miCache.TryGetValue(key, out double mi))
-                    {
-                        mi = ComputeEntropyBasedMI(residualData, n, candidate, other);
-                        miCache[key] = mi;
-                    }
-                    totalMI += mi;
+                    double diffMI = DiffMutualInfo(residualData, n, candidate, other);
+                    double neg = Math.Min(0.0, diffMI);
+                    effectEvidence += neg * neg;
                 }
 
-                // Normalize by number of comparisons
-                int comparisons = remaining.Count - 1;
-                double avgMI = comparisons > 0 ? totalMI / comparisons : 0;
-
-                if (avgMI < bestScore)
+                if (effectEvidence < bestScore)
                 {
-                    bestScore = avgMI;
+                    bestScore = effectEvidence;
                     bestVar = candidate;
                 }
             }
@@ -138,14 +180,29 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
                 break;
             }
 
-            if (bestScore > _independenceCutoff && ordering.Count > 0)
+            // Scale-free confounding ratio for the selected candidate: the fraction of its squared
+            // direction-evidence that points the WRONG way (evidence it is an EFFECT of some other
+            // variable, not a cause). ≈ 0 for a clean root (all evidence outward); elevated when no
+            // clean root exists (latent confounding), e.g. ≈ 0.5 for a symmetric common-cause pair.
+            // Normalizing by the total evidence removes the per-dataset scale drift that made the raw
+            // Σ min(0, DiffMI)² sum (≈ 1e-4) never reach the cutoff — the dead-code bug this fixes.
+            double confoundingRatio = ConfoundingRatio(residualData, n, bestVar, remaining);
+            // Stop when the best candidate carries too much wrong-way evidence (latent confounding),
+            // OR when its direction evidence is degenerate/indeterminate (ConfoundingRatio returns NaN
+            // for ~zero or non-finite total evidence — perfectly collinear/deterministic residuals). In
+            // BOTH cases the remaining variables cannot be cleanly ordered. Detect this in the FIRST
+            // round too (no `ordering.Count > 0` guard): when every observed variable is already
+            // confounded there is no clean root to seed the ordering, and picking an arbitrary bestVar
+            // and writing directed coefficients would fabricate causal structure that RCD explicitly
+            // must NOT assert.
+            if (double.IsNaN(confoundingRatio) || confoundingRatio > _confoundingScoreCutoff)
             {
-                // Remaining variables are likely confounded — mark as confounded and stop.
-                // Per RCD: confounded variables cannot be cleanly ordered, so we do NOT
-                // assign edges among them. The zero entries in W for these variables
-                // indicate "unidentified due to latent confounding", which is the correct
-                // RCD behavior. Callers can check: if W[i,j]==0 AND W[j,i]==0 for
-                // remaining variables, those relationships are confounded.
+                // Remaining variables are likely confounded (or unidentifiable) — mark as confounded
+                // and stop. Per RCD: confounded variables cannot be cleanly ordered, so we do NOT
+                // assign edges among them. The zero entries in W for these variables indicate
+                // "unidentified due to latent confounding", which is the correct RCD behavior. Callers
+                // can check: if W[i,j]==0 AND W[j,i]==0 for remaining variables, those relationships
+                // are confounded.
                 break;
             }
 
@@ -177,58 +234,110 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     }
 
     /// <summary>
-    /// Computes mutual information between two columns using entropy-based estimation.
-    /// Uses differential entropy via histogram binning: MI = H(X) + H(Y) - H(X,Y).
+    /// Hyvärinen's (1998) maximum-entropy approximation of the differential entropy of a
+    /// STANDARDIZED (zero-mean, unit-variance) variable. Lower entropy ⇒ more non-Gaussian.
+    /// This is the entropy term DirectLiNGAM (Shimizu et al. 2011) — which RCD (Maeda &amp;
+    /// Shimizu 2020) builds on — uses to score causal direction, because the non-Gaussianity of
+    /// a residual is what identifies direction; a histogram MI cannot resolve this on
+    /// near-collinear data.
     /// </summary>
-    private static double ComputeEntropyBasedMI(double[,] data, int n, int col1, int col2)
+    private static double DifferentialEntropy(double[] u, int n)
     {
-        if (n < 4) return 0;
+        // Constants from Hyvärinen (1998) "New approximations of differential entropy…":
+        // the two non-quadratic contrast functions G1(u)=log cosh(u), G2(u)=u·exp(-u²/2),
+        // with gamma = E[G1(standard normal)].
+        const double k1 = 79.047;
+        const double k2 = 7.4129;
+        const double gamma = 0.37457;
+        double gaussEntropy = (1.0 + Math.Log(2.0 * Math.PI)) / 2.0;
 
-        // Number of bins via Sturges' rule
-        int numBins = Math.Max(3, (int)Math.Ceiling(Math.Log(n, 2) + 1));
-
-        // Find ranges for each variable
-        double min1 = double.MaxValue, max1 = double.MinValue;
-        double min2 = double.MaxValue, max2 = double.MinValue;
+        double m1 = 0, m2 = 0;
         for (int i = 0; i < n; i++)
         {
-            double v1 = data[i, col1], v2 = data[i, col2];
-            if (v1 < min1) min1 = v1; if (v1 > max1) max1 = v1;
-            if (v2 < min2) min2 = v2; if (v2 > max2) max2 = v2;
+            double x = u[i];
+            m1 += Math.Log(Math.Cosh(x));
+            m2 += x * Math.Exp(-0.5 * x * x);
         }
+        m1 /= n;
+        m2 /= n;
 
-        double range1 = max1 - min1, range2 = max2 - min2;
-        if (range1 < 1e-15 || range2 < 1e-15) return 0;
+        return gaussEntropy - k1 * (m1 - gamma) * (m1 - gamma) - k2 * m2 * m2;
+    }
 
-        // Build joint and marginal histograms
-        var joint = new int[numBins, numBins];
-        var marginal1 = new int[numBins];
-        var marginal2 = new int[numBins];
-
-        for (int i = 0; i < n; i++)
+    /// <summary>
+    /// DirectLiNGAM's entropy-based mutual-information difference for the ordered pair (i, j):
+    /// a positive value means <c>i → j</c> (variable i is the cause), a negative value means
+    /// <c>j → i</c>. Both variables are standardized; the regression residuals in each direction
+    /// are r_{i|j} = x_i − ρ·x_j and r_{j|i} = x_j − ρ·x_i (ρ = correlation), and the measure is
+    /// [H(x_j) + H(r_{i|j})] − [H(x_i) + H(r_{j|i})] using
+    /// <see cref="DifferentialEntropy(double[], int)"/>.
+    /// </summary>
+    /// <summary>
+    /// Scale-free confounding ratio for <paramref name="candidate"/> against the other variables in
+    /// <paramref name="remaining"/>: <c>Σⱼ min(0, DiffMI(candidate, j))² / Σⱼ DiffMI(candidate, j)²</c>
+    /// — the fraction of the candidate's squared direction-evidence (DirectLiNGAM entropy criterion)
+    /// that indicates it is an EFFECT of some other variable rather than a cause. Returns a value in
+    /// <c>[0, 1]</c>: ≈ 0 when the candidate is a clean root (all evidence points outward), rising
+    /// toward ≈ 0.5 for a symmetric common-cause (latently-confounded) pair where direction is
+    /// unidentifiable. Degenerate direction evidence (perfectly collinear/deterministic residuals →
+    /// ~zero or non-finite total evidence) returns <see cref="double.NaN"/> (INDETERMINATE — not a
+    /// clean root); the discovery loop treats NaN as a stop, not as an exogenous cause. Exposed
+    /// <c>internal</c> so the RCD calibration tests can assert the clean-vs-
+    /// confounded separation directly without depending on a full discovery run.
+    /// </summary>
+    internal static double ConfoundingRatio(double[,] residualData, int n, int candidate, IReadOnlyList<int> remaining)
+    {
+        double effectEvidence = 0;   // Σ min(0, DiffMI)²  — squared WRONG-WAY (effect) evidence
+        double totalEvidence = 0;    // Σ DiffMI²          — total squared direction-evidence
+        foreach (int other in remaining)
         {
-            int b1 = Math.Min((int)((data[i, col1] - min1) / range1 * numBins), numBins - 1);
-            int b2 = Math.Min((int)((data[i, col2] - min2) / range2 * numBins), numBins - 1);
-            joint[b1, b2]++;
-            marginal1[b1]++;
-            marginal2[b2]++;
+            if (other == candidate) continue;
+            double diffMI = DiffMutualInfo(residualData, n, candidate, other);
+            double neg = Math.Min(0.0, diffMI);
+            effectEvidence += neg * neg;
+            totalEvidence += diffMI * diffMI;
         }
+        // Degenerate direction evidence (perfectly collinear/deterministic residuals → ~zero or
+        // non-finite total evidence): the direction is UNIDENTIFIABLE, which is NOT the same as a clean
+        // root (ratio ≈ 0). Return NaN so the caller stops without fabricating edges, rather than
+        // treating a variable with no directional evidence as a clean exogenous cause.
+        return totalEvidence > 1e-12 ? effectEvidence / totalEvidence : double.NaN;
+    }
 
-        // MI = sum p(x,y) * log(p(x,y) / (p(x)*p(y)))
-        double mi = 0;
-        double logN = Math.Log(n);
-        for (int b1 = 0; b1 < numBins; b1++)
+    private static double DiffMutualInfo(double[,] data, int n, int i, int j)
+    {
+        double meanI = 0, meanJ = 0;
+        for (int k = 0; k < n; k++) { meanI += data[k, i]; meanJ += data[k, j]; }
+        meanI /= n; meanJ /= n;
+
+        double varI = 0, varJ = 0, cov = 0;
+        for (int k = 0; k < n; k++)
         {
-            if (marginal1[b1] == 0) continue;
-            for (int b2 = 0; b2 < numBins; b2++)
-            {
-                if (joint[b1, b2] == 0 || marginal2[b2] == 0) continue;
-                mi += (double)joint[b1, b2] / n *
-                      (Math.Log(joint[b1, b2]) - Math.Log(marginal1[b1]) - Math.Log(marginal2[b2]) + logN);
-            }
+            double di = data[k, i] - meanI, dj = data[k, j] - meanJ;
+            varI += di * di; varJ += dj * dj; cov += di * dj;
+        }
+        double stdI = Math.Sqrt(varI / n), stdJ = Math.Sqrt(varJ / n);
+        if (stdI < 1e-12 || stdJ < 1e-12) return 0;
+        double rho = (cov / n) / (stdI * stdJ);
+        if (rho > 1) rho = 1; else if (rho < -1) rho = -1;
+        double residStd = Math.Sqrt(Math.Max(1e-12, 1.0 - rho * rho));
+
+        var xi = new double[n];
+        var xj = new double[n];
+        var rIgivenJ = new double[n];
+        var rJgivenI = new double[n];
+        for (int k = 0; k < n; k++)
+        {
+            double xis = (data[k, i] - meanI) / stdI;
+            double xjs = (data[k, j] - meanJ) / stdJ;
+            xi[k] = xis;
+            xj[k] = xjs;
+            rIgivenJ[k] = (xis - rho * xjs) / residStd;
+            rJgivenI[k] = (xjs - rho * xis) / residStd;
         }
 
-        return Math.Max(mi, 0);
+        return (DifferentialEntropy(xj, n) + DifferentialEntropy(rIgivenJ, n))
+             - (DifferentialEntropy(xi, n) + DifferentialEntropy(rJgivenI, n));
     }
 
     /// <summary>

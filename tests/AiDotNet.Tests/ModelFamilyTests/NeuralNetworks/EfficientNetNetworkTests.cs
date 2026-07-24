@@ -28,6 +28,15 @@ public class EfficientNetNetworkTests : NeuralNetworkModelTestBase<float>
     protected override int[] InputShape => [3, 64, 64];
     protected override int[] OutputShape => [1000];
 
+    // MoreData's default 50+200-iteration probe overruns the 120 s per-test gate on EfficientNet-B0
+    // (MBConv + squeeze-excitation is multi-second per step even at 64x64) — the lighter 10-iteration
+    // Training and 100-iteration memorization tests fit, only MoreData does not. Cap MoreData to a
+    // smoke gap (10 vs 30 steps): still catches a training DIVERGENCE (long-run loss >> short-run
+    // loss), with the relaxed absolute tolerance the generated heavy-model scaffolds use.
+    protected override int MoreDataShortIterations => 10;
+    protected override int MoreDataLongIterations => 30;
+    protected override double MoreDataTolerance => 0.5;
+
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new EfficientNetNetwork<float>();
 }

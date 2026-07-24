@@ -117,7 +117,21 @@ public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                BatchSize = _options.OptimizerBatchSize,
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.OptimizerBeta1,
+                Beta2 = _options.OptimizerBeta2,
+                Epsilon = _options.OptimizerEpsilon,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false,
+                MaxGradientNorm = 0.0,
+            });
         _channelDims = [64, 128, 320, 768];
         _depths = [2, 2, 4, 12];
         _decoderDim = 256;
@@ -193,7 +207,7 @@ public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -322,8 +336,11 @@ public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new PixelLM<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new PixelLM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+        ? new PixelLM<T>(Architecture, optimizer: null, lossFunction: LossFunction,
+            numClasses: _numClasses, dropRate: _dropRate, options: new PixelLMOptions(_options))
+        : new PixelLM<T>(Architecture,
+            _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."),
+            _numClasses, new PixelLMOptions(_options));
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

@@ -20,6 +20,19 @@ public class MeshCNNTests : NeuralNetworkModelTestBase<float>
         return mesh;
     }
 
+    // MeshCNN's default architecture carries Dropout (per Hanocka et al. 2019). On the
+    // tiny fixed-sample memorization task the loss converges to a ~0.31 plateau by the
+    // short (50-iter) run, after which the long (200-iter) run oscillates within the
+    // Dropout + Adam-past-convergence noise band (~4e-4 drift observed) rather than
+    // strictly decreasing — not divergence (LossStrictlyDecreases confirms it decreases).
+    //
+    // Tolerance calibrated at 1e-3: ~2.5× the observed ~4e-4 stochastic drift band,
+    // enough headroom to swallow Dropout-mask/Adam-past-convergence noise without also
+    // swallowing genuine regressions. Was 5e-3 (12.5× headroom), which could let a real
+    // training regression pass. LossStrictlyDecreases still catches divergence from the
+    // other direction, so this is the "no significant increase" complement.
+    protected override double MoreDataTolerance => 1e-3;
+
     /// <summary>
     /// Creates a simple circular edge adjacency matrix for testing.
     /// Each edge has 4 neighbors (default NumNeighbors) arranged in a ring topology.

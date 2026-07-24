@@ -123,7 +123,13 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
     /// </summary>
     /// <param name="options">Configuration options for the PointNet++ model.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
-    public PointNetPlusPlus(PointNetPlusPlusOptions options, ILossFunction<T>? lossFunction = null, PointNetPlusPlusModelOptions? modelOptions = null)
+    /// <param name="modelOptions">Optional common model options.</param>
+    /// <param name="optimizer">Optional user-supplied optimizer. Defaults to the paper's Adam configuration.</param>
+    public PointNetPlusPlus(
+        PointNetPlusPlusOptions options,
+        ILossFunction<T>? lossFunction = null,
+        PointNetPlusPlusModelOptions? modelOptions = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification))
     {
         _options = modelOptions ?? new PointNetPlusPlusModelOptions();
@@ -159,6 +165,17 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         _useDropout = options.UseDropout;
         _dropoutRate = options.DropoutRate;
         _learningRate = NumOps.FromDouble(options.LearningRate);
+
+        // Qi et al. train PointNet++ with Adam at an initial learning rate of 1e-3. Route that
+        // option (or the caller's fully custom optimizer) into the optimizer actually used by
+        // TrainWithTape; previously LearningRate was metadata-only and the user setting was ignored.
+        SetBaseTrainOptimizer(optimizer ?? new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                UseAMSGrad = false,
+            }));
 
         _multiScaleRadii = options.MultiScaleRadii;
         _multiScaleMlpDimensions = options.MultiScaleMlpDimensions;
@@ -316,7 +333,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         {
             var outputLayer = new DenseLayer<T>(
                 _numClasses,
-                activationFunction: new IdentityActivation<T>());
+                activationFunction: new SoftmaxActivation<T>());
             AddLayerToCollection(outputLayer);
             _classificationHeadLayers.Add(outputLayer);
             return;
@@ -341,7 +358,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 
         var output = new DenseLayer<T>(
             _numClasses,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new SoftmaxActivation<T>());
         AddLayerToCollection(output);
         _classificationHeadLayers.Add(output);
     }
@@ -1034,7 +1051,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 /// - Input: Many points, basic features (XYZ)
 /// - Output: Fewer points, rich features (learned patterns)
 /// </remarks>
-internal class SetAbstractionLayer<T> : LayerBase<T>
+public class SetAbstractionLayer<T> : LayerBase<T>
 {
     private sealed class ScaleBranch
     {

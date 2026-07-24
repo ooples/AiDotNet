@@ -76,6 +76,25 @@ internal static class NeuralBatchHelper
     /// </summary>
     public const double MemoryBudgetSafetyFactor = 0.7;
 
+    /// <summary>
+    /// Correction applied to the empirical per-sample slope in
+    /// <see cref="EstimateChunkSize{T}"/> to account for the batched execution
+    /// path holding SEVERAL of a single forward's footprint concurrently.
+    /// </summary>
+    /// <remarks>
+    /// The probes measure the retained/allocated bytes of ONE forward, but the
+    /// budgeted path (<see cref="NeuralNetworkBase{T}.PredictInBatches"/>) runs each
+    /// chunk while concurrently holding the growing concatenated output, the tensor
+    /// arena's retained high-water buffer, AND the next chunk's inputs — so the
+    /// process-retained heap is a MULTIPLE of a lone forward's delta. Measured on the
+    /// MemoryBudget guard (50 000 samples, 1 GB budget): the uncorrected estimate chose
+    /// a chunk whose actual retained heap was 1506 MB — 2.1× the 0.7×-budget (717 MB)
+    /// target, i.e. 1.47× the budget itself. Scaling the per-sample slope by 2.5×
+    /// (covering the observed 2.1× with margin) sizes the chunk so the ACTUAL retained
+    /// footprint honors the budget with headroom instead of overshooting it.
+    /// </remarks>
+    public const double BatchedRetentionFactor = 2.5;
+
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, AdaptiveState> _adaptiveStates
         = new();
 
@@ -568,9 +587,53 @@ internal static class NeuralBatchHelper
         // ~0 and the chunk becomes unbounded.
         beta = System.Math.Max(beta, perSampleRetained);
 
+        // Analytic per-sample floor from the model's own resolved layer shapes.
+        // The empirical probes above read POST-forward retained heap, but the memory
+        // that actually OOMs is the TRANSIENT arena high-water DURING a forward — the
+        // concurrently-live activation set — which the arena returns to its pool
+        // afterward, so retained heap systematically under-counts the in-flight peak.
+        // Worse, on quadratic-in-seq operators (attention scores [heads, seq, seq])
+        // the tiny B=8/B=16 probes never enter the allocation regime the full chunk
+        // hits. Derive a conservative per-sample lower bound straight from every
+        // (sub-)layer's resolved output element count so the chosen chunk honors the
+        // budget regardless of allocator pooling — the arena's live set is bounded
+        // below by the activations flowing through the layers. Shapes are already
+        // resolved by the warm-up forward the retained probe just ran.
+        long analyticPerSample = EstimateAnalyticPerSampleFloorBytes(nn);
+        beta = System.Math.Max(beta, analyticPerSample);
+
+        // Correct the single-forward slope for the batched path's concurrent-buffer
+        // overhead (see BatchedRetentionFactor). Without this the chosen chunk's actual
+        // retained heap overshoots the budget by ~2.1× (measured 1506 MB at a 1 GB budget).
+        // Guard the double multiply: beta can now saturate to long.MaxValue (impossible analytic
+        // floor), and casting an out-of-long-range double back to long is unspecified (can yield a
+        // negative). Clamp to long.MaxValue so an impossible per-sample floor stays impossible.
+        double scaledBeta = beta * BatchedRetentionFactor;
+        beta = scaledBeta >= long.MaxValue ? long.MaxValue : System.Math.Max(1L, (long)scaledBeta);
+
         long budgetWithMargin = (long)(memoryBudgetBytes * MemoryBudgetSafetyFactor);
-        // Solve alpha + beta * chunk <= budget for chunk.
-        long chunk = (budgetWithMargin - alpha) / beta;
+        // Reserve memory for the COMPLETE concatenated output FIRST. PredictInBatches retains an output
+        // proportional to the ENTIRE axis0 regardless of chunk size, so a budget that fits the per-chunk
+        // activations but not the full result would still OOM at concat time — scaling beta (the
+        // chunk-dependent term) alone cannot bound it. Subtract the full-output retention, then solve for
+        // the chunk from what remains, and reject a budget too small to even hold the result.
+        long outputRetention = EstimateFinalOutputBytes(nn, axis0);
+        // Reject BEFORE subtracting. outputRetention can saturate to long.MaxValue and alpha can be
+        // large, so computing budgetWithMargin - alpha - outputRetention directly could underflow past
+        // long.MinValue and wrap to an apparently-positive availableForChunk — silently admitting a
+        // chunk that violates the budget. Order the guards so neither intermediate subtraction can
+        // underflow: test outputRetention against the budget first, then alpha against what remains.
+        if (outputRetention >= budgetWithMargin || alpha >= budgetWithMargin - outputRetention)
+        {
+            throw new InvalidOperationException(
+                $"The memory budget ({memoryBudgetBytes} bytes, {budgetWithMargin} after the " +
+                $"{MemoryBudgetSafetyFactor:P0} safety margin) cannot hold the complete prediction " +
+                $"output (~{outputRetention} bytes) plus the per-call fixed overhead (~{alpha} bytes). " +
+                "Increase the memory budget or reduce the output size.");
+        }
+        long availableForChunk = budgetWithMargin - outputRetention - alpha;
+        // Solve alpha + outputRetention + beta * chunk <= budget for chunk.
+        long chunk = availableForChunk / beta;
         if (chunk < 1) return 1;
         if (chunk > axis0) return axis0;
         return (int)chunk;
@@ -640,5 +703,137 @@ internal static class NeuralBatchHelper
 #endif
         if (probeOutput is System.IDisposable disposable) disposable.Dispose();
         return System.Math.Max(0L, after - before);
+    }
+
+    /// <summary>
+    /// Conservative per-sample byte floor derived from the network's own resolved
+    /// layer shapes — a lower bound on the transient forward arena footprint that the
+    /// empirical retained/allocated probes cannot see (the arena returns its scratch
+    /// to the pool after each forward, so post-forward retained heap under-counts the
+    /// in-flight peak). Sums every (sub-)layer's per-sample output element count and
+    /// scales by element size and a small factor that covers non-output scratch (e.g.
+    /// attention-score <c>[heads, seq, seq]</c> tensors, which are never a layer
+    /// OUTPUT) plus the arena holding a layer's input + output + scratch concurrently.
+    /// Returns 0 when no layer shape is resolved (the caller then keeps the empirical
+    /// estimate); never negative.
+    /// </summary>
+    private static long EstimateAnalyticPerSampleFloorBytes<T>(NeuralNetworkBase<T> nn)
+    {
+        long totalElements = 0;
+        foreach (var layer in nn.Layers)
+            totalElements = SaturatingAdd(totalElements, SumResolvedOutputElements(layer));
+        if (totalElements <= 0) return 0;
+
+        long elementSize = typeof(T) == typeof(double) ? sizeof(double)
+            : typeof(T) == typeof(float) ? sizeof(float)
+            : sizeof(double); // conservative default for an unknown numeric T
+        // 3x: attention/scratch tensors are not layer outputs, and the arena holds a
+        // layer's input, output, and intermediate scratch live at once. Keeps the
+        // floor a genuine (modestly padded) lower bound — not a wild over-estimate —
+        // so the chosen chunk stays as large as the budget safely allows.
+        const long ScratchAndDoubleBufferFactor = 3;
+        // Saturating so an absurd (impossible) layer shape floors at long.MaxValue instead of wrapping
+        // to a small/negative value that would understate the footprint and admit an invalid chunk.
+        return SaturatingMul(SaturatingMul(elementSize, totalElements), ScratchAndDoubleBufferFactor);
+    }
+
+    /// <summary>
+    /// Non-negative <see cref="long"/> multiply that saturates to <see cref="long.MaxValue"/> on
+    /// overflow instead of wrapping. All call sites here multiply element counts / byte sizes, which are
+    /// non-negative, so a wrap would produce a bogus small or negative footprint that admits an
+    /// impossible chunk.
+    /// </summary>
+    private static long SaturatingMul(long a, long b)
+    {
+        try { return checked(a * b); }
+        catch (OverflowException) { return long.MaxValue; }
+    }
+
+    /// <summary>
+    /// Non-negative <see cref="long"/> add that saturates to <see cref="long.MaxValue"/> on overflow.
+    /// </summary>
+    private static long SaturatingAdd(long a, long b)
+    {
+        try { return checked(a + b); }
+        catch (OverflowException) { return long.MaxValue; }
+    }
+
+    /// <summary>
+    /// Estimates the bytes retained by the COMPLETE concatenated prediction output over all
+    /// <paramref name="axis0"/> samples — the memory <c>PredictInBatches</c> holds for the full result
+    /// regardless of chunk size. Uses the final layer's resolved per-sample output shape × element size
+    /// × <paramref name="axis0"/> with checked arithmetic (saturating to <see cref="long.MaxValue"/> on
+    /// overflow so an impossibly large output is rejected, not silently wrapped). Returns 0 when no
+    /// output shape is resolved (caller then reserves nothing extra — prior behavior). Never negative.
+    /// </summary>
+    private static long EstimateFinalOutputBytes<T>(NeuralNetworkBase<T> nn, int axis0)
+    {
+        if (axis0 <= 0) return 0;
+
+        // Per-sample output element count = the LAST layer with a resolved output shape (the network
+        // output). Walk forward keeping the most recent resolved value so no reverse indexer is needed.
+        long perSampleElements = 0;
+        foreach (var layer in nn.Layers)
+        {
+            long p = OwnResolvedOutputElements(layer);
+            if (p > 0) perSampleElements = p;
+        }
+        if (perSampleElements <= 0) return 0;
+
+        long elementSize = typeof(T) == typeof(double) ? sizeof(double)
+            : typeof(T) == typeof(float) ? sizeof(float)
+            : sizeof(double); // conservative default for an unknown numeric T
+        try
+        {
+            return checked(elementSize * perSampleElements * axis0);
+        }
+        catch (OverflowException)
+        {
+            return long.MaxValue; // an output this large trivially exceeds any real budget
+        }
+    }
+
+    /// <summary>
+    /// The product of <paramref name="layer"/>'s OWN resolved per-sample output shape, or 0 if the shape
+    /// is unresolved or has a non-positive (sentinel/placeholder) dimension. Unlike
+    /// <see cref="SumResolvedOutputElements"/> this does NOT recurse into sub-layers — the network output
+    /// is the last top-level layer's own output, not a sum over its internals.
+    /// </summary>
+    private static long OwnResolvedOutputElements<T>(AiDotNet.Interfaces.ILayer<T> layer)
+    {
+        var shape = layer.GetOutputShape();
+        if (shape is null || shape.Length == 0) return 0;
+        long product = 1;
+        foreach (var dim in shape)
+        {
+            if (dim <= 0) return 0;
+            product = SaturatingMul(product, dim);
+        }
+        return product;
+    }
+
+    /// <summary>
+    /// Recursively sums the per-sample output element count of <paramref name="layer"/>
+    /// and all its registered sub-layers. Skips any layer whose output shape is
+    /// unresolved or contains a non-positive (sentinel/placeholder) dimension.
+    /// </summary>
+    private static long SumResolvedOutputElements<T>(AiDotNet.Interfaces.ILayer<T> layer)
+    {
+        long elements = 0;
+        var shape = layer.GetOutputShape();
+        if (shape is not null && shape.Length > 0)
+        {
+            long product = 1;
+            bool valid = true;
+            foreach (var dim in shape)
+            {
+                if (dim <= 0) { valid = false; break; }
+                product = SaturatingMul(product, dim);
+            }
+            if (valid) elements = SaturatingAdd(elements, product);
+        }
+        foreach (var sub in layer.GetSubLayers())
+            elements = SaturatingAdd(elements, SumResolvedOutputElements(sub));
+        return elements;
     }
 }

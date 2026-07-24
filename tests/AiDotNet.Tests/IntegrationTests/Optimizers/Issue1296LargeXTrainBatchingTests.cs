@@ -56,6 +56,12 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 /// 57 500 samples reaches <c>~3.8 GB</c> and OOMs.
 /// </para>
 /// </summary>
+// SerialPerf: MemoryBudget_ActualPeakStaysUnderTwiceBudget measures single-process peak memory, which
+// is only valid when nothing else allocates concurrently. [Collection] disables parallelism within its
+// own collection, but sibling collections in the same CI shard still allocate and inflate the measured
+// peak (flaked on Integration N-O). The Category=SerialPerf trait routes it to a dedicated serial CI
+// shard where it runs alone — keeping the budget assertion at full strength instead of relaxing it.
+[Xunit.Trait("Category", "SerialPerf")]
 [Collection("NonParallelIntegration")]
 public class Issue1296LargeXTrainBatchingTests
 {

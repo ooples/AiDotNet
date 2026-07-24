@@ -79,7 +79,8 @@ public class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new PiperOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0002 });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -213,7 +214,7 @@ public class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

@@ -125,6 +125,15 @@ public class NeuralNetworkHelperIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task GetDefaultLossFunction_Embedding_ReturnsCosineSimilarity()
+    {
+        var lossFunction = NeuralNetworkHelper<double>.GetDefaultLossFunction(NeuralNetworkTaskType.Embedding);
+
+        Assert.NotNull(lossFunction);
+        Assert.IsType<CosineSimilarityLoss<double>>(lossFunction);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task GetDefaultLossFunction_ImageSegmentation_ReturnsDiceLoss()
     {
         var lossFunction = NeuralNetworkHelper<double>.GetDefaultLossFunction(NeuralNetworkTaskType.ImageSegmentation);
@@ -187,6 +196,15 @@ public class NeuralNetworkHelperIntegrationTests
     public async Task GetDefaultActivationFunction_Regression_ReturnsIdentity()
     {
         var activation = NeuralNetworkHelper<double>.GetDefaultActivationFunction(NeuralNetworkTaskType.Regression);
+
+        Assert.NotNull(activation);
+        Assert.IsType<IdentityActivation<double>>(activation);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GetDefaultActivationFunction_Embedding_ReturnsIdentity()
+    {
+        var activation = NeuralNetworkHelper<double>.GetDefaultActivationFunction(NeuralNetworkTaskType.Embedding);
 
         Assert.NotNull(activation);
         Assert.IsType<IdentityActivation<double>>(activation);
@@ -435,6 +453,27 @@ public class NeuralNetworkHelperIntegrationTests
         // Values should be unchanged (identity activation)
         Assert.Equal(5.5, Convert.ToDouble(output[0, 0]));
         Assert.Equal(-3.2, Convert.ToDouble(output[1, 0]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ApplyOutputActivation_Embedding_NoChange()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Embedding,
+            inputSize: 10,
+            outputSize: 3);
+
+        var output = new Tensor<double>(new[] { 1, 3 });
+        output[0, 0] = -2.0;
+        output[0, 1] = 0.5;
+        output[0, 2] = 4.0;
+
+        NeuralNetworkHelper<double>.ApplyOutputActivation(output, architecture);
+
+        Assert.Equal(-2.0, Convert.ToDouble(output[0, 0]));
+        Assert.Equal(0.5, Convert.ToDouble(output[0, 1]));
+        Assert.Equal(4.0, Convert.ToDouble(output[0, 2]));
     }
 
     [Fact(Timeout = 120000)]

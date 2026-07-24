@@ -62,7 +62,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _nodeDim;
     private int _edgeDim;
     private int _graphLayers;
@@ -126,7 +126,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         int graphLayers = 4,
         int numClasses = 9,
         int maxNodes = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutGraphOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -162,7 +162,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         int graphLayers = 4,
         int numClasses = 9,
         int maxNodes = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutGraphOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -177,6 +177,11 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         _numClasses = numClasses;
         _maxNodes = maxNodes;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        // Route base tape training through the configured optimizer. Previously _optimizer was stored but
+        // never used — TrainWithTape resolved the default base optimizer, so a caller-supplied optimizer
+        // was silently ignored. Install it as the base-train optimizer (matches SVTR<T>).
+        SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
         InitializeEmbeddings();
@@ -517,6 +522,45 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    /// <summary>
+    /// Inference forward: runs the graph layer stack and returns the per-node class logits
+    /// [numNodes, numClasses] UNCHANGED. DetectLayout, DetectReadingOrder, and ParseLayoutOutput index
+    /// this rank-2 output per node (output[node, class]); pooling it to a rank-1 [numClasses] vector here
+    /// would collapse every node and break their two-dimensional indexing. The document-level pooling
+    /// needed to align with the classification target happens only on the training path
+    /// (<see cref="ForwardForTraining"/>).
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        var output = input;
+        foreach (var layer in Layers)
+            output = layer.Forward(output);
+        return output;
+    }
+
+    /// <summary>
+    /// Training forward: runs the base training forward (which wires layer seeds and applies gradient
+    /// checkpointing / weight streaming over the graph layers), then mean-pools every axis but the class
+    /// axis so the per-node logits [numNodes, numClasses] reduce to the document-level [numClasses] logit
+    /// vector the classification target expects. Without this pooling the rank-2 tensor cannot align to
+    /// the rank-1 [numClasses] target and CrossEntropyWithLogits over-indexes ClassIndicesToOneHot and
+    /// throws. All ops are tape-aware, so training back-propagates through the pool into the graph layers.
+    /// Inference (PredictCore → Forward) deliberately skips this pooling to keep the per-node output.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var output = base.ForwardForTraining(input);
+
+        if (output.Shape.Length >= 2)
+        {
+            int classAxis = output.Shape.Length - 1;
+            var poolAxes = new int[classAxis];
+            for (int a = 0; a < classAxis; a++) poolAxes[a] = a;
+            output = Engine.ReduceMean(output, poolAxes, keepDims: false); // → [numClasses]
+        }
+        return output;
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -524,10 +568,20 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape performs the complete forward + backward + optimizer step over the tape. The
+            // previous code then ALSO ran a manual UpdateParameters(CollectGradients()) gradient-descent step
+            // on top of it — a double update that reads gradients TrainWithTape already consumed and pushes
+            // the weights past the tape's step. One tape step is the correct, complete update.
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            // Restore inference mode even if TrainWithTape throws, so a failed step doesn't leave
+            // BatchNorm/Dropout stuck in training mode for subsequent inference.
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -541,14 +595,6 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
 
         currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
     }
 
     #endregion

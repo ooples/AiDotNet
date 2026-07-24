@@ -471,9 +471,9 @@ public class FILM<T> : FrameInterpolationBase<T>
         }
         var grid = Engine.TensorAdd(baseGrid, Engine.TensorMultiply(flowNHWC, scale));
 
-        var featNHWC = Engine.TensorPermute(features, [0, 2, 3, 1]);
-        var warpedNHWC = Engine.GridSample(featNHWC, grid);
-        return Engine.TensorPermute(warpedNHWC, [0, 3, 1, 2]);
+        // Engine.GridSample is NCHW (PyTorch convention): features are already [B, C, H, W],
+        // pass them directly. The grid is [B, H, W, 2] regardless of image layout.
+        return Engine.GridSample(features, grid);
     }
 
     private Tensor<T> FuseFeatures(
