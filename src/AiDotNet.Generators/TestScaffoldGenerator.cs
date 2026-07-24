@@ -8084,7 +8084,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // correctness without stalling CI. MoreData_ShouldNotDegrade at 50/200
             // iterations is inherently skipped on this scale and returns early when
             // losses are NaN (see ComputeMSE NaN guard).
-            sb.AppendLine("    protected override int TrainingIterations => 1;");
+            sb.AppendLine($"    protected override int TrainingIterations => {(model.ClassName == "FEDformer" ? 10 : 1)};");
             // MoreData_ShouldNotDegrade pairs two networks trained for short and long
             // iteration counts. At paper scale the defaults (50 / 200) far exceed the
             // 120s timeout; 1 / 2 still exercises the "more data shouldn't degrade"
