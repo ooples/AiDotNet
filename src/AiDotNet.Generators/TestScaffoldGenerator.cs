@@ -5829,6 +5829,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumFeatures = 8, NumResBlocks = 1, ScaleFactor = 2, " +
                     "NumFrames = 2, LearningRate = 2e-4, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "DOVE" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // DOVE's native video-diffusion prior uses the same deep residual VSR stack as the
+                // other video models. Keep the architecture family intact but use a tiny legal CI
+                // fixture so training invariants stay inside the 120-second runner timeout.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.DOVEOptions { NumFeatures = 8, NumResBlocks = 1, " +
+                    "NumAttentionHeads = 1, NumDenoisingSteps = 1, ScaleFactor = 2, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "RVRT" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
