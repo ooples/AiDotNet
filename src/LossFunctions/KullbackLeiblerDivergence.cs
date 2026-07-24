@@ -37,13 +37,11 @@ namespace AiDotNet.LossFunctions;
 [LossCategory(LossCategory.Generation)]
 [LossTask(LossTask.ImageGeneration)]
 [LossTask(LossTask.TextGeneration)]
-// KL(P||Q) = Σ P·log(P/Q). On the generic continuous test inputs (unnormalized vectors) KL is NOT
-// guaranteed non-negative, and its derivative w.r.t. Q is -P/Q — which is -1 (not 0) when P==Q and is
-// always negative regardless of the sign of (Q-P). So the MSE-style invariants (non-negativity /
-// larger-error-larger-loss, zero-derivative-at-identical, gradient-sign-matches-error) genuinely do
-// not hold for this divergence; declare them off so the generated loss-invariant tests match KL's
-// real mathematics (ZeroForIdentical stays true: KL(P||P) = 0).
-[LossProperty(IsNonNegative = false, ZeroForIdentical = true, ZeroDerivativeForIdentical = false, HasStandardGradientSign = false, RequiresProbabilityInputs = true, ExpectedOutput = OutputType.Probabilities)]
+// KL is only non-negative / monotonic in error when both P and Q are normalized probability
+// distributions, so the generated tests must feed ProbabilityDistribution vectors (the Continuous
+// default is unnormalized and makes sum(P·log(P/Q)) negative). And the unconstrained derivative
+// -P/Q is -1 at the identity (not zero), so ZeroDerivativeForIdentical is false.
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ZeroDerivativeForIdentical = false, RequiresProbabilityInputs = true, TestInputFormat = LossTestInputFormat.ProbabilityDistribution, ExpectedOutput = OutputType.Probabilities)]
 public class KullbackLeiblerDivergence<T> : LossFunctionBase<T>
 {
     /// <summary>
