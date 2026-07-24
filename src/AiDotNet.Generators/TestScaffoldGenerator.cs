@@ -2820,6 +2820,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
                     "embedDim: 32, numLayers: 4, numFrames: 4, numTimesteps: 16)";
             }
+            else if (model.ClassName == "DeepSeekVL" && model.TypeParameterCount == 1)
+            {
+                // DeepSeek-VL defaults to its paper-scale hybrid VLM: a 1024-wide 24-layer
+                // SigLIP/SAM vision stack followed by a 4096-wide 30-layer DeepSeek decoder.
+                // Even metadata/output-norm probes materialize enough of that <double> graph to
+                // exhaust a 16 GB runner, while one deterministic forward exceeds 120 seconds.
+                // Exercise the identical PatchEmbedding -> vision transformer -> semantic token
+                // reduction -> MLP projector -> language decoder topology at CI-smoke scale.
+                // ImageSize=112 matches the patch-vision scaffold and MaxVisualTokens=64 yields
+                // the matching 14px patch (112 / sqrt(64)).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
+                    "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 64), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.DeepSeekVLOptions { ImageSize = 112, " +
+                    "MaxVisualTokens = 64, VisionDim = 32, DecoderDim = 64, ProjectionDim = 64, " +
+                    "NumVisionLayers = 1, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 256, " +
+                    "MaxSequenceLength = 16, MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.Video.Tracking.", System.StringComparison.Ordinal))
