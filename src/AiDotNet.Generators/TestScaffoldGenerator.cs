@@ -2782,7 +2782,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName == "EVACLIP" && model.TypeParameterCount == 1)
+            if ((model.ClassName == "Emu2" || model.ClassName == "Emu3") && model.TypeParameterCount == 1)
+            {
+                // Emu2/Emu3 production defaults are multi-billion-parameter unified VLMs. Their
+                // generated construction probes materialize the full cross-attention stack and OOM
+                // the 16 GB runner before the invariant assertions. Keep the same unified
+                // vision-to-decoder topology at CI-smoke scale through the public options.
+                string emuOptionsType = model.ClassName == "Emu2"
+                    ? "AiDotNet.VisionLanguage.Generative.Emu2Options"
+                    : "AiDotNet.VisionLanguage.Generative.Emu3Options";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    $"new {emuOptionsType} {{ ImageSize = 32, VisionDim = 32, DecoderDim = 32, " +
+                    "NumVisionLayers = 1, NumDecoderLayers = 1, NumHeads = 2, RegressionDim = 32, " +
+                    "NumRegressionLayers = 1, VocabSize = 64, MaxSequenceLength = 8, " +
+                    "MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "EVACLIP" && model.TypeParameterCount == 1)
             {
                 // EVA-CLIP-E defaults to a 24-layer, 1024-wide vision transformer plus a 12-layer,
                 // 768-wide text transformer. FP32 was applied first, but the generated test's minimum
