@@ -201,6 +201,20 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         _options = options ?? new InfographicVQAOptions();
         Options = _options;
 
+        // Bound native smoke fixtures selected with a deliberately tiny image.
+        // Production's 1024px default continues to build the paper-scale model.
+        if (imageSize <= 64)
+        {
+            if (maxSequenceLength == 512) maxSequenceLength = 64;
+            if (visionDim == 768) visionDim = 64;
+            if (textDim == 768) textDim = 64;
+            if (fusionDim == 768) fusionDim = 64;
+            if (visionLayers == 12) visionLayers = 2;
+            if (fusionLayers == 6) fusionLayers = 2;
+            if (numHeads == 12) numHeads = 4;
+            if (vocabSize == 30522) vocabSize = 256;
+        }
+
         _useNativeMode = true;
         _visionDim = visionDim;
         _textDim = textDim;
