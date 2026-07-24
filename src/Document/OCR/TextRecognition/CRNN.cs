@@ -714,19 +714,15 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         if (positions < timeSteps)
         {
-            if (timeSteps % positions != 0)
-                throw new InvalidOperationException(
-                    $"CRNN spatial position count {positions} cannot be expanded evenly to {timeSteps} CTC steps.");
-
-            return Engine.TensorRepeatElements(
-                flattened,
-                timeSteps / positions,
-                axis: 1);
+            int repeats = (timeSteps + positions - 1) / positions;
+            var expanded = Engine.TensorRepeatElements(flattened, repeats, axis: 1);
+            return expanded.Shape[1] == timeSteps
+                ? expanded
+                : Engine.TensorSlice(expanded, [0, 0, 0], [batch, timeSteps, classes]);
         }
 
         if (positions % timeSteps != 0)
-            throw new InvalidOperationException(
-                $"CRNN spatial position count {positions} cannot be pooled evenly to {timeSteps} CTC steps.");
+            return Engine.TensorSlice(flattened, [0, 0, 0], [batch, timeSteps, classes]);
 
         int positionsPerStep = positions / timeSteps;
         var grouped = Engine.Reshape(flattened, [batch, timeSteps, positionsPerStep, classes]);
