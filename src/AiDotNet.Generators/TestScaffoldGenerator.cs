@@ -5380,6 +5380,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 2, NumQFormerHeads = 2, NumQueryTokens = 4, MaxVisualTokens = 4, " +
                     "VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "DFNCLIP" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.Encoders.", System.StringComparison.Ordinal))
+            {
+                // DFN-CLIP's production ViT-H/14 dual encoder is foundation-scale (1280-wide,
+                // 32 vision layers) and its generated training probe can exhaust a 16 GB runner.
+                // Preserve the complete image/text contrastive topology at CI-smoke scale through
+                // the public options; production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 16), " +
+                    "new AiDotNet.VisionLanguage.Encoders.DFNCLIPOptions { ImageSize = 32, PatchSize = 2, " +
+                    "VisionEmbeddingDim = 32, NumVisionLayers = 2, NumVisionHeads = 4, " +
+                    "TextEmbeddingDim = 32, NumTextLayers = 2, NumTextHeads = 4, ProjectionDim = 16, " +
+                    "VocabSize = 64, MaxSequenceLength = 8, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "CLIPA"
                      && typeName.StartsWith("AiDotNet.VisionLanguage.Encoders.", System.StringComparison.Ordinal))
             {
