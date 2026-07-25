@@ -3200,12 +3200,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "MoG" && model.TypeParameterCount == 1)
             {
                 // MoG (motion-guided frame interpolation): production runs a residual interpolation net over
-                // full-resolution frames — OOMs from the frame size. Exercise the full net at a 32x32 input and
-                // reduced feature/residual counts via public options. Paper defaults unchanged. (#1789)
+                // full-resolution frames — OOMs from the frame size. Exercise the full net at a 16x16 input and
+                // reduced feature/residual counts via public options. Paper defaults unchanged. The 16 is in
+                // lockstep with the frame-interpolation InputShape branch, which emits [6, 16, 16] for MoG.
+                // (#1789)
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3), " +
+                    "inputHeight: 16, inputWidth: 16, inputDepth: 3, outputSize: 3), " +
                     "new AiDotNet.Video.Options.MoGOptions { NumFeatures = 8, NumResBlocks = 1 })";
             }
             else if (model.ClassName == "AudioFlamingo2" && model.TypeParameterCount == 1)
@@ -6753,8 +6755,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // two RGB frames stacked. (Previously only VFIT was special-cased here;
             // every other frame-interp model fell through to the rank-4 branch and
             // its whole test class failed at Predict with the rejection error.)
-            sb.AppendLine("    protected override int[] InputShape => new[] { 6, 64, 64 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 64, 64 };");
+            // MoG is the exception: at 64x64 a single training step costs ~40 s, so even the
+            // smoke-capped 1-vs-2-iteration MoreData_ShouldNotDegrade blew its 120 s timeout. Emit a
+            // 16x16 pair for it (16x fewer pixels per step) in lockstep with the reduced 16x16
+            // architecture its constructor special-case builds. The pair-concat contract and the
+            // model's depth/architecture stay intact; only the spatial extent of the TEST input
+            // shrinks. (#1789)
+            int fiSpatial = model.ClassName == "MoG" ? 16 : 64;
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 6, {fiSpatial}, {fiSpatial} }};");
+            sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 3, {fiSpatial}, {fiSpatial} }};");
         }
         else if (isTwoFrameModel)
         {
