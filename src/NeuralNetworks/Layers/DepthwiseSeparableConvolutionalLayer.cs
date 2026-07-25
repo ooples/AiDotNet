@@ -1303,6 +1303,36 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// It's like replacing all the "knowledge" in the layer with new information.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Returns layer-specific metadata for serialization purposes.
+    /// </summary>
+    /// <remarks>
+    /// Clone and Deserialize rebuild layers through
+    /// <c>DeserializationHelper.CreateLayerFromType</c>, which can only pass back what the layer publishes here.
+    /// Without this override the layer had NO metadata at all, so its output depth, kernel size, stride and
+    /// padding were lost and the rebuilt layer fell through to a generic shape guess. It then rejected its own
+    /// saved weights: "Expected 2000 parameters, but got 5136" (a block with outputDepth 96 rebuilt as 32).
+    /// ConvolutionalLayer publishes the same set for the same reason. (#1789)
+    /// </remarks>
+    /// <returns>A dictionary of metadata key-value pairs including output depth, kernel size, stride and padding.</returns>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["OutputDepth"] = _outputDepth.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["FilterSize"] = _kernelSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Stride"] = _stride.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Padding"] = _padding.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        if (ScalarActivation is not null)
+        {
+            string? activationTypeName = ScalarActivation.GetType().AssemblyQualifiedName;
+            if (activationTypeName is not null)
+                metadata["ScalarActivationType"] = activationTypeName;
+        }
+
+        return metadata;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         // Lazy ctor: if shape isn't resolved (placeholders with Length 0),
