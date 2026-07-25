@@ -25,6 +25,7 @@ public class Chirp3Options : ModelOptions
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardExpansionFactor = other.FeedForwardExpansionFactor;
         NumMels = other.NumMels;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
@@ -39,6 +40,19 @@ public class Chirp3Options : ModelOptions
     public int EncoderDim { get; set; } = 1024;
     public int NumEncoderLayers { get; set; } = 12;
     public int NumAttentionHeads { get; set; } = 16;
+
+    /// <summary>
+    /// Expansion factor of each Conformer block's feed-forward module: the FFN inner width is
+    /// <c>EncoderDim × FeedForwardExpansionFactor</c>. Default 4, the value used by the Conformer
+    /// encoder that USM/Chirp is built on (Gulati et al. 2020, §2.1; USM, Zhang et al. 2023).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each encoder block briefly widens the representation before
+    /// projecting it back, which gives the block extra capacity to transform features. 4× is the
+    /// published setting; larger values add capacity and cost, smaller values shrink the model.</para>
+    /// </remarks>
+    public int FeedForwardExpansionFactor { get; set; } = 4;
+
     public int NumMels { get; set; } = 128;
     public int VocabSize { get; set; } = 32000;
     public int MaxTextLength { get; set; } = 512;

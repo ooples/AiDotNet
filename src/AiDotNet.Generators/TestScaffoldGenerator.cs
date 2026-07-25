@@ -911,6 +911,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // exhausted the 16 GB runner at fp64. Precision is the first mitigation; model defaults and the
         // public customization surface are unchanged.
         "Pixtral", "PixtralLarge", "TOTEM", "InstructionNER",
+        // Generated A-C shard budget (PR #1789). The A-C matrix entry runs SERIALIZED (it is in CI's
+        // $heavyShards) against the 45-minute job timeout, and a measured local run of the shard —
+        // Release, serialized, Category!=HeavyTimeout, 16 GB heap cap, i.e. the runner configuration —
+        // showed the shard cannot fit: 102 of its 184 classes alone consumed 32.1 min of test wall
+        // time. The cost is concentrated in a handful of training-bound fixtures (per-class totals
+        // from that run's trx):
+        //   BioBERTNER 558 s  ← 29% of all measured time, 28 training-heavy NER invariants over a
+        //                       BERT-base-scale encoder (additionally bounded by a CI-smoke
+        //                       constructor below, since its cost is per-test construction)
+        //   BSRoFormer 201 s, AnomalyTransformerDetector 128 s, AudioPaLM 124 s, BiaffineNER 118 s,
+        //   AVID 82 s, ABINet 72 s, APNet 53 s, APNet2 52 s, AzureSpeechSTT 45 s, AWSTranscribe 43 s
+        // Precision is the required first mitigation: <float> halves the per-step footprint and
+        // roughly doubles throughput on the SIMD paths while leaving every architecture, paper
+        // default, and public customization point untouched — these invariants are all self-relative
+        // (loss decreases, outputs differ, clone matches), so they hold identically at fp32.
+        // AudioPaLM is deliberately NOT in this list: it is one of ~54 codec-LM TTS models whose
+        // token-logit head is trained through TtsModelBase's MSE default, which leaves its second Adam
+        // step marginally unstable (memorization loss rose 11.66 -> 36.97) once fp32 removed the
+        // headroom. It is correct and green at fp64, and its 124 s is affordable now that BioBERTNER's
+        // 558 s is gone, so precision is not applied here rather than destabilizing a passing model.
+        // (Switching that head to the paper's cross-entropy objective fixes the memorization probe but
+        // breaks Training_ShouldReduceLoss / MoreData, because the generated TTS fixture regresses
+        // continuous mel targets — a family-wide objective change to evaluate separately, not here.)
+        "BioBERTNER", "BiaffineNER", "BSRoFormer", "AnomalyTransformerDetector",
+        "AVID", "ABINet", "APNet", "APNet2", "AzureSpeechSTT", "AWSTranscribe",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -3398,6 +3423,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // the complete clinical token embedding -> residual Transformer
                 // encoder -> per-token BIO classifier through public NER options at
                 // bounded scale, with dimensions matching the NER token fixture.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 32, outputSize: 9), " +
+                    "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
+                    "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
+                    "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 5e-5 })";
+            }
+            else if (model.ClassName == "BioBERTNER" && model.TypeParameterCount == 1)
+            {
+                // BioBERT (Lee et al., Bioinformatics 2020) keeps BERT-base in production: 768-wide,
+                // 12 layers, 3072 FFN, 256-token context — ~85 M parameters. Its generated suite is 28
+                // invariants and EVERY one of them materializes that stack, so the per-test construction
+                // cost dominates: a measured A-C shard run attributed 558 s (9.3 min, 29% of ALL
+                // measured shard time) to this one class, and the shard is serialized against a 45-minute
+                // CI job timeout. Precision alone was not enough (still >10 min at <float>), because the
+                // cost is per-test model construction rather than a single long training probe.
+                // Exercise the identical topology — biomedical token embedding -> residual Transformer
+                // encoder -> per-token BIO classifier — through the public NER options at CI-smoke
+                // width/depth, matching the sibling BERT-scale NER fixtures (ClinicalBERTNER, BLINKNER,
+                // DeBERTaNER) already bounded this way. Production defaults stay paper-faithful.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
@@ -7667,10 +7713,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // 1D models in families that support InputShape override:
             // match the architecture's inputSize
             bool isLang = model.Domains.Contains(2) || model.Domains.Contains(5);
+            // CausalGANGenerator is a GAN GENERATOR: it consumes a LATENT vector, and both its
+            // pre-Fit stack (InitializeLayers) and its Fit-time rebuild size that input as
+            // CausalGANOptions.EmbeddingDimension (default 128) — not the architecture's inputSize.
+            // Its output width is the architecture's outputSize, which its parameterless constructor
+            // (the one the generated fixture uses) sets to 10. Feeding the generic 16-wide input threw
+            // "Matrix dimensions incompatible: [1,16] x [10,256]" on every Forward-only invariant
+            // (Predict_ShouldBeDeterministic / Clone_ShouldProduceIdenticalOutput /
+            // BatchConsistency_SingleMatchesBatch); training-path tests masked it because Fit()
+            // rebuilds the stack. Feed the latent width the generator actually declares.
+            bool isCausalGanGenerator = model.ClassName == "CausalGANGenerator";
             int dim = model.ClassName is "Mamba2LanguageModel" or "HawkLanguageModel"
-                or "GLALanguageModel" or "GatedDeltaNetLanguageModel" ? 32 : isLang ? 128 : 16;
+                or "GLALanguageModel" or "GatedDeltaNetLanguageModel" ? 32
+                : isCausalGanGenerator ? 128
+                : isLang ? 128 : 16;
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            sb.AppendLine(isCausalGanGenerator
+                ? "    protected override int[] OutputShape => new[] { 10 };"
+                : "    protected override int[] OutputShape => new[] { 4 };");
 
             // Paper-scale language models: Griffin / Hawk / RecurrentGemma all
             // use VocabSize=256000 by paper default (De et al. 2024
@@ -7821,7 +7881,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // keep the test fast while matching the model's expected
             // embedding size. Models with non-default hidden dimensions
             // (TinyBERT=312, etc.) need a manual test override.
-            sb.AppendLine(model.ClassName is "BLINKNER" or "ClinicalBERTNER" or "FinBERTNER" or "DeBERTaNER"
+            // Fixtures given a CI-smoke constructor above build a 32-wide encoder, so their input must
+            // be [seq, 32]; feeding the paper-width [8, 768] into a 32-wide model throws
+            // "embedding dimension (768) does not match weight dimension (32)" inside MultiHeadAttention.
+            // Keep this list in sync with the HiddenDimension = 32 constructorExpr branches.
+            sb.AppendLine(model.ClassName is "BLINKNER" or "ClinicalBERTNER" or "FinBERTNER" or "DeBERTaNER" or "BioBERTNER"
                 ? "    protected override int[] InputShape => new[] { 8, 32 };"
                 : "    protected override int[] InputShape => new[] { 8, 768 };");
 

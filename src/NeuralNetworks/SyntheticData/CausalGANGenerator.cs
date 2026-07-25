@@ -236,15 +236,23 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
         for (int i = 0; i < dims.Length; i++)
         {
-            // Residual: input dimension includes original input concatenated
+            // Residual: input dimension includes original input concatenated. This width MUST be
+            // passed to the layer explicitly: the output-size-only FullyConnectedLayer constructor
+            // infers its input from the preceding layer's output (dims[i-1]), which ignores the
+            // concatenated original input, so the second block was built [256,256] while the forward
+            // pass fed it [1, 256+inputDim]. That threw "Matrix dimensions incompatible:
+            // [1,266] x [256,256]" on every Forward-only invariant (Predict_ShouldBeDeterministic,
+            // Clone_ShouldProduceIdenticalOutput, BatchConsistency_SingleMatchesBatch); training-path
+            // tests masked it because Fit() rebuilds the stack via RebuildLayersWithActualDimensions.
             int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
-            Layers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+            Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
             _genBNLayers.Add(new BatchNormalizationLayer<T>());
         }
 
-        // Output layer: produces raw features (no activation)
+        // Output layer: produces raw features (no activation). Its input is likewise the last hidden
+        // width plus the concatenated original input.
         int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
-        Layers.Add(new FullyConnectedLayer<T>(outputDim, identity));
+        Layers.Add(new FullyConnectedLayer<T>(lastHidden, outputDim, identity));
     }
 
     /// <summary>
@@ -559,6 +567,55 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         current = Layers[^1].Forward(current);
 
         return current;
+    }
+
+    /// <summary>
+    /// Reports the per-layer activations of the GENERATOR, following the same residual path
+    /// <see cref="GeneratorForward"/> uses.
+    /// </summary>
+    /// <param name="input">The latent/noise input, sized <c>CausalGANOptions.EmbeddingDimension</c>.</param>
+    /// <returns>Named activations for each generator block, in forward order.</returns>
+    /// <remarks>
+    /// <para>
+    /// The base implementation walks <c>Layers</c> as a plain sequential chain, which is NOT this
+    /// model's topology: every block after the first (and the output layer) receives its predecessor's
+    /// activation CONCATENATED with the original latent input, so its weights are
+    /// <c>[hidden + latent, hidden]</c>. Feeding a bare <c>[1, hidden]</c> activation into the next
+    /// block therefore threw "Matrix dimensions incompatible: [1,256] x [384,256]". Mirroring
+    /// <see cref="GeneratorForward"/> here keeps the reported activations identical to the ones the
+    /// forward pass actually computes (BatchNorm and ReLU included), which is what makes this probe
+    /// meaningful rather than merely non-throwing.
+    /// </para>
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (_usingCustomLayers)
+            return base.GetNamedLayerActivations(input);
+        if (Layers.Count == 0)
+            return activations;
+
+        var inputTensor = input;
+        var current = input;
+
+        for (int i = 0; i < Layers.Count - 1; i++)
+        {
+            if (i > 0)
+                current = ConcatTensors(current, inputTensor);
+
+            current = Layers[i].Forward(current);
+            if (i < _genBNLayers.Count)
+                current = _genBNLayers[i].Forward(current);
+
+            current = ApplyReLU(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        current = ConcatTensors(current, inputTensor);
+        current = Layers[^1].Forward(current);
+        activations[$"Layer_{Layers.Count - 1}_{Layers[^1].GetType().Name}"] = current.Clone();
+
+        return activations;
     }
 
     /// <summary>
