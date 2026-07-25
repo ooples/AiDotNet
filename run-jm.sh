@@ -10,19 +10,29 @@ if ! ( echo probe > /repo/_mnt_probe && rm -f /repo/_mnt_probe ) 2>/dev/null; th
   echo "FATAL: /repo bind mount not writable -- restart the container"; exit 3
 fi
 
+# Accept either a letter set (e.g. "M", "JK") or "RAW:<tag>:<alternation>" for the second-letter
+# shards, e.g. RAW:Ma-Ml:FullyQualifiedName~Generated.Ma|FullyQualifiedName~Generated.MA|...
+if [ "${1#RAW:}" != "${1:-}" ]; then
+  REST="${1#RAW:}"
+  TAG="${REST%%:*}"
+  ALT="${REST#*:}"
+  BLOG=/tmp/loop-build-$TAG.log
+  TLOG=/tmp/loop-test-$TAG.log
+  RAWMODE=1
+fi
 LETTERS="${1:-JKLM}"
-TAG="$LETTERS"
-ALT=""
+[ -z "${RAWMODE:-}" ] && TAG="$LETTERS"
+[ -z "${RAWMODE:-}" ] && ALT=""
 i=0
-while [ $i -lt ${#LETTERS} ]; do
+while [ -z "${RAWMODE:-}" ] && [ $i -lt ${#LETTERS} ]; do
   L=$(printf '%s' "$LETTERS" | cut -c$((i+1)))
   [ -n "$ALT" ] && ALT="$ALT|"
   ALT="${ALT}FullyQualifiedName~Generated.$L"
   i=$((i+1))
 done
 
-BLOG=/tmp/loop-build-$TAG.log
-TLOG=/tmp/loop-test-$TAG.log
+BLOG=${BLOG:-/tmp/loop-build-$TAG.log}
+TLOG=${TLOG:-/tmp/loop-test-$TAG.log}
 
 echo "=== [$(date +%H:%M:%S)] BUILD (shard $TAG) ==="
 dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 > "$BLOG" 2>&1

@@ -740,12 +740,22 @@ jobs:
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
               FullyQualifiedName~Generated.L
-          - name: ModelFamily - Generated Layers M
+          # M on its own was STILL a 45-min timeout (measured locally on the CI envelope: exit 124),
+          # so split it once more by SECOND letter. Generated M classes use both cases in that position
+          # (MoG / MOMENT, MedCLIP / MMS, MPLUGOwl2), so each letter is listed in both cases - that keeps
+          # the two halves gap-free and non-overlapping: union == M.
+          - name: ModelFamily - Generated Layers Ma-Ml
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              FullyQualifiedName~Generated.M
+              (FullyQualifiedName~Generated.Ma|FullyQualifiedName~Generated.MA|FullyQualifiedName~Generated.Mb|FullyQualifiedName~Generated.MB|FullyQualifiedName~Generated.Mc|FullyQualifiedName~Generated.MC|FullyQualifiedName~Generated.Md|FullyQualifiedName~Generated.MD|FullyQualifiedName~Generated.Me|FullyQualifiedName~Generated.ME|FullyQualifiedName~Generated.Mf|FullyQualifiedName~Generated.MF|FullyQualifiedName~Generated.Mg|FullyQualifiedName~Generated.MG|FullyQualifiedName~Generated.Mh|FullyQualifiedName~Generated.MH|FullyQualifiedName~Generated.Mi|FullyQualifiedName~Generated.MI|FullyQualifiedName~Generated.Mj|FullyQualifiedName~Generated.MJ|FullyQualifiedName~Generated.Mk|FullyQualifiedName~Generated.MK|FullyQualifiedName~Generated.Ml|FullyQualifiedName~Generated.ML)
+          - name: ModelFamily - Generated Layers Mm-Mz
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.Mm|FullyQualifiedName~Generated.MM|FullyQualifiedName~Generated.Mn|FullyQualifiedName~Generated.MN|FullyQualifiedName~Generated.Mo|FullyQualifiedName~Generated.MO|FullyQualifiedName~Generated.Mp|FullyQualifiedName~Generated.MP|FullyQualifiedName~Generated.Mq|FullyQualifiedName~Generated.MQ|FullyQualifiedName~Generated.Mr|FullyQualifiedName~Generated.MR|FullyQualifiedName~Generated.Ms|FullyQualifiedName~Generated.MS|FullyQualifiedName~Generated.Mt|FullyQualifiedName~Generated.MT|FullyQualifiedName~Generated.Mu|FullyQualifiedName~Generated.MU|FullyQualifiedName~Generated.Mv|FullyQualifiedName~Generated.MV|FullyQualifiedName~Generated.Mw|FullyQualifiedName~Generated.MW|FullyQualifiedName~Generated.Mx|FullyQualifiedName~Generated.MX|FullyQualifiedName~Generated.My|FullyQualifiedName~Generated.MY|FullyQualifiedName~Generated.Mz|FullyQualifiedName~Generated.MZ)
           # N-Z was a single serial $heavyShard whose ~835 default-gate scaffold
           # methods ran the full 45-min job timeout and got CANCELLED before
           # finishing — perpetually red, like Integration C / NeuralNetworks A-L
