@@ -3431,6 +3431,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
                     "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 5e-5 })";
             }
+            else if (model.ClassName == "ConformerFP" && model.TypeParameterCount == 1)
+            {
+                // ConformerFP's production fingerprinter is a 256-mel / 256-wide / 6-block Conformer
+                // with a 128-wide fingerprint head. Two problems at that scale in the generated suite:
+                // the fixture's declared shapes could not match its real per-frame output, and an
+                // UNTRAINED 256-wide 6-block stack amplifies the epsilon perturbation of
+                // SimilarInputs_ProduceSimilarEmbeddings enough to drop cosine similarity to 0.896
+                // (just under the 0.9 local-continuity bound). Exercise the same topology — mel
+                // projection -> Conformer blocks -> Dense(EmbeddingDim) fingerprint head — at CI-smoke
+                // width so the fed mel width matches the model's own NumMels and the fingerprint width
+                // is exact. Production defaults stay paper-faithful and fully user-configurable.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 16, inputWidth: 32, inputDepth: 1, outputSize: 32), " +
+                    "new AiDotNet.Audio.Fingerprinting.ConformerFPOptions { NumMels = 32, " +
+                    "EmbeddingDim = 32, HiddenDim = 64, NumLayers = 2, NumAttentionHeads = 4, " +
+                    "DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "BioBERTNER" && model.TypeParameterCount == 1)
             {
                 // BioBERT (Lee et al., Bioinformatics 2020) keeps BERT-base in production: 768-wide,
@@ -7483,6 +7502,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 402 };");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
+            }
+            else if (model.ClassName == "ConformerFP")
+            {
+                // ConformerFP is an audio FINGERPRINTER, and both the encoder it cites (Gulati et al.
+                // 2020, arXiv:2005.08100) and neural audio fingerprinting practice (Chang et al. 2021,
+                // arXiv:2010.11910) embed each frame/segment rather than pooling a whole clip into one
+                // vector — which is exactly what FingerprintLength => EmbeddingDim and
+                // ComputeFingerprint's FrameCount = length / EmbeddingDim encode. Its stack
+                // (Dense/LayerNorm/MHSA closing with Dense(EmbeddingDim)) does NO subsampling, so
+                // [1, T, NumMels] maps to [1, T, EmbeddingDim]. The generic scaffold declared
+                // OutputShape [4], so OutputDimensionality_MatchesEmbeddingDim compared 4 against the
+                // real 16x128 frame embeddings and failed. Declare the shapes the architecture implies.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16, 32 };");
             }
             else if (model.ClassName == "NemotronSpeech")
             {
