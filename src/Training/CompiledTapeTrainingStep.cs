@@ -344,6 +344,24 @@ public static class CompiledTapeTrainingStep<T>
     }
 
     /// <summary>
+    /// Invalidates the thread-local compiled training state only when it belongs
+    /// to the supplied layer set. Used during model disposal so releasing an
+    /// older model cannot erase a different live model's fused optimizer plan.
+    /// </summary>
+    internal static void InvalidateIfOwnedBy<TLayer>(IReadOnlyList<TLayer> layers) where TLayer : class
+    {
+        var cached = _cachedLayerSetIdentities;
+        if (cached is null || cached.Length != layers.Count) return;
+
+        for (int i = 0; i < cached.Length; i++)
+        {
+            if (!ReferenceEquals(cached[i], layers[i])) return;
+        }
+
+        Invalidate();
+    }
+
+    /// <summary>
     /// Captures the current trainable-layer set's reference identities so a
     /// subsequent call can detect a model switch. Called immediately after
     /// the cache is populated for the first time in a given lifecycle.
