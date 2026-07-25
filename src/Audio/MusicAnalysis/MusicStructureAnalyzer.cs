@@ -97,6 +97,16 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         InitializeLayers();
     }
 
+    /// <summary>
+    /// Routes tape training through the configured optimizer. Without this override the base trainer only
+    /// consults <see cref="NeuralNetworkBase{T}.GetOrCreateBaseOptimizer"/>, so the <c>_optimizer</c> field above
+    /// was stored but never used and training silently ran at the base Adam 1e-3 default instead of the
+    /// model's 1e-4 — Training_ShouldReduceLoss saw loss rise 8.86 -> 10.95 on the CI envelope. Same defect
+    /// already fixed in litedvdnet, the madmom beat tracker and mog. (#1789)
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
     internal static async Task<MusicStructureAnalyzer<T>> CreateAsync(MusicStructureAnalyzerOptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         options ??= new MusicStructureAnalyzerOptions();
