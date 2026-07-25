@@ -7356,6 +7356,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // the non-zero fitting floor of a batch-1 BatchNorm segmentation backbone (0.99999 /
                 // 0.5, same as the VSR/VL heavy-model pattern). Architecture (ViT-B encoder, SAM
                 // decoder) stays paper-faithful; only iteration COUNTS are reduced.
+                // TrainingIterations is capped too: per-test timing of the Ma-Ml shard showed MedSAM spending
+                // 57 s in Training_ShouldReduceLoss and 53 s in TrainingError_ShouldNotExceedTestError - both run
+                // the default 10 iterations, which this earlier cap did not touch. Those two tests alone were a
+                // fifth of the class's 265 s. 2 iterations still exercises the full train path.
+                sb.AppendLine("    protected override int TrainingIterations => 2;");
                 sb.AppendLine("    protected override int MoreDataShortIterations => 2;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 6;");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
@@ -7364,11 +7369,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName is "MaskAdapter" or "MoG")
             {
-                // Mask-Adapter (mask-pooling adapter over a frozen segmentation backbone) and MoG both run their
-                // full encoder/decoder per step even at the reduced fixture scale set by their constructor
-                // special-cases, so the default convergence invariants overran the CPU budget on CI:
+                // Mask-Adapter (mask-pooling adapter over a frozen segmentation backbone), MoG and Mask2Former all
+                // run their full encoder/decoder per step even at the reduced fixture scale set by their
+                // constructor special-cases, so the default convergence invariants overran the CPU budget on CI:
                 // MaskAdapter timed out in MoreData_ShouldNotDegrade (120 s) and MoG in both MoreData (120 s) and
-                // LossStrictlyDecreasesOnMemorizationTask (180 s). Apply the same smoke-iteration treatment the
+                // LossStrictlyDecreasesOnMemorizationTask (180 s). Mask2Former had no iteration overrides at all
+                // and was the single most expensive class in the shard - per-test timing measured 267 s total,
+                // with 54 s in Training_ShouldReduceLoss, 54 s in TrainingError_ShouldNotExceedTestError and 53 s
+                // in LossStrictlyDecreasesOnMemorizationTask. Apply the same smoke-iteration treatment the
                 // MedSAM / VSR / VL families use — architecture stays paper-faithful, only iteration COUNTS drop,
                 // with thresholds relaxed to the batch-1 fitting floor. (#1789)
                 sb.AppendLine("    protected override int TrainingIterations => 1;");
