@@ -35,6 +35,13 @@ public class GraFPrintLossTraceTests : EmbeddingModelTestBase<float>
     // more-training-doesn't-degrade behaviour is still covered by those non-cloning siblings.
     protected override bool MoreDataInvariantApplicable => false;
 
+    // The paper-faithful 53-layer pyramid is intentionally retained, but the
+    // generic 10-iteration training probe multiplies into 30 full backward
+    // passes and exceeds the 180 s CPU gate. Four iterations still exercises
+    // the complete forward/backward/update path while keeping this focused
+    // invariant bounded on the 16 GB runner.
+    protected override int TrainingIterations => 4;
+
     // Training_ShouldReduceLoss runs TrainingIterations*3 iters at batch=8.
     // The per-iter wall is ~3.4s, AND the min-loss assertion in the base
     // class adds a per-iter Predict probe (~doubles wall), so we keep iter
