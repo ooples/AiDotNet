@@ -1154,6 +1154,40 @@ public static class DeserializationHelper
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             instance = new CitrinetBlockLayer<T>(channels, kernelSize, numSubBlocks, seReductionRatio, dropoutRate, stride);
         }
+        else if (genericDef == typeof(DepthwiseSeparableConvolutionalLayer<>))
+        {
+            // DepthwiseSeparableConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
+            //                                      IActivationFunction<T>?)
+            // This layer had NO case here at all, so it fell through to the generic reconstruction path and was
+            // rebuilt with a guessed output depth. Its parameter count is
+            //   inputDepth * (kernelSize^2 + outputDepth) + outputDepth,
+            // so a wrong outputDepth makes the layer reject its own saved weights — Clone() and
+            // Clone_AfterTraining threw "Expected 2000 parameters, but got 5136" (a block built with
+            // outputDepth 96 came back as 32). The layer now publishes these four values in GetMetadata. (#1789)
+            int dsKernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
+            int dsStride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int dsPadding = TryGetInt(additionalParams, "Padding") ?? 0;
+            // Prefer the published depth; fall back to the declared output shape, whose last axis carries
+            // outputDepth for this layer (its base output shape is [-1, -1, outputDepth]).
+            int dsOutputDepth = TryGetInt(additionalParams, "OutputDepth")
+                ?? (outputShape.Length > 0 ? outputShape[outputShape.Length - 1] : 1);
+
+            // Constructed DIRECTLY rather than through GetConstructor/Invoke: T is a compile-time type parameter
+            // of this method, so the concrete layer type is known here and no reflection is needed. That keeps
+            // this case type-checked at compile time and avoids the reflection cost the ctor-matching paths pay.
+            // (The one unavoidable reflective step is materializing the activation, whose type arrives as a
+            // string in the metadata.)
+            var dsActivationType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? dsActivationObj = TryCreateActivationInstance(additionalParams, "ScalarActivationType", dsActivationType);
+            if (dsActivationObj is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
+                throw new InvalidOperationException(
+                    $"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for DepthwiseSeparableConvolutionalLayer.");
+
+            instance = new DepthwiseSeparableConvolutionalLayer<T>(
+                dsOutputDepth, dsKernelSize, dsStride, dsPadding, dsActivationObj as IActivationFunction<T>);
+            // Left lazy on purpose: the caller resolves it from the layer's own serialized input shape, and
+            // SetParameters can still infer inputDepth from the parameter vector if that shape is unavailable.
+        }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
             // ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)
