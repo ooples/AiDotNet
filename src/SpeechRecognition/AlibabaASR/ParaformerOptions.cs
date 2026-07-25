@@ -20,6 +20,7 @@ public class ParaformerOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        Seed = other.Seed;
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
@@ -32,6 +33,8 @@ public class ParaformerOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
     }
 
     public int SampleRate { get; set; } = 16000;
@@ -46,6 +49,12 @@ public class ParaformerOptions : ModelOptions
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
     public string Language { get; set; } = "en";
+    /// <summary>Gets or sets the AdamW learning rate used by native training.</summary>
+    /// <value>Defaults to 1e-3, preserving the model's previous optimizer behavior.</value>
+    public double LearningRate { get; set; } = 1e-3;
+    /// <summary>Gets or sets the decoupled AdamW weight decay used by native training.</summary>
+    /// <value>Defaults to 0.01, preserving the framework AdamW default.</value>
+    public double WeightDecay { get; set; } = 0.01;
     /// <summary>Optional vocabulary mapping token IDs to text tokens (e.g., SentencePiece vocabulary).</summary>
     public string[]? Vocabulary { get; set; }
 }

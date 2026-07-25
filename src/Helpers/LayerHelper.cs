@@ -7175,6 +7175,14 @@ public static class LayerHelper<T>
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
+        // Kong et al.'s released CNN14 normalizes each mel bin before the
+        // convolution stack: [B, 1, time, mel] -> [B, mel, time, 1], bn0,
+        // then transpose back. TransposeLayer permutations address the logical
+        // (non-batch) axes, and [2,1,0] is self-inverse for this layout.
+        yield return new TransposeLayer<T>(new[] { 2, 1, 0 });
+        yield return new BatchNormalizationLayer<T>(numMels);
+        yield return new TransposeLayer<T>(new[] { 2, 1, 0 });
+
         // CNN14: each paper block is Conv(3x3) -> BN -> ReLU ->
         // Conv(3x3) -> BN -> ReLU -> AvgPool(2x2). The public width/depth
         // options scale that same topology; their defaults reproduce the

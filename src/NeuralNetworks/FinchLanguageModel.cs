@@ -148,8 +148,8 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
             // RWKV-6 recurrent products can transiently overflow on an
             // unscaled smoke batch. Keep the update finite and bounded so one
             // bad element cannot poison the entire model state.
-            if (!double.IsFinite(gradient)) gradient = 0.0;
-            gradient = Math.Clamp(gradient, -1.0, 1.0);
+            if (double.IsNaN(gradient) || double.IsInfinity(gradient)) gradient = 0.0;
+            gradient = Math.Max(-1.0, Math.Min(1.0, gradient));
             safeGradients[i] = NumOps.FromDouble(gradient);
         }
         T learningRate = NumOps.FromDouble(_learningRate);
