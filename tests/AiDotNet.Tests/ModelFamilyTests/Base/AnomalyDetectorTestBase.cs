@@ -15,22 +15,36 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Anomaly detectors use IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; where
 /// the output vector contains anomaly scores (higher = more anomalous).
 /// </remarks>
-public abstract class AnomalyDetectorTestBase
+/// <typeparam name="T">
+/// Numeric precision of the generated fixture. Generic so a training-bound detector can be routed to
+/// <c>&lt;float&gt;</c> (the scaffold's Fp32 selection) to fit the shard budget instead of being
+/// deferred out of it; the non-generic <see cref="AnomalyDetectorTestBase"/> alias below keeps every
+/// existing <c>&lt;double&gt;</c> fixture source-compatible.
+/// </typeparam>
+public abstract class AnomalyDetectorTestBase<T>
 {
-    protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Converts a double literal into the fixture's numeric type.</summary>
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+
+    /// <summary>Converts a fixture-typed value back to double for finiteness / magnitude asserts.</summary>
+    protected static double ToD(T value) => Convert.ToDouble(value);
+
+    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateModel();
 
     protected virtual int TrainSamples => 100;
     protected virtual int Features => 3;
 
-    private (Matrix<double> X, Vector<double> Y) GenerateNormalData(Random rng)
+    private (Matrix<T> X, Vector<T> Y) GenerateNormalData(Random rng)
     {
-        var x = new Matrix<double>(TrainSamples, Features);
-        var y = new Vector<double>(TrainSamples);
+        var x = new Matrix<T>(TrainSamples, Features);
+        var y = new Vector<T>(TrainSamples);
         for (int i = 0; i < TrainSamples; i++)
         {
             for (int j = 0; j < Features; j++)
-                x[i, j] = ModelTestHelpers.NextGaussian(rng) * 1.0; // centered at 0
-            y[i] = 0; // normal label
+                x[i, j] = ToT(ModelTestHelpers.NextGaussian(rng) * 1.0); // centered at 0
+            y[i] = NumOps.Zero; // normal label
         }
         return (x, y);
     }
@@ -46,16 +60,16 @@ public abstract class AnomalyDetectorTestBase
         model.Train(trainX, trainY);
 
         // Normal test points
-        var normalX = new Matrix<double>(5, Features);
+        var normalX = new Matrix<T>(5, Features);
         for (int i = 0; i < 5; i++)
             for (int j = 0; j < Features; j++)
-                normalX[i, j] = ModelTestHelpers.NextGaussian(rng) * 1.0;
+                normalX[i, j] = ToT(ModelTestHelpers.NextGaussian(rng) * 1.0);
 
         // Outlier test points (far from training distribution)
-        var outlierX = new Matrix<double>(5, Features);
+        var outlierX = new Matrix<T>(5, Features);
         for (int i = 0; i < 5; i++)
             for (int j = 0; j < Features; j++)
-                outlierX[i, j] = 50.0 + ModelTestHelpers.NextGaussian(rng) * 0.1;
+                outlierX[i, j] = ToT(50.0 + ModelTestHelpers.NextGaussian(rng) * 0.1);
 
         var normalScores = model.Predict(normalX);
         var outlierScores = model.Predict(outlierX);
@@ -63,8 +77,8 @@ public abstract class AnomalyDetectorTestBase
         if (ModelTestHelpers.AllFinite(normalScores) && ModelTestHelpers.AllFinite(outlierScores))
         {
             double normalMean = 0, outlierMean = 0;
-            for (int i = 0; i < normalScores.Length; i++) normalMean += normalScores[i];
-            for (int i = 0; i < outlierScores.Length; i++) outlierMean += outlierScores[i];
+            for (int i = 0; i < normalScores.Length; i++) normalMean += ToD(normalScores[i]);
+            for (int i = 0; i < outlierScores.Length; i++) outlierMean += ToD(outlierScores[i]);
             normalMean /= normalScores.Length;
             outlierMean /= outlierScores.Length;
 
@@ -88,8 +102,9 @@ public abstract class AnomalyDetectorTestBase
         var scores = model.Predict(trainX);
         for (int i = 0; i < scores.Length; i++)
         {
-            Assert.False(double.IsNaN(scores[i]), $"Anomaly score[{i}] is NaN.");
-            Assert.False(double.IsInfinity(scores[i]), $"Anomaly score[{i}] is Infinity.");
+            double s = ToD(scores[i]);
+            Assert.False(double.IsNaN(s), $"Anomaly score[{i}] is NaN.");
+            Assert.False(double.IsInfinity(s), $"Anomaly score[{i}] is Infinity.");
         }
     }
 
@@ -159,6 +174,13 @@ public abstract class AnomalyDetectorTestBase
         using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
-        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained anomaly detector should have parameters.");
+        Assert.True(((IParameterizable<T, Matrix<T>, Vector<T>>)model).GetParameters().Length > 0, "Trained anomaly detector should have parameters.");
     }
 }
+
+/// <summary>
+/// Double-precision alias so existing generated anomaly-detector fixtures keep deriving from a
+/// non-generic base; <c>&lt;float&gt;</c> fixtures derive from <see cref="AnomalyDetectorTestBase{T}"/>
+/// directly.
+/// </summary>
+public abstract class AnomalyDetectorTestBase : AnomalyDetectorTestBase<double> { }

@@ -12,7 +12,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for video inpainting models. Inherits video NN invariants
 /// and adds inpainting-specific: output same size as input and bounded values.
 /// </summary>
-public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
+/// <typeparam name="T">
+/// Numeric precision of the generated fixture. Generic so a training-bound inpainting model can be
+/// routed to <c>&lt;float&gt;</c> (the scaffold's Fp32 selection) instead of being deferred out of the
+/// shard; the non-generic <see cref="VideoInpaintingTestBase"/> alias below keeps every existing
+/// <c>&lt;double&gt;</c> fixture source-compatible.
+/// </typeparam>
+public abstract class VideoInpaintingTestBase<T> : VideoNNModelTestBase<T>
 {
     [Fact(Timeout = 120000)]
     public async Task InpaintedOutput_SameSizeAsInput()
@@ -38,9 +44,10 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]), $"Inpainted output[{i}] is NaN.");
-            Assert.True(Math.Abs(output[i]) < 1e6,
-                $"Inpainted output[{i}] = {output[i]:E4} is unbounded.");
+            double o = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(o), $"Inpainted output[{i}] is NaN.");
+            Assert.True(Math.Abs(o) < 1e6,
+                $"Inpainted output[{i}] = {o:E4} is unbounded.");
         }
     }
 
@@ -61,7 +68,7 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
         var network = CreateNetwork();
 
         // Only models that expose the mask-conditioned Inpaint path are in scope.
-        if (network is not VideoInpaintingBase<double> inpainter) return;
+        if (network is not VideoInpaintingBase<T> inpainter) return;
 
         var frames = CreateRandomTensor(InputShape, rng);
         int n = frames.Shape[0];
@@ -91,9 +98,9 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
     }
 
     /// <summary>Builds a single-channel <c>[n, 1, h, w]</c> mask with a rectangular hole (1 = hole).</summary>
-    private Tensor<double> BuildBoxMask(int n, int h, int w, int top, int left, int boxH, int boxW)
+    private Tensor<T> BuildBoxMask(int n, int h, int w, int top, int left, int boxH, int boxW)
     {
-        var mask = new Tensor<double>([n, 1, h, w]);
+        var mask = new Tensor<T>([n, 1, h, w]);
         var one = NumOps.FromDouble(1.0);
         var span = mask.Data.Span;
         int plane = h * w;
@@ -110,3 +117,10 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
         return mask;
     }
 }
+
+/// <summary>
+/// Double-precision alias so existing generated inpainting fixtures keep deriving from a
+/// non-generic base; <c>&lt;float&gt;</c> fixtures derive from <see cref="VideoInpaintingTestBase{T}"/>
+/// directly.
+/// </summary>
+public abstract class VideoInpaintingTestBase : VideoInpaintingTestBase<double> { }
