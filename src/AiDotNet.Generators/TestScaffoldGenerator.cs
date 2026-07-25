@@ -11044,6 +11044,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "MiniGPT4" => true,
             "MiniGPTv2" => true,
             "BLIP3" => true,
+            // MedCLIP's fixture is built at CI-smoke scale beside BiomedCLIP and DFNCLIP above, but each
+            // training step still walks the full dual encoder, so the default 10/50/200-iteration convergence
+            // invariants overran the xUnit budget (it timed out in LossStrictlyDecreasesOnMemorizationTask at
+            // 180 s). Same smoke-iteration caps as the rest of the CLIP family - widths stay paper-faithful,
+            // only iteration COUNTS drop. (LLM2CLIP and MetaCLIP already receive these caps from their own
+            // fixture branches; adding them here double-emits the overrides and fails to compile.) (#1789)
+            "MedCLIP" => true,
             _ => false,
         };
     }
