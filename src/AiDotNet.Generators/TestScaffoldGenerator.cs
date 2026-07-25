@@ -4604,7 +4604,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
                     "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32)";
+                    "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32, " +
+                    // TEST-ONLY learning rate. The production default is the paper's 2e-5 (Appendix B), but that
+                    // is a FINE-TUNING rate for an already-pretrained backbone. This fixture trains a randomly
+                    // initialized model from scratch, where 2e-5 barely moves it: MoreData_ShouldNotDegrade
+                    // measured 2.2398 after 50 iterations against 2.2491 after 200, both still at the ~2.24
+                    // near-random loss of a 4-class head, so the comparison was dominated by data draw rather
+                    // than by learning. 3e-4 is the ordinary from-scratch rate for a small transformer; the
+                    // production default stays paper-faithful. (#1789)
+                    "options: new AiDotNet.Document.Options.LayoutLMv2Options { LearningRate = 3e-4 })";
             }
             else if (model.ClassName == "UDOP" && model.TypeParameterCount == 1)
             {

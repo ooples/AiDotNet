@@ -250,8 +250,8 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         // through the constructor's optimizer parameter.
         var options = new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
-            InitialLearningRate = 2e-5,
-            WeightDecay = 1e-2,
+            InitialLearningRate = _options.LearningRate,
+            WeightDecay = _options.WeightDecay,
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8,
