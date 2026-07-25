@@ -723,12 +723,29 @@ jobs:
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
               (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I)
-          - name: ModelFamily - Generated Layers J-M
+          # J-M in turn ran the full 45-min job timeout and got CANCELLED before finishing
+          # (measured locally on the CI envelope — 4 CPU / 16 GB, serial, Category!=HeavyTimeout —
+          # at 44 min it had only reached the "Med..." classes). It is 177 generated classes, and
+          # the M range alone is 97 of them: J=9, K=21, L=50, M=97. Split J-M → J-K + L + M so each
+          # serial shard finishes under the timeout. Gap-free + non-overlapping: union == J-M.
+          - name: ModelFamily - Generated Layers J-K
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
+              (FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K)
+          - name: ModelFamily - Generated Layers L
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              FullyQualifiedName~Generated.L
+          - name: ModelFamily - Generated Layers M
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              FullyQualifiedName~Generated.M
           # N-Z was a single serial $heavyShard whose ~835 default-gate scaffold
           # methods ran the full 45-min job timeout and got CANCELLED before
           # finishing — perpetually red, like Integration C / NeuralNetworks A-L
