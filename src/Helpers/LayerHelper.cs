@@ -7986,6 +7986,94 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates the LiteDVDNet denoising stack (Ilchenko &amp; Stirenko, IJIGSP 2025).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// LiteDVDNet is FastDVDnet (Tassano, Delon &amp; Veit, CVPR 2020) with four optimizations. Three of them are
+    /// architectural and are implemented here:
+    /// </para>
+    /// <list type="number">
+    /// <item>the InputCvBlock's intermediate channel count is cut by a factor of three (90 -&gt; 30);</item>
+    /// <item>each convolutional block is simplified to a SINGLE convolution ("LiteCvBlock" - the paper drops the
+    /// second convolution of FastDVDnet's CvBlock);</item>
+    /// <item>the channel count is halved for the smaller variant - LiteDVDNet-32 keeps FastDVDnet's width
+    /// (<paramref name="numFeatures"/> = 32) and LiteDVDNet-16 halves it, taking the model from 2.48M to 0.64M
+    /// parameters.</item>
+    /// </list>
+    /// <para>
+    /// The fourth optimization - caching intermediate denoising results across overlapping frame windows - is an
+    /// INFERENCE-only reuse of already-computed outputs; the paper notes that mode "is suitable only for
+    /// computations, not for network training", so it is not part of the trainable stack.
+    /// </para>
+    /// <para>
+    /// Layer ordering follows the paper: "Batch normalization is placed between convolutional and ReLU layers",
+    /// and "most layers use point-wise ReLU activation functions, EXCEPT FOR THE LAST ONE" - so the output head
+    /// is linear, which also matches the residual formulation (the residual is signed, and both
+    /// ConvolutionalLayer and DepthwiseSeparableConvolutionalLayer default to ReLU when no activation is passed).
+    /// Upsampling uses PixelShuffle, as in FastDVDnet. The residual connection between the central noisy input
+    /// frame and the output lives in the model (see LiteDVDNet), since it spans the whole stack.
+    /// </para>
+    /// <para>
+    /// NOTE: this is a sequential approximation of the paper's DenBlock - the additive U-Net skip connections
+    /// inside the block are not modelled, because the shared <c>Layers</c> pipeline is a flat sequential list.
+    /// The stack this replaced modelled neither the skips NOR any of the above.
+    /// </para>
+    /// <para>
+    /// The previous generic stack was doubly wrong for this model: it had NO normalization at all (so the paper's
+    /// Adam 1e-3 diverged, loss exploding 0.28 -&gt; 150), and the model's own documentation claimed depthwise
+    /// separable convolutions, which appear nowhere in the paper. (#1789)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputChannels">Channels per frame (3 for RGB).</param>
+    /// <param name="numFeatures">Base width, the paper's variant number: 32 for LiteDVDNet-32, 16 for LiteDVDNet-16.</param>
+    /// <param name="inputBlockIntermediateChannels">InputCvBlock intermediate channels (paper: 30, reduced from FastDVDnet's 90).</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultLiteDVDNetLayers(
+        int inputChannels = 3,
+        int numFeatures = 32,
+        int inputBlockIntermediateChannels = 30)
+    {
+        if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));
+        if (inputBlockIntermediateChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputBlockIntermediateChannels));
+
+        int chs0 = numFeatures;
+        int chs1 = numFeatures * 2;
+        int chs2 = numFeatures * 4;
+
+        // Conv -> BatchNorm -> ReLU, the paper's ordering. A "LiteCvBlock" is exactly one of these.
+        IEnumerable<ILayer<T>> LiteCvBlock(int outChannels, int kernel, int stride, int padding)
+        {
+            yield return new ConvolutionalLayer<T>(outChannels, kernel, stride, padding, new IdentityActivation<T>() as IActivationFunction<T>);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // InputCvBlock: reduced intermediate width, then project to the base width.
+        foreach (var l in LiteCvBlock(inputBlockIntermediateChannels, 3, 1, 1)) yield return l;
+        foreach (var l in LiteCvBlock(chs0, 3, 1, 1)) yield return l;
+
+        // Encoder: two stride-2 downsamples, each followed by a LiteCvBlock.
+        foreach (var l in LiteCvBlock(chs1, 3, 2, 1)) yield return l;
+        foreach (var l in LiteCvBlock(chs1, 3, 1, 1)) yield return l;
+        foreach (var l in LiteCvBlock(chs2, 3, 2, 1)) yield return l;
+        foreach (var l in LiteCvBlock(chs2, 3, 1, 1)) yield return l;
+
+        // Decoder: PixelShuffle upsampling. The convolution feeding each shuffle emits 4x the target channels so
+        // the 2x shuffle trades them for spatial resolution.
+        foreach (var l in LiteCvBlock(chs2, 3, 1, 1)) yield return l;
+        yield return new ConvolutionalLayer<T>(chs1 * 4, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
+        yield return new PixelShuffleLayer<T>(2);
+
+        foreach (var l in LiteCvBlock(chs1, 3, 1, 1)) yield return l;
+        yield return new ConvolutionalLayer<T>(chs0 * 4, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
+        yield return new PixelShuffleLayer<T>(2);
+
+        // OutputCvBlock: one normalized+activated convolution, then a LINEAR projection back to frame channels.
+        foreach (var l in LiteCvBlock(chs0, 3, 1, 1)) yield return l;
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
     /// Creates layers for a video inpainting model (encoder-transformer-decoder).
     /// </summary>
     /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
