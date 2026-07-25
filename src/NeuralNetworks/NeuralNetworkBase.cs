@@ -9070,6 +9070,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// default and the fused fast path.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Adopts an optimizer that was constructed FOR this network as its tape-training optimizer, unless one has
+    /// already been chosen.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Models overwhelmingly configure their optimizer as
+    /// <c>_optimizer = optimizer ?? new SomeOptimizer&lt;T, ...&gt;(this, new SomeOptions { InitialLearningRate = ... })</c>
+    /// and then never publish it — the field is private to the derived class, and unless the model also overrides
+    /// <see cref="GetOrCreateBaseOptimizer"/> or calls <c>SetBaseTrainOptimizer</c>, the trainer never sees it and
+    /// falls back to the base Adam default. A survey of this repository found 850 models assigning such a field and
+    /// only 56 with a live path to it: roughly 794 models were silently training at the base default instead of the
+    /// learning rate their own options declared, usually an order of magnitude away from it. Four of those were
+    /// diagnosed one at a time as test failures (litedvdnet, the madmom beat tracker, mog, musicstructureanalyzer);
+    /// each was fixed by adding the missing override, which is the symptom of a defect that belongs here rather
+    /// than in 794 constructors.
+    /// </para>
+    /// <para>
+    /// Adoption is deliberately conservative: the FIRST optimizer built for this network wins, so an explicit
+    /// <c>SetBaseTrainOptimizer</c> call still takes precedence, a model that constructs several optimizers
+    /// (generator/discriminator pairs) keeps its first, and any model overriding
+    /// <see cref="GetOrCreateBaseOptimizer"/> bypasses this entirely. (#1789)
+    /// </para>
+    /// </remarks>
+    internal void AdoptConfiguredOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        _baseTrainOptimizer ??= optimizer;
+    }
+
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
         if (_baseTrainOptimizer is not null) return _baseTrainOptimizer;
