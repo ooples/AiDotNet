@@ -1151,28 +1151,70 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             }
         }
 
-        if (_useNativeMode)
+        // Small generated/test instances can use an exact parameter round-trip;
+        // production-scale Flamingo models stay on NeuralNetworkBase's COW path
+        // so no model-wide vector is materialized.
+        if (_useNativeMode && ParameterCount <= 50_000_000)
         {
-            var copy = (FlamingoNeuralNetwork<T>)CreateNewInstance();
-            try { copy.ResolveShapes(new Tensor<T>(new[] { 3, _imageSize, _imageSize })); }
+            var smallCopy = (FlamingoNeuralNetwork<T>)base.DeepCopy();
+            try { smallCopy.ResolveShapes(new Tensor<T>(new[] { 3, _imageSize, _imageSize })); }
             catch (ArgumentException) { }
-
-            for (int i = 0; i < Layers.Count && i < copy.Layers.Count; i++)
+            for (int i = 0; i < Layers.Count && i < smallCopy.Layers.Count; i++)
             {
-                var source = Layers[i];
-                var destination = copy.Layers[i];
-                if (source.ParameterCount > 0 && source.ParameterCount == destination.ParameterCount)
-                    destination.SetParameters(source.GetParameters());
+                if (Layers[i] is LayerBase<T> sourceLayer
+                    && smallCopy.Layers[i] is LayerBase<T> destinationLayer
+                    && sourceLayer.ParameterCount > 0)
+                {
+                    try { destinationLayer.ResolveFromShape(sourceLayer.GetInputShape()); }
+                    catch (ArgumentException) { }
+                }
             }
+            try { smallCopy.Predict(new Tensor<T>(new[] { 3, _imageSize, _imageSize })); }
+            catch (ArgumentException) { }
+            var sourceLayers = _visionEncoderLayers
+                .Concat(_perceiverLayers)
+                .Concat(_gatedCrossAttentionLayers)
+                .Concat(_languageModelLayers)
+                .Concat(new[] { _patchEmbedding, _textTokenEmbedding, _outputProjection }
+                    .Where(layer => layer is not null)
+                    .Cast<ILayer<T>>())
+                .ToArray();
+            var destinationLayers = smallCopy._visionEncoderLayers
+                .Concat(smallCopy._perceiverLayers)
+                .Concat(smallCopy._gatedCrossAttentionLayers)
+                .Concat(smallCopy._languageModelLayers)
+                .Concat(new[] { smallCopy._patchEmbedding, smallCopy._textTokenEmbedding, smallCopy._outputProjection }
+                    .Where(layer => layer is not null)
+                    .Cast<ILayer<T>>())
+                .ToArray();
+            for (int i = 0; i < sourceLayers.Length && i < destinationLayers.Length; i++)
+            {
+                if (destinationLayers[i] is TransformerEncoderLayer<T> encoder
+                    && encoder.ParameterCount == 0)
+                {
+                    int embedding = i < _visionEncoderLayers.Count ? _visionHiddenDim : _lmHiddenDim;
+                    try { encoder.ResolveFromShape(new[] { 1, embedding }); }
+                    catch (ArgumentException) { }
+                }
+                destinationLayers[i].SetParameters(sourceLayers[i].GetParameters());
+            }
+            smallCopy._visionPositionalEmbeddings = _visionPositionalEmbeddings?.Clone();
+            smallCopy._perceiverQueries = _perceiverQueries?.Clone();
+            smallCopy._textPositionalEmbeddings = _textPositionalEmbeddings?.Clone();
+            smallCopy.SetTrainingMode(IsTrainingMode);
+            return smallCopy;
+        }
 
+        // Large models use COW/weight streaming and avoid flattening.
+        var result = base.DeepCopy();
+        if (result is FlamingoNeuralNetwork<T> copy && _useNativeMode)
+        {
             copy._visionPositionalEmbeddings = _visionPositionalEmbeddings?.Clone();
             copy._perceiverQueries = _perceiverQueries?.Clone();
             copy._textPositionalEmbeddings = _textPositionalEmbeddings?.Clone();
             copy.SetTrainingMode(IsTrainingMode);
-            return copy;
         }
-
-        return base.DeepCopy();
+        return result;
     }
 
     /// <inheritdoc/>
@@ -1277,8 +1319,28 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
         if (_useNativeMode)
         {
+            // Architecture.Layers may contain this instance's live layer objects.
+            // Rebuild the blueprint without that list so the COW clone owns fresh
+            // layer instances before rebinding their shared tensors.
+            var freshArchitecture = new NeuralNetworkArchitecture<T>(
+                Architecture.InputType,
+                Architecture.TaskType,
+                Architecture.Complexity,
+                Architecture.InputSize,
+                Architecture.InputHeight,
+                Architecture.InputWidth,
+                Architecture.InputDepth,
+                Architecture.OutputSize,
+                shouldReturnFullSequence: Architecture.ShouldReturnFullSequence,
+                imageEmbeddingDim: Architecture.ImageEmbeddingDim,
+                textEmbeddingDim: Architecture.TextEmbeddingDim,
+                inputFrames: Architecture.InputFrames)
+            {
+                RandomSeed = Architecture.RandomSeed
+            };
+
             return new FlamingoNeuralNetwork<T>(
-                Architecture,
+                freshArchitecture,
                 _embeddingDimension,
                 _maxSequenceLength,
                 _imageSize,
