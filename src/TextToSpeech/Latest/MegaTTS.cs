@@ -81,7 +81,17 @@ public class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new MegaTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honour the configured LearningRate / WeightDecay. Constructing the optimizer bare left it
+        // on AdamW's own defaults (InitialLearningRate 0.001), so MegaTTS trained at 10x the 1e-4
+        // its options specify and those two user-facing settings did nothing at all. The resulting
+        // overshoot showed up as Training_ShouldReduceLoss drifting upward (0.802 -> 0.837) even
+        // though the model's own training loss was decreasing. Same wiring as Piper in this family.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -281,7 +291,11 @@ public class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        // Pass the configured optimizer through, as Piper and MegaTTS2 do. Calling the
+        // two-argument overload left _optimizer assigned but never read, so training silently fell
+        // back to the base default and MegaTTS's LearningRate / WeightDecay options had no effect
+        // whatsoever.
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
