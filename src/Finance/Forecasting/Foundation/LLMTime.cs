@@ -162,8 +162,25 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Adam's stock 1e-3 is too hot for this stack: amplified through the transformer blocks it
+        // diverged the generated Training_ShouldReduceLoss probe from 0.488 to 3.054 and collapsed
+        // DifferentInputs_AfterTraining to an L2 of 1.6e-10, even though every gradient invariant
+        // (finite-difference, gradient-flow, param-L2) passes — so this is step size, not plumbing.
+        // Use the same conservative initial rate MOIRAI settled on for its transformer stack, with
+        // headroom to ramp toward the usual 1e-3 if a scheduler is attached.
+        var llmTimeAdamOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = 1e-6,
+            MinLearningRate = 1e-9,
+            MaxLearningRate = 1e-3,
+        };
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, llmTimeAdamOptions);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        // Wire it into the base slot. Without this _optimizer was assigned and never read: as a
+        // Finance model, Train routes through FinancialModelBase -> TrainWithTape(.., TrainingOptimizer),
+        // TrainingOptimizer defaults to null, and the framework default optimizer won instead. Same
+        // dead-dependency shape as MegaTTS/_optimizer and LiteDVDNet; MOIRAI wires it exactly this way.
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
         InitializeLayers();
