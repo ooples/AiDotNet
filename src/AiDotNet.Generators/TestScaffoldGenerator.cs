@@ -977,6 +977,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // precision, so trimming the many-iteration convergence probes to smoke counts keeps the
         // model paper-scale and still exercises the full train path.
         "Mask2Former", "EfficientSAM", "U2Seg", "KMaXDeepLab",
+        // MedCLIP (Wang et al. 2022): dual medical image/text CLIP encoder, 768-wide embeddings with
+        // a 512-wide projection. <float> was applied FIRST (it is in Fp32TestClassNames) and measured
+        // insufficient on the J-M shard — LossStrictlyDecreasesOnMemorizationTask still hit the 180 s
+        // gate and MoreData_ShouldNotDegrade the 120 s one, while its single-forward invariants pass.
+        // It is a VisionLanguage model, NOT audio, so the audio branch's auto-emitted Fp32 smoke caps
+        // do not reach it and the iteration cap has to come from this list — the same reason GraFPrint
+        // is handled here rather than by the audio branch. No double-emit results.
+        "MedCLIP",
         // DepthAnythingV2 (arXiv:2406.09414): DINOv2 ViT encoder + DPT decoder. After the
         // paper-faithful rewrite (real patch-embed + transformer encoder, tape-aware token
         // reassemble, sigmoid depth head) every single-forward / gradient / determinism /
