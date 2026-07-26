@@ -143,35 +143,137 @@ public class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
+    // Half-open [start, end) index ranges into Layers for each branch of the Mega-TTS
+    // decomposition. Populated by ExtractLayerReferences; -1 means "custom Architecture.Layers
+    // were supplied", in which case the forward degrades to a plain sequential dispatch.
+    private int _contentEnd = -1;
+    private int _prosodyEnd = -1;
+    private int _timbreEnd = -1;
+    private int _pllmEnd = -1;
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
             return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
             Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultProprietaryTTSLayers(
-                    _options.EncoderDim,
-                    _options.DecoderDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
+            return;
+        }
+
+        Layers.AddRange(
+            LayerHelper<T>.CreateDefaultMegaTTSLayers(
+                encoderDim: _options.EncoderDim,
+                decoderDim: _options.DecoderDim,
+                melChannels: _options.MelChannels,
+                prosodyDim: _options.ProsodyDim,
+                prosodyCodebookSize: _options.ProsodyCodebookSize,
+                timbreDim: _options.TimbreDim,
+                pllmDim: _options.PLLMDim,
+                numEncoderLayers: _options.NumEncoderLayers,
+                numDecoderLayers: _options.NumDecoderLayers,
+                numProsodyLayers: _options.NumProsodyLayers,
+                numTimbreLayers: _options.NumTimbreLayers,
+                numPLLMLayers: _options.NumPLLMLayers,
+                numHeads: _options.NumHeads,
+                numPLLMHeads: _options.NumPLLMHeads,
+                dropoutRate: _options.DropoutRate,
+                vocabSize: _options.VocabSize
+            )
+        );
+        ExtractLayerReferences();
     }
 
+    /// <summary>
+    /// Records where each branch of the decomposition starts and ends inside <see cref="Layers"/>.
+    /// The counts mirror the emission order in <c>LayerHelper.CreateDefaultMegaTTSLayers</c>.
+    /// </summary>
+    private void ExtractLayerReferences()
+    {
+        _contentEnd = 1 + _options.NumEncoderLayers;                  // embedding + encoder blocks
+        _prosodyEnd = _contentEnd + 2 + _options.NumProsodyLayers;    // proj + blocks + bottleneck
+        _timbreEnd = _prosodyEnd + 1 + _options.NumTimbreLayers;      // proj + blocks
+        _pllmEnd = _timbreEnd + 3 + _options.NumPLLMLayers;           // proj + blocks + logits + codebook
+    }
+
+    private Tensor<T> RunRange(Tensor<T> x, int start, int end)
+    {
+        var c = x;
+        for (int i = start; i < end; i++)
+            c = Layers[i].Forward(c);
+        return c;
+    }
+
+    /// <summary>
+    /// Mega-TTS forward (Jiang et al. 2023 §3): content, prosody and timbre are encoded on
+    /// separate branches with the inductive bias each attribute deserves, then fused for the mel
+    /// decoder. Phase is deliberately absent — the vocoder owns it.
+    /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        return ForwardNative(input);
+    }
+
+    private Tensor<T> ForwardNative(Tensor<T> input)
+    {
+        // Custom Architecture.Layers were supplied — honour them verbatim.
+        if (_contentEnd < 0)
+        {
+            var seq = input;
+            foreach (var l in Layers)
+                seq = l.Forward(seq);
+            return seq;
+        }
+
+        // 1. Content: the discrete, order-sensitive attribute gets the full transformer.
+        var content = RunRange(input, 0, _contentEnd);
+
+        // 2. Prosody: squeezed through the deliberately narrow bottleneck so it cannot carry
+        //    timbre or content, then re-predicted by the P-LLM as a distribution over the
+        //    codebook (softmax) which the codebook projection turns back into an embedding.
+        var prosodyLatent = RunRange(content, _contentEnd, _prosodyEnd);
+        var pllmLogits = RunRange(prosodyLatent, _timbreEnd, _pllmEnd - 1);
+        var codeWeights = Engine.Softmax(pllmLogits);
+        var prosodyFromCodes = Layers[_pllmEnd - 1].Forward(codeWeights);
+        var prosody = Engine.TensorAdd(prosodyLatent, prosodyFromCodes);
+
+        // 3. Timbre: mean-pooled over time so it is global and time-INVARIANT by construction —
+        //    the architecture is simply not given the capacity to let it drift within an
+        //    utterance, which is the paper's central inductive bias.
+        var timbreSeq = RunRange(content, _prosodyEnd, _timbreEnd);
+        var timbre = MeanOverTime(timbreSeq);
+
+        // 4. Fuse and decode to mel. DenseLayer infers its input width lazily, so the decoder's
+        //    entry projection absorbs the concatenated content+prosody+timbre width.
+        var fused = Engine.TensorConcatenate(
+            new[] { content, prosody, BroadcastOverTime(timbre, content) }, content.Rank - 1);
+        return RunRange(fused, _pllmEnd, Layers.Count);
+    }
+
+    /// <summary>Averages a [..., time, feature] tensor over its time axis, keeping the rank.</summary>
+    private Tensor<T> MeanOverTime(Tensor<T> x)
+    {
+        int timeAxis = x.Rank - 2;
+        if (timeAxis < 0)
+            return x;
+        return Engine.ReduceMean(x, new[] { timeAxis }, keepDims: true);
+    }
+
+    /// <summary>Repeats a pooled [..., 1, feature] tensor across the time axis of <paramref name="like"/>.</summary>
+    private Tensor<T> BroadcastOverTime(Tensor<T> pooled, Tensor<T> like)
+    {
+        int timeAxis = like.Rank - 2;
+        if (timeAxis < 0)
+            return pooled;
+        int steps = like.Shape[timeAxis];
+        var repeats = new Tensor<T>[steps];
+        for (int i = 0; i < steps; i++)
+            repeats[i] = pooled;
+        return Engine.TensorConcatenate(repeats, timeAxis);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -224,6 +326,15 @@ public class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         writer.Write(_options.NumDecoderLayers);
         writer.Write(_options.NumEncoderLayers);
         writer.Write(_options.NumHeads);
+        writer.Write(_options.ProsodyDim);
+        writer.Write(_options.ProsodyCodebookSize);
+        writer.Write(_options.NumProsodyLayers);
+        writer.Write(_options.ProsodyMelBands);
+        writer.Write(_options.TimbreDim);
+        writer.Write(_options.NumTimbreLayers);
+        writer.Write(_options.PLLMDim);
+        writer.Write(_options.NumPLLMLayers);
+        writer.Write(_options.NumPLLMHeads);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -239,6 +350,19 @@ public class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumEncoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
+        _options.ProsodyDim = reader.ReadInt32();
+        _options.ProsodyCodebookSize = reader.ReadInt32();
+        _options.NumProsodyLayers = reader.ReadInt32();
+        _options.ProsodyMelBands = reader.ReadInt32();
+        _options.TimbreDim = reader.ReadInt32();
+        _options.NumTimbreLayers = reader.ReadInt32();
+        _options.PLLMDim = reader.ReadInt32();
+        _options.NumPLLMLayers = reader.ReadInt32();
+        _options.NumPLLMHeads = reader.ReadInt32();
+        // The branch offsets are derived from the layer counts above, so they must be recomputed
+        // once the restored options are in place.
+        if (_useNativeMode && (Architecture.Layers is null || Architecture.Layers.Count == 0))
+            ExtractLayerReferences();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

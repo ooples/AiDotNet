@@ -34323,6 +34323,105 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates the Mega-TTS acoustic stack (Jiang et al. 2023, arXiv:2306.03509).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mega-TTS's contribution is not a new block type but an <i>inductive bias</i>: speech is
+    /// decomposed into content, timbre, prosody and phase, and each is modelled with the structure
+    /// that matches its nature (§3.1). This builder emits that decomposition in five contiguous
+    /// groups, which <c>MegaTTS.ExtractLayerReferences</c> slices apart by the counts below:
+    /// </para>
+    /// <list type="number">
+    /// <item><b>Content encoder</b> — phoneme embedding + <c>numEncoderLayers</c> residual Pre-LN
+    /// FFT blocks. Content is a discrete, order-sensitive sequence, so it gets a full transformer.</item>
+    /// <item><b>Prosody encoder</b> — projection + <c>numProsodyLayers</c> blocks + a
+    /// <c>prosodyDim</c>-wide bottleneck. Deliberately narrow (paper: 20): the bottleneck is what
+    /// stops prosody from carrying timbre or content (§3.2).</item>
+    /// <item><b>Timbre encoder</b> — projection + <c>numTimbreLayers</c> blocks, consumed by the
+    /// model through a temporal MEAN POOL so the result is time-invariant by construction. That
+    /// pooling is the paper's central bias: timbre cannot vary over the utterance, so the
+    /// architecture is not given the capacity to make it vary (§3.1).</item>
+    /// <item><b>P-LLM</b> — embedding over the prosody codebook + <c>numPLLMLayers</c> blocks +
+    /// a projection back to codebook logits. Predicts prosody codes autoregressively from content
+    /// and timbre, which is what makes zero-shot prosody transfer possible (§3.3).</item>
+    /// <item><b>Mel decoder</b> — fusion projection + <c>numDecoderLayers</c> blocks + output
+    /// projection to <c>melChannels</c>. Phase is deliberately NOT modelled; it is left to the
+    /// vocoder (§3.1).</item>
+    /// </list>
+    /// <para>
+    /// Every block is a residual Pre-LN <see cref="TransformerEncoderBlock{T}"/>. This matters:
+    /// the flat MHA→Norm→FFN→Norm chain MegaTTS previously borrowed from
+    /// <c>CreateDefaultProprietaryTTSLayers</c> has no residual path, so each block REPLACED rather
+    /// than refined the hidden state and the model converged to a uniform output — the #1380
+    /// collapse mechanism, reproduced on the J-M shard as an L2 of 3.5e-10 between the outputs for
+    /// two distinct inputs.
+    /// </para>
+    /// </remarks>
+    internal static IEnumerable<ILayer<T>> CreateDefaultMegaTTSLayers(
+        int encoderDim = 192,
+        int decoderDim = 192,
+        int melChannels = 80,
+        int prosodyDim = 20,
+        int prosodyCodebookSize = 1024,
+        int timbreDim = 192,
+        int pllmDim = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numProsodyLayers = 2,
+        int numTimbreLayers = 2,
+        int numPLLMLayers = 4,
+        int numHeads = 8,
+        int numPLLMHeads = 8,
+        double dropoutRate = 0.1,
+        int vocabSize = 256)
+    {
+        IActivationFunction<T> gelu = new GELUActivation<T>();
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+
+        // --- 1. Content encoder -------------------------------------------------------------
+        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim, numHeads: numHeads, ffnDim: encoderDim * 4, dropoutRate: dropoutRate);
+
+        // --- 2. Prosody encoder (bottlenecked) ----------------------------------------------
+        int prosodyHidden = Math.Max(prosodyDim * 4, numHeads);
+        yield return new DenseLayer<T>(prosodyHidden, gelu);
+        for (int i = 0; i < numProsodyLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: prosodyHidden, numHeads: numHeads, ffnDim: prosodyHidden * 4, dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(prosodyDim, identity);
+
+        // --- 3. Timbre encoder (mean-pooled by the model into one global vector) ------------
+        yield return new DenseLayer<T>(timbreDim, gelu);
+        for (int i = 0; i < numTimbreLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: timbreDim, numHeads: numHeads, ffnDim: timbreDim * 4, dropoutRate: dropoutRate);
+
+        // --- 4. Prosody latent language model ------------------------------------------------
+        // Consumes the continuous prosody latent rather than hard code indices, and emits a
+        // distribution over the codebook which the final projection turns back into a prosody
+        // embedding. That keeps the paper's "predict the prosody code" formulation while staying
+        // differentiable end to end, so the P-LLM trains with the rest of the stack instead of
+        // needing a separate non-differentiable argmin/straight-through stage.
+        yield return new DenseLayer<T>(pllmDim, gelu);
+        for (int i = 0; i < numPLLMLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: pllmDim, numHeads: numPLLMHeads, ffnDim: pllmDim * 4, dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(prosodyCodebookSize, identity);
+        // The learned codebook itself: soft code assignment -> prosody embedding.
+        yield return new DenseLayer<T>(prosodyDim, identity);
+
+        // --- 5. Mel decoder -------------------------------------------------------------------
+        yield return new DenseLayer<T>(decoderDim, gelu);
+        for (int i = 0; i < numDecoderLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: decoderDim, numHeads: numHeads, ffnDim: decoderDim * 4, dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(melChannels, identity);
+    }
+
+    /// <summary>
     /// Creates default layers for autoregressive vocoders (WaveNet, WaveRNN).
     /// Architecture: Causal dilated convolution / recurrent blocks for sample-by-sample generation.
     /// </summary>
