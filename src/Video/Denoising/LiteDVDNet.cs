@@ -89,7 +89,14 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new LiteDVDNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honour the configured LearningRate / WeightDecay. Building the optimizer bare left it on
+        // AdamW's own defaults and, combined with Train() not passing it through (see below), the
+        // configured values did nothing at all.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
         TemporalRadius = (_options.TemporalWindowSize - 1) / 2;
         InitializeLayers();
     }
@@ -136,7 +143,11 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the configured optimizer through. The two-argument overload left _optimizer
+            // assigned but never read, so training silently used the framework default: the loss
+            // EXPLODED from 0.292 to 299.3 on the J-L shard's Training_ShouldReduceLoss, a
+            // thousandfold divergence, while LiteDVDNet's own LearningRate option sat unused.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

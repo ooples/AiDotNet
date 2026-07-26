@@ -636,15 +636,56 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         // decoder-only path returned the raw [B, seqLen, numMixtures*3] head and
         // the MSE training loss threw a shape mismatch against the
         // [B, forecastHorizon, 1] target (e.g. [1,8,30] vs [1,4,1]).
+        // Per-POSITION extraction. The previous body mean-pooled the sequence axis away and then
+        // tiled a single scalar across the horizon, so the training output was identical at every
+        // horizon step. That is not what MOIRAI does — Woo et al. 2024 emit a mixture distribution
+        // PER timestep — and it makes the model structurally unable to fit horizon-varying targets:
+        // a constant can only ever match the target's mean, so the loss floor is the target's
+        // variance. That is exactly what the memorization probe saw (step-1 loss 0.0883 against a
+        // uniform[0,1] target whose variance is 0.0833 — already at the floor on iteration one,
+        // with nowhere to descend).
         if (current.Rank == 3)
         {
-            current = Engine.ReduceMean(current, axes: new[] { 1 }, keepDims: false);
+            return ExtractPerPositionPointPredictionsTapeSafe(current, _forecastHorizon);
         }
         if (current.Rank == 2)
         {
             current = ExtractPointPredictionsTapeSafe(current, _forecastHorizon);
         }
         return current;
+    }
+
+    /// <summary>
+    /// Tape-safe per-position mixture-weighted-mean extraction: maps a rank-3
+    /// <c>[B, seqLen, numMixtures*3]</c> head output to <c>[B, horizon, 1]</c> point predictions
+    /// that VARY along the horizon, rather than one pooled scalar repeated.
+    /// </summary>
+    /// <remarks>
+    /// Keeps the per-timestep predictive distributions the paper's head produces. When seqLen and
+    /// the horizon differ the sequence is aligned by taking the most recent <c>horizon</c>
+    /// positions (the forecast is anchored at the end of the context), or by repeating and
+    /// trimming when the sequence is shorter than the horizon.
+    /// </remarks>
+    private Tensor<T> ExtractPerPositionPointPredictionsTapeSafe(Tensor<T> mixtureOutput, int horizon)
+    {
+        int b = mixtureOutput.Shape[0];
+        int s = mixtureOutput.Shape[1];
+
+        var reshaped = Engine.Reshape(mixtureOutput, new[] { b, s, _numMixtures, 3 });
+        var weights = Engine.TensorSliceAxis(reshaped, 3, 0);            // [B, S, M]
+        var means = Engine.TensorSliceAxis(reshaped, 3, 1);              // [B, S, M]
+        var probs = Engine.Softmax(weights, axis: 2);                    // [B, S, M]
+        var weighted = Engine.TensorMultiply(probs, means);              // [B, S, M]
+        var perPosition = Engine.ReduceSum(weighted, new[] { 2 }, keepDims: true); // [B, S, 1]
+
+        if (s == horizon)
+            return perPosition;
+        if (s > horizon)
+            return Engine.TensorNarrow(perPosition, dim: 1, start: s - horizon, length: horizon);
+
+        int repeats = (horizon + s - 1) / s;
+        var tiled = Engine.TensorTile(perPosition, new[] { 1, repeats, 1 });
+        return Engine.TensorNarrow(tiled, dim: 1, start: 0, length: horizon);
     }
 
     /// <summary>
