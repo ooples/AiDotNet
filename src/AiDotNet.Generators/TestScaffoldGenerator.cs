@@ -3228,7 +3228,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "DropoutRate = 0.0 })";
             }
             else if ((model.ClassName == "MARS5TTS" || model.ClassName == "MaskGCT"
-                      || model.ClassName == "MinMo" || model.ClassName == "LlamaOmni")
+                      || model.ClassName == "MinMo" || model.ClassName == "LlamaOmni"
+                      || model.ClassName == "Voicebox" || model.ClassName == "VALLEX"
+                      || model.ClassName == "WhisperSpeech")
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
             {
@@ -3242,6 +3244,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // MaskGCT and MinMo were already on Fp32TestClassNames, so <float> was applied
                 // first and measured insufficient — these OOM during CONSTRUCTION, which halving
                 // element width cannot fix. MARS5TTS carried no mitigation at all.
+                // Voicebox, VALLEX and WhisperSpeech join from the T-Z shard, which ran only 23
+                // classes before hitting the 45-min job timeout: measured there at 356s, 231s and
+                // 199s of test time respectively — with VALLE (309s) and W2vBERT (251s), six
+                // classes accounted for roughly 24 of those 45 minutes. Voicebox and WhisperSpeech
+                // additionally failed Training_ShouldReduceLoss and
+                // LossStrictlyDecreasesOnMemorizationTask, which the smaller fixture also settles
+                // by keeping training stable at the default step size.
                 // Exercise the same embedding -> text encoder -> codec-LM -> token-head topology
                 // at smoke scale through the public options, exactly as the FireRedTTS bound above
                 // does for the same base. Production defaults are unchanged.
@@ -3250,6 +3259,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MARS5TTS" => "AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions",
                     "MaskGCT" => "AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions",
                     "LlamaOmni" => "AiDotNet.TextToSpeech.MultiModal.LlamaOmniOptions",
+                    "Voicebox" => "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions",
+                    "VALLEX" => "AiDotNet.TextToSpeech.CodecBased.VALLEXOptions",
+                    "WhisperSpeech" => "AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions",
                     _ => "AiDotNet.TextToSpeech.MultiModal.MinMoOptions",
                 };
                 pinInitSeed = true;
@@ -4342,6 +4354,45 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "PLLMDim = 32, NumEncoderLayers = 1, NumDecoderLayers = 1, NumProsodyLayers = 1, " +
                     "NumTimbreLayers = 1, NumPLLMLayers = 1, NumHeads = 2, NumPLLMHeads = 2, " +
                     "VocabSize = 64, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "W2vBERT" && model.TypeParameterCount == 1)
+            {
+                // W2vBERT keeps its production w2v-BERT stack by default — a 1024-wide, 24-layer
+                // conformer encoder over 30 s of 16 kHz audio. On the T-Z shard it measured 251 s of
+                // test time, one of six classes that consumed roughly 24 of the shard's 45 minutes
+                // before it hit the job timeout having run only 23 classes.
+                // Same option surface and same remedy as its MMS / OmnilangualASR neighbours below:
+                // exercise the identical feature-projection -> conformer -> CTC path through the
+                // public options at runner-safe scale. Production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "new AiDotNet.SpeechRecognition.Foundation.W2vBERTOptions { " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
+                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
+                    "MaxTextLength = 16, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "VALLE" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+            {
+                // VALL-E's production defaults are a two-stage neural codec LM: a 1024-wide,
+                // 12-layer autoregressive stage plus a 1024-wide, 12-layer non-autoregressive stage
+                // over an 8x1024 codec, across 30 s of audio. On the T-Z shard it measured 309 s of
+                // test time and failed LossStrictlyDecreasesOnMemorizationTask.
+                // Its configured LearningRate of 5e-4 was also being ignored entirely — the ctor
+                // built AdamW bare and Train() called the two-argument TrainWithTape — so it trained
+                // at the framework's 1e-3, twice the intended rate. That wiring is fixed separately;
+                // this bound brings the AR + NAR codec-LM topology to CI-smoke scale through the
+                // public options. Production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
+                    "inputSize: 16, outputSize: 8), " +
+                    "new AiDotNet.Audio.Generation.VALLEOptions { " +
+                    "MaxDurationSeconds = 1.0, ARHiddenDim = 32, NumARLayers = 1, NumARHeads = 2, " +
+                    "NARHiddenDim = 32, NumNARLayers = 1, NumNARHeads = 2, PhonemeVocabSize = 32, " +
+                    "CodebookSize = 16, NumCodebooks = 1, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "MMS" && model.TypeParameterCount == 1)
             {
@@ -6226,6 +6277,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumVisionLayers = 1, NumDecoderLayers = 1, NumHeads = 2, ImageSize = 32, " +
                     "MaxVisualTokens = 4, VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, " +
                     "DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "InternVL"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // InternVL (the base model) carries the same InternViT-6B scale as the InternVL2 /
+                // InternVL25 / InternVL3 siblings bounded directly below — 3200/4096 wide over
+                // 48+32 layers at 448px — but was the only one of the four never bounded. CI has
+                // not caught it because the G-I shard aborted after 22 classes on the InstructBLIP
+                // timeout and never reached it; with that fixed the shard gets here and InternVL
+                // produces 21 cascading OutOfMemoryExceptions, one class taking the whole run down.
+                // Note G-I is NOT in $heavyShards, so CI runs it with parallel collections — more
+                // concurrent memory than the serialized local repro, so this would fail there too.
+                // Same treatment as the siblings: keep the MLP-projection vision-to-decoder topology
+                // and instantiate it through the public options at scaffold scale. InternVL uses
+                // MLPProjection rather than the siblings' pixel-shuffle path, so it takes no
+                // PixelShuffleFactor / EnableDynamicResolution. Production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.InternVLOptions { VisionDim = 32, " +
+                    "DecoderDim = 32, ProjectionDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 2, ImageSize = 32, MaxVisualTokens = 4, VocabSize = 64, " +
+                    "MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "InternVL2"
                      && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
