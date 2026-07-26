@@ -968,7 +968,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "IART",
         // Segmentation foundation models (Swin/ViT encoder + transformer mask decoder) — 250-iter
         // MoreData / 100-iter memorization overrun 120 s on CPU (verified: solo timeout).
-        "Mask2Former", "EfficientSAM", "U2Seg",
+        // kMaX-DeepLab (Yu et al. 2022, arXiv:2207.04044 — k-means Mask Transformer for panoptic
+        // segmentation) is the same shape and was missed in the first pass: on the J-M shard its
+        // single-forward invariants all pass (DifferentInputs 1 s, Gradients_MatchFiniteDifference
+        // 5 ms, NamedLayerActivations 932 ms) while LossStrictlyDecreasesOnMemorizationTask hit the
+        // 180 s gate — exactly the profile this cap exists for. As with its siblings here, <float> is
+        // NOT applied: the family's cost is iteration count over a mask-decoder stack, not per-step
+        // precision, so trimming the many-iteration convergence probes to smoke counts keeps the
+        // model paper-scale and still exercises the full train path.
+        "Mask2Former", "EfficientSAM", "U2Seg", "KMaXDeepLab",
         // DepthAnythingV2 (arXiv:2406.09414): DINOv2 ViT encoder + DPT decoder. After the
         // paper-faithful rewrite (real patch-embed + transformer encoder, tape-aware token
         // reassemble, sigmoid depth head) every single-forward / gradient / determinism /
