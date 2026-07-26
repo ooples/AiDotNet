@@ -407,6 +407,12 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         // headline lr=1e-3), not the framework default.
         SetBaseTrainOptimizer(_optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        // Wire the loss into the base slot too. _lossFunction was assigned in both constructors
+        // and never read, so a caller-supplied lossFunction was silently discarded and training
+        // always used the framework default — the same dead-field shape as the optimizer above,
+        // which IS wired. (This does not change the default objective: the fallback here and the
+        // base default are both mean squared error.)
+        SetLossFunction(_lossFunction);
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
