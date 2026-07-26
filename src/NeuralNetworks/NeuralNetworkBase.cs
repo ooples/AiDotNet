@@ -11987,8 +11987,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (disposing)
         {
-            // Release compiled plans first so pooled tensor buffers the plans
-            // captured are freed before layers Dispose and return their weights.
+            // Release inference plans plus training plans/caches before layer disposal.
+            // CompiledTapeTrainingStep is thread-local/static and captures the
+            // live layer parameter tensors in its plan. Leaving that plan alive
+            // while the layers return their buffers to TensorAllocator lets the
+            // next model reuse those buffers before the stale plan is invalidated;
+            // disposing/replaying the old plan can then corrupt the new model's
+            // first step (observed as NaN -> GetLastLoss() == 0 in consecutive
+            // transformer-NER tests). It also pins the compiled activation and
+            // optimizer buffers after the owning model has been disposed.
+            if (Layers is not null)
+            {
+                var ownedTrainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(
+                    Layers, _layerStructureVersion);
+                Training.CompiledTapeTrainingStep<T>.InvalidateIfOwnedBy(ownedTrainableLayers);
+            }
+            Training.TapeTrainingStep<T>.InvalidateCache();
             _compileHost.Dispose();
 
             // Cascade Dispose into every layer that owns releasable state

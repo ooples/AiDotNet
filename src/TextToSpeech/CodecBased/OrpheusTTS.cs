@@ -229,8 +229,14 @@ public class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -308,9 +314,10 @@ public class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new OrpheusTTSOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new OrpheusTTS<T>(Architecture, mp, _options);
-        return new OrpheusTTS<T>(Architecture, _options);
+            return new OrpheusTTS<T>(Architecture, mp, options);
+        return new OrpheusTTS<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

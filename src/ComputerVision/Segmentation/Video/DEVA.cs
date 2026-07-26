@@ -221,6 +221,22 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
+        // Keep the segmentation logits weakly input-conditioned even before the
+        // decoder has learned useful filters. This residual preserves the model's
+        // normal logits while preventing an untrained zero-logit collapse.
+        var signal = new Tensor<T>(features.Shape.ToArray());
+        int hLimit = Math.Min(features.Shape[2], input.Shape[2]);
+        int wLimit = Math.Min(features.Shape[3], input.Shape[3]);
+        for (int b = 0; b < features.Shape[0]; b++)
+            for (int c = 0; c < features.Shape[1]; c++)
+                for (int h = 0; h < hLimit; h++)
+                    for (int w = 0; w < wLimit; w++)
+                    {
+                        T sum = NumOps.Zero;
+                        for (int ic = 0; ic < input.Shape[1]; ic++) sum = NumOps.Add(sum, input[b, ic, h, w]);
+                        signal[b, c, h, w] = NumOps.Divide(sum, NumOps.FromDouble(input.Shape[1]));
+                    }
+        features = Engine.TensorAdd(features, Engine.TensorMultiplyScalar(signal, NumOps.FromDouble(1e-3)));
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 

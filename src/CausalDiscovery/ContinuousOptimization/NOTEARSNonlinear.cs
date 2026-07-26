@@ -191,7 +191,8 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
                 if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
                     hasEdges = true;
 
-        return hasEdges ? result : FallbackCorrelationGraph(data);
+        var candidate = hasEdges ? result : FallbackCorrelationGraph(data);
+        return EnforceAcyclic(candidate);
     }
 
     #endregion
@@ -244,10 +245,9 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Forward pass for variable j: output = W2[j]^T * sigmoid(W1[j]^T * x + b1[j]) + b2[j]
     /// </summary>
-    private (double output, double[] hidden) ForwardMLP(Matrix<T> data, int sample, int j, int d)
+    private double ForwardMLP(Matrix<T> data, int sample, int j, int d, double[] hidden)
     {
         int h = _b1[j].Length;
-        var hidden = new double[h];
 
         for (int k = 0; k < h; k++)
         {
@@ -261,7 +261,7 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         for (int k = 0; k < h; k++)
             output += hidden[k] * _W2[j][k];
 
-        return (output, hidden);
+        return output;
     }
 
     /// <summary>
@@ -315,13 +315,14 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         }
 
         double totalLoss = 0;
+        var hidden = new double[h];
 
         // Compute loss and data gradients for each sample
         for (int sample = 0; sample < n; sample++)
         {
             for (int j = 0; j < d; j++)
             {
-                var (pred, hidden) = ForwardMLP(data, sample, j, d);
+                double pred = ForwardMLP(data, sample, j, d, hidden);
                 double residual = pred - NumOps.ToDouble(data[sample, j]);
                 totalLoss += residual * residual;
 
