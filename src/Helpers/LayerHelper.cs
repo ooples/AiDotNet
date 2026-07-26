@@ -11231,37 +11231,44 @@ public static class LayerHelper<T>
         int numHeads = 12,
         int vocabSize = 30522)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Patch embedding: conv with kernel=16, stride=16 on full image → (imageSize/16)^2 patches
-        yield return new ConvolutionalLayer<T>(visionDim, 16, 16, 0);
-        yield return new LayerNormalizationLayer<T>();
+        if (imageSize < 16 || imageSize % 16 != 0)
+            throw new ArgumentOutOfRangeException(nameof(imageSize), imageSize,
+                "Image size must be a positive multiple of the 16-pixel patch size.");
+        if (visionLayers < 0)
+            throw new ArgumentOutOfRangeException(nameof(visionLayers));
+        if (fusionLayers < 0)
+            throw new ArgumentOutOfRangeException(nameof(fusionLayers));
+        if (numHeads <= 0 || visionDim % numHeads != 0 || fusionDim % numHeads != 0)
+            throw new ArgumentException("Attention heads must evenly divide both visionDim and fusionDim.", nameof(numHeads));
 
-        for (int i = 0; i < Math.Min(visionLayers, 6); i++)
+        int numPatches = (imageSize / 16) * (imageSize / 16);
+
+        // Convert channels-first RGB pixels to a token sequence before LayerNorm/attention.
+        // The previous ConvolutionalLayer left [C,H,W] in channels-first layout, causing
+        // attention to interpret image width as embedding width. It then routed continuous
+        // visual activations through EmbeddingLayer as if they were integer token IDs.
+        yield return new PatchEmbeddingLayer<T>(16, visionDim, expectedInputChannels: 3);
+        yield return new LayerNormalizationLayer<T>();
+        yield return new PositionalEncodingLayer<T>(numPatches, visionDim);
+
+        for (int i = 0; i < visionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionDim * 4, geluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, visionDim * 4, visionDim);
         }
 
-        // Text encoder
-        yield return new EmbeddingLayer<T>(vocabSize, textDim);
-        yield return new PositionalEncodingLayer<T>(512, textDim);
-        yield return new LayerNormalizationLayer<T>();
+        // The single-tensor neural-network contract carries visual tokens. Project them
+        // into the configured fusion width instead of treating pixels as vocabulary IDs.
+        if (visionDim != fusionDim)
+            yield return new DenseLayer<T>(fusionDim, identityActivation);
 
-        // Fusion layers
         for (int i = 0; i < fusionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (fusionDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(fusionDim * 4, geluActivation);
-            yield return new DenseLayer<T>(fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, fusionDim * 4, fusionDim);
         }
 
+        _ = textDim;
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 
@@ -32711,15 +32718,18 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateGriffinLayers(
         int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512)
+        int modelDimension = 2048,
+        int numLayers = 24,
+        int maxSeqLength = 2048,
+        int recurrenceDimension = 2560)
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
-            yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
+            yield return new RealGatedLinearRecurrenceLayer<T>(
+                maxSeqLength, modelDimension, recurrenceDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // Return raw logits and fuse log-softmax with cross-entropy in the model loss.
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -32728,15 +32738,18 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateHawkLayers(
         int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512)
+        int modelDimension = 2048,
+        int numLayers = 24,
+        int maxSeqLength = 2048,
+        int recurrenceDimension = 2560)
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
-            yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
+            yield return new RealGatedLinearRecurrenceLayer<T>(
+                maxSeqLength, modelDimension, recurrenceDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // Return raw logits and fuse log-softmax with cross-entropy in the model loss.
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>

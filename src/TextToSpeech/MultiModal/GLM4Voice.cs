@@ -233,6 +233,10 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
         }
     }
 
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
@@ -312,8 +316,8 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GLM4Voice<T>(Architecture, mp, _options);
-        return new GLM4Voice<T>(Architecture, _options);
+            return new GLM4Voice<T>(Architecture, mp, new GLM4VoiceOptions(_options));
+        return new GLM4Voice<T>(Architecture, new GLM4VoiceOptions(_options));
     }
 
     private void ThrowIfDisposed()

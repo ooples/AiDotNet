@@ -20,7 +20,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// <code>
 ///   r_t = sigmoid(W_r * x_t + b_r)           // Recurrence gate
 ///   i_t = sigmoid(W_i * x_t + b_i)           // Input gate
-///   a_t = diag(r_t) * diag(exp(-softplus(c))) // Gated decay (c is a learned parameter)
+///   log(a_t) = -8 * softplus(Lambda) * r_t    // Paper's stable gated-decay form
 ///   h_t = a_t * h_{t-1} + sqrt(1 - a_t^2) * (i_t * (W_x * x_t))
 ///   y_t = h_t
 /// </code>
@@ -207,9 +207,19 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _inputGateBias.Fill(NumOps.Zero);
         InitializeTensor(_valueProjectionWeights);
 
-        // Initialize decay ~ 0.9 per step (softplus(2.2) ≈ 2.3, exp(-2.3) ≈ 0.1 -> 1-0.1=0.9)
+        // Griffin, Section 2.4: c=8 and a^c is uniform in [0.9, 0.999]. The
+        // numerically-stable implementation in Appendix A parameterizes
+        // log(a) = -softplus(Lambda), so solve Lambda = log((1-a)/a) for each
+        // sampled a. The previous positive 2.2..2.7 initialization produced
+        // a≈0.06..0.10 and then multiplied it directly by r_t, erasing nearly
+        // all recurrent state in one step instead of initializing long memory.
+        const double recurrencePower = 8.0;
         for (int i = 0; i < _recurrenceDimension; i++)
-            _decayParam[i] = NumOps.FromDouble(2.2 + Random.NextDouble() * 0.5);
+        {
+            double aToC = 0.9 + Random.NextDouble() * 0.099;
+            double a = Math.Pow(aToC, 1.0 / recurrencePower);
+            _decayParam[i] = NumOps.FromDouble(Math.Log((1.0 - a) / a));
+        }
 
         InitializeTensor(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
@@ -376,21 +386,20 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         int batchSize, int seqLen)
     {
         var hiddenList = new System.Collections.Generic.List<Tensor<T>>(seqLen);
+        // Griffin and Hawk define h_0 as zero. TensorAllocator.Rent guarantees
+        // zero-initialized logical storage while retaining arena/pool reuse.
         var h = TensorAllocator.Rent<T>(new[] { batchSize, _recurrenceDimension });
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
-        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) once per forward as a
-        // [recurrenceDim] tensor. The closed form is
-        //     exp(-softplus(c)) = exp(-log(1 + e^c)) = 1 / (1 + e^c) = sigmoid(-c),
-        // so a single tape-connected Engine.Sigmoid(Engine.TensorNegate(_decayParam))
-        // both (a) keeps _decayParam on the autodiff graph — the prior
-        // NumOps.ToDouble/Math.Exp scalar loop detached it, so the learned decay
-        // never received a gradient under tape-based training — and (b) stays
-        // numerically stable, since sigmoid saturates gracefully for large |c|.
-        // It is also a single SIMD-accelerated engine op rather than the
-        // (recDim × batchSize) NumOps virtual dispatches per timestep the loop cost.
-        var baseDecay = Engine.Sigmoid(Engine.TensorNegate(_decayParam));
+        // Griffin Appendix A, Eq. 6: log(a_t) = -c*softplus(Lambda)*r_t,
+        // with c=8. Keep the entire expression on the protected base Engine so
+        // Lambda and the recurrence gate both receive tape gradients. A shaped
+        // constant is used because TensorMultiplyScalar bypasses this tape.
+        var softplusDecay = Engine.Softplus(_decayParam);
+        var negativeC = Tensor<T>.CreateDefault(
+            new[] { _recurrenceDimension }, NumOps.FromDouble(-8.0));
+        var negativeCSoftplus = Engine.TensorMultiply(softplusDecay, negativeC);
 
         // A constant `ones` tensor for the tape-connected (1 - a²) computation.
         // Engine.TensorMultiplyScalar / TensorAddScalar do NOT propagate on the
@@ -398,6 +407,8 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         // so we use TensorSubtract against this constant instead.
         var onesForMagnitude = Tensor<T>.CreateDefault(
             new[] { batchSize, _recurrenceDimension }, NumOps.One);
+        var magnitudeFloor = Tensor<T>.CreateDefault(
+            new[] { batchSize, _recurrenceDimension }, NumOps.FromDouble(1e-7));
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -408,14 +419,17 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             // Value projection: v_t = x_t @ W_v   ([batch, recDim])
             var v_t = Engine.TensorMatMul(x_t, _valueProjectionWeights);
 
-            // Decay: a_t = r_t * baseDecay (broadcast [batch, recDim] × [recDim])
-            var a_t = Engine.TensorBroadcastMultiply(r_t, baseDecay);
+            // Decay: a_t = exp(-8 * softplus(Lambda) * r_t).
+            var logA_t = Engine.TensorBroadcastMultiply(r_t, negativeCSoftplus);
+            var a_t = Engine.TensorExp(logA_t);
 
             // Magnitude-preserving factor: sqrtFactor = sqrt(max(0, 1 - a²)),
             // composed from tape-connected element-wise tensor ops.
             var aSquared = Engine.TensorSquare(a_t);
             var oneMinusASquared = Engine.TensorSubtract(onesForMagnitude, aSquared);
-            var clamped = Engine.TensorReLU(oneMinusASquared);
+            // A finite positive floor avoids the sqrt derivative singularity at
+            // exactly zero if finite-precision exp rounds a_t to one.
+            var clamped = Engine.TensorMax(oneMinusASquared, magnitudeFloor);
             var sqrtFactor = Engine.TensorSqrt(clamped);
 
             // h_t = a_t · h_{t-1} + sqrtFactor · (i_t · v_t)
@@ -424,22 +438,10 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             var aHPrev = Engine.TensorMultiply(a_t, h);
             var hNext = Engine.TensorAdd(aHPrev, weighted);
 
-            // Update h in-place for next iteration. h is rented from the
-            // allocator and we want to keep using the same buffer; bulk-copy
-            // hNext's full storage into h via Engine.TensorCopy rather than
-            // reassigning the local (which would drop the rented reference).
-            // The previous element-wise write loop allocated 2 fresh int[]
-            // index arrays per (batch, recurrenceDim) pair — at seqLen=1024,
-            // batchSize=16, recurrenceDim=256 that's ~8 million per-call
-            // allocations and erodes the SIMD gains from the gate/output
-            // computation above. Engine.TensorCopy dispatches to the
-            // SIMD-aware bulk path used by ConvLSTMLayer / Bidirectional
-            // and friends.
-            // Keep the tape node as the running hidden state so the time recurrence
-            // stays on the autodiff graph. The previous Engine.TensorCopy into a
-            // rented buffer detached h from hNext, breaking gradient flow through the
-            // recurrence (and the SetSlice-assembled output) so the gate/value/decay
-            // weights never received a gradient.
+            // Keep hNext itself as the running state so recurrence history remains
+            // on the autodiff tape.
+            // Copying hNext into a separate buffer would detach the recurrence and
+            // prevent gate/value/decay gradients.
             h = hNext;
             hiddenList.Add(Engine.Reshape(h, new[] { batchSize, 1, _recurrenceDimension }));
 

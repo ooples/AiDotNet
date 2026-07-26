@@ -10428,6 +10428,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var largeCopy = CreateNewInstance();
             if (largeCopy is NeuralNetworkBase<T> largeBase && largeBase._layers.Count == _layers.Count)
             {
+                CopyCloneRuntimeConfigurationTo(largeBase);
+
                 // A DeepCopy clone is a transient in-memory copy whose weights are materialized
                 // resident below. Suppress its independent weight-streaming auto-enable: the
                 // process-wide WeightRegistry / streaming pool is a singleton that cannot host two
@@ -10515,6 +10517,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // matching guard in the large/custom-layer copy path above.
             copyBase.DisableAutoStreaming();
             copyBase.DeserializeInternalUnchecked(serialized);
+            CopyCloneRuntimeConfigurationTo(copyBase);
             // Base LayerBase.Serialize does NOT persist the per-layer RandomSeed, so the
             // serialize/deserialize roundtrip drops it. Transfer it (and the wired latch) so the
             // clone's stochastic layers (DropoutLayer) reproduce the source's dropout stream — see
@@ -10554,6 +10557,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             (copy as IDisposable)?.Dispose();
             return false;
         }
+
+        CopyCloneRuntimeConfigurationTo(copyBase);
 
         // A COW clone keeps its (shared) weights resident; suppress its independent weight-streaming
         // auto-enable so it does not re-Configure the process-wide singleton streaming pool owned by the
@@ -10756,6 +10761,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // the source layers are unseeded (production default).
         CopyLayerRandomSeedsTo(copyBase);
         return true;
+    }
+
+    /// <summary>
+    /// Copies public runtime training policy to an in-memory clone without copying
+    /// optimizer moments or other trajectory state. These settings are deliberately
+    /// not part of model persistence, but a clone used as another training worker must
+    /// retain the caller's selected memory/precision strategy.
+    /// </summary>
+    private void CopyCloneRuntimeConfigurationTo(NeuralNetworkBase<T> destination)
+    {
+        destination.StreamingTraining = StreamingTraining;
+        destination.FastApproxGradClip = FastApproxGradClip;
+        destination.StreamingTrainingLearningRate = StreamingTrainingLearningRate;
+        destination.StreamingTrainingWeightDecay = StreamingTrainingWeightDecay;
     }
 
     /// <summary>
