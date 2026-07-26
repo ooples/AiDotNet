@@ -837,7 +837,7 @@ jobs:
           - name: Integration H-L
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.H|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.I|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.J|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.K|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.L)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=SerialPerf&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.H|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.I|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.J|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.K|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.L)'
           - name: Integration M
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0

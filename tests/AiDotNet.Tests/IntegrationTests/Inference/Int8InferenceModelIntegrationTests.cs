@@ -154,6 +154,23 @@ public class Int8InferenceModelIntegrationTests
             $"Quantized: {int8.QuantizedWeightBytes} bytes, original: {int8.OriginalWeightBytes} bytes.");
     }
 
+    // SerialPerf: this is a WALL-CLOCK ratio guard, and it only means anything when nothing else
+    // is competing for CPU. Run alongside the rest of Integration H-L it measures runner
+    // contention rather than the dequant primitive, and the median-of-5 hardening added earlier
+    // cannot fix that, because each round's ratio couples TWO independent noise sources — when the
+    // sub-millisecond fp32 baseline happens to be slow the ratio looks healthy no matter how int8
+    // performed. Three consecutive CI runs show the failure mode plainly:
+    //   4.35x PASS  (int8 14.607ms / fp32 3.358ms)
+    //   4.43x PASS  (int8 23.823ms / fp32 0.496ms)  <- int8 nearly 2x SLOWER than the failing run
+    //   22.20x FAIL (int8 12.858ms / fp32 0.424ms)
+    // The run that passed most comfortably had the WORST int8 time, so the guard was inverted with
+    // respect to the thing it exists to protect. Measured serially in a container at runner parity
+    // the same test reports a stable 16.86x and passes.
+    // Route it to the dedicated serial shard, exactly as TransformerTrainPathReproIssue1227And1228
+    // and Issue1296LargeXTrainBatching already are, so the 20x ceiling keeps its full strength
+    // instead of being relaxed to absorb noise. The trait is on the METHOD, not the class: the
+    // other six tests here are correctness checks and stay in Integration H-L.
+    [Xunit.Trait("Category", "SerialPerf")]
     [Fact(Timeout = 180000)]
     public async Task FromTrained_PredictWallClockGapVsFP32_DocumentsCurrentState()
     {
