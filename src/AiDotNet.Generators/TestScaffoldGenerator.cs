@@ -992,6 +992,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // do not reach it and the iteration cap has to come from this list — the same reason GraFPrint
         // is handled here rather than by the audio branch. No double-emit results.
         "MedCLIP",
+        // MaskAdapter (open-vocabulary segmentation): mask-proposal adapter over a CLIP backbone.
+        // On the J-M shard every invariant passes — including Gradients_MatchFiniteDifference and
+        // LossStrictlyDecreasesOnMemorizationTask — and only MoreData_ShouldNotDegrade hit the
+        // 120 s gate. Vision/Language family, so like MedCLIP above the cap has to come from this
+        // list rather than the audio branch's auto-emitted Fp32 caps.
+        "MaskAdapter",
         // DepthAnythingV2 (arXiv:2406.09414): DINOv2 ViT encoder + DPT decoder. After the
         // paper-faithful rewrite (real patch-embed + transformer encoder, tape-aware token
         // reassemble, sigmoid depth head) every single-forward / gradient / determinism /
@@ -3199,6 +3205,40 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName == "MARS5TTS" || model.ClassName == "MaskGCT"
+                      || model.ClassName == "MinMo")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
+            {
+                // Three CodecTtsOptions models whose production defaults are foundation-scale
+                // codec LMs — an 8x1024 codec-token head behind a wide, deep autoregressive
+                // decoder (MARS5-TTS 1536-wide/24-layer, MaskGCT 1024-wide/16-layer, MinMo
+                // 1024-wide/12-layer). On the J-M shard they produced 16, 22 and 4
+                // OutOfMemoryExceptions respectively, cascading across nearly every invariant in
+                // each class because a class that OOMs mid-suite leaves too little headroom for
+                // the tests that follow it.
+                // MaskGCT and MinMo were already on Fp32TestClassNames, so <float> was applied
+                // first and measured insufficient — these OOM during CONSTRUCTION, which halving
+                // element width cannot fix. MARS5TTS carried no mitigation at all.
+                // Exercise the same embedding -> text encoder -> codec-LM -> token-head topology
+                // at smoke scale through the public options, exactly as the FireRedTTS bound above
+                // does for the same base. Production defaults are unchanged.
+                string codecOptionsType = model.ClassName switch
+                {
+                    "MARS5TTS" => "AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions",
+                    "MaskGCT" => "AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions",
+                    _ => "AiDotNet.TextToSpeech.MultiModal.MinMoOptions",
+                };
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    $"new {codecOptionsType} {{ NumCodebooks = 1, " +
+                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
+                    "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    "DropoutRate = 0.0 }})";
             }
             else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
