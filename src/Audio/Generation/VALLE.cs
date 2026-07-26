@@ -259,7 +259,11 @@ public class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the configured optimizer through. The two-argument overload left _optimizer
+            // assigned and never read, so training silently used the framework default and any
+            // caller-supplied optimizer was discarded. Same dead-dependency shape already fixed on
+            // MegaTTS, LiteDVDNet, LLMTime and InstructBLIP.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

@@ -159,8 +159,23 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Adam's stock 1e-3 diverged this stack on the T-Z shard: Training_ShouldReduceLoss and
+        // LossStrictlyDecreasesOnMemorizationTask both failed while the single-forward invariants
+        // passed. Use the same conservative initial rate MOIRAI and LLMTime settled on for their
+        // transformer stacks, with headroom to ramp if a scheduler is attached.
+        var yingLongAdamOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = 1e-6,
+            MinLearningRate = 1e-9,
+            MaxLearningRate = 1e-3,
+        };
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, yingLongAdamOptions);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        // Wire it into the base slot. Without this _optimizer was assigned and never read: as a
+        // Finance model, Train routes through FinancialModelBase -> TrainWithTape(.., TrainingOptimizer),
+        // TrainingOptimizer defaults to null, and the framework default optimizer won instead.
+        // Identical dead-dependency shape to LLMTime; MOIRAI wires it exactly this way.
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
         InitializeLayers();
