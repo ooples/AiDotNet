@@ -206,6 +206,12 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     private int _totalPatches;
 
     /// <summary>
+    /// Per-call counter that varies the masked-encoder pattern across training steps while keeping
+    /// the sequence reproducible. See <see cref="ApplyRandomMasking"/>.
+    /// </summary>
+    private int _maskStepCounter;
+
+    /// <summary>
     /// Model size variant.
     /// </summary>
     private FoundationModelSize _modelSize;
@@ -1235,7 +1241,21 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     private Tensor<T> ApplyRandomMasking(Tensor<T> input)
     {
         var masked = new Tensor<T>(input._shape);
-        var rand = RandomHelper.CreateSecureRandom();
+        // Reproducible-but-varying mask per step: seed off the configured seed plus a per-call
+        // counter, so the mask sequence is deterministic across runs yet still sweeps different
+        // patches so the encoder learns the full masked objective. Mirrors MGTSD's train-step
+        // seeding in this same folder.
+        //
+        // This previously called RandomHelper.CreateSecureRandom(), which is UNSEEDED — so MOIRAI
+        // ignored its own Seed option entirely and no training run was reproducible. It also
+        // constructed a fresh cryptographic RNG on every Train call. The non-determinism surfaced
+        // on the J-M shard as LossStrictlyDecreasesOnMemorizationTask failing (step 1 = 0.088,
+        // step 20 = 0.161): the memorization probe trains repeatedly on ONE fixed pair, but a
+        // re-randomized mask each step means the model never sees the same input twice, so the
+        // loss wanders instead of descending.
+        int maskSeed = _options.Seed ?? Architecture?.RandomSeed ?? 12345;
+        var rand = RandomHelper.CreateSeededRandom(maskSeed + _maskStepCounter);
+        _maskStepCounter++;
 
         // Copy input data
         for (int i = 0; i < input.Length; i++)
