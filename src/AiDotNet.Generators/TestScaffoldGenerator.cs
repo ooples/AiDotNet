@@ -6170,6 +6170,56 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 2, NumQFormerHeads = 2, NumQueryTokens = 4, MaxVisualTokens = 4, " +
                     "VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
             }
+            else if ((model.ClassName == "KimiVL" || model.ClassName == "KimiVLThinking")
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.Reasoning.", System.StringComparison.Ordinal))
+            {
+                // Kimi-VL and Kimi-VL-Thinking are 16B-total / 2B-active MoE VLMs: a 1024-wide
+                // 24-layer MoonViT feeding a 4096-wide 28-layer / 32-head decoder over 384px images
+                // with a 128k vocabulary, plus 128K long-context and (for Thinking) a 4096-token
+                // reasoning chain. Both throw OutOfMemoryException in their generated forward probe
+                // on a 16 GB runner.
+                // Preserve the complete MoonViT -> resampler -> MoE-decoder topology at CI-smoke
+                // scale through the public options; 32px / sqrt(4 tokens) gives a legal 16px patch
+                // for ComputePatchSize(). The long-context / long-thinking switches are turned off
+                // because they size buffers independently of the dims above. Production defaults are
+                // unchanged.
+                string kimiOptionsType = model.ClassName == "KimiVL"
+                    ? "AiDotNet.VisionLanguage.Reasoning.KimiVLOptions"
+                    : "AiDotNet.VisionLanguage.Reasoning.KimiVLThinkingOptions";
+                string kimiLongContextFlag = model.ClassName == "KimiVL"
+                    ? "EnableLongContext = false"
+                    : "EnableLongThinking = false";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    $"new {kimiOptionsType} {{ ImageSize = 32, " +
+                    "VisionDim = 32, DecoderDim = 32, ProjectionDim = 32, NumVisionLayers = 1, " +
+                    "NumDecoderLayers = 1, NumHeads = 2, MaxVisualTokens = 4, VocabSize = 64, " +
+                    "MaxSequenceLength = 8, MaxGenerationLength = 8, MaxReasoningTokens = 8, " +
+                    $"{kimiLongContextFlag}, DropoutRate = 0.0 }})";
+            }
+            else if (model.ClassName == "Llama32Vision"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // Llama 3.2 Vision's production defaults are the 11B-class stack: a 1024-wide
+                // 24-layer vision tower feeding a 4096-wide 32-layer / 32-head decoder through a
+                // 4096-wide MLP projection, over 336px images at 576 visual tokens. Its generated
+                // forward probe throws OutOfMemoryException on a 16 GB runner, making it the second
+                // model (after MiniGPT-v2) that takes the J-M shard down.
+                // Preserve the complete patch encoder -> vision transformer -> MLP projection ->
+                // decoder topology at CI-smoke scale through the public options. As with Gemma3
+                // above, 32px / sqrt(4 tokens) yields a legal 16px patch for ComputePatchSize(), and
+                // 2 heads divide both dims. Production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.Llama32VisionOptions { ImageSize = 32, " +
+                    "VisionDim = 32, DecoderDim = 32, ProjectionDim = 32, NumVisionLayers = 1, " +
+                    "NumDecoderLayers = 1, NumHeads = 2, MaxVisualTokens = 4, VocabSize = 64, " +
+                    "MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "MiniGPTv2"
                      && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
             {
