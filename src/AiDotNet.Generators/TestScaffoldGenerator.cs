@@ -998,6 +998,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 120 s gate. Vision/Language family, so like MedCLIP above the cap has to come from this
         // list rather than the audio branch's auto-emitted Fp32 caps.
         "MaskAdapter",
+        // MoG (diffusion frame interpolation). The CI-smoke constructorExpr already cut it from 5
+        // failures to 1 by shrinking the fixture, but even at 2 frames of 8x8 with 2 denoising
+        // steps the 50+200-iteration MoreData probe still overran the 120 s gate — a diffusion
+        // forward is inherently multi-pass, so per-iteration cost stays high however small the
+        // model gets. Pair the bound with the iteration cap, exactly as BasicVSR and
+        // DepthAnythingV2 above do. Video family, so this list is the right home for the cap.
+        "MoG",
         // DepthAnythingV2 (arXiv:2406.09414): DINOv2 ViT encoder + DPT decoder. After the
         // paper-faithful rewrite (real patch-embed + transformer encoder, tape-aware token
         // reassemble, sigmoid depth head) every single-forward / gradient / determinism /
