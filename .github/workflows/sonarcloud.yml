@@ -723,12 +723,26 @@ jobs:
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
               (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I)
-          - name: ModelFamily - Generated Layers J-M
+          # J-M in turn never once COMPLETED: every run either OOMed (MiniGPT-v2 / Llama-3.2-Vision /
+          # Kimi-VL, all bounded now) or ran out the 45-min budget. It carries 183 generated classes,
+          # and the last CI run covered only 44 of them in 14.4 min of execution before dying —
+          # ~61 min extrapolated for the whole shard, well over the job timeout. Split J-M → J-L + M
+          # so each serial half finishes under it (~24 min / ~37 min on the same extrapolation).
+          # The M half holds the heavy tail (Mask2Former, MaskDINO, MedSAM/MedSAM2, MPLUG-Owl,
+          # MiniGPT, MusicSourceSeparator), which is why the cut is not at the midpoint by count.
+          # Gap-free + non-overlapping: union == J-M.
+          - name: ModelFamily - Generated Layers J-L
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
+              (FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L)
+          - name: ModelFamily - Generated Layers M
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              FullyQualifiedName~Generated.M
           # N-Z was a single serial $heavyShard whose ~835 default-gate scaffold
           # methods ran the full 45-min job timeout and got CANCELLED before
           # finishing — perpetually red, like Integration C / NeuralNetworks A-L
@@ -989,7 +1003,8 @@ jobs:
             'ModelFamily - Generated Layers A-C',
             'ModelFamily - Generated Layers D-F',
             'ModelFamily - Generated Layers G-I',
-            'ModelFamily - Generated Layers J-M',
+            'ModelFamily - Generated Layers J-L',
+            'ModelFamily - Generated Layers M',
             'ModelFamily - Generated Layers N-P',
             'ModelFamily - Generated Layers Q-S',
             'ModelFamily - Generated Layers T-Z',
