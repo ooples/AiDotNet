@@ -6170,6 +6170,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 2, NumQFormerHeads = 2, NumQueryTokens = 4, MaxVisualTokens = 4, " +
                     "VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "MiniGPTv2"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // MiniGPT-v2 carries the same foundation-scale stack as its MiniGPT-4 sibling above —
+                // EVA-ViT-G/14 (1408-wide, 39 layers) and a LLaMA-2 decoder (4096-wide, 32 layers,
+                // 32 heads) over a 768-wide/12-layer Q-Former. MiniGPT-4 was bounded on PR #1789 but
+                // v2 was missed, and it is the model that OOMs the J-M shard: memory climbs from
+                // ~9 GB to the 16 GB runner cap in ~20 s the moment its fixture constructs, killing
+                // the shard before the rest of J-M runs (confirmed locally under a 16 GiB cgroup —
+                // MiniGPTv2Tests.NamedLayerActivations_ShouldBeNonEmpty throws OutOfMemoryException).
+                // Keep the identical topology — 14px patch embed, vision transformer, Q-Former
+                // cross-attention, projection, decoder — at CI-smoke scale through the public
+                // options. 28px gives a real 2x2 grid of 14px patches. Production defaults are
+                // unchanged; every value here is a user-settable option.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.MiniGPTv2Options { ImageSize = 28, " +
+                    "VisionDim = 32, QFormerDim = 32, DecoderDim = 32, ProjectionDim = 32, " +
+                    "NumVisionLayers = 1, NumQFormerLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 2, NumQFormerHeads = 2, NumQueryTokens = 4, MaxVisualTokens = 4, " +
+                    "VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "DFNCLIP" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.VisionLanguage.Encoders.", System.StringComparison.Ordinal))
             {
