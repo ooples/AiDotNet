@@ -522,6 +522,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // generation — they have manual reduced-scale scaffolds — so they are not listed here.)
         "HuBERTASR", "Wav2Vec2ASR", "WavLMASR", "BESTRQ", "W2vBERT", "SPIRAL", "AVHuBERT",
         "WavLMRobust", "OmnilangualASR", "MMS", "USM", "XLSR",
+        // MedicalASR (SpeechRecognition/Specialized): carried no mitigation at all. On the J-M shard
+        // every single-forward, gradient and determinism invariant passes and only the
+        // many-iteration MoreData_ShouldNotDegrade probe hit the 120 s gate — the usual deep-ASR
+        // encoder profile. It is an Audio-domain model, so listing it here gets both <float> and the
+        // audio branch's auto-emitted smoke-iteration caps; it must NOT also go in
+        // HeavyTrainingTimeoutClassNames or the override properties would be double-emitted.
+        "MedicalASR",
         // wav2vec-2 lineage foundation/ASR models sharing the BERT-base-scale (12-layer / 768-dim
         // conv-encoder + RESIDUAL transformer) design. Wav2Vec2 / HuBERT / WavLM use
         // CreateDefaultFoundationModelLayers; Wav2Vec2Model uses CreateWav2Vec2Layers. After the
