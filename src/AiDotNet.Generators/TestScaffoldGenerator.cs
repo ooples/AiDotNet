@@ -3238,7 +3238,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new {codecOptionsType} {{ NumCodebooks = 1, " +
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 }})";
+                    "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
