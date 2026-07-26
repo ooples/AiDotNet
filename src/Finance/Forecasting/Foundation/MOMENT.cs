@@ -129,6 +129,13 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    // RevIN (reversible instance normalization, Kim et al. 2022) statistics, captured by
+    // ApplyInstanceNormalization so ForwardNative can restore each instance's level on the
+    // way out. Without the reverse step the forecast head emits in normalized space, so the
+    // series' own scale is discarded — a constant-valued input normalizes to all-zeros and
+    // every such series yields a bit-identical forecast.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
     private int _contextLength;
     private int _forecastHorizon;
     private int _patchLength;
@@ -576,6 +583,10 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input._shape);
 
+        // Retain the per-instance statistics for the RevIN reverse step in ForwardNative.
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
+
         for (int b = 0; b < batchSize; b++)
         {
             T mean = NumOps.Zero;
@@ -600,6 +611,9 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
             T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
 
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
             for (int t = 0; t < seqLen; t++)
             {
                 int idx = b * seqLen + t;
@@ -611,6 +625,40 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the forecast
+    /// so it lands on the input series' original scale.
+    /// </summary>
+    /// <remarks>
+    /// MOMENT normalizes every input instance to zero mean / unit variance before the patch
+    /// embedding, which is what lets one pretrained encoder serve series of wildly different
+    /// magnitudes. That transform is only valid if it is undone on the way out — RevIN is
+    /// *reversible* by construction. Without this step the forecast head's output stays in
+    /// normalized space, so a series with level 1000 forecasts near 0, and any constant-valued
+    /// series (variance 0, so every element maps to exactly 0) becomes indistinguishable from
+    /// every other constant series.
+    /// </remarks>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
+
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
@@ -793,6 +841,10 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
 
         foreach (var layer in Layers)
             current = layer.Forward(current);
+
+        // RevIN reverse step, applied while `current` is still [batch, forecastHorizon] so the
+        // per-instance statistics broadcast down the horizon.
+        current = DenormalizeForecast(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = Engine.Reshape(current, new[] { current.Shape[1] });
