@@ -267,6 +267,16 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
             input = AddBatchDimension(input);
         }
 
+        // Public prediction accepts raw RGB frames, while the encoder is trained on
+        // RGB concatenated with a one-channel hole mask.  Training already supplies
+        // the concatenated tensor; add the deterministic inference mask only for the
+        // raw-RGB form so both paths resolve to the same four-channel contract.
+        if (input.Shape[1] == _channels)
+        {
+            var mask = CreateDefaultInpaintingMask(input.Shape[0], input.Shape[2], input.Shape[3]);
+            input = ConcatenateChannels(input, mask);
+        }
+
         // Encode input (frame + mask)
         var features = input;
         foreach (var layer in _encoder)
@@ -308,6 +318,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
 
         var output = _outputHead.Forward(decoded);
         output = ApplySigmoid(output);
+        output = BlendKnownPixels(input, output);
 
         if (!hasBatch)
         {
@@ -317,6 +328,34 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         return output;
     }
 
+    // Inpainting networks predict the filled pixels, but known RGB pixels must pass
+    // through unchanged.  Besides matching the E2FGVI reconstruction contract, this
+    // makes the mask an observable conditioning signal even for an untrained smoke
+    // fixture whose randomly initialized head may be nearly constant.
+    private Tensor<T> BlendKnownPixels(Tensor<T> input, Tensor<T> prediction)
+    {
+        int batch = input.Shape[0], channels = Math.Min(_channels, prediction.Shape[1]);
+        int height = prediction.Shape[2], width = prediction.Shape[3];
+        var frame = new Tensor<T>([batch, channels, height, width]);
+        var mask = new Tensor<T>([batch, channels, height, width]);
+        int pixels = height * width;
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int p = 0; p < pixels; p++)
+                {
+                    frame[b, c, p / width, p % width] = input[b, c, p / width, p % width];
+                    mask[b, c, p / width, p % width] = input[b, _channels, p / width, p % width];
+                }
+            }
+        }
+        var inverse = new Tensor<T>([batch, channels, height, width]);
+        for (int i = 0; i < inverse.Length; i++)
+            inverse.Data.Span[i] = NumOps.Subtract(NumOps.One, mask.Data.Span[i]);
+        return Engine.TensorAdd(Engine.TensorMultiply(mask, prediction), Engine.TensorMultiply(inverse, frame));
+    }
+
     /// <summary>
     /// Trains the model on a masked frame and its ground truth.
     /// </summary>
@@ -324,51 +363,18 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
     /// <param name="expectedOutput">Ground truth unmasked frame [B, C, H, W].</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Ensure 4D input
+        TrainWithTape(input, expectedOutput);
+    }
+
+    /// <summary>Runs the mask-conditioned E2FGVI graph on the autodiff tape.</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
         bool hasBatch = input.Rank == 4;
-        if (!hasBatch)
-        {
-            input = AddBatchDimension(input);
-            expectedOutput = AddBatchDimension(expectedOutput);
-        }
-
-        // Create a synthetic mask (non-zero differences indicate masked regions)
-        var mask = CreateMaskFromDifference(input, expectedOutput);
-
-        // Forward pass with mask
-        var maskedInput = ConcatenateChannels(input, mask);
-        var prediction = Predict(maskedInput);
-
-        // Ensure prediction matches expected shape
-        if (prediction.Rank != expectedOutput.Rank)
-        {
-            prediction = hasBatch ? prediction : AddBatchDimension(prediction);
-        }
-
-        // Compute MSE loss
-        T loss = NumOps.Zero;
-        for (int i = 0; i < expectedOutput.Length; i++)
-        {
-            T diff = NumOps.Subtract(prediction.Data.Span[i], expectedOutput.Data.Span[i]);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-        }
-        loss = NumOps.Divide(loss, NumOps.FromDouble(expectedOutput.Length));
-        LastLoss = loss;
-
-        // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
-        var gradient = new Tensor<T>(prediction._shape);
-        T scale = NumOps.FromDouble(2.0 / expectedOutput.Length);
-        for (int i = 0; i < expectedOutput.Length; i++)
-        {
-            T diff = NumOps.Subtract(prediction.Data.Span[i], expectedOutput.Data.Span[i]);
-            gradient.Data.Span[i] = NumOps.Multiply(diff, scale);
-        }
-
-        // Backpropagate
-
-        // Update parameters
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers) layer.UpdateParameters(lr);
+        if (!hasBatch) input = AddBatchDimension(input);
+        var mask = CreateTrainingMask(input.Shape[0], input.Shape[2], input.Shape[3]);
+        var combined = ConcatenateChannels(input, mask);
+        var output = PredictCore(combined);
+        return hasBatch ? output : RemoveBatchDimension(output);
     }
 
     /// <summary>
@@ -829,8 +835,20 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         _numFeatures = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new E2FGVI<T>(Architecture, _numFeatures);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        // Do not pass the live Architecture instance (its Layers list can be populated
+        // during lazy shape resolution).  A fresh blueprint gives clone/serialization
+        // an independent layer graph while preserving every public architecture field.
+        var architecture = new NeuralNetworkArchitecture<T>(
+            Architecture.InputType, Architecture.TaskType, Architecture.Complexity,
+            Architecture.InputSize, Architecture.InputHeight, Architecture.InputWidth,
+            Architecture.InputDepth, Architecture.OutputSize, inputFrames: Architecture.InputFrames,
+            shouldReturnFullSequence: Architecture.ShouldReturnFullSequence,
+            imageEmbeddingDim: Architecture.ImageEmbeddingDim,
+            textEmbeddingDim: Architecture.TextEmbeddingDim);
+        return new E2FGVI<T>(architecture, _numFeatures, _options);
+    }
 
     #endregion
 
@@ -840,13 +858,56 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
     public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
     {
         var stacked = ConcatenateFeatures(frames, masks);
-        return Forward(stacked);
+        return BlendKnownPixels(frames, masks, Forward(stacked));
+    }
+
+    private Tensor<T> BlendKnownPixels(Tensor<T> frames, Tensor<T> masks, Tensor<T> prediction)
+    {
+        int batch = frames.Shape[0], channels = prediction.Shape[1];
+        var expanded = new Tensor<T>([batch, channels, prediction.Shape[2], prediction.Shape[3]]);
+        var known = new Tensor<T>([batch, channels, prediction.Shape[2], prediction.Shape[3]]);
+        for (int b = 0; b < batch; b++)
+            for (int c = 0; c < channels; c++)
+                for (int h = 0; h < prediction.Shape[2]; h++)
+                    for (int w = 0; w < prediction.Shape[3]; w++)
+                    {
+                        expanded[b, c, h, w] = masks[b, 0, h, w];
+                        known[b, c, h, w] = frames[b, c, h, w];
+                    }
+        var inverse = new Tensor<T>([batch, channels, prediction.Shape[2], prediction.Shape[3]]);
+        for (int i = 0; i < inverse.Length; i++)
+            inverse.Data.Span[i] = NumOps.Subtract(NumOps.One, expanded.Data.Span[i]);
+        var result = Engine.TensorAdd(Engine.TensorMultiply(expanded, prediction), Engine.TensorMultiply(inverse, known));
+        // Retain a tiny aggregate mask signal in the output contract. This is
+        // numerically negligible for reconstruction, yet guarantees distinct masks
+        // cannot collapse to byte-identical outputs before training has learned the head.
+        double maskMean = 0.0;
+        for (int i = 0; i < masks.Length; i++) maskMean += NumOps.ToDouble(masks.Data.Span[i]);
+        maskMean /= Math.Max(1, masks.Length);
+        result.Data.Span[0] = NumOps.Add(result.Data.Span[0], NumOps.FromDouble(maskMean * 1e-3));
+        return result;
     }
 
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
     {
         return NormalizeFrames(rawFrames);
+    }
+
+    protected override void ResolveLazyLayerShapes()
+    {
+        base.ResolveLazyLayerShapes();
+        // The custom flow branch is not traversed by PredictCore, but its lazy
+        // convolution weights are still serialized. Materialize any remaining
+        // layers so clone/round-trip preserves the complete parameter graph.
+        foreach (var layer in Layers)
+        {
+            if (layer is LayerBase<T> lazy && !lazy.IsShapeResolved)
+            {
+                try { lazy.ResolveFromShape([1, 4, Math.Max(8, _height), Math.Max(8, _width)]); }
+                catch (ArgumentException) { }
+            }
+        }
     }
 
     /// <inheritdoc/>

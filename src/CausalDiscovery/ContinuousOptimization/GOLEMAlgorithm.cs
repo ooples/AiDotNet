@@ -88,6 +88,10 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
     public GOLEMAlgorithm(CausalDiscoveryOptions? options = null, bool equalVariance = true)
     {
         ApplyOptions(options);
+        // Preserve GOLEM's published 50,000-step default while honoring the
+        // common MaxIterations option when callers explicitly provide it.
+        if (options?.MaxIterations is null)
+            MaxIterations = DEFAULT_NUM_ITERATIONS;
         _equalVariance = equalVariance;
     }
 
@@ -112,7 +116,7 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
         double prevObj = double.MaxValue;
         _lastIterations = 0;
 
-        for (int iter = 1; iter <= DEFAULT_NUM_ITERATIONS; iter++)
+        for (int iter = 1; iter <= MaxIterations; iter++)
         {
             _lastIterations = iter;
 

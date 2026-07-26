@@ -23,6 +23,21 @@ public class ODISESegmentationOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        ChannelDimensions = (int[])other.ChannelDimensions.Clone();
+        StageDepths = (int[])other.StageDepths.Clone();
+        DecoderDimension = other.DecoderDimension;
     }
+
+    /// <summary>
+    /// Gets or sets the four diffusion-backbone stage widths. The defaults preserve
+    /// ODISE's paper-scale feature hierarchy.
+    /// </summary>
+    public int[] ChannelDimensions { get; set; } = [320, 640, 1280, 1280];
+
+    /// <summary>Gets or sets the block count in each diffusion-backbone stage.</summary>
+    public int[] StageDepths { get; set; } = [2, 2, 2, 2];
+
+    /// <summary>Gets or sets the panoptic decoder width.</summary>
+    public int DecoderDimension { get; set; } = 256;
 
 }

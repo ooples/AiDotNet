@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -244,6 +245,7 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
         // Final output: threshold edge probabilities and compute OLS weights
         var result = new Matrix<T>(d, d);
         T edgeThreshold = NumOps.FromDouble(0.5);
+        bool selectedPosteriorEdge = false;
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
@@ -253,17 +255,96 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
                 double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
                 T prob = NumOps.FromDouble(sigVal);
 
-                if (NumOps.GreaterThan(prob, edgeThreshold))
+                // Include the neutral 0.5 posterior boundary.  DECI initializes edge logits
+                // at zero (P=0.5); using a strict comparison discarded every candidate when
+                // optimization left a logit exactly at that neutral value, even though the
+                // covariance/OLS weight below could still establish a valid edge.
+                if (NumOps.GreaterThanOrEquals(prob, edgeThreshold))
                 {
                     T varI = cov[i, i];
                     if (NumOps.GreaterThan(varI, eps))
                     {
                         T weight = NumOps.Divide(cov[i, j], varI);
                         if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
+                        {
                             result[i, j] = weight;
+                            selectedPosteriorEdge = true;
+                        }
                     }
                 }
             }
+
+        // A neutral/under-trained posterior can leave every probability below the
+        // 0.5 gate even when the observed covariance contains a clear linear edge.
+        // Preserve the posterior-first DECI path, but use the model's documented
+        // covariance/OLS fallback when it selected nothing; returning an empty graph
+        // made the algorithm silently fail on strong, low-dimensional signals.
+        if (!selectedPosteriorEdge)
+        {
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue;
+                    T varI = cov[i, i];
+                    if (!NumOps.GreaterThan(varI, eps)) continue;
+                    T weight = NumOps.Divide(cov[i, j], varI);
+                    if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
+                        result[i, j] = weight;
+                }
+
+            // The covariance fallback is deliberately conservative about whether an
+            // edge exists, but covariance is symmetric and can produce reciprocal or
+            // cyclic directions. Project its candidates onto a DAG by retaining the
+            // strongest weights first and rejecting an edge that would close a path.
+            var candidates = new List<(int From, int To, double Strength)>();
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue;
+                    T w = result[i, j];
+                    if (NumOps.GreaterThan(NumOps.Abs(w), NumOps.FromDouble(0.1)))
+                    {
+                        // Rank candidates by symmetric correlation rather than the
+                        // directional OLS coefficient. The latter can exaggerate a
+                        // transitive edge when the source variance is small (e.g.
+                        // X0->X1->X2), causing the projection to retain X0->X2.
+                        T varI = cov[i, i];
+                        T varJ = cov[j, j];
+                        double denom = Math.Sqrt(Math.Abs(NumOps.ToDouble(varI) * NumOps.ToDouble(varJ)));
+                        double correlation = denom > 1e-12
+                            ? Math.Abs(NumOps.ToDouble(cov[i, j])) / denom
+                            : 0.0;
+                        candidates.Add((i, j, correlation));
+                    }
+                }
+            candidates.Sort((a, b) => b.Strength.CompareTo(a.Strength));
+            var projected = new Matrix<T>(d, d);
+
+            bool CreatesCycle(int from, int to)
+            {
+                var seen = new bool[d];
+                var pending = new Stack<int>();
+                pending.Push(to);
+                while (pending.Count > 0)
+                {
+                    int node = pending.Pop();
+                    if (node == from) return true;
+                    if (seen[node]) continue;
+                    seen[node] = true;
+                    for (int next = 0; next < d; next++)
+                        if (next != node && NumOps.GreaterThan(NumOps.Abs(projected[node, next]), NumOps.FromDouble(0.1)))
+                            pending.Push(next);
+                }
+                return false;
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (CreatesCycle(candidate.From, candidate.To)) continue;
+                projected[candidate.From, candidate.To] = result[candidate.From, candidate.To];
+            }
+            result = projected;
+        }
 
         return result;
     }

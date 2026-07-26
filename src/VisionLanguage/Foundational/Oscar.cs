@@ -103,8 +103,18 @@ public class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         : base(architecture)
     {
         _options = options ?? new OscarOptions();
+        if (_options.LearningRate <= 0.0 || double.IsNaN(_options.LearningRate) || double.IsInfinity(_options.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be finite and greater than zero.");
+        if (_options.WeightDecay < 0.0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay must be finite and non-negative.");
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;
@@ -272,8 +282,14 @@ public class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -319,6 +335,8 @@ public class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         writer.Write(_options.FusionDim);
         writer.Write(_options.NumFusionLayers);
         writer.Write(_options.NumHeads);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.WeightDecay);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -333,6 +351,8 @@ public class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         _options.FusionDim = reader.ReadInt32();
         _options.NumFusionLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.WeightDecay = reader.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
         if (_useNativeMode)
@@ -343,9 +363,10 @@ public class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new OscarOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Oscar<T>(Architecture, mp, _options);
-        return new Oscar<T>(Architecture, _options);
+            return new Oscar<T>(Architecture, mp, options);
+        return new Oscar<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

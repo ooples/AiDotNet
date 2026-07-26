@@ -24,36 +24,8 @@ public class OpenCLIPOptions : ContrastiveEncoderOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public OpenCLIPOptions(OpenCLIPOptions other)
+        : base(other)
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
-        Seed = other.Seed;
-        ImageSize = other.ImageSize;
-        VisionEmbeddingDim = other.VisionEmbeddingDim;
-        VisionEncoderVariant = other.VisionEncoderVariant;
-        PatchSize = other.PatchSize;
-        NumVisionLayers = other.NumVisionLayers;
-        NumVisionHeads = other.NumVisionHeads;
-        VisionFfnMultiplier = other.VisionFfnMultiplier;
-        TextEmbeddingDim = other.TextEmbeddingDim;
-        TextEncoderVariant = other.TextEncoderVariant;
-        MaxSequenceLength = other.MaxSequenceLength;
-        VocabSize = other.VocabSize;
-        NumTextLayers = other.NumTextLayers;
-        NumTextHeads = other.NumTextHeads;
-        ProjectionDim = other.ProjectionDim;
-        Temperature = other.Temperature;
-        DropoutRate = other.DropoutRate;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
-        ImageEncoderModelPath = other.ImageEncoderModelPath;
-        TextEncoderModelPath = other.TextEncoderModelPath;
-        OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        WeightDecay = other.WeightDecay;
-        WarmUpSteps = other.WarmUpSteps;
-        LabelSmoothing = other.LabelSmoothing;
         Dataset = other.Dataset;
         UseCoCaVariant = other.UseCoCaVariant;
         Precision = other.Precision;
