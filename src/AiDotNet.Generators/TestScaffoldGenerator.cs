@@ -4244,14 +4244,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // situation, and same remedy, as the FastSpeech bound above: keep the production
                 // defaults untouched and exercise the identical content / prosody-bottleneck /
                 // timbre / P-LLM / mel-decoder topology through the public options at smoke scale.
-                // Widths stay divisible by the head counts, and outputSize tracks MelChannels
-                // because the decoder's final projection emits mel channels.
+                // Widths stay divisible by the head counts, and output shape follows the text-to-mel branch
+                // (8 tokens -> [8, 80] mel).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 8, outputSize: 16), " +
+                    "inputSize: 8, outputSize: 80), " +
                     "new AiDotNet.TextToSpeech.Latest.MegaTTSOptions { EncoderDim = 32, DecoderDim = 32, " +
-                    "MelChannels = 16, ProsodyDim = 8, ProsodyCodebookSize = 32, TimbreDim = 32, " +
+                    "ProsodyDim = 8, ProsodyCodebookSize = 32, TimbreDim = 32, " +
                     "PLLMDim = 32, NumEncoderLayers = 1, NumDecoderLayers = 1, NumProsodyLayers = 1, " +
                     "NumTimbreLayers = 1, NumPLLMLayers = 1, NumHeads = 2, NumPLLMHeads = 2, " +
                     "VocabSize = 64, DropoutRate = 0.0 })";
@@ -11798,6 +11798,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "E2TTS" => true,
             // Mega-TTS 2 consumes text/prosody tokens and predicts acoustic mel frames.
             "MegaTTS2" => true,
+            // Mega-TTS (v1) is the same contract as MegaTTS2 above and was simply missed here. Its
+            // content branch is phoneme-embedding-first, so the harness must supply integer token
+            // IDs; while it was absent from this list the generic path fed it continuous 0.1/0.9
+            // constants, which the embedding rounded to the same handful of indices and which no
+            // amount of training could separate.
+            "MegaTTS" => true,
             // Proprietary-API TTS wrappers (text input, API does synthesis).
             "WellSaidLabs" => true,
             "ElevenLabsTTS" => true,
