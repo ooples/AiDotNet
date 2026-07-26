@@ -4232,6 +4232,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 4, " +
                     "MaxDetections = 4, NumClassEmbeddings = 32, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "MMS" && model.TypeParameterCount == 1)
+            {
+                // MMS (Pratap et al. 2023) keeps its production wav2vec2-large stack by default:
+                // 1024-wide, 24-layer encoder over 30 s of 16 kHz audio for 1100+ languages.
+                // <float> was applied FIRST (MMS is in Fp32TestClassNames) and measured insufficient
+                // on the J-M shard: it is both the slowest class in M at 342 s of test time and the
+                // one that OOMs — Clone_AfterTraining_ShouldPreserveLearnedWeights holds the model,
+                // its clone and the optimizer moments at once and threw OutOfMemoryException with the
+                // runner at 14.9 GB of 16. Same remedy as its OmnilangualASR neighbour below:
+                // exercise the identical feature-projection -> transformer -> CTC path through the
+                // public options at runner-safe scale. Production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.MMSOptions { " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
+                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
+                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+            }
             else if (model.ClassName == "OmnilangualASR" && model.TypeParameterCount == 1)
             {
                 // The production defaults remain the paper-scale 24-layer,
