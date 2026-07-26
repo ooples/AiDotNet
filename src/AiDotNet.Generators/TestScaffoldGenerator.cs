@@ -6299,6 +6299,32 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumDecoderLayers = 1, NumHeads = 2, MaxVisualTokens = 4, VocabSize = 64, " +
                     "MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "InstructBLIP"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.Generative.", System.StringComparison.Ordinal))
+            {
+                // InstructBLIP (Dai et al. NeurIPS 2023) carries the same EVA-ViT-G + Q-Former +
+                // Vicuna scale as its MiniGPT-4 sibling below — 1408/4096 dims over 39/32 layers —
+                // and was simply never bounded. On the G-I shard it blows the 120 s per-test gate,
+                // and WHICH test trips first varies with ordering: CI failed
+                // ForwardPass_ShouldBeFinite_AfterTraining while a local runner-parity repro failed
+                // Predict_ShouldBeDeterministic, both with "Test execution timed out after 120000
+                // milliseconds". That is cost, not correctness.
+                // Keep the identical patch-embed -> vision transformer -> Q-Former bridge ->
+                // decoder topology at CI-smoke scale through the public options, exactly as the
+                // MiniGPT4 / MiniGPTv2 bounds do. ImageSize stays a multiple of the 14px patch size
+                // this family's PatchEmbeddingLayer requires (28 gives a real 2x2 grid), which is
+                // the constraint the InstructBLIP entry in the Q-Former patch-size list documents.
+                // Production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Generative.InstructBLIPOptions { ImageSize = 28, " +
+                    "VisionDim = 32, QFormerDim = 32, DecoderDim = 32, " +
+                    "NumVisionLayers = 1, NumQFormerLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 2, NumQFormerHeads = 2, NumQueryTokens = 4, " +
+                    "VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "MiniGPT4"
                      && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
             {
@@ -7723,7 +7749,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // shows a transient Adam first-step warm-up rise at step 2, so the strict 2-iteration
             // memorization check fails even though Training_ShouldReduceLoss passes. A few more steps
             // clear the hump; its fast test-scale forward keeps 15 well inside the 180 s budget.
-            sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "GroundedSAM2" ? 15 : 2)};");
+            // GLaMM shows the SAME transient first-step rise GroundedSAM2 does — measured on the G-I
+            // shard, step 1 = 1.433492 against step 2 = 1.499923 — so the strict 2-iteration check
+            // fails while Training_ShouldReduceLoss, GradientFlow, Gradients_MatchFiniteDifference and
+            // OptimizerStep_ParamL2_DoesNotExplode all pass, and its optimizer is correctly wired
+            // (AdamW at 5e-5 passed through to TrainWithTape). It needs more steps to clear the hump,
+            // but NOT GroundedSAM2's 15: GLaMM is the heaviest grounding backbone here, measured at
+            // 31 s for 2 iterations locally (15 s on CI), so 15 would risk the 180 s gate on the slower
+            // of the two. 8 is the compromise — enough steps past the warm-up, with headroom left.
+            int memorizationIterations = model.ClassName switch
+            {
+                "GroundedSAM2" => 15,
+                "GLaMM" => 8,
+                _ => 2,
+            };
+            sb.AppendLine($"    protected override int MemorizationTaskIterations => {memorizationIterations};");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
 
             // GLaMM alone (VisionDim 1024 x 24 vision layers — the largest grounding backbone here)
