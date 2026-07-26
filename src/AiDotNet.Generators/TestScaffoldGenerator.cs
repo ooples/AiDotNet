@@ -6731,6 +6731,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     }
                 }
             }
+            else if (model.ClassName == "MoG" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
+            {
+                // MoG is DIFFUSION-based frame interpolation: its production defaults run 20
+                // denoising steps over a 3-scale flow pyramid with 64 features, so a single forward
+                // is 20 passes through the whole stack. On the J-M shard that overran the 120 s gate
+                // on MoreData_ShouldNotDegrade, and the timed-out probe left enough pressure behind
+                // that the very next test (Metadata_ShouldExist, which only constructs the model)
+                // threw OutOfMemoryException. Its structural invariants — interpolated-frame
+                // bracketing, batch consistency, input sensitivity, output dimensions — all pass.
+                // Same treatment as the DualXVSR / DAMVSR video fixtures below: keep the native
+                // diffusion-interpolation layer family and training path, at a small legal CI scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, " +
+                    "outputSize: 4), " +
+                    "new AiDotNet.Video.Options.MoGOptions { " +
+                    "NumFeatures = 8, NumDiffusionSteps = 2, NumFlowScales = 1, " +
+                    "NumResBlocks = 1, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "DualXVSR" && model.TypeParameterCount == 1)
             {
                 // DualX-VSR (Cao et al. 2025) is a real-world video
