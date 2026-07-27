@@ -1269,17 +1269,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "Upscale4KAgent",
         // VideoLISA had no bound and ran its training probes out of memory outright.
         "VideoLISA",
-        // Generated Q-S: RemoteCLIP is a CLIP dual-encoder at the same scaffold scale as its
-        // already-listed siblings DeCLIP / LLM2CLIP (VisionLanguageTestBase<float>, InputShape
-        // [3, 128, 128]) but was the only one of them missing a repetition bound, so it inherited
-        // the base 50+200-step MoreData probe and the 100-step memorization probe. Precision-first
-        // measurement on this PR: its sibling 10-iteration Training_ShouldChangeParameters takes
-        // 24 s, i.e. ~2 s per train step, so the 250-step MoreData probe needs ~500 s against a
-        // 120 s per-test gate — both MoreData_ShouldNotDegrade and
-        // LossStrictlyDecreasesOnMemorizationTask timed out in the Q-S shard. Bound the repetition
-        // only: the paper architecture, numerical tolerances and decrease thresholds are unchanged,
-        // and every training assertion still executes against the real forward/backward path.
-        "RemoteCLIP",
+        // NOTE: RemoteCLIP was previously bounded here, but it is now handled one rung further up
+        // by HeavyTrainingTimeoutClassNames (its cap) PLUS a dedicated CI-smoke constructorExpr.
+        // Keeping it in BOTH lists double-emits TrainingIterations / MoreDataShortIterations /
+        // MoreDataLongIterations / MemorizationTaskIterations and fails the build with CS0102.
     };
 
     // Attribute metadata names
@@ -7230,6 +7223,32 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumResBlocks = 2, CleaningModuleBlocks = 2, ScaleFactor = 2, NumFrames = 4, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "SEEDX" && model.TypeParameterCount == 1)
+            {
+                // Generated Q-S: SEEDX was constructed with NO options at all, so it inherited the
+                // full paper-scale SEEDXOptions defaults - DecoderDim 4096 x NumDecoderLayers 32
+                // (a LLaMA-2 7B-class decoder), VocabSize 32000, NumVisualTokens 8192,
+                // ImageSize 448. Every one of its 32 generated tests failed, and the two genuine
+                // failures were System.OutOfMemoryException in Metadata_ShouldExist (23 s) and
+                // MoreData_ShouldNotDegrade (1 m 16 s); the rest were the 1 ms xunit cascade that
+                // follows a process-level OOM - which also poisoned REBFormer in the same run.
+                // The OOM happens in Metadata_ShouldExist, a test that only CONSTRUCTS the model
+                // and runs zero training iterations, so an iteration cap
+                // (BoundedGeneratedTrainingClassNames) provably cannot fix it and shrinking is the
+                // correct rung. Exercise the SAME topology (multi-granularity vision encoder ->
+                // visual-token codebook -> LLaMA decoder) at CI-smoke width through the public
+                // options; production defaults and user customization remain unchanged. ImageSize
+                // and the architecture stay at 128 so the emitted InputShape [3, 128, 128] still
+                // matches the forward path - only widths, depths and the codebook shrink.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Unified.SEEDXOptions { VisionDim = 64, " +
+                    "DecoderDim = 64, NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, " +
+                    "ImageSize = 128, VocabSize = 256, NumVisualTokens = 64, " +
+                    "OutputImageSize = 128, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "Cutie" && model.TypeParameterCount == 1)
             {
                 // Cutie (Cheng et al. 2023) is a video object-segmentation model with a working-memory
@@ -9952,7 +9971,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
                     // NaturalSpeech clears its measured AdamW warm-up at five steps;
                     // the other bounded FP32 end-to-end models remain at two.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    // SpeechT5 joins AudioLM / IndexTTS2 at fifteen: at the two-step bound its
+                    // memorization probe was judged between step 1 and step 2, which lands inside
+                    // the Adam warm-up overshoot rather than on the real trajectory - measured
+                    // step 1 = 15.629474 rising to step 2 = 72.217690. Fifteen steps clear the hump
+                    // and expose the genuine decrease while keeping the DEFAULT decrease threshold
+                    // intact (no tolerance is relaxed).
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "SpeechT5" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                 }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling
@@ -11201,17 +11226,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         if (BoundedGeneratedTrainingClassNames.Contains(model.ClassName))
         {
-            // RemoteCLIP joins the warm-up group for the same reason Mamba2 / Zamba2 did: at the
-            // capped 1-vs-2 step probe its Adam moments are still inside the first-few-step
-            // OVERSHOOT the base class documents, so "more data" reads as a degradation even though
-            // training is perfectly healthy. Measured on this PR once the cap removed the timeout:
-            // 1-step loss 1.1767 -> 2-step loss 1.5372 against the razor-thin 1e-4 default
-            // tolerance, with BOTH parameter snapshots finite (nonfinite=0, L2 302.54 vs 302.73) —
-            // i.e. a warm-up artefact, not divergence. Comparing 5 steps against 15 clears the hump
-            // and keeps the DEFAULT tight tolerance, which is strictly better than relaxing
-            // MoreDataTolerance the way the paper-scale branch does.
+            // Mamba2 / Zamba2 need the warm-up group: at the capped 1-vs-2 step probe their Adam
+            // moments are still inside the first-few-step OVERSHOOT the base class documents, so
+            // "more data" reads as a degradation even though training is perfectly healthy.
+            // Comparing 5 steps against 15 clears the hump and keeps the DEFAULT tight tolerance,
+            // which is strictly better than relaxing MoreDataTolerance the way the paper-scale
+            // branch does. (RemoteCLIP exhibited the same artefact — measured 1-step loss 1.1767 ->
+            // 2-step 1.5372 with both parameter snapshots finite — but it is now capped by
+            // HeavyTrainingTimeoutClassNames, whose MoreDataTolerance => 0.5 absorbs that hump, so
+            // it must NOT be listed here as well; doing so double-emits and fails with CS0102.)
             bool needsOptimizerWarmup =
-                model.ClassName is "Mamba2LanguageModel" or "Zamba2LanguageModel" or "RemoteCLIP";
+                model.ClassName is "Mamba2LanguageModel" or "Zamba2LanguageModel";
             sb.AppendLine($"    protected override int TrainingIterations => {(model.ClassName == "Zamba2LanguageModel" ? 15 : 5)};");
             sb.AppendLine($"    protected override int MoreDataShortIterations => {(needsOptimizerWarmup ? 5 : 1)};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {(needsOptimizerWarmup ? 15 : model.ClassName == "DEVA" ? 10 : 2)};");
