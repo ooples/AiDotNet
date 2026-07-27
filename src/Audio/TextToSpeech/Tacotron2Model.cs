@@ -529,7 +529,19 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         // Initialize training components
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper training configuration (Shen et al. 2018, sec. 3): "Adam optimizer with beta1 = 0.9,
+        // beta2 = 0.999, eps = 10^-6 and a learning rate of 10^-3 exponentially decaying to 10^-5".
+        // The optimizer was previously built bare, so none of those values applied and the decoder ran
+        // on framework defaults. Callers can still supply their own optimizer.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-3,
+                MinLearningRate = 1e-5,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-6,
+            });
 
         InitializeNativeLayers();
     }
@@ -851,6 +863,17 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     }
 
     /// <summary>
+    /// Mean squared difference between two mel tensors, as a recorded scalar the tape can follow.
+    /// </summary>
+    private Tensor<T> MeanSquaredDifference(Tensor<T> predicted, Tensor<T> target)
+    {
+        var diff = Engine.TensorSubtract(predicted, target);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
+        return Engine.ReduceMean(squared, allAxes, keepDims: false);
+    }
+
+    /// <summary>
     /// Installs an explicit parameter vector, as the base contract requires: the argument is the new
     /// weights, not a gradient.
     /// </summary>
@@ -877,6 +900,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     // Stored target for teacher forcing during ForwardForTraining
     private Tensor<T>? _teacherForcingTarget;
+
+    /// <summary>
+    /// The decoder's mel output BEFORE the post-net residual, captured on the teacher-forced forward
+    /// so the loss can supervise it directly alongside the refined output.
+    /// </summary>
+    private Tensor<T>? _lastPrePostnetMel;
 
     /// <summary>
     /// Overrides ForwardForTraining to use teacher forcing when target is available.
@@ -915,7 +944,19 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             // built in the constructor assigned but never read, so training silently fell back to the
             // framework default and the memorization loss came back byte-identical between step 1 and
             // step 100 (0.371638 both times) — the model was not learning at all.
-            TrainWithTape(input, expectedOutput,
+            // Paper objective (Shen et al. 2018, sec. 3): "summed mean squared error (MSE) from
+            // before and after the post-net". Only the refined output was supervised before, so the
+            // decoder got a gradient solely THROUGH the post-net and never directly — which is the
+            // convergence role the paper gives the pre-post-net term.
+            TrainWithCustomLoss(
+                input,
+                refined =>
+                {
+                    var afterPostnet = MeanSquaredDifference(refined, expectedOutput);
+                    if (_lastPrePostnetMel is null) return afterPostnet;
+                    return Engine.TensorAdd(
+                        afterPostnet, MeanSquaredDifference(_lastPrePostnetMel, expectedOutput));
+                },
                 _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         }
         finally
@@ -1213,6 +1254,9 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         // tensor with no history on the autodiff tape, which detached the ENTIRE forward pass: no
         // gradient reached the post-net, decoder, attention or encoder, so no parameter ever moved and
         // the memorization loss came back byte-identical at step 1 and step 100 (0.325832 both times).
+        // Keep the pre-post-net mel: the paper minimizes the SUMMED MSE from before AND after
+        // the post-net, so both have to reach the loss (see Train).
+        _lastPrePostnetMel = melSpectrogram;
         return Engine.TensorAdd(melSpectrogram, residual);
     }
 
