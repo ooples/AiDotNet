@@ -1159,6 +1159,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // missing here: with no bound at all its MoreData probe ran the full 50/200-iteration pair
         // and blew the 120s per-test timeout.
         "XLSTMLanguageModel",
+        // VinVL carries ~86M parameters over 36x2048 region features and had no bound either, so its
+        // MoreData probe timed out at 120s once training actually ran.
+        "VinVL",
+        // VideoCLIP runs its spatial encoder per frame at 768 hidden channels and had no bound, so
+        // Training_ShouldReduceLoss hit the 120s timeout even at the fixture's small 4x3x32x32 clip.
+        "VideoCLIP",
     };
 
     // Attribute metadata names
@@ -5855,6 +5861,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "attentionDim: 16, attentionFilters: 8, prenetDim: 16, postnetEmbeddingDim: 32, " +
                     "numEncoderConvLayers: 1, numPostnetConvLayers: 1, numMelsPerFrame: 2, " +
                     "maxDecoderSteps: 4, stopThreshold: 1.0)";
+            }
+            else if (model.ClassName == "VideoCLIP" && model.TypeParameterCount == 1)
+            {
+                // VideoCLIP's parameterless constructor takes CLIP-scale defaults: a 49408-token
+                // vocabulary over the hardcoded 768-wide hidden state, so the token embedding table
+                // alone is ~38M entries — about 300 MB in double before any activation — which is what
+                // OOM-killed Metadata_ShouldExist. numFrames=4 and a 32x32 clip match the InputShape
+                // the video family emits, and a 512-token vocabulary keeps the same text pathway while
+                // cutting that table by two orders of magnitude. hiddenDim itself is a local constant
+                // in the model rather than an option, so it is deliberately left alone here.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "numFrames: 4, embeddingDim: 64, textMaxLength: 16, vocabSize: 512)";
             }
             else if (model.ClassName == "MOMENT" && model.TypeParameterCount == 1)
             {

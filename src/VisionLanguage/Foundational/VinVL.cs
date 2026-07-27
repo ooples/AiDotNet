@@ -103,7 +103,15 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     {
         _options = options ?? new VinVLOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honour a paper-faithful fine-tuning step size. VinVL / Oscar+ (Zhang et al. 2021) fine-tunes
+        // in the 5e-5 range; built bare, AdamW's own default step was large enough to drive this
+        // ~86M-parameter stack straight to NaN once the optimizer was actually connected to training.
+        // Callers can still pass any optimizer they want through the constructor.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 5e-5,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;
