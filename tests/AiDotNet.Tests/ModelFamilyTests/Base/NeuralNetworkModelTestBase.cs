@@ -1289,7 +1289,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual bool TrainingErrorInvariantApplicable => true;
 
     [Fact(Timeout = 120000)]
-    public async Task TrainingError_ShouldNotExceedTestError()
+    // virtual for parity with its sibling invariants (Training_ShouldReduceLoss,
+    // MoreData_ShouldNotDegrade, LossStrictlyDecreasesOnMemorizationTask are all virtual), so a
+    // generated fixture can re-declare it to attach a heavy-lane [Fact(Timeout)] / Category trait
+    // without altering the assertion body. Needed by StableVideoSR, whose ~8-10 s per train step
+    // puts this probe over the 120 s PR-shard gate; the override just calls base.
+    public virtual async Task TrainingError_ShouldNotExceedTestError()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
