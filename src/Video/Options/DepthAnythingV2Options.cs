@@ -15,7 +15,8 @@ public class DepthAnythingV2Options : NeuralNetworkOptions
     /// <summary>Initializes a new instance by copying another options instance.</summary>
     public DepthAnythingV2Options(DepthAnythingV2Options other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         NumFeatures = other.NumFeatures;

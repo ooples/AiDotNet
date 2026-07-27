@@ -31,7 +31,8 @@ public class FastConformerOptions : ModelOptions
     /// <summary>Initializes an independent copy of an existing configuration.</summary>
     public FastConformerOptions(FastConformerOptions other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
         Seed = other.Seed;
         SampleRate = other.SampleRate;
         NumMels = other.NumMels;
