@@ -47,6 +47,7 @@ public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
     public override ModelOptions GetOptions() => _options;
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _preserveSuppliedOptimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -59,6 +60,7 @@ public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
     {
         _options = options ?? new DiffWaveOptions();
         _useNativeMode = false;
+        _preserveSuppliedOptimizer = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -80,6 +82,7 @@ public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
     {
         _options = options ?? new DiffWaveOptions();
         _useNativeMode = true;
+        _preserveSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -263,7 +266,7 @@ public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
-        if (_useNativeMode)
+        if (_useNativeMode && !_preserveSuppliedOptimizer)
             _optimizer = CreateDefaultOptimizer();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
@@ -273,7 +276,16 @@ public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
             return new DiffWave<T>(Architecture, mp, new DiffWaveOptions(_options));
-        return new DiffWave<T>(Architecture, new DiffWaveOptions(_options));
+
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? cloneOptimizer = _optimizer switch
+        {
+            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
+            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
+            _ => null
+        };
+        return new DiffWave<T>(Architecture, new DiffWaveOptions(_options), cloneOptimizer);
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()

@@ -199,8 +199,14 @@ public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -265,8 +271,12 @@ public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new FreGrad<T>(Architecture, mp, _options);
-        return new FreGrad<T>(Architecture, _options);
+            return new FreGrad<T>(Architecture, mp, new FreGradOptions(_options));
+
+        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
+            : null;
+        return new FreGrad<T>(Architecture, new FreGradOptions(_options), cloneOptimizer);
     }
 
     private void ThrowIfDisposed()

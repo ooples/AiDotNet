@@ -23,6 +23,34 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// </remarks>
 public class FastConformerOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with the paper configuration defaults.</summary>
+    public FastConformerOptions()
+    {
+    }
+
+    /// <summary>Initializes an independent copy of an existing configuration.</summary>
+    public FastConformerOptions(FastConformerOptions other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        NumMels = other.NumMels;
+        Language = other.Language;
+        EncoderDim = other.EncoderDim;
+        NumLayers = other.NumLayers;
+        NumHeads = other.NumHeads;
+        ConvKernelSize = other.ConvKernelSize;
+        DownsampleFactor = other.DownsampleFactor;
+        FeedForwardDim = other.FeedForwardDim;
+        VocabSize = other.VocabSize;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        Variant = other.Variant;
+        Vocabulary = other.Vocabulary.ToArray();
+    }
+
     #region Audio Settings
 
     /// <summary>Gets or sets the audio sample rate in Hz.</summary>
