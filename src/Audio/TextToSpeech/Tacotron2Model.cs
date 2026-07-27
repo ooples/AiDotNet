@@ -1114,7 +1114,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             melFrames.Add(melOutput);
         }
 
-        var melSpectrogram = CombineMelFrames(melFrames);
+        var melSpectrogram = CombineMelFramesTapeSafe(melFrames);
 
         var residual = melSpectrogram;
         foreach (var postConv in _postNetLayers)
@@ -1122,13 +1122,40 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             residual = postConv.Forward(residual);
         }
 
-        var refined = new Tensor<T>(melSpectrogram._shape);
-        for (int i = 0; i < melSpectrogram.Length; i++)
+        // Recorded add, matching the inference path. Writing the sum element by element produced a
+        // tensor with no history on the autodiff tape, which detached the ENTIRE forward pass: no
+        // gradient reached the post-net, decoder, attention or encoder, so no parameter ever moved and
+        // the memorization loss came back byte-identical at step 1 and step 100 (0.325832 both times).
+        return Engine.TensorAdd(melSpectrogram, residual);
+    }
+
+    /// <summary>
+    /// Assembles the decoder's per-step mel outputs into [1, steps * numMelsPerFrame, numMels] using
+    /// recorded reshape/concatenate ops, so gradients flow back through every decoder step.
+    /// <see cref="CombineMelFrames"/> builds the same tensor by assigning elements one at a time,
+    /// which produces a value the tape cannot differentiate through.
+    /// </summary>
+    private Tensor<T> CombineMelFramesTapeSafe(List<Tensor<T>> frames)
+    {
+        int perFrame = _numMelsPerFrame * NumMels;
+        foreach (var frame in frames)
         {
-            refined[i] = NumOps.Add(melSpectrogram[i], residual[i]);
+            // Reshape needs an exact element count. If a decoder ever emits a different width, fall
+            // back to the element-wise builder rather than throwing — inference still works there,
+            // and the assembly stays correct.
+            if (frame.Length != perFrame)
+            {
+                return CombineMelFrames(frames);
+            }
         }
 
-        return refined;
+        var reshaped = new Tensor<T>[frames.Count];
+        for (int i = 0; i < frames.Count; i++)
+        {
+            reshaped[i] = Engine.Reshape(frames[i], new[] { 1, _numMelsPerFrame, NumMels });
+        }
+
+        return reshaped.Length == 1 ? reshaped[0] : Engine.TensorConcatenate(reshaped, axis: 1);
     }
 
     private Tensor<T> ForwardOnnx(Tensor<T> phonemes)
