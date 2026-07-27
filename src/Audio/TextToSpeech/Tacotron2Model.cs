@@ -831,7 +831,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         try
         {
             SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput);
+            // Pass the configured optimizer through. The two-argument overload left the optimizer
+            // built in the constructor assigned but never read, so training silently fell back to the
+            // framework default and the memorization loss came back byte-identical between step 1 and
+            // step 100 (0.371638 both times) — the model was not learning at all.
+            TrainWithTape(input, expectedOutput,
+                _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         }
         finally
         {

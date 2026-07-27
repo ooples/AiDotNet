@@ -220,7 +220,9 @@ public class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        // Pass the configured optimizer through. The two-argument overload left _optimizer
+        // assigned and never read, so training silently used the framework default.
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
