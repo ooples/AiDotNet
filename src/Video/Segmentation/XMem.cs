@@ -537,24 +537,23 @@ public class XMem<T> : NeuralNetworkBase<T>
         return concat;
     }
 
+    /// <summary>
+    /// Runs the decoder over the fused readout to produce the mask.
+    /// </summary>
+    /// <remarks>
+    /// The decoder stack built by CreateDefaultXMemLayers ALREADY carries its own UpsamplingLayer(2)
+    /// between convolution stages — four of them, which is exactly the stride-16 to full-resolution
+    /// climb the paper describes ("iteratively upsamples by 2x at a time"), ending in a 1-channel
+    /// sigmoid mask head. This method additionally called Upsample2x once per layer on top of that, so
+    /// the mask was upsampled twice over and a 32x32 clip decoded to 2048x2048. Let the layers do the
+    /// upsampling they were built to do; the loop below only tops the mask up if a shallower decoder
+    /// leaves it short of the frame.
+    /// </remarks>
     private Tensor<T> DecodeMask(Tensor<T> features)
     {
         var decoded = features;
         for (int i = 13; i < Layers.Count; i++)
         {
-            // Only upsample while the mask is still SMALLER than the frame being segmented. This
-            // doubled once per decoder layer regardless, so the output overshot the target resolution
-            // by whatever the layer count happened to be: on a 32x32 clip the decoder produced a
-            // 2048x2048 mask. That is what made Predict allocate gigabytes and then fail the loss
-            // against a [4, 1, 32, 32] target with "[4, 1, 2048, 2048] and [4, 1, 32, 32] cannot be
-            // broadcast". The trailing loop below still tops the mask up when the decoder is too
-            // shallow to reach full resolution, so both directions stay covered.
-            if (i < Layers.Count - 1
-                && (decoded.Shape[2] < _inputHeight || decoded.Shape[3] < _inputWidth))
-            {
-                decoded = Upsample2x(decoded);
-            }
-
             decoded = Layers[i].Forward(decoded);
         }
 
@@ -563,7 +562,6 @@ public class XMem<T> : NeuralNetworkBase<T>
 
         return decoded;
     }
-
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
         return Engine.TensorConcatenate([a, b], axis: 1);
