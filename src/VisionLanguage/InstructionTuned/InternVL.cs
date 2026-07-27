@@ -268,7 +268,10 @@ public class InternVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        // Pass the configured optimizer through, matching InstructBLIP and MiniGPTv2. The
+        // constructor's AdamW was assigned but never read, so the configured optimizer had no effect
+        // on training at all.
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

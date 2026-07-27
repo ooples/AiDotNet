@@ -271,7 +271,11 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        // Pass the configured optimizer through, as the InstructBLIP and MiniGPTv2 siblings already
+        // do. The two-argument overload left the AdamW built in the constructor assigned but never
+        // read, so training ran on the framework default and the forward pass came back NaN after 10
+        // iterations.
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
