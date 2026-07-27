@@ -1269,10 +1269,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "Upscale4KAgent",
         // VideoLISA had no bound and ran its training probes out of memory outright.
         "VideoLISA",
-        // NOTE: RemoteCLIP was previously bounded here, but it is now handled one rung further up
-        // by HeavyTrainingTimeoutClassNames (its cap) PLUS a dedicated CI-smoke constructorExpr.
-        // Keeping it in BOTH lists double-emits TrainingIterations / MoreDataShortIterations /
-        // MoreDataLongIterations / MemorizationTaskIterations and fails the build with CS0102.
+        // RemoteCLIP is a CLIP dual-encoder at the same scaffold scale as its already-listed
+        // siblings DeCLIP / LLM2CLIP (VisionLanguageTestBase<float>, InputShape [3, 128, 128])
+        // and had no repetition bound, so it inherited the base 50+200-step MoreData probe and
+        // the 100-step memorization probe: measured ~2 s per train step, i.e. ~500 s for the
+        // 250-step probe against a 120 s per-test gate. It is bounded HERE and deliberately NOT
+        // in HeavyTrainingTimeoutClassNames — this list gives it the optimizer-warm-up treatment
+        // (5-vs-15 steps) which clears its first-few-step Adam hump while keeping the DEFAULT
+        // tight MoreDataTolerance, instead of the 0.5 relaxation the heavy branch applies. The
+        // two sets MUST stay disjoint: listing it in both double-emits the four iteration
+        // overrides (CS0102).
+        "RemoteCLIP",
     };
 
     // Attribute metadata names
@@ -11231,12 +11238,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // "more data" reads as a degradation even though training is perfectly healthy.
             // Comparing 5 steps against 15 clears the hump and keeps the DEFAULT tight tolerance,
             // which is strictly better than relaxing MoreDataTolerance the way the paper-scale
-            // branch does. (RemoteCLIP exhibited the same artefact — measured 1-step loss 1.1767 ->
-            // 2-step 1.5372 with both parameter snapshots finite — but it is now capped by
-            // HeavyTrainingTimeoutClassNames, whose MoreDataTolerance => 0.5 absorbs that hump, so
-            // it must NOT be listed here as well; doing so double-emits and fails with CS0102.)
+            // branch does. RemoteCLIP joins them for exactly the same reason: measured on this PR
+            // once the cap removed its timeout, 1-step loss 1.1767 -> 2-step 1.5372 against the
+            // razor-thin 1e-4 default tolerance, with BOTH parameter snapshots finite
+            // (nonfinite=0, L2 302.54 vs 302.73) — a warm-up artefact, not divergence.
             bool needsOptimizerWarmup =
-                model.ClassName is "Mamba2LanguageModel" or "Zamba2LanguageModel";
+                model.ClassName is "Mamba2LanguageModel" or "Zamba2LanguageModel" or "RemoteCLIP";
             sb.AppendLine($"    protected override int TrainingIterations => {(model.ClassName == "Zamba2LanguageModel" ? 15 : 5)};");
             sb.AppendLine($"    protected override int MoreDataShortIterations => {(needsOptimizerWarmup ? 5 : 1)};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {(needsOptimizerWarmup ? 15 : model.ClassName == "DEVA" ? 10 : 2)};");
