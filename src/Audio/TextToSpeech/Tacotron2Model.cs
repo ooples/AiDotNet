@@ -1080,7 +1080,14 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             Tensor<T> prevMel;
             if (step == 0)
             {
-                prevMel = new Tensor<T>(new[] { 1, _numMelsPerFrame });
+                // The GO frame is an all-zero MEL FRAME, so it must be NumMels wide — the same width
+                // ExtractMelFrame returns for every later step, and the same width the inference path
+                // seeds. It was _numMelsPerFrame wide (2 against 80), so the decoder pre-net saw one
+                // width on step 0 and another from step 1 on. The pre-net's Dense layers resolve their
+                // input width lazily from whatever reaches them first, which left the resolved shape
+                // dependent on which path ran first and is what made a trained model and its clone
+                // disagree after a serialize/deserialize round trip.
+                prevMel = new Tensor<T>(new[] { 1, NumMels });
             }
             else
             {
