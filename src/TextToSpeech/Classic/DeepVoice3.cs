@@ -93,7 +93,13 @@ public class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new DeepVoice3Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -258,7 +264,7 @@ public class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -334,8 +340,14 @@ public class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new DeepVoice3<T>(Architecture, mp, _options);
-        return new DeepVoice3<T>(Architecture, _options);
+            return new DeepVoice3<T>(Architecture, mp, new DeepVoice3Options(_options));
+
+        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
+            : null;
+        return new DeepVoice3<T>(Architecture, new DeepVoice3Options(_options), cloneOptimizer);
     }
 
     private void ThrowIfDisposed()

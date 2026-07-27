@@ -246,8 +246,14 @@ public class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -313,8 +319,14 @@ public class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GradTTS<T>(Architecture, mp, _options);
-        return new GradTTS<T>(Architecture, _options);
+            return new GradTTS<T>(Architecture, mp, new GradTTSOptions(_options));
+
+        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
+            : null;
+        return new GradTTS<T>(Architecture, new GradTTSOptions(_options), cloneOptimizer);
     }
 
     private void ThrowIfDisposed()

@@ -7,4 +7,13 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// </summary>
 public class GatedDeltaNetOptions : NeuralNetworkOptions
 {
+    public GatedDeltaNetOptions() { }
+
+    public GatedDeltaNetOptions(GatedDeltaNetOptions other)
+    {
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
+    }
 }

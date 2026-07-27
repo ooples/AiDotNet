@@ -22709,18 +22709,25 @@ public static class LayerHelper<T>
         int numMels = 80,
         int vocabSize = 5000,
         double dropoutRate = 0.1,
-        int maxSequenceLength = 750)
+        int maxSequenceLength = 750,
+        bool useLayerNormalization = false)
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
         int ffDim = encoderDim * feedForwardExpansionFactor;
 
-        // Conv subsampling
+        // The sequence tensors are [batch, time, features]. Resolve BatchNorm with
+        // the explicit feature width so its first rank-3 forward takes the documented
+        // features-last flattening path instead of inferring an image channel axis.
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return useLayerNormalization
+            ? new LayerNormalizationLayer<T>()
+            : new BatchNormalizationLayer<T>(encoderDim);
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return useLayerNormalization
+            ? new LayerNormalizationLayer<T>()
+            : new BatchNormalizationLayer<T>(encoderDim);
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Squeezeformer blocks with temporal U-Net (micro-macro structure)
@@ -22734,7 +22741,9 @@ public static class LayerHelper<T>
             // Depthwise separable convolution module
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>();
+            yield return useLayerNormalization
+                ? new LayerNormalizationLayer<T>()
+                : new BatchNormalizationLayer<T>(encoderDim * 2);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
@@ -27907,7 +27916,8 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDEVAEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
+        int[] channelDims, int[] depths, double dropRate,
+        bool useGroupNormalization = false)
     {
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         int h = inputHeight, w = inputWidth, inC = inputChannels;
@@ -27919,14 +27929,32 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad,
+                useGroupNormalization ? null : relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
+            if (useGroupNormalization)
+            {
+                yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+                yield return new ActivationLayer<T>(relu);
+            }
+            else
+            {
+                yield return new BatchNormalizationLayer<T>();
+            }
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1,
+                    useGroupNormalization ? null : relu);
+                if (useGroupNormalization)
+                {
+                    yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+                    yield return new ActivationLayer<T>(relu);
+                }
+                else
+                {
+                    yield return new BatchNormalizationLayer<T>();
+                }
             }
 
             inC = outC;

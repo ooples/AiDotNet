@@ -297,7 +297,43 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 _numLmLayers, _numHeads, _vocabularySize, _maxSequenceLength));
         }
 
-        // Distribute layers to internal fields
+        RebindNativeLayerReferences();
+
+        // Initialize vision positional embeddings
+        _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionHiddenDim, NumOps.Zero);
+        InitializePositionalEmbeddings(_visionPositionalEmbeddings);
+
+        // Initialize perceiver queries
+        _perceiverQueries = Matrix<T>.CreateDefault(_numPerceiverTokens, _lmHiddenDim, NumOps.Zero);
+        InitializePerceiverQueries(_perceiverQueries);
+
+        // Text positional embeddings
+        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _lmHiddenDim, NumOps.Zero);
+        InitializePositionalEmbeddings(_textPositionalEmbeddings);
+    }
+
+    /// <summary>
+    /// Rebinds Flamingo's branch-specific layer references to the canonical base
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> collection.
+    /// </summary>
+    /// <remarks>
+    /// The base clone paths replace or COW-share the canonical layer collection. Flamingo executes
+    /// through its branch lists rather than walking that collection sequentially, so those lists must
+    /// be rebound after cloning; copying parameters into the constructor's stale branch objects would
+    /// duplicate storage and bypass the base COW contract.
+    /// </remarks>
+    private void RebindNativeLayerReferences()
+    {
+        int gatedCrossAttnCount = _numLmLayers / 4;
+        int requiredLayers = 1 + _numVisionLayers + (3 * _numPerceiverLayers)
+            + gatedCrossAttnCount + 1 + _numLmLayers + 1;
+        if (Layers.Count < requiredLayers)
+        {
+            throw new InvalidOperationException(
+                $"Flamingo layer graph contains {Layers.Count} layers but {requiredLayers} are required.");
+        }
+
+        // Distribute canonical layers to the private execution branches.
         int idx = 0;
 
         // Patch embedding
@@ -332,18 +368,6 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
         // Output projection
         _outputProjection = Layers[idx++];
-
-        // Initialize vision positional embeddings
-        _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionHiddenDim, NumOps.Zero);
-        InitializePositionalEmbeddings(_visionPositionalEmbeddings);
-
-        // Initialize perceiver queries
-        _perceiverQueries = Matrix<T>.CreateDefault(_numPerceiverTokens, _lmHiddenDim, NumOps.Zero);
-        InitializePerceiverQueries(_perceiverQueries);
-
-        // Text positional embeddings
-        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _lmHiddenDim, NumOps.Zero);
-        InitializePositionalEmbeddings(_textPositionalEmbeddings);
     }
 
     private void InitializePositionalEmbeddings(Matrix<T> embeddings)
@@ -1125,6 +1149,19 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     }
 
     /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // The base implementation walks Layers as one flat sequential graph. Flamingo's
+        // layer list is structural storage for separate vision, perceiver, gated-attention,
+        // and language branches, so that walk does not represent PredictCore. Training the
+        // flat list therefore optimized a different output than Predict measured and could
+        // increase prediction loss even after a successful optimizer step. Run the same
+        // vision/perceiver graph used by PredictCore while the caller-owned tape is active.
+        EnsureLayerRandomSeedsWired();
+        return ExtractPerceiverFeatures(input);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
@@ -1151,64 +1188,13 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             }
         }
 
-        // Small generated/test instances can use an exact parameter round-trip;
-        // production-scale Flamingo models stay on NeuralNetworkBase's COW path
-        // so no model-wide vector is materialized.
-        if (_useNativeMode && ParameterCount <= 50_000_000)
-        {
-            var smallCopy = (FlamingoNeuralNetwork<T>)base.DeepCopy();
-            try { smallCopy.ResolveShapes(new Tensor<T>(new[] { 3, _imageSize, _imageSize })); }
-            catch (ArgumentException) { }
-            for (int i = 0; i < Layers.Count && i < smallCopy.Layers.Count; i++)
-            {
-                if (Layers[i] is LayerBase<T> sourceLayer
-                    && smallCopy.Layers[i] is LayerBase<T> destinationLayer
-                    && sourceLayer.ParameterCount > 0)
-                {
-                    try { destinationLayer.ResolveFromShape(sourceLayer.GetInputShape()); }
-                    catch (ArgumentException) { }
-                }
-            }
-            try { smallCopy.Predict(new Tensor<T>(new[] { 3, _imageSize, _imageSize })); }
-            catch (ArgumentException) { }
-            var sourceLayers = _visionEncoderLayers
-                .Concat(_perceiverLayers)
-                .Concat(_gatedCrossAttentionLayers)
-                .Concat(_languageModelLayers)
-                .Concat(new[] { _patchEmbedding, _textTokenEmbedding, _outputProjection }
-                    .Where(layer => layer is not null)
-                    .Cast<ILayer<T>>())
-                .ToArray();
-            var destinationLayers = smallCopy._visionEncoderLayers
-                .Concat(smallCopy._perceiverLayers)
-                .Concat(smallCopy._gatedCrossAttentionLayers)
-                .Concat(smallCopy._languageModelLayers)
-                .Concat(new[] { smallCopy._patchEmbedding, smallCopy._textTokenEmbedding, smallCopy._outputProjection }
-                    .Where(layer => layer is not null)
-                    .Cast<ILayer<T>>())
-                .ToArray();
-            for (int i = 0; i < sourceLayers.Length && i < destinationLayers.Length; i++)
-            {
-                if (destinationLayers[i] is TransformerEncoderLayer<T> encoder
-                    && encoder.ParameterCount == 0)
-                {
-                    int embedding = i < _visionEncoderLayers.Count ? _visionHiddenDim : _lmHiddenDim;
-                    try { encoder.ResolveFromShape(new[] { 1, embedding }); }
-                    catch (ArgumentException) { }
-                }
-                destinationLayers[i].SetParameters(sourceLayers[i].GetParameters());
-            }
-            smallCopy._visionPositionalEmbeddings = _visionPositionalEmbeddings?.Clone();
-            smallCopy._perceiverQueries = _perceiverQueries?.Clone();
-            smallCopy._textPositionalEmbeddings = _textPositionalEmbeddings?.Clone();
-            smallCopy.SetTrainingMode(IsTrainingMode);
-            return smallCopy;
-        }
-
-        // Large models use COW/weight streaming and avoid flattening.
+        // The base path owns COW/weight streaming for every model size. Rebind the
+        // private execution branches to its canonical cloned layer collection so no
+        // model-wide or per-layer parameter vector is materialized here.
         var result = base.DeepCopy();
         if (result is FlamingoNeuralNetwork<T> copy && _useNativeMode)
         {
+            copy.RebindNativeLayerReferences();
             copy._visionPositionalEmbeddings = _visionPositionalEmbeddings?.Clone();
             copy._perceiverQueries = _perceiverQueries?.Clone();
             copy._textPositionalEmbeddings = _textPositionalEmbeddings?.Clone();
