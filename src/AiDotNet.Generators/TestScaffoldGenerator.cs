@@ -10159,15 +10159,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
-        // xLSTM belongs with the init-sensitive models above. Run on its own it is green, but sharing
-        // an xUnit worker with sibling classes advances the process-shared RandomHelper first, and
-        // from some of those inits its ~26M-parameter stack goes NaN on the very first training step
-        // (Param L2 106.8021 -> NaN). Pinning the init makes that independent of execution order.
-        if (model.ClassName == "XLSTMLanguageModel")
-        {
-            pinInitSeed = true;
-        }
-
         if (pinInitSeed)
         {
             // Init-sensitive models: pin a deterministic per-layer init seed around
