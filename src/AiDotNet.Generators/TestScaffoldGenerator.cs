@@ -5877,7 +5877,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numFrames: 4, embeddingDim: 64, textMaxLength: 16, vocabSize: 512)";
+                    "numFrames: 2, embeddingDim: 64, textMaxLength: 16, vocabSize: 512)";
             }
             else if (model.ClassName == "MOMENT" && model.TypeParameterCount == 1)
             {
@@ -7764,7 +7764,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // a RATE of descent the model can reach solely by being unstable.
                 sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.998;");
             }
-            if (model.ClassName == "VideoLLaMA2")
+            if (model.ClassName == "VideoCLIP")
+            {
+                // Two frames rather than four. VideoCLIP's hidden width is a constant inside the model
+                // rather than an option, so it still carries ~171M parameters at this clip size and its
+                // spatial encoder runs once PER FRAME — the dominant cost. Four frames left the
+                // training probes brushing the 120s per-test timeout (they passed twice and then timed
+                // out), and halving the frames halves that work while still giving temporal attention
+                // more than one step to attend over. numFrames in the constructor special-case stays
+                // in lockstep with this.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 32, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            }
+            else if (model.ClassName == "VideoLLaMA2")
             {
                 // The CI constructor uses CLIP's 14px patch size at 56px, yielding a 4x4 patch grid.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 56, 56 };");
