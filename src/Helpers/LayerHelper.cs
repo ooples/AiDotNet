@@ -23106,7 +23106,8 @@ public static class LayerHelper<T>
         int numMels = 80,
         int vocabSize = 8404,
         double dropoutRate = 0.1,
-        int maxSequenceLength = 750)
+        int maxSequenceLength = 750,
+        bool useCifAlignment = true)
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
@@ -23165,7 +23166,8 @@ public static class LayerHelper<T>
         // bound on N (the predicted token count). Unused trailing
         // slots are zero-padded — downstream MHA / cross-attention
         // ignores them through standard padding-mask handling.
-        yield return new CifAlignmentLayer<T>(encoderDim);
+        if (useCifAlignment)
+            yield return new CifAlignmentLayer<T>(encoderDim);
 
         // Paraformer decoder (non-autoregressive)
         if (encoderDim != decoderDim)

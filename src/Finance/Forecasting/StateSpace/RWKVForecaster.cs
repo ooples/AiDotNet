@@ -148,7 +148,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
         _numFeatures = 1;
@@ -170,7 +170,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _options = options;
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
         _numFeatures = numFeatures;
@@ -185,6 +185,22 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _numHeads = options.NumHeads;
         _numLayers = options.NumLayers;
         _dropout = options.DropoutRate;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        RWKVForecastingOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = options.AdamBeta1,
+                Beta2 = options.AdamBeta2,
+                Epsilon = options.AdamEpsilon,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false
+            });
     }
 
     #endregion
@@ -234,6 +250,9 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
+
+    /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)

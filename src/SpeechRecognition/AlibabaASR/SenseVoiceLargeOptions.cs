@@ -5,7 +5,10 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 
 /// <summary>Options for SenseVoice-Large: scaled multi-task speech model.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the SenseVoiceLarge model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para><b>For Beginners:</b> These options configure the native SenseVoice-Large approximation.
+/// The paper specifies an autoregressive encoder-decoder supporting more than 50 languages, but does
+/// not publish its exact layer dimensions or optimizer hyperparameters. Every native scale and training
+/// value used by this implementation is therefore exposed for customization.</para>
 /// </remarks>
 public class SenseVoiceLargeOptions : ModelOptions
 {
@@ -32,6 +35,12 @@ public class SenseVoiceLargeOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
+        DecoderDim = other.DecoderDim;
+        NumDecoderLayers = other.NumDecoderLayers;
+        FeedForwardDim = other.FeedForwardDim;
+        UseCifAlignment = other.UseCifAlignment;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
     }
 
     public int SampleRate { get; set; } = 16000;
@@ -46,4 +55,10 @@ public class SenseVoiceLargeOptions : ModelOptions
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
     public string Language { get; set; } = "en";
+    public int DecoderDim { get; set; } = 512;
+    public int NumDecoderLayers { get; set; } = 6;
+    public int FeedForwardDim { get; set; } = 2048;
+    public bool UseCifAlignment { get; set; } = true;
+    public double LearningRate { get; set; } = 1e-4;
+    public double WeightDecay { get; set; } = 0.01;
 }

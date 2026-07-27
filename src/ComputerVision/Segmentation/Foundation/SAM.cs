@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -142,7 +143,18 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         _dropRate = dropRate;
         _useNativeMode = true;
         _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.AdamBeta1,
+                Beta2 = _options.AdamBeta2,
+                Epsilon = _options.AdamEpsilon,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+            });
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
@@ -230,7 +242,10 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            // Use the constructor-selected AdamW instance. The overload without an
+            // optimizer falls back to NeuralNetworkBase's Adam and would silently
+            // discard SAM's paper hyperparameters and any user-supplied optimizer.
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -431,8 +446,15 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// Creates a new instance with the same configuration but fresh weights.
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new SAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+        ? new SAM<T>(
+            Architecture,
+            optimizer: null,
+            lossFunction: LossFunction,
+            numClasses: _numClasses,
+            modelSize: _modelSize,
+            dropRate: _dropRate,
+            options: new SAMOptions(_options))
+        : new SAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new SAMOptions(_options));
 
     /// <summary>
     /// Releases managed resources.

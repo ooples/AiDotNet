@@ -26,6 +26,30 @@ public class SAMOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        AdamBeta1 = other.AdamBeta1;
+        AdamBeta2 = other.AdamBeta2;
+        AdamEpsilon = other.AdamEpsilon;
     }
 
+    /// <summary>
+    /// Gets or sets the initial AdamW learning rate. The default, 8e-4, is the
+    /// Segment Anything paper's training value.
+    /// </summary>
+    public double LearningRate { get; set; } = 8e-4;
+
+    /// <summary>
+    /// Gets or sets the decoupled AdamW weight decay. The paper default is 0.1.
+    /// </summary>
+    public double WeightDecay { get; set; } = 0.1;
+
+    /// <summary>Gets or sets AdamW's first-moment decay. The paper default is 0.9.</summary>
+    public double AdamBeta1 { get; set; } = 0.9;
+
+    /// <summary>Gets or sets AdamW's second-moment decay. The paper default is 0.999.</summary>
+    public double AdamBeta2 { get; set; } = 0.999;
+
+    /// <summary>Gets or sets AdamW's numerical-stability epsilon.</summary>
+    public double AdamEpsilon { get; set; } = 1e-8;
 }
