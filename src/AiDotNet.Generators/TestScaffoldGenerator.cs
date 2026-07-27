@@ -1144,6 +1144,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // FP32 is applied above first; retain the full paper architecture and trim only repeated
         // generated training iterations that exceeded the per-test CI budget.
         "RealESRGANVideo", "SlowFast",
+        // StableVideoSR joins its two Q-S video siblings above for the same reason. Measured on the
+        // full local Q-S run: ALL FOUR of its training probes hit the per-test gate outright —
+        // Training_ShouldReduceLoss, TrainingError_ShouldNotExceedTestError and
+        // MoreData_ShouldNotDegrade at 120 s each, LossStrictlyDecreasesOnMemorizationTask at 180 s.
+        // Beyond being red, those four alone burn ~9 minutes of the shard's 45-minute job budget,
+        // which is a material part of why Q-S never reaches its end and gets cancelled. Trim the
+        // repeated generated iterations only: the paper architecture stays intact and every training
+        // assertion still runs against the real forward/backward path.
+        "StableVideoSR",
     };
 
     // These #1789 fixtures already use FP32 and public scaffold-scale model options, but the

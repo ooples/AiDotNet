@@ -393,9 +393,19 @@ public partial class RWKVLayer<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var k_t = Engine.Reshape(Kall.GetSliceAlongDimension(t, 1), new[] { batchSize, _modelDimension });
-            var v_t = Engine.Reshape(Vall.GetSliceAlongDimension(t, 1), new[] { batchSize, _modelDimension });
-            var r_t = Engine.Reshape(Rall.GetSliceAlongDimension(t, 1), new[] { batchSize, _modelDimension });
+            // RECORDED slice via Engine.TensorNarrow. Wrapping a BARE
+            // GetSliceAlongDimension view in Engine.Reshape is NOT sufficient: the Reshape is a
+            // recorded op but its INPUT is still a non-owning view that no compiled step produces,
+            // so the fused compiled-training plan captures it as a graph LEAF frozen at trace time
+            // and every timestep then reads abandoned trace-time storage (zeros first, recycled
+            // garbage later). It also means the slice never joined the gradient tape, so the
+            // upstream weights received no gradient through it.
+            // Same defect and same fix as RealGatedLinearRecurrenceLayer — see the detailed
+            // rationale there (#1789 Generated Q-S). RWKV4's failures were the identical signature:
+            // Clone_AfterTraining / MoreData / OptimizerStep_ParamL2.
+            var k_t = Engine.Reshape(Engine.TensorNarrow(Kall, 1, t, 1), new[] { batchSize, _modelDimension });
+            var v_t = Engine.Reshape(Engine.TensorNarrow(Vall, 1, t, 1), new[] { batchSize, _modelDimension });
+            var r_t = Engine.Reshape(Engine.TensorNarrow(Rall, 1, t, 1), new[] { batchSize, _modelDimension });
 
             // Output for this token (current key boosted by the time_first bonus u).
             var ww = Engine.TensorBroadcastAdd(k_t, u);
