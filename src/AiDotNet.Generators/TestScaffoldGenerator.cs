@@ -1203,6 +1203,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // repeated generated iterations only: the paper architecture stays intact and every training
         // assertion still runs against the real forward/backward path.
         "StableVideoSR",
+        // Generated A-C shard budget. Measured from the cancelled CI job for
+        // "ModelFamily - Generated Layers A-C" (run 30286528012): the shard completed only
+        // 2,085 of its 3,625 tests inside the 45-minute job budget — it is not failing on
+        // correctness (2 failures), it simply never finishes. Of the 29.9 minutes attributable
+        // to individually-timed tests, 23.4 minutes (78%) are the training probes, and
+        // MoreData_ShouldNotDegrade plus LossStrictlyDecreasesOnMemorizationTask alone are
+        // 13.5 of those minutes. None of the classes below carried ANY repetition bound, so
+        // each was running the generic 50 + 200-step MoreData probe and the 100-step
+        // memorization probe.
+        //
+        // Per-class training-probe cost measured in that job, for the classes added here:
+        //   CogVideo 135s, AVID 92s, ABINet 65s, AMT 27s, ABME 18s, BiMVFI 18s.
+        //
+        // Trim ONLY the repeated iterations: paper architectures, production defaults,
+        // numerical tolerances and decrease thresholds are unchanged, and every training
+        // assertion still executes against the real forward/backward path.
+        "CogVideo", "AVID", "ABINet", "AMT", "ABME", "BiMVFI",
+        // Deliberately NOT added to this set — every one of them ALREADY emits iteration
+        // overrides from another branch, so listing them here double-emits (CS0102, confirmed
+        // by build). Their caps exist but are evidently too loose for the A-C budget, so they
+        // need tightening in place rather than set membership:
+        //   Chronos            212s — emits all six overrides already
+        //   Chirp3             133s — FP32 audio branch (2-vs-5 MoreData)
+        //   CLIPA              113s — own MoreData cap (1-vs-2); memorization is UNcapped at 54s
+        //   BiaffineNER         92s — emits MoreData counts/tolerance + memorization
+        //   ConvTasNet          76s — emits MoreDataTolerance
+        //   BiomedCLIP          43s — emits all six
+        //   ContextNet          37s — FP32 audio branch
+        //   BSVD                33s — own convergence block
+        //   AudioPaLM           24s — emits counts + memorization
+        //   AudioEventDetector  18s — emits MoreDataTolerance
     };
 
     // These #1789 fixtures already use FP32 and public scaffold-scale model options, but the
@@ -4636,6 +4667,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "DecoderHiddenDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, " +
                     "NumHeads = 4, NumQuantiles = 3, DropoutRate = 0.0, " +
                     "WarmupSteps = 2, TotalSteps = 16 })";
+            }
+            else if (model.ClassName == "Chronos" && model.TypeParameterCount == 1)
+            {
+                // Chronos keeps the paper's T5-base tokenized forecaster in production:
+                // ContextLength 512, 768-wide, 12 layers, 12 heads, 3072 FFN, a 4,096-token
+                // quantization vocabulary, and NumSamples = 20 sampled trajectories per
+                // forecast — so a single Predict is 20 passes through the stack.
+                //
+                // It is the single most expensive class in the A-C shard: 212 s across its
+                // training probes (memorization 95 s, MoreData 28 s, TrainingError 22 s,
+                // Training_ShouldReduceLoss 19 s) in run 30286528012, at ~4.75 s per train
+                // step. Its repetition counts are ALREADY at the floor the forecasting-
+                // foundation branch allows (TrainingIterations 1, MoreData 1-vs-2,
+                // memorization 20), so capping is exhausted and the residual cost is pure
+                // per-step scale — which is what this bound addresses.
+                //
+                // Exercise the same tokenization -> encoder-decoder -> sampled-decoding path
+                // through the public options at CI-smoke scale, exactly as its sibling
+                // ChronosBolt already does above. NumSamples is cut hardest because it
+                // multiplies every forward pass. Production research defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.ChronosFinanceOptions<double> { ContextLength = 64, " +
+                    "ForecastHorizon = 8, NumTokens = 64, HiddenDimension = 32, NumLayers = 2, " +
+                    "NumHeads = 4, IntermediateSize = 64, NumSamples = 2, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "LLMTime" && model.TypeParameterCount == 1)
             {
@@ -10811,7 +10869,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // fixture kept feeding the paper-scale 512-element context into a 64-context model and
             // every invariant failed with "ReshapeLayer per-sample input element count (512) does not
             // match output element count (64)".
-            bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT" || model.ClassName == "LLMTime";
+            // Chronos joins them too: its bounded constructor above uses the same
+            // ContextLength 64 / ForecastHorizon 8 geometry, so it needs the same ctx and
+            // output-shape pair. Without this the fixture would keep feeding the paper-scale
+            // 512-element context into a 64-context model (and expect its paper 64-wide
+            // forecast instead of the fixture's 8), failing every invariant on shape.
+            bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT" || model.ClassName == "LLMTime" || model.ClassName == "Chronos";
             bool usesReducedRwkvFixture = model.ClassName == "RWKVForecaster";
             bool usesReducedAutoformerFixture = model.ClassName == "Autoformer";
             int paperCtx = usesReducedChronosBoltFixture
@@ -10909,6 +10972,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+            // The cap above bounded MoreData but left the memorization probe on its generic
+            // 100-step default, which is now CLIPA's dominant cost: measured at 54 s in the
+            // A-C shard job (run 30286528012) against a 180 s gate — passing, but 54 s of a
+            // 45-minute shard budget for one test. 15 steps clears the Adam warm-up hump and
+            // still shows the net decrease this test asserts, matching the count every other
+            // bounded heavy model here uses. The default threshold is retained, so a genuinely
+            // broken optimizer still fails.
+            sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
         }
 
         // DiffCutSegmentation keeps its Stable-Diffusion encoder widths
