@@ -10236,10 +10236,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // step 2 before its normal descent begins. Compare after that transient while keeping
                     // the same real training path, paper-default optimizer, and fully customizable model.
                     // Other floated audio models retain the cheaper 1-vs-2 convergence smoke probe.
-                    sb.AppendLine(model.ClassName == "Chirp3"
+                    // RoomImpulseResponse shows the same measured warm-up transient as Chirp3: its
+                    // MoreData probe compared 1 iteration against 2 and the loss was still RISING
+                    // there, so "more data" read as degradation while training was healthy. Compare
+                    // after the transient (2 vs 5) on the same real training path, keeping the
+                    // paper-default optimizer and the DEFAULT tolerance rather than relaxing it.
+                    sb.AppendLine(model.ClassName is "Chirp3" or "RoomImpulseResponse"
                         ? "    protected override int MoreDataShortIterations => 2;"
                         : "    protected override int MoreDataShortIterations => 1;");
-                    sb.AppendLine(model.ClassName == "Chirp3"
+                    sb.AppendLine(model.ClassName is "Chirp3" or "RoomImpulseResponse"
                         ? "    protected override int MoreDataLongIterations => 5;"
                         : model.ClassName is "FastEmit" or "EmformerRNNT"
                             ? "    protected override int MoreDataLongIterations => 10;"
@@ -10257,7 +10262,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // descends), so it gets the same 15-step budget. ContextNet likewise passes its
                     // longer reduction invariant but rises across the first AdamW update; LastLoss is
                     // sampled before each update, so its two-step probe observes only that warm-up hump.
-                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer"
+                    // RoomImpulseResponse has the same first-step hump: its memorization probe was
+                    // judged between step 1 and step 2 with the loss RISING (0.645785 -> 0.926694),
+                    // so a decrease assertion cannot hold there however the threshold is set. Give
+                    // it the same 15-step budget so the probe clears the hump and sees the genuine
+                    // net decrease; 15 float steps stay well under the 180 s timeout.
+                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse"
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
