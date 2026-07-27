@@ -110,10 +110,19 @@ public class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     // MHA->LN->FFN->FFN->LN blocks with no convolution module. The paper-accurate encoder now exists as
     // LayerHelper<T>.CreateDefaultUSMConformerLayers (real ConformerBlockLayer blocks: macaron
     // half-step FFNs, relative-attention MHSA, and the paper's pointwise->GLU->depthwise->BatchNorm->
-    // Swish->pointwise convolution module), and the block passes its own layer invariants — but
-    // training a full model through it still reaches NaN on the first Adam step (parameter L2
-    // 34.4358 -> NaN), so switching turns this model's 1 failure into 6. Kept on the existing builder
-    // until that is resolved, rather than regressing the shard.
+    // Swish->pointwise convolution module), and the block passes its own layer invariants — but the
+    // GENERATED model suite reaches NaN on the first Adam step through it (parameter L2 34.4358 ->
+    // NaN), so switching turns this model's 1 failure into 6. Kept on the existing builder until that
+    // is resolved, rather than regressing the shard.
+    //
+    // Narrowed down, for whoever picks this up: the block's own math is NOT the problem. A standalone
+    // harness that builds this exact model (EncoderDim 32, 2 blocks, ConvKernelSize 3) and runs one
+    // eager Train step is finite and stable at BOTH double and float, reproducing the same pre-step
+    // parameter L2 (34.4358) the test reports — so init and forward agree with the failing fixture and
+    // only the UPDATE diverges. The remaining suspect is therefore the fused/compiled training path
+    // (CompiledTapeTrainingStep) rather than the layer: it is what the generated suite exercises and
+    // what the eager harness bypasses. Swapping the conv module's BatchNorm for LayerNorm changes
+    // nothing (identical pre-step L2, identical failure), so normalization choice is ruled out.
     //
     // Its actual test failure (LossStrictlyDecreasesOnMemorizationTask) was NOT the architecture: it
     // was SCALE. The production defaults (1024-wide, 12 blocks, 32000-way head) cannot memorize the
