@@ -97,7 +97,12 @@ public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         _options = options ?? new FastConformerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         base.SampleRate = _options.SampleRate;
         SupportedLanguages = new[] { _options.Language };
         InitializeLayers();
@@ -185,7 +190,7 @@ public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -245,7 +250,16 @@ public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new FastConformer<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } modelPath && !string.IsNullOrEmpty(modelPath))
+            return new FastConformer<T>(Architecture, modelPath, new FastConformerOptions(_options));
+
+        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
+            : null;
+        return new FastConformer<T>(Architecture, new FastConformerOptions(_options), cloneOptimizer);
+    }
 
     #endregion
 

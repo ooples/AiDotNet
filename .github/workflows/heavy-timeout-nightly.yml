@@ -34,7 +34,7 @@ jobs:
     timeout-minutes: 350   # generous budget; these models are the slow ones by definition
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           # This lane only reads + uploads test artifacts; it never pushes, so don't leave the
           # GITHUB_TOKEN persisted in .git/config where it could leak into an uploaded artifact (artipacked).

@@ -7,4 +7,13 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// </summary>
 public class GLAOptions : NeuralNetworkOptions
 {
+    public GLAOptions() { }
+
+    public GLAOptions(GLAOptions other)
+    {
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
+    }
 }

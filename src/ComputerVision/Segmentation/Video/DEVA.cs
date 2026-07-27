@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -124,7 +125,7 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
         InitializeLayers();
     }
 
@@ -161,7 +162,7 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load DEVA ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -192,28 +193,41 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? throw new InvalidOperationException("A native DEVA optimizer is not available in ONNX mode.");
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        base.Train(input, expectedOutput);
     }
     #endregion
 
     #region Private Methods
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(DEVAModelSize modelSize) => modelSize switch
+    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(
+        DEVAModelSize modelSize,
+        DEVAOptions options)
     {
-        DEVAModelSize.Base => ([64, 128, 256, 512], [2, 2, 4, 2], 256),
-        DEVAModelSize.Large => ([128, 256, 512, 1024], [3, 4, 6, 3], 256),
-        _ => ([64, 128, 256, 512], [2, 2, 4, 2], 256)
-    };
+        var defaults = modelSize switch
+        {
+            DEVAModelSize.Base => (ChannelDims: new[] { 64, 128, 256, 512 }, Depths: new[] { 2, 2, 4, 2 }, DecoderDim: 256),
+            DEVAModelSize.Large => (ChannelDims: new[] { 128, 256, 512, 1024 }, Depths: new[] { 3, 4, 6, 3 }, DecoderDim: 256),
+            _ => (ChannelDims: new[] { 64, 128, 256, 512 }, Depths: new[] { 2, 2, 4, 2 }, DecoderDim: 256)
+        };
+
+        int[] channelDims = options.ChannelDimensions?.ToArray() ?? defaults.ChannelDims;
+        int[] depths = options.StageDepths?.ToArray() ?? defaults.Depths;
+        int decoderDim = options.DecoderDimension ?? defaults.DecoderDim;
+
+        if (channelDims.Length != 4 || channelDims.Any(value => value <= 0))
+            throw new ArgumentException("DEVA ChannelDimensions must contain four positive values.", nameof(options));
+        if (depths.Length != 4 || depths.Any(value => value <= 0))
+            throw new ArgumentException("DEVA StageDepths must contain four positive values.", nameof(options));
+        if (decoderDim <= 0)
+            throw new ArgumentException("DEVA DecoderDimension must be positive.", nameof(options));
+
+        return (channelDims, depths, decoderDim);
+    }
 
     private Tensor<T> Forward(Tensor<T> input)
     {
@@ -281,7 +295,9 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateDEVAEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
+            var encoderLayers = LayerHelper<T>.CreateDEVAEncoderLayers(
+                _channels, _height, _width, _channelDims, _depths, _dropRate,
+                _options.UseGroupNormalization).ToList();
             _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
             int fH = _height / 32, fW = _width / 32;
             var decoderLayers = LayerHelper<T>.CreateDEVADecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
@@ -299,7 +315,18 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}.", nameof(parameters));
+
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
+    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.
@@ -350,8 +377,23 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new DEVA<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new DEVA<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+        ? new DEVA<T>(Architecture, CreateOptimizerForClone(), LossFunction, _numClasses, _modelSize, _dropRate, new DEVAOptions(_options))
+        : new DEVA<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new DEVAOptions(_options));
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateOptimizerForClone()
+    {
+        if (_optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options)
+        {
+            return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options));
+        }
+
+        // Unknown custom optimizers cannot safely share mutable moment state with a
+        // clone. Fall back to the model's fresh default; builder-level configuration
+        // can still install any optimizer on the cloned model before training.
+        return null;
+    }
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

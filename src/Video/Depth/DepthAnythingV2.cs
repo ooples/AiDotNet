@@ -186,21 +186,23 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         _onnxModelPath = null;
         _optimizer = optimizer;
 
-        _numFeatures = modelSize switch
+        _numFeatures = _options.NumFeatures ?? (modelSize switch
         {
             ModelSize.Small => 384,
             ModelSize.Base => 768,
             ModelSize.Large => 1024,
             _ => 768
-        };
+        });
 
-        _numEncoderBlocks = modelSize switch
+        _numEncoderBlocks = _options.NumEncoderBlocks ?? (modelSize switch
         {
             ModelSize.Small => 12,
             ModelSize.Base => 12,
             ModelSize.Large => 24,
             _ => 12
-        };
+        });
+
+        ValidateConfigurableDimensions();
 
         InitializeLayers();
     }
@@ -241,21 +243,23 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         _onnxModelPath = onnxModelPath;
         _optimizer = null;
 
-        _numFeatures = modelSize switch
+        _numFeatures = _options.NumFeatures ?? (modelSize switch
         {
             ModelSize.Small => 384,
             ModelSize.Base => 768,
             ModelSize.Large => 1024,
             _ => 768
-        };
+        });
 
-        _numEncoderBlocks = modelSize switch
+        _numEncoderBlocks = _options.NumEncoderBlocks ?? (modelSize switch
         {
             ModelSize.Small => 12,
             ModelSize.Base => 12,
             ModelSize.Large => 24,
             _ => 12
-        };
+        });
+
+        ValidateConfigurableDimensions();
 
         try
         {
@@ -272,6 +276,16 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     #endregion
 
     #region Public Methods
+
+    private void ValidateConfigurableDimensions()
+    {
+        if (_numFeatures < 8 || _numFeatures % 8 != 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumFeatures), _numFeatures,
+                "DepthAnythingV2 NumFeatures must be at least 8 and divisible by 8 for the DPT decoder.");
+        if (_numEncoderBlocks <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumEncoderBlocks), _numEncoderBlocks,
+                "DepthAnythingV2 NumEncoderBlocks must be positive.");
+    }
 
     /// <summary>
     /// Estimates depth from an RGB image.
@@ -417,7 +431,10 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            if (_optimizer is null)
+                TrainWithTape(input, expectedOutput);
+            else
+                TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -604,22 +621,15 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}.", nameof(parameters));
+
         int offset = 0;
         foreach (var layer in Layers)
         {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(newParams);
-                offset += layerParamCount;
-            }
+            int layerParamCount = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(offset, layerParamCount));
+            offset += layerParamCount;
         }
     }
 
@@ -675,12 +685,28 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     {
         if (_useNativeMode)
         {
-            return new DepthAnythingV2<T>(Architecture, _optimizer, LossFunction, _modelSize);
+            return new DepthAnythingV2<T>(Architecture, CreateOptimizerForClone(), LossFunction, _modelSize, new DepthAnythingV2Options(_options));
         }
         else
         {
-            return new DepthAnythingV2<T>(Architecture, _onnxModelPath!, _modelSize);
+            return new DepthAnythingV2<T>(Architecture, _onnxModelPath!, _modelSize, new DepthAnythingV2Options(_options));
         }
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateOptimizerForClone()
+    {
+        return _optimizer switch
+        {
+            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                    null,
+                    new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
+            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                    null,
+                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
+            _ => null
+        };
     }
 
     #endregion
