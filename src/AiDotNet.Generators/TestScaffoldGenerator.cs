@@ -7231,6 +7231,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumResBlocks = 2, CleaningModuleBlocks = 2, ScaleFactor = 2, NumFrames = 4, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "SlowFastLLaVA" && model.TypeParameterCount == 1)
+            {
+                // Generated Q-S: same defect as SEEDX below - constructed with NO options, so it
+                // inherited the full paper-scale SlowFastLLaVAOptions defaults: DecoderDim 4096 x
+                // NumDecoderLayers 32 (a LLaMA-3 7B-class decoder), VisionDim 1024 x
+                // NumVisionLayers 24, VocabSize 32000, ImageSize 336, MaxFrames 64 - against a
+                // fixture that only supplies 4 frames of 3x32x32. Both failures were
+                // System.OutOfMemoryException, one of them in Metadata_ShouldExist (1 m 9 s), which
+                // only CONSTRUCTS the model and runs zero training iterations - so an iteration cap
+                // provably cannot help and shrinking is the correct rung. Exercise the SAME
+                // slow-pathway/fast-pathway dual-rate video topology at CI-smoke width through the
+                // public options; ImageSize and MaxFrames now match the fixture the scaffold feeds
+                // it. Production defaults and user customization remain unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.VideoLanguage.SlowFastLLaVAOptions { VisionDim = 64, " +
+                    "DecoderDim = 64, NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, " +
+                    "ImageSize = 32, VocabSize = 256, MaxFrames = 4, SlowFrames = 2, " +
+                    "FastFrames = 4, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "SEEDX" && model.TypeParameterCount == 1)
             {
                 // Generated Q-S: SEEDX was constructed with NO options at all, so it inherited the
