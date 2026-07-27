@@ -1165,6 +1165,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // VideoCLIP runs its spatial encoder per frame at 768 hidden channels and had no bound, so
         // Training_ShouldReduceLoss hit the 120s timeout even at the fixture's small 4x3x32x32 clip.
         "VideoCLIP",
+        // Upscale4KAgent had no bound either and ran its MoreData probe past 120s and its
+        // memorization probe past 180s.
+        "Upscale4KAgent",
     };
 
     // Attribute metadata names
@@ -5864,6 +5867,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "numEncoderConvLayers: 1, numPostnetConvLayers: 1, numMelsPerFrame: 2, " +
                     "maxDecoderSteps: 4, stopThreshold: 1.0)";
             }
+            else if (model.ClassName == "WGANGP" && model.TypeParameterCount == 1)
+            {
+                // Its single-architecture constructor forwards architecture.InputType straight into
+                // the generator/critic pair, both of which are ConvolutionalNeuralNetwork, so the
+                // architecture has to be 2-D or 3-D. Build the same model on a small 8x8 single-channel
+                // image; the fixture's InputShape stays in lockstep with it.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 8, inputWidth: 8, inputDepth: 1, outputSize: 4))";
+            }
             else if (model.ClassName == "VideoCLIP" && model.TypeParameterCount == 1)
             {
                 // VideoCLIP's parameterless constructor takes CLIP-scale defaults: a 49408-token
@@ -9173,10 +9187,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 or "GLALanguageModel" or "GatedDeltaNetLanguageModel" ? 32
                 : isCausalGanGenerator ? 128
                 : isLang ? 128 : 16;
-            sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
-            sb.AppendLine(isCausalGanGenerator
-                ? "    protected override int[] OutputShape => new[] { 10 };"
-                : "    protected override int[] OutputShape => new[] { 4 };");
+            if (model.ClassName == "WGANGP")
+            {
+                // WGANGP builds a ConvolutionalNeuralNetwork for BOTH its generator and its critic,
+                // and CreateDefaultCNNLayers rejects a 1-D architecture outright — the generic
+                // one-dimensional fixture below made every one of its tests throw
+                // "CNN requires 2D or 3D input, got 1D input shape" from the constructor, before any
+                // invariant ran. Feed it the [batch, depth, height, width] image its convolutional
+                // stack expects, matching the layout the vision fixtures already use.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 8, 8 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            }
+            else
+            {
+                sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
+                sb.AppendLine(isCausalGanGenerator
+                    ? "    protected override int[] OutputShape => new[] { 10 };"
+                    : "    protected override int[] OutputShape => new[] { 4 };");
+            }
 
             // Paper-scale language models: Griffin / Hawk / RecurrentGemma all
             // use VocabSize=256000 by paper default (De et al. 2024

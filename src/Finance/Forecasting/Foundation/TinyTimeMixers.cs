@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -546,6 +546,39 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
     /// <summary>
     /// Performs the full native forward pass through the TTM MLP-Mixer architecture.
     /// </summary>
+    /// <summary>
+    /// Walks the layer stack the same way <see cref="ForwardNative"/> does, applying the instance
+    /// normalization and rank-1 -> [1, N] promotion first so the leading ReshapeLayer receives a
+    /// batched tensor.
+    /// </summary>
+    /// <remarks>
+    /// Without this override NamedLayerActivations_ShouldBeNonEmpty threw "ReshapeLayer per-sample
+    /// input element count (1) does not match output element count": the base implementation walks
+    /// Layers directly and skips the normalization and shape promotion ForwardNative performs, so the
+    /// first layer saw a rank-1 tensor it cannot consume. MOMENT and YingLong carry the identical
+    /// override for the identical reason.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode || Layers.Count == 0)
+            return activations;
+
+        var walk = ApplyInstanceNormalization(input);
+        if (walk.Rank == 1)
+            walk = walk.Reshape(new[] { 1, walk.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            walk = Layers[i].Forward(walk);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = walk.Clone();
+        }
+
+        return activations;
+    }
+
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
         // TTM (Ekambaram et al., 2024) is an MLP-Mixer over patches. The
