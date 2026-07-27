@@ -1152,6 +1152,17 @@ jobs:
               # the assembly discovers ~64k cases and pre-enumeration inflates the
               # retained-case baseline before a single test even runs.
               $cfg | Add-Member -NotePropertyName preEnumerateTheories -NotePropertyValue $false -Force
+              # Silence xUnit discovery diagnostics on heavy shards. --TestCaseFilter is applied
+              # AFTER xUnit discovers the whole assembly, so every shard enumerates all ~66.8k test
+              # cases; with diagnosticMessages the runner prints one "Discovered [execution] test
+              # case" line each. That output alone exceeds GitHub's per-job log cap: the
+              # "NeuralNetworks A-F" job (90049783747) produced 57,102 discovery lines and its
+              # entire 16.9 MB log covered just the first 2m44s of a 55-minute job, with ZERO test
+              # results retained — the shard became impossible to diagnose from CI. The messages
+              # are pure noise for a filtered shard run; keep them off here and leave the default
+              # (on) in the checked-in xunit.runner.json for local debugging.
+              $cfg.diagnosticMessages = $false
+              $cfg.internalDiagnosticMessages = $false
               $cfg | ConvertTo-Json -Depth 10 | Set-Content $runnerJson -Encoding utf8
               Write-Host "Serialized heavy-shard runner config: $runnerJson"
             } else {
