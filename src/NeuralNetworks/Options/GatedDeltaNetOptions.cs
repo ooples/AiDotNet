@@ -11,7 +11,8 @@ public class GatedDeltaNetOptions : NeuralNetworkOptions
 
     public GatedDeltaNetOptions(GatedDeltaNetOptions other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
     }

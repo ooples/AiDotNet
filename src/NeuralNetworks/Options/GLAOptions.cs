@@ -11,7 +11,8 @@ public class GLAOptions : NeuralNetworkOptions
 
     public GLAOptions(GLAOptions other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
     }
