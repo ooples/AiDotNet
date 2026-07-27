@@ -765,31 +765,25 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     }
 
     /// <summary>
-    /// Updates model parameters using the configured optimizer.
+    /// Installs an explicit parameter vector, as the base contract requires: the argument is the new
+    /// weights, not a gradient.
     /// </summary>
-    public override void UpdateParameters(Vector<T> gradients)
+    /// <remarks>
+    /// This override previously treated its argument as a GRADIENT and ran an optimizer step on it,
+    /// which inverted the base contract (<c>WithParameters</c> and the clone path both call this to
+    /// INSTALL weights). Restoring a trained parameter vector therefore applied an Adam update on top
+    /// of it, so a round-tripped clone predicted differently from the model it was copied from.
+    /// Training does not go through here — it runs the optimizer via TrainWithTape — so nothing else
+    /// depended on the old behaviour.
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
         }
 
-        // Use the configured optimizer for parameter updates
-        var currentParams = GetParameters();
-
-        // Cast to gradient-based optimizer to access UpdateParameters
-        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
-        {
-            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
-            SetParameters(updatedParams);
-        }
-        else
-        {
-            // Fallback: manual SGD if optimizer doesn't support gradient-based updates
-            T learningRate = NumOps.FromDouble(0.001);
-            currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-            SetParameters(currentParams);
-        }
+        SetParameters(parameters);
     }
 
     /// <summary>
