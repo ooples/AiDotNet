@@ -3254,6 +3254,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Exercise the same embedding -> text encoder -> codec-LM -> token-head topology
                 // at smoke scale through the public options, exactly as the FireRedTTS bound above
                 // does for the same base. Production defaults are unchanged.
+                // NumCodebooks stays at 2, NOT 1. Several models routed here have a genuine
+                // MULTI-codebook contract that collapses at 1: VALLEX is VALL-E X, whose AR stage
+                // predicts the first codebook and whose NAR stage predicts the REMAINING ones, and
+                // MaskGCT and Voicebox are likewise non-autoregressive over multiple codec layers.
+                // At NumCodebooks = 1 there are no remaining codebooks, so the NAR half of those
+                // architectures is silently skipped by the fixture and the test stops covering the
+                // thing the paper is about. 2 is the smallest value that keeps both stages live, and
+                // it only widens the codec head from 1x16 to 2x16.
                 string codecOptionsType = model.ClassName switch
                 {
                     "MARS5TTS" => "AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions",
@@ -3269,7 +3277,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 16), " +
-                    $"new {codecOptionsType} {{ NumCodebooks = 1, " +
+                    $"new {codecOptionsType} {{ NumCodebooks = 2, " +
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
@@ -4385,6 +4393,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // at the framework's 1e-3, twice the intended rate. That wiring is fixed separately;
                 // this bound brings the AR + NAR codec-LM topology to CI-smoke scale through the
                 // public options. Production defaults are unchanged.
+                // NumCodebooks stays at 2, NOT 1: VALL-E's whole contribution is the two-stage split
+                // where the AR model predicts the FIRST codebook and the NAR model predicts the
+                // REMAINING ones (Wang et al. 2023, and the class summary says exactly that). At
+                // NumCodebooks = 1 there are no remaining codebooks, so GenerateNARTokens has nothing
+                // to model and the NAR stage — half the paper's architecture — is silently skipped by
+                // the fixture. 2 is the smallest value that still exercises both stages.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
@@ -4392,7 +4406,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Generation.VALLEOptions { " +
                     "MaxDurationSeconds = 1.0, ARHiddenDim = 32, NumARLayers = 1, NumARHeads = 2, " +
                     "NARHiddenDim = 32, NumNARLayers = 1, NumNARHeads = 2, PhonemeVocabSize = 32, " +
-                    "CodebookSize = 16, NumCodebooks = 1, DropoutRate = 0.0 })";
+                    "CodebookSize = 16, NumCodebooks = 2, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "MMS" && model.TypeParameterCount == 1)
             {
@@ -8530,16 +8544,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        return tensor;");
                 sb.AppendLine("    }");
                 sb.AppendLine();
+                // VALLE joins the iteration-capped set. It was the only codec-LM model here still
+                // running the DEFAULT 100 memorization iterations, which is precisely why its
+                // LossStrictlyDecreasesOnMemorizationTask reported "timed out after 180000
+                // milliseconds" rather than a bad loss value: measured ~1.8 s per iteration, 100 of
+                // them lands exactly on the gate. Its Training_ShouldChangeParameters likewise ran the
+                // default 10 iterations at 36 s. The model itself is already bounded to a 32-wide,
+                // 1-layer AR stack, so this was never model size — it was iteration count.
+                // 15 memorization steps (GLM4Voice's value, ~27 s here) also leaves room past the
+                // first-step Adam warm-up rise that trips the strict 2-iteration form elsewhere.
                 sb.AppendLine(model.ClassName is "Bark" or "FishSpeech" or "GLM4Voice"
                     ? "    protected override int MoreDataShortIterations => 1;"
                     : "    protected override int MoreDataShortIterations => 3;");
                 sb.AppendLine(model.ClassName is "Bark" or "FishSpeech" or "GLM4Voice"
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
-                if (model.ClassName is "Bark" or "GLM4Voice")
+                if (model.ClassName is "Bark" or "GLM4Voice" or "VALLE")
                 {
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
-                    sb.AppendLine(model.ClassName == "GLM4Voice"
+                    sb.AppendLine(model.ClassName is "GLM4Voice" or "VALLE"
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                 }
