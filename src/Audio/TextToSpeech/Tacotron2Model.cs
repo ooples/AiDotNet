@@ -552,6 +552,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     private void InitializeNativeLayers()
     {
         List<ILayer<T>> layers;
+        bool builtDefaultLayers = false;
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             layers = Architecture.Layers.ToList();
@@ -565,6 +566,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
         else
         {
+            builtDefaultLayers = true;
             _embedding = new EmbeddingLayer<T>(_vocabSize, _embeddingDim);
             Layers.Add(_embedding);
 
@@ -598,6 +600,90 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             _stopTokenLayer = layers[idx++];
         while (idx < layers.Count)
             _postNetLayers.Add(layers[idx++]);
+
+        if (builtDefaultLayers)
+        {
+            ResolveDefaultLayerShapes();
+        }
+    }
+
+    /// <summary>
+    /// Resolves every default layer's input width up front instead of letting it be inferred from
+    /// whatever tensor happens to arrive first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>DenseLayer</c> is always lazy: it carries a -1 input placeholder and resolves the real width
+    /// on its first forward. That is fine while a model stays in memory, but a deserialized model has
+    /// not run a forward pass yet, so its layers are still unresolved, report a parameter count of 0,
+    /// and <c>SetParameters</c> skips them without complaint — the trained weights are dropped on the
+    /// floor and a clone predicts differently from the model it was copied from. This is the #1221
+    /// lazy-layer class of failure.
+    /// </para>
+    /// <para>
+    /// Every width here is already fixed by the constructor arguments, so none of it needs to be
+    /// discovered at runtime. The pairs that are not simply "previous layer's output" come from the
+    /// two concatenations in the decoder loop: the decoder LSTM consumes pre-net output joined to the
+    /// attention context, and both the mel projection and the stop-token head consume the decoder
+    /// state joined to that same context.
+    /// </para>
+    /// <para>
+    /// Only the layers this class builds are resolved. A caller supplying its own
+    /// <c>Architecture.Layers</c> may use entirely different widths, so those are left to resolve
+    /// themselves as before.
+    /// </para>
+    /// </remarks>
+    private void ResolveDefaultLayerShapes()
+    {
+        int encoderOut = _encoderDim * 2;
+        int decoderIn = _prenetDim + encoderOut;
+        int contextIn = _decoderDim + encoderOut;
+
+        foreach (var conv in _encoderConvLayers)
+        {
+            ResolveLayerInput(conv, _embeddingDim);
+        }
+
+        ResolveLayerInput(_encoderLstm, _embeddingDim);
+
+        if (_attentionLayers.Count >= 4)
+        {
+            ResolveLayerInput(_attentionLayers[0], _decoderDim);       // query projection
+            ResolveLayerInput(_attentionLayers[1], encoderOut);        // key projection
+            ResolveLayerInput(_attentionLayers[2], _attentionFilters); // location projection
+            ResolveLayerInput(_attentionLayers[3], _attentionDim);     // energy projection
+        }
+
+        if (_decoderLstmLayers.Count >= 5)
+        {
+            ResolveLayerInput(_decoderLstmLayers[0], NumMels);   // pre-net takes a mel frame
+            ResolveLayerInput(_decoderLstmLayers[1], _prenetDim);
+            ResolveLayerInput(_decoderLstmLayers[2], decoderIn);
+            ResolveLayerInput(_decoderLstmLayers[3], _decoderDim);
+            ResolveLayerInput(_decoderLstmLayers[4], contextIn); // mel projection
+        }
+
+        ResolveLayerInput(_stopTokenLayer, contextIn);
+
+        for (int i = 0; i < _postNetLayers.Count; i++)
+        {
+            // The post-net refines the mel spectrogram, so it starts at NumMels and stays at the
+            // post-net width until the last layer projects back down.
+            ResolveLayerInput(_postNetLayers[i], i == 0 ? NumMels : _postnetEmbeddingDim);
+        }
+    }
+
+    /// <summary>
+    /// Pins one layer's input width. ResolveShapesOnly is declared on <see cref="LayerBase{T}"/>
+    /// rather than on ILayer, and it deliberately resolves shapes WITHOUT allocating weights, so the
+    /// first real forward still initializes them from the same RNG draw as before.
+    /// </summary>
+    private static void ResolveLayerInput(ILayer<T>? layer, int inputWidth)
+    {
+        if (layer is LayerBase<T> resolvable && inputWidth > 0)
+        {
+            resolvable.ResolveShapesOnly(new[] { inputWidth });
+        }
     }
 
     private static IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
