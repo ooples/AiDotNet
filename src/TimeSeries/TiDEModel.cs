@@ -61,6 +61,46 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
 
     private static bool IsFiniteValue(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
 
+    /// <summary>
+    /// Reversible instance normalization of the look-back window, which the TiDE paper applies so the
+    /// network sees a scale-free series and distribution shift between windows cannot move the input
+    /// magnitude. It was missing here, and without it the manual SGD below took steps proportional to
+    /// the raw series scale and diverged outright — <c>Prediction[0]</c> came back Infinity.
+    /// Returns the normalized window plus the mean and scale needed to invert the transform.
+    /// </summary>
+    private static (double[] Normalized, double Mean, double Scale) NormalizeWindow(double[] x)
+    {
+        double mean = 0.0;
+        for (int j = 0; j < x.Length; j++) { mean += x[j]; }
+        mean /= x.Length;
+
+        double variance = 0.0;
+        for (int j = 0; j < x.Length; j++) { double d = x[j] - mean; variance += d * d; }
+        variance /= x.Length;
+
+        double scale = Math.Sqrt(variance);
+        // A constant window has zero spread; dividing by it would manufacture the very non-finite
+        // values this normalization exists to prevent, so fall back to an identity scale.
+        if (!IsFiniteValue(scale) || scale < 1e-8) { scale = 1.0; }
+
+        var normalized = new double[x.Length];
+        for (int j = 0; j < x.Length; j++) { normalized[j] = (x[j] - mean) / scale; }
+        return (normalized, mean, scale);
+    }
+
+    /// <summary>
+    /// Converts a forecast to <typeparamref name="T"/> and verifies finiteness AFTER the conversion.
+    /// Checking only the double is not enough: every double from about 3.4e38 up is finite yet
+    /// overflows to Infinity once narrowed to float, so a pre-conversion guard passes the value
+    /// through and the float caller still receives Infinity.
+    /// </summary>
+    private T ToFiniteT(double value)
+    {
+        if (!IsFiniteValue(value)) { return NumOps.Zero; }
+        T converted = NumOps.FromDouble(value);
+        return IsFiniteValue(NumOps.ToDouble(converted)) ? converted : NumOps.Zero;
+    }
+
     private static double[] Window(int l, Func<int, double> get, int count)
     {
         var x = new double[l];
@@ -120,9 +160,13 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
                 for (int bi = batchStart; bi < batchEnd; bi++)
                 {
                     int idx = order[bi];
-                    var xv = Window(_l, c => Convert.ToDouble(x[idx, c]), cols);
+                    var xvRaw = Window(_l, c => Convert.ToDouble(x[idx, c]), cols);
+                    var (xv, wMean, wScale) = NormalizeWindow(xvRaw);
                     var (hidden, pred) = Forward(xv);
-                    double err = pred - Convert.ToDouble(y[idx]); // dMSE/dpred
+                    // The target has to enter the same normalized space as the window, otherwise the
+                    // error — and every gradient derived from it — carries the raw series scale.
+                    double target = (Convert.ToDouble(y[idx]) - wMean) / wScale;
+                    double err = pred - target; // dMSE/dpred
 
                     gB2 += err;
                     gBr += err;
@@ -177,9 +221,11 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
 
     public override T PredictSingle(Vector<T> input)
     {
-        var xv = Window(_l, j => Convert.ToDouble(input[j]), input.Length);
-        var (_, pred) = Forward(xv);
-        return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
+        var xvRaw = Window(_l, j => Convert.ToDouble(input[j]), input.Length);
+        var (xv, wMean, wScale) = NormalizeWindow(xvRaw);
+        var (_, predNormalized) = Forward(xv);
+        // Reverse the instance normalization to return the forecast in the series' own units.
+        return ToFiniteT(wMean + (wScale * predNormalized));
     }
 
     public override long ParameterCount => (long)_h * _l + _h + _h + 1 + _l + 1;
