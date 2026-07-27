@@ -5864,25 +5864,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "numEncoderConvLayers: 1, numPostnetConvLayers: 1, numMelsPerFrame: 2, " +
                     "maxDecoderSteps: 4, stopThreshold: 1.0)";
             }
-            else if (model.ClassName == "VinVL" && model.TypeParameterCount == 1)
-            {
-                // VinVL's own default is the paper's 5e-5 fine-tuning rate, which is right for
-                // production but moves an 86M-parameter stack too little to register over the handful
-                // of iterations these probes run: the memorization loss crept from 0.305985 to
-                // 0.305303 across 15 steps. Hand it a larger step through the public optimizer
-                // parameter so the convergence invariants can actually observe learning; the model's
-                // own default is untouched. AdamW's bare default was tried first and diverged to NaN,
-                // so this sits deliberately between the two.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
-                    "optimizer: new AiDotNet.Optimizers.AdamWOptimizer<double, " +
-                    "AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(" +
-                    "null, new AiDotNet.Models.Options.AdamWOptimizerOptions<double, " +
-                    "AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> " +
-                    "{ InitialLearningRate = 5e-4 }))";
-            }
             else if (model.ClassName == "VideoCLIP" && model.TypeParameterCount == 1)
             {
                 // VideoCLIP's parameterless constructor takes CLIP-scale defaults: a 49408-token
@@ -10166,6 +10147,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
+        // xLSTM belongs with the init-sensitive models above. Run on its own it is green, but sharing
+        // an xUnit worker with sibling classes advances the process-shared RandomHelper first, and
+        // from some of those inits its ~26M-parameter stack goes NaN on the very first training step
+        // (Param L2 106.8021 -> NaN). Pinning the init makes that independent of execution order.
+        if (model.ClassName == "XLSTMLanguageModel")
+        {
+            pinInitSeed = true;
+        }
+
         if (pinInitSeed)
         {
             // Init-sensitive models: pin a deterministic per-layer init seed around
