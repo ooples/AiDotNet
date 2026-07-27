@@ -1168,6 +1168,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Upscale4KAgent had no bound either and ran its MoreData probe past 120s and its
         // memorization probe past 180s.
         "Upscale4KAgent",
+        // VideoLISA had no bound and ran its training probes out of memory outright.
+        "VideoLISA",
     };
 
     // Attribute metadata names
@@ -5898,8 +5900,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // alone is ~38M entries — about 300 MB in double before any activation — which is what
                 // OOM-killed Metadata_ShouldExist. numFrames=4 and a 32x32 clip match the InputShape
                 // the video family emits, and a 512-token vocabulary keeps the same text pathway while
-                // cutting that table by two orders of magnitude. hiddenDim itself is a local constant
-                // in the model rather than an option, so it is deliberately left alone here.
+                // cutting that table by two orders of magnitude. hiddenDim is a constructor parameter
+                // now as well (paper default 768), but the layer factory does not build a usable stack
+                // at smaller widths — "Index 1 is out of range" — so the fixture leaves it at 768.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
@@ -6990,7 +6993,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // training invariants time out. This generic fallback would shadow RAFT's CI-smoke constructor
             // branch further down, so let RAFT fall through to it. (RVRT/RealisVSR/DAMVSR/etc. have no
             // parameterless ctor, so they already skip this branch and reach their own overrides.)
-            else if (model.HasParameterlessConstructor && model.ClassName != "RAFT")
+            // XMem and VideoCLIP join RAFT here: each has a parameterless constructor AND its own
+            // special-case above, and this branch would otherwise discard that and fall back to the
+            // zero-arg form. XMem's parameterless constructor hardcodes a 2048-wide architecture, so
+            // it kept predicting [4, 1, 2048, 2048] against a [4, 1, 32, 32] target no matter what the
+            // special-case asked for.
+            else if (model.HasParameterlessConstructor
+                     && model.ClassName is not ("RAFT" or "XMem" or "VideoCLIP"))
             {
                 // Zero-arg constructor: simple instantiation
                 if (model.TypeParameterCount == 0)
@@ -8919,6 +8928,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // count (axis 1), NOT the final embedding dim (fixed by the attention weights).
                 // DifferentInputLengths_ShouldNotCrash must halve the tokens, not the embedding.
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+            }
+            else if (model.ClassName == "VITSModel")
+            {
+                // VITS (Kim et al. 2021) is the same family as OpenVoiceV2 above: a conv encoder,
+                // normalizing flow and HiFi-GAN transposed-conv decoder that upsamples the time axis
+                // by 2 and projects to a single waveform channel. So a [1, 64, 32] spectrum becomes a
+                // [1, 1, 64] waveform, not the generic 4-wide vector — GeneratorOutput_ShouldHaveCorrectShape
+                // compared the declared 4 against the 64 samples it actually produces.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 64 };");
             }
             else if (model.ClassName == "Tacotron2Model")
             {

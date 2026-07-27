@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -196,7 +196,8 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            // Pass the configured optimizer through; the two-argument overload ignored it.
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -232,11 +233,25 @@ public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
+    /// <summary>Adds a leading batch axis. Recorded, so it stays on the autodiff tape.</summary>
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+        => Engine.Reshape(tensor, new[] { 1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2] });
 
+    /// <summary>
+    /// Drops the leading batch axis. Recorded, for the same reason.
+    /// </summary>
+    /// <remarks>
+    /// Both of these copied raw spans into a freshly allocated tensor, which produces a value with no
+    /// history on the autodiff tape. Forward ends by calling this one whenever the caller passed an
+    /// unbatched clip, so the network's OUTPUT was detached and every gradient came back zero —
+    /// GradientFlow_ShouldBeNonZeroAndFinite reported "No parameters changed after training".
+    /// </remarks>
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    {
+        int[] s = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1];
+        return Engine.Reshape(tensor, s);
+    }
     #endregion
 
     #region Abstract Implementation

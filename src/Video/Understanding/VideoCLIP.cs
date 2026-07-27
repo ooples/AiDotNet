@@ -106,6 +106,12 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     private readonly ConvolutionalLayer<T> _textProjection;
     private readonly int _textHiddenDim;
 
+    /// <summary>
+    /// Width of the vision and text trunks. CLIP ViT-B/32's 768 stays the default; it was a hardcoded
+    /// local before, which left the model at ~171M parameters no matter how small a clip it was given.
+    /// </summary>
+    private readonly int _hiddenDim;
+
     // Shared components
     private readonly ConvolutionalLayer<T> _logitScale;
 
@@ -191,6 +197,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int textMaxLength = 77,
         int vocabSize = 49408,
         double temperature = 0.07,
+        int hiddenDim = 768,
         string? vocabPath = null,
         string? mergesPath = null,
         VideoCLIPVideoOptions? options = null)
@@ -229,7 +236,8 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         _textTransformerFFN1 = [];
         _textTransformerFFN2 = [];
 
-        int hiddenDim = 768;
+        if (hiddenDim <= 0) hiddenDim = 768;
+        _hiddenDim = hiddenDim;
         _textHiddenDim = hiddenDim;
         int numSpatialBlocks = 12;
         int numTemporalBlocks = 4;
@@ -596,7 +604,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int height = videoFrames.Shape[3];
         int width = videoFrames.Shape[4];
 
-        int hiddenDim = 768;
+        int hiddenDim = _hiddenDim;
         int featH = height / 16;
         int featW = width / 16;
 
