@@ -20202,6 +20202,72 @@ public static class LayerHelper<T>
     #region Speech Recognition Layers
 
     /// <summary>
+    /// Builds a USM / Chirp encoder from GENUINE Conformer blocks (Zhang et al. 2023,
+    /// arXiv:2303.01037 §2.1 — "We use the convolution-augmented transformer, or Conformer, with
+    /// relative attention as an encoder"; block per Gulati et al. 2020, arXiv:2005.08100 Eq. 1).
+    /// Structure: log-Mel projection + LayerNorm → N <see cref="NeuralNetworks.Layers.ConformerBlockLayer{T}"/>
+    /// → LayerNorm + vocabulary projection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This exists because neither factory the Chirp models previously used is a Conformer:
+    /// <c>CreateDefaultProprietaryASRLayers</c> emits residual-FREE MHA/LN/FFN blocks (so the encoder
+    /// has no gradient highway and cannot reduce its loss — the #1208/#1221 degeneracy), and
+    /// <c>CreateDefaultConformerLayers</c> is a residual PRE-LN TRANSFORMER whose own comment concedes
+    /// its position-wise FFN stands in for a convolution module that "was never a real convolution".
+    /// <see cref="NeuralNetworks.Layers.ConformerBlockLayer{T}"/> implements the paper block exactly:
+    /// two half-step macaron FFNs around relative-attention self-attention and a real convolution
+    /// module (pointwise → GLU → depthwise → norm → Swish → pointwise).
+    /// </para>
+    /// <para>
+    /// Known remaining deviation, documented rather than hidden: the paper's front-end is a
+    /// convolutional subsampling stack that reduces the frame rate 4×. This builder keeps the linear
+    /// mel projection the existing ASR fixtures are shaped around, so the encoder preserves its time
+    /// axis. That affects compute, not the block structure the failing training invariant depends on.
+    /// </para>
+    /// </remarks>
+    /// <param name="encoderDim">Encoder width d_model. USM uses 1024 (0.6B) / 1536 (2B).</param>
+    /// <param name="numLayers">Conformer block count. USM uses 24 (0.6B) / 32 (2B).</param>
+    /// <param name="numAttentionHeads">Attention heads. USM uses 8 (0.6B) / 16 (2B).</param>
+    /// <param name="feedForwardExpansionFactor">Macaron FFN expansion. Conformer paper default 4.</param>
+    /// <param name="convKernelSize">Depthwise kernel. USM reports a 5-frame convolution kernel.</param>
+    /// <param name="numMels">Input log-Mel channel count.</param>
+    /// <param name="vocabSize">Output vocabulary size for the CTC projection.</param>
+    /// <param name="dropoutRate">Dropout applied after the input projection.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultUSMConformerLayers(
+        int encoderDim = 1024,
+        int numLayers = 24,
+        int numAttentionHeads = 8,
+        int feedForwardExpansionFactor = 4,
+        int convKernelSize = 5,
+        int numMels = 128,
+        int vocabSize = 32000,
+        double dropoutRate = 0.1)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        int heads = ChooseDivisibleHeadConfig(encoderDim, numAttentionHeads).heads;
+
+        // --- Feature projection: log-Mel -> encoder width ---
+        yield return new DenseLayer<T>(encoderDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>();
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Conformer encoder blocks (the paper's Equation 1) ---
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new ConformerBlockLayer<T>(
+                encoderDim, heads, feedForwardExpansionFactor, convKernelSize);
+        }
+
+        // --- CTC output head ---
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(vocabSize, identityActivation);
+    }
+
+    /// <summary>
     /// Creates default layers for the Conformer ASR model (Gulati et al., 2020).
     /// Architecture: Conv-subsampling → N Conformer blocks (FF/Attn/Conv/FF macaron) → CTC head.
     /// </summary>
