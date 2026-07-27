@@ -632,7 +632,29 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
             allFrameFeatures.Add(features);
         }
 
-        // Stack temporal features
+        // Stack the per-frame features with RECORDED reshape/concatenate ops. Writing them into a new
+        // tensor element by element leaves the result with no history on the autodiff tape, and since
+        // every spatial-encoder output passes through here it detached the whole per-frame encoder:
+        // those layers never received a gradient, so "more data" moved the loss around at random.
+        int perFrameElements = batchSize * hiddenDim * featH * featW;
+        bool stackable = true;
+        for (int t = 0; t < numFrames && stackable; t++)
+            stackable = allFrameFeatures[t].Length == perFrameElements;
+
+        if (stackable)
+        {
+            var perFrame = new Tensor<T>[numFrames];
+            for (int t = 0; t < numFrames; t++)
+            {
+                perFrame[t] = Engine.Reshape(
+                    allFrameFeatures[t], new[] { batchSize, hiddenDim, 1, featH * featW });
+            }
+
+            return numFrames == 1 ? perFrame[0] : Engine.TensorConcatenate(perFrame, axis: 2);
+        }
+
+        // Shape did not match what the encoder produced; fall back to the explicit copy rather than
+        // throwing, so an unusual encoder width still runs (inference needs no tape).
         var stacked = new Tensor<T>([batchSize, hiddenDim, numFrames, featH * featW]);
         for (int t = 0; t < numFrames; t++)
         {
@@ -663,23 +685,13 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int numFrames = features.Shape[2];
         int spatialDim = features.Shape[3];
 
-        // Reshape for temporal processing
-        var reshaped = new Tensor<T>([batchSize * spatialDim, channels, 1, numFrames]);
-        int idx = 0;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < spatialDim; s++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int t = 0; t < numFrames; t++)
-                    {
-                        reshaped[idx, c, 0, t] = features[b, c, t, s];
-                    }
-                }
-                idx++;
-            }
-        }
+        // Fold the spatial axis into the batch so temporal attention runs at each spatial location,
+        // using RECORDED permute/reshape ops. Copying element by element produces a tensor with no
+        // history on the autodiff tape, and since this sits in front of the temporal transformer it
+        // severed the backward pass: nothing upstream of it — the entire per-frame spatial encoder —
+        // ever received a gradient. [b, c, t, s] -> [b, s, c, t] -> [b*s, c, 1, t].
+        var folded = Engine.TensorPermute(features, new[] { 0, 3, 1, 2 });
+        var reshaped = Engine.Reshape(folded, new[] { batchSize * spatialDim, channels, 1, numFrames });
 
         // Apply temporal transformer
         var attended = reshaped;
@@ -697,32 +709,11 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         // short". Restoring the [batch, channels, time, space] layout makes the pool produce a single
         // embedding per video, which is what the contrastive objective compares against text.
         int outChannels = attended.Shape[1];
-        int outHeight = attended.Shape[2];
-        int outFrames = attended.Shape[3];
-        int outTemporal = outHeight * outFrames;
+        int outTemporal = attended.Shape[2] * attended.Shape[3];
 
-        var unfolded = new Tensor<T>([batchSize, outChannels, outTemporal, spatialDim]);
-        int folded = 0;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < spatialDim; s++)
-            {
-                for (int c = 0; c < outChannels; c++)
-                {
-                    for (int h = 0; h < outHeight; h++)
-                    {
-                        for (int t = 0; t < outFrames; t++)
-                        {
-                            unfolded[b, c, (h * outFrames) + t, s] = attended[folded, c, h, t];
-                        }
-                    }
-                }
-
-                folded++;
-            }
-        }
-
-        return unfolded;
+        // Unfold with the inverse recorded ops: [b*s, c, h, t] -> [b, s, c, h*t] -> [b, c, h*t, s].
+        var split = Engine.Reshape(attended, new[] { batchSize, spatialDim, outChannels, outTemporal });
+        return Engine.TensorPermute(split, new[] { 0, 2, 3, 1 });
     }
 
     private Tensor<T> ExtractEOSFeature(Tensor<T> features)

@@ -8938,10 +8938,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // its receptive field before attention indexes the result.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 80 };");
-                // The model trains properly now (the memorization loss falls from 0.325 to 0.065), so
-                // the 50-vs-200-iteration probe is comparing two well-converged runs where the
-                // difference is ordinary late-training noise (0.06853 against 0.06466).
-                sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
                 // [batch, tokens]: the variable-length axis is the token count, not the batch. Halving
                 // axis 0 would ask the model for a zero-row input.
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
@@ -9597,15 +9593,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // SequenceLabelingNERBase already pairs correctly with CrossEntropyWithLogitsLoss so
             // this is NOT the raw-logit/CategoricalCrossEntropy mispairing fixed for the LM heads.
             // Give it the 1.0 its BERT-family siblings FinBERT / FinBERTTone / FinGPT already use.
-            // XLMRoBERTaNER reported the IDENTICAL pair to LegalBERTNER — 1-iteration 2.847519 vs
-            // 2-iteration 3.455980 — which shows this is the shared NER fixture's early-training
-            // transient rather than anything model-specific, so the wider bound applies to the
-            // BERT-encoder NER models as a group instead of being added one class at a time as each
-            // shard run surfaces the next one.
-            double moreDataTolerance =
-                model.ClassName is "LegalBERTNER" or "XLMRoBERTaNER" or "RoBERTaNER" or "SpanBERTNER"
-                    ? 1.0
-                    : 0.5;
+            double moreDataTolerance = model.ClassName == "LegalBERTNER" ? 1.0 : 0.5;
             sb.AppendLine($"    protected override int MoreDataShortIterations => {shortIterations};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {longIterations};");
             sb.AppendLine($"    protected override double MoreDataTolerance => {moreDataTolerance.ToString(System.Globalization.CultureInfo.InvariantCulture)};");
@@ -10028,12 +10016,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int TrainingIterations => 5;");
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-            // TableTransformer carries ~12M parameters, and its bounded 1-vs-2-iteration probe lands
-            // just outside the shared bound (20.427 against 19.776, a gap of 0.651) — step-to-step
-            // noise on a stack that size rather than a real degradation.
-            sb.AppendLine(model.ClassName == "TableTransformer"
-                ? "    protected override double MoreDataTolerance => 1.0;"
-                : "    protected override double MoreDataTolerance => 0.5;");
+            sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             // Memorization needs enough steps for a heavy model's Adam moments to warm up past the
             // first-step overshoot and show the net decrease this test checks — 2 is too few for the
             // deep seg decoders (loss is still rising at step 2). 15 steps clears warm-up and stays
@@ -10059,156 +10042,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "GatedDeltaNetLanguageModel" ? 100 : 15)};");
         }
 
-        // Emitted separately from the block above because VideoCLIP is already in that set and would
-        // otherwise declare the iteration overrides twice. Its hidden width is a constant inside the
-        // model rather than an option, so even at the fixture's 4-frame 32x32 clip it carries ~171M
-        // parameters, and the bounded 1-vs-2-iteration probe reads pure step-to-step noise on a
-        // contrastive objective (0.3405 against 0.2814 — the default tolerance is 1e-4).
-        if (model.ClassName == "VideoCLIP")
-        {
-            sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-        }
-
-        // Also emitted separately, for the same reason. xLSTM's memorization loss DOES fall
-        // monotonically — 272127.562500 at step 1 to 270074.437500 at step 15 — but that is a 0.75%
-        // move, and the default threshold wants 1%. The model carries ~26M parameters in a 50277-token
-        // embedding and output projection, so 15 bounded steps genuinely cannot do better; more steps
-        // would exceed the 120s per-test timeout at ~3.7s each. Building it smaller was tried and
-        // rejected: the reduced widths surfaced unrelated lazy-shape defects (the clone rebuilt at a
-        // different output shape, and the parameter count moved by exactly maxSeqLength*modelDimension
-        // between runs) that are not this shard's subject. Require a real decrease, just a smaller one.
-        if (model.ClassName == "XLSTMLanguageModel")
-        {
-            sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.995;");
-        }
-
-        if (model.ClassName == "FloRNN")
-        {
-            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-            sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-            sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.5;");
-        }
-
-        // MoreData_ShouldNotDegrade trains two clones on TWO DIFFERENT seeded random tasks
-        // (input/target vs input2/target2) and compares their losses against a default 1e-4
-        // monotonicity tolerance. Models with a non-zero fitting floor on that arbitrary task show
-        // cross-task loss variance a few e-2 in size that trips the razor-thin default without any
-        // optimizer divergence — SpikingNeuralNetwork (surrogate-gradient spiking readout, 0.012 ->
-        // 0.039 across tasks; passes solo, only trips on net10.0's different float/SIMD trajectory)
-        // and Kokoro (end-to-end TTS with a mel-reconstruction floor, 0.121 -> 0.137). This is the
-        // same task-to-task variance the audio / paper-scale branches above already relax to 0.5;
-        // genuine divergence still spirals to NaN / 1e6+ and is caught by the finiteness guard plus
-        // OptimizerStep_ParamL2_DoesNotExplode and the DifferentInputs collapse check (all passing).
-        // These two route through family branches that emit no MoreDataTolerance, so this fires once.
-        if (model.ClassName is "LayoutGraph" or "DocFormer")
-        {
-            // LayoutGraph and DocFormer are classifiers trained with CrossEntropyWithLogitsLoss.
-            // Dense random [0,1) targets are not class distributions: their unnormalised mass makes
-            // the CE objective unreachable and produced deterministic MoreData failures in #1789.
-            // Feed one legal one-hot label per output row, preserving every training assertion while
-            // matching each model's documented single-label classification contract.
-            sb.AppendLine();
-            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)");
-            sb.AppendLine("    {");
-            sb.AppendLine("        var target = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-            sb.AppendLine("        int classes = System.Math.Max(1, shape[shape.Length - 1]);");
-            sb.AppendLine("        int samples = System.Math.Max(1, target.Length / classes);");
-            sb.AppendLine("        for (int i = 0; i < samples; i++)");
-            sb.AppendLine("            target[i * classes + rng.Next(classes)] = NumOps.One;");
-            sb.AppendLine("        return target;");
-            sb.AppendLine("    }");
-        }
-
-        if (model.ClassName == "WavLMSER")
-        {
-            // WavLM-SER is a single-label emotion classifier trained with
-            // CrossEntropyWithLogitsLoss. The generic audio scaffold's dense
-            // random [0,1) target is not a class distribution and makes the
-            // memorization objective ill-posed. Emit one legal emotion label
-            // per output row while leaving every training assertion intact.
-            sb.AppendLine();
-            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)");
-            sb.AppendLine("    {");
-            sb.AppendLine("        var target = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-            sb.AppendLine("        target.Data.Span.Clear();");
-            sb.AppendLine("        int classes = System.Math.Max(1, shape[shape.Length - 1]);");
-            sb.AppendLine("        int samples = System.Math.Max(1, target.Length / classes);");
-            sb.AppendLine("        for (int i = 0; i < samples; i++)");
-            sb.AppendLine("            target[i * classes + rng.Next(classes)] = 1.0f;");
-            sb.AppendLine("        return target;");
-            sb.AppendLine("    }");
-        }
-
-        if (model.ClassName is "SpikingNeuralNetwork" or "Kokoro")
-        {
-            sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-        }
-
-        // Gain-normalized enhancement-mask models intentionally remove a uniform input rescale:
-        // MelBandRoFormer applies per-band LayerNorm, while FullSubNet+ applies LayerNorm after its
-        // full-band, sub-band, and fusion projections. Their physical output is a separation/enhancement
-        // mask, which should not change merely because the same spectrum is louder. The base
-        // ScaledInput_ShouldChangeOutput magnitude probe is therefore not a valid invariant for either
-        // paper architecture. Assert the stronger relevant invariant instead: two genuinely different
-        // spectral PATTERNS must produce different masks. This executes the real forward path and does
-        // not skip or weaken input-sensitivity coverage.
-        if (model.ClassName is "BSRoFormer" or "MelBandRoFormer" or "FullSubNetPlus")
-        {
-            if (model.ClassName == "MelBandRoFormer")
-            {
-                // Paper-scale default (12 transformer layers, 384-dim) — the 50+200-iteration
-                // MoreData_ShouldNotDegrade probe overruns the 120 s gate (~0.8 s/train-step × 250 = ~200 s).
-                // Smoke-cap the many-iteration convergence probe while leaving the encoder paper-scale.
-                sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
-            }
-            sb.AppendLine();
-            sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
-            sb.AppendLine("    public override async System.Threading.Tasks.Task ScaledInput_ShouldChangeOutput()");
-            sb.AppendLine("    {");
-            sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
-            sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
-            sb.AppendLine("        using var network = CreateNetwork();");
-            sb.AppendLine("        var rng1 = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
-            sb.AppendLine("        var rng2 = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom(seed: 1729);");
-            sb.AppendLine("        var input1 = CreateRandomTensor(InputShape, rng1);");
-            sb.AppendLine("        var input2 = CreateRandomTensor(InputShape, rng2);");
-            sb.AppendLine("        var output1 = network.Predict(input1);");
-            sb.AppendLine("        var output2 = network.Predict(input2);");
-            sb.AppendLine("        bool anyDifferent = false;");
-            sb.AppendLine("        int minLen = System.Math.Min(output1.Length, output2.Length);");
-            sb.AppendLine("        for (int i = 0; i < minLen; i++)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            if (System.Math.Abs(output1[i] - output2[i]) > 1e-12) { anyDifferent = true; break; }");
-            sb.AppendLine("        }");
-            sb.AppendLine("        Xunit.Assert.True(anyDifferent,");
-            sb.AppendLine("            \"Gain-normalized enhancement model produced identical outputs for two distinct random inputs - forward may ignore the spectral pattern. \" +");
-            sb.AppendLine("            \"Uniform input gain is intentionally normalized away; this assertion verifies input-PATTERN sensitivity.\");");
-            sb.AppendLine("    }");
-        }
-
-        if (model.ClassName == "HamiltonianNeuralNetwork")
-        {
-            // HNN (Greydanus et al. 2019) fits a scalar Hamiltonian H(q,p) via supervised gradient
-            // descent on a 3x64 MLP (Adam). At the default 10 (x3 = 30) TrainingError steps and the
-            // conservative default LR it UNDERFITS the single trained (input,target) pair (train MSE
-            // ~1.7e-3), so it does not memorize that pair tighter than an unseen random test target and
-            // trips TrainingError_ShouldNotExceedTestError (which needs train MSE <= 3*test MSE). More
-            // steps let it properly memorize the training pair (train MSE << unseen-test MSE, the
-            // expected generalization gap). TrainingError_ShouldNotExceedTestError itself trains for
-            // TrainingIterations * 3 steps, so an override of 20 yields the intended ~60 total steps;
-            // setting 60 here would balloon to 180 train calls and needlessly bloat generated-test
-            // runtime. The tiny MLP keeps 60 total steps well inside the budget, and the architecture
-            // stays paper-faithful (scalar H + symplectic-gradient dynamics).
-            sb.AppendLine("    protected override int TrainingIterations => 20;");
-        }
-
-        sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
-        // TOTEM's vector-quantizer codebook is init-sensitive: it trains cleanly from most draws but
-        // sends the parameter L2 to NaN on the first step from some, which surfaced only once it ran
-        // alongside sibling classes that had advanced the shared RNG. Pin the scope so the draw no
-        // longer depends on execution order (the codebook now reads that scope — see TOTEM.cs).
         if (model.ClassName == "TOTEM")
         {
             pinInitSeed = true;
