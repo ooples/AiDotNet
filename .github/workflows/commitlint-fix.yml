@@ -35,7 +35,7 @@ jobs:
       # AUTOFIX_PAT so the follow-up push is authenticated as a real user and therefore
       # re-triggers the required checks (pushes made with GITHUB_TOKEN do not).
       - name: Checkout PR head branch
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
