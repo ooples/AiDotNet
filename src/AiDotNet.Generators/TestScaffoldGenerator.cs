@@ -4421,6 +4421,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
                     "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 1e-5 })";
             }
+            else if (model.ClassName == "BiaffineNER" && model.TypeParameterCount == 1)
+            {
+                // Biaffine-NER (Yu et al., ACL 2020) keeps the BERT-base span-scoring stack in
+                // production: 768-wide, 12 layers, 12 heads, 3072 FFN, 256-token sequences,
+                // 256-d span embeddings and NegativeSpanSampleRatio = 100. A span-based tagger
+                // scores every candidate span, so its cost grows with
+                // MaxSequenceLength x MaxSpanLength and is then multiplied by the negative
+                // sampling ratio — which is why it is the third most expensive class in the
+                // A-C shard at 92 s across its training probes (run 30286528012).
+                // Exercise the same encoder -> biaffine span-scoring topology through public
+                // options at CI-smoke scale, bounding the span enumeration as well as the
+                // encoder so the reduction actually reaches the dominant term. Production
+                // defaults and every customization point are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 32, outputSize: 9), " +
+                    "new AiDotNet.NER.Options.SpanBasedNEROptions { HiddenDimension = 32, " +
+                    "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
+                    "NumLabels = 9, MaxSequenceLength = 16, MaxSpanLength = 4, " +
+                    "SpanEmbeddingDimension = 32, NegativeSpanSampleRatio = 5, " +
+                    "DropoutRate = 0.0, LearningRate = 1e-5 })";
+            }
             else if (model.ClassName == "BLINKNER" && model.TypeParameterCount == 1)
             {
                 // BLINK keeps the full BERT-base encoder defaults in production. Its generated
@@ -5664,6 +5687,53 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "UseCifAlignment = false, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
                     "DropoutRate = 0.0, Language = \"en\", LearningRate = 2e-5, WeightDecay = 0.01 })";
             }
+            else if (model.ClassName == "Chirp3" && model.TypeParameterCount == 1)
+            {
+                // Chirp3 keeps Google's paper-scale encoder in production: 1024-wide,
+                // 12 layers, 16 heads, a 4x feed-forward expansion, 128 mel bins and a
+                // 32,000-entry vocabulary. It is the second most expensive class in the A-C
+                // shard at 133 s across its training probes (run 30286528012). Its repetition
+                // counts are already bounded by the FP32 audio branch (2 training steps,
+                // 2-vs-5 MoreData), so — as with Chronos — the residual cost is per-step
+                // scale rather than repeat count, and only a fixture bound can address it.
+                // Exercise the same mel projection -> Conformer encoder -> vocabulary head at
+                // CI-smoke scale; NumMels=64 matches the generated [1,64,32] audio fixture.
+                // Production defaults and every customization point are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.Chirp3Options { SampleRate = 16000, " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 2, FeedForwardExpansionFactor = 2, NumMels = 64, " +
+                    "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "ContextNet" && model.TypeParameterCount == 1)
+            {
+                // ContextNet retains the paper's 512-wide, 23-block squeeze-and-excitation
+                // encoder and 5,000-entry vocabulary in production. 37 s across its training
+                // probes in the A-C shard, on top of the FP32 audio branch's existing
+                // repetition caps. Exercise the same mel -> SE-convolution encoder -> CTC head
+                // topology at CI-smoke scale. SqueezeExcitationRatio is kept at its paper value
+                // of 8, which still divides the reduced 32-wide encoder evenly. Production
+                // defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.ConformerFamily.ContextNetOptions { SampleRate = 16000, " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumBlocks = 2, " +
+                    "SqueezeExcitationRatio = 8, NumMels = 64, VocabSize = 64, DropoutRate = 0.0 })";
+            }
+            // NOTE (A-C tier-3, not yet done): AudioPaLM is still unbounded at 24 s of training
+            // probes. There are TWO AudioPaLM types — AiDotNet.SpeechRecognition.LLMIntegrated
+            // and AiDotNet.TextToSpeech.MultiModal — each with its OWN AudioPaLMOptions. The
+            // generated test targets the TextToSpeech.MultiModal one (see
+            // AiDotNet_TextToSpeech_MultiModal_AudioPaLMTests), whose options derive from
+            // EndToEndTtsOptions and expose no direct encoder-sizing properties, so a bound has
+            // to come from that base surface. Matching on the bare class name here is ambiguous
+            // between the two and silently binds the wrong overload (confirmed: CS1503, options
+            // vs string modelPath), so any fix must disambiguate on the containing namespace.
             else if (model.ClassName == "SenseVoiceLarge" && model.TypeParameterCount == 1)
             {
                 // SenseVoice-Large retains the paper-scale 1024-wide, 50-layer encoder and
@@ -10380,7 +10450,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // be [seq, 32]; feeding the paper-width [8, 768] into a 32-wide model throws
             // "embedding dimension (768) does not match weight dimension (32)" inside MultiHeadAttention.
             // Keep this list in sync with the HiddenDimension = 32 constructorExpr branches.
-            sb.AppendLine(model.ClassName is "DistilBERTNER" or "BLINKNER" or "ClinicalBERTNER" or "InstructionNER" or "ONNXNER" or "PubMedBERTNER" or "PromptNER" or "PURENER" or "PyramidNER" or "FinBERTNER" or "DeBERTaNER" or "ELECTRANER" or "BioBERTNER" or "SECBertNER" or "SpanBERTNER" or "RELNER" or "RoBERTaNER"
+            sb.AppendLine(model.ClassName is "DistilBERTNER" or "BLINKNER" or "ClinicalBERTNER" or "InstructionNER" or "ONNXNER" or "PubMedBERTNER" or "PromptNER" or "PURENER" or "PyramidNER" or "FinBERTNER" or "DeBERTaNER" or "ELECTRANER" or "BioBERTNER" or "SECBertNER" or "SpanBERTNER" or "RELNER" or "RoBERTaNER" or "BiaffineNER"
                 ? "    protected override int[] InputShape => new[] { 8, 32 };"
                 : "    protected override int[] InputShape => new[] { 8, 768 };");
 
