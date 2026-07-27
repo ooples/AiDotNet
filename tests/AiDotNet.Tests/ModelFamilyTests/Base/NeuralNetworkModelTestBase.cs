@@ -1726,10 +1726,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var batchOutput = network.Predict(input);
 
         Assert.Equal(singleOutput.Length, batchOutput.Length);
+        // A model's first FP32 prediction may run the eager kernel while the
+        // second uses its newly cached/compiled plan. Different reduction order
+        // can move the result by a few float ULPs without mutable model state;
+        // the third replay below distinguishes that stable transition from a
+        // genuinely stateful inference path. Keep double precision strict.
+        bool isFloat = typeof(T) == typeof(float);
+        double absoluteTolerance = isFloat ? 1e-5 : 1e-12;
+        double relativeTolerance = isFloat ? 1e-5 : 0.0;
         for (int i = 0; i < singleOutput.Length; i++)
         {
-            double delta = Math.Abs(ConvertToDouble(singleOutput[i]) - ConvertToDouble(batchOutput[i]));
-            if (delta >= 1e-12)
+            double first = ConvertToDouble(singleOutput[i]);
+            double second = ConvertToDouble(batchOutput[i]);
+            double delta = Math.Abs(first - second);
+            if (delta > absoluteTolerance + relativeTolerance * Math.Abs(first))
             {
                 var replayOutput = network.Predict(input);
                 Assert.Fail(

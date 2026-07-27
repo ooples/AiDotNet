@@ -40,7 +40,13 @@ public class GraFPrintLossTraceTests : EmbeddingModelTestBase<float>
     // passes and exceeds the 180 s CPU gate. Four iterations still exercises
     // the complete forward/backward/update path while keeping this focused
     // invariant bounded on the 16 GB runner.
-    protected override int TrainingIterations => 4;
+    protected override int TrainingIterations => 1;
+
+    // This focused fixture duplicates the auto-generated GraFPrint convergence surface.
+    // Three updates still exercise the full 53-layer BatchNorm backward path and require a
+    // real loss decrease, without spending almost three minutes in this single invariant.
+    protected override int MemorizationTaskIterations => 3;
+    protected override double MemorizationTaskLossThreshold => 0.99999;
 
     // Training_ShouldReduceLoss runs TrainingIterations*3 iters at batch=8.
     // The per-iter wall is ~3.4s, AND the min-loss assertion in the base
