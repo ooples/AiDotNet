@@ -1002,10 +1002,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // generic 100-step memorization probe exceeded 180 seconds. Retain the full model
         // and bound only repeated generated training iterations unless measured otherwise.
         "SAM21",
-        // RegionCLIP, RemoteCLIP, and SigLIP exceeded the 120/180-second training
-        // gates even in FP32. Their bounded public-options fixtures retain
-        // dual-stream topology; cap the remaining repeated convergence probes.
-        "RegionCLIP", "RemoteCLIP", "SigLIP",
+        // RegionCLIP and SigLIP exceeded the 120/180-second training gates even in
+        // FP32. Their bounded public-options fixtures retain dual-stream topology;
+        // cap the remaining repeated convergence probes.
+        // RemoteCLIP shares that same bounded 32px/8px-patch fixture but is deliberately
+        // NOT listed here: it takes the optimizer-warm-up treatment in
+        // BoundedGeneratedTrainingClassNames instead, which clears its first-few-step Adam
+        // hump while keeping the DEFAULT tight MoreDataTolerance rather than the 0.5
+        // relaxation this branch applies. Listing it in BOTH sets double-emits the four
+        // iteration-override properties (CS0102) — these two sets must stay disjoint.
+        "RegionCLIP", "SigLIP",
         // SegGPT's ViT-Large in-context segmentation stack timed out in MoreData.
         // Its generated fixture uses the same four-stage public topology at CI scale.
         "SEEM", "SegGPT", "ShowO", "SlimSAM",
