@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -287,13 +287,14 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         for (int i = 0; i < _criticIterations; i++)
         {
             // Generate fake images
-            Tensor<T> fakeImages = GenerateImages(noise);
+            Tensor<T> fakeImages = ShapeAsCriticInput(GenerateImages(noise));
+            Tensor<T> realBatch = ShapeAsCriticInput(realImages);
 
             // Get batch size
-            int batchSize = realImages.Shape[0];
+            int batchSize = realBatch.Shape[0];
 
             // Train critic and get losses
-            var (criticLoss, _) = TrainCriticBatchWithGP(realImages, fakeImages, batchSize);
+            var (criticLoss, _) = TrainCriticBatchWithGP(realBatch, fakeImages, batchSize);
 
             totalCriticLoss = NumOps.Add(totalCriticLoss, criticLoss);
         }
@@ -306,7 +307,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var trainableGen = (NeuralNetworkBase<T>)Generator;
         T generatorLoss = trainableGen.TrainWithCustomLoss(newNoise, genOutput =>
         {
-            var criticScore = Critic.Predict(genOutput);
+            var criticScore = Critic.Predict(ShapeAsCriticInput(genOutput));
             var negScore = Engine.TensorNegate(criticScore);
             var allAxes = Enumerable.Range(0, negScore.Shape.Length).ToArray();
             return Engine.ReduceMean(negScore, allAxes, keepDims: false);
@@ -580,7 +581,47 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     public Tensor<T> GenerateImages(Tensor<T> noise)
     {
         Generator.SetTrainingMode(false);
-        return Generator.Predict(noise);
+        return ShapeAsCriticInput(Generator.Predict(noise));
+    }
+
+    /// <summary>
+    /// Presents a tensor in the [batch, depth, height, width] layout the critic consumes.
+    /// </summary>
+    /// <remarks>
+    /// The generator is a convolutional network whose stack ends in a dense projection, so it emits a
+    /// FLAT vector, while the critic is a convolutional network that requires a 2-D or 3-D image.
+    /// Nothing bridged the two: the generator's output was handed straight to Critic.Predict, and the
+    /// real samples were passed through untouched as well, so the critic reported "Expected input
+    /// depth 1, but got 4" — it was reading the leading dimension of a flat vector as a channel count.
+    /// A GAN's generator has to produce something shaped like its training images for the critic to
+    /// compare the two at all. Reshaping is a recorded op, so the generator still trains through it.
+    /// Tensors that already match, or whose element count cannot be divided into whole images, are
+    /// returned unchanged rather than forced.
+    /// </remarks>
+    private Tensor<T> ShapeAsCriticInput(Tensor<T> images)
+    {
+        var arch = Critic.Architecture;
+        int depth = arch.InputDepth;
+        int height = arch.InputHeight;
+        int width = arch.InputWidth;
+        if (depth <= 0 || height <= 0 || width <= 0)
+            return images;
+
+        int perSample = depth * height * width;
+        if (perSample <= 0 || images.Length % perSample != 0)
+            return images;
+
+        var target = new[] { images.Length / perSample, depth, height, width };
+        if (images.Shape.Length == target.Length)
+        {
+            bool alreadyShaped = true;
+            for (int i = 0; i < target.Length && alreadyShaped; i++)
+                alreadyShaped = images.Shape[i] == target[i];
+            if (alreadyShaped)
+                return images;
+        }
+
+        return Engine.Reshape(images, target);
     }
 
     /// <summary>
@@ -676,7 +717,9 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        return Generator.Predict(input);
+        // A GAN predicts by generating, so hand back an IMAGE rather than the generator's flat
+        // projection — the same shape the critic and the training targets use.
+        return ShapeAsCriticInput(Generator.Predict(input));
     }
 
     /// <inheritdoc/>
