@@ -62,11 +62,20 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
     private static bool IsFiniteValue(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
 
     /// <summary>
-    /// Reversible instance normalization of the look-back window, which the TiDE paper applies so the
-    /// network sees a scale-free series and distribution shift between windows cannot move the input
-    /// magnitude. It was missing here, and without it the manual SGD below took steps proportional to
-    /// the raw series scale and diverged outright — <c>Prediction[0]</c> came back Infinity.
-    /// Returns the normalized window plus the mean and scale needed to invert the transform.
+    /// Instance-normalizes the look-back window, following the TiDE paper's use of reversible instance
+    /// normalization so the network sees a scale-free input and distribution shift between windows
+    /// cannot move the input magnitude. It was missing here, and without it the manual SGD below took
+    /// steps proportional to the raw series scale and diverged outright — <c>Prediction[0]</c> came
+    /// back Infinity.
+    /// <para>
+    /// Only the INPUT is normalized: the target stays in its own units and the forecast is emitted
+    /// directly, so the model learns the output offset in its own bias terms. Rescaling the output by
+    /// each window's own spread instead would make a constant shift in the targets come back as a
+    /// shift that varies from row to row, which breaks the translation- and scaling-equivariance the
+    /// regression contract requires. Bounding the input is what stops the divergence; rescaling the
+    /// output is not needed for it.
+    /// </para>
+    /// Returns the normalized window plus the mean and scale that produced it.
     /// </summary>
     private static (double[] Normalized, double Mean, double Scale) NormalizeWindow(double[] x)
     {
@@ -161,12 +170,9 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
                 {
                     int idx = order[bi];
                     var xvRaw = Window(_l, c => Convert.ToDouble(x[idx, c]), cols);
-                    var (xv, wMean, wScale) = NormalizeWindow(xvRaw);
+                    var (xv, _, _) = NormalizeWindow(xvRaw);
                     var (hidden, pred) = Forward(xv);
-                    // The target has to enter the same normalized space as the window, otherwise the
-                    // error — and every gradient derived from it — carries the raw series scale.
-                    double target = (Convert.ToDouble(y[idx]) - wMean) / wScale;
-                    double err = pred - target; // dMSE/dpred
+                    double err = pred - Convert.ToDouble(y[idx]); // dMSE/dpred
 
                     gB2 += err;
                     gBr += err;
@@ -222,10 +228,9 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
     public override T PredictSingle(Vector<T> input)
     {
         var xvRaw = Window(_l, j => Convert.ToDouble(input[j]), input.Length);
-        var (xv, wMean, wScale) = NormalizeWindow(xvRaw);
-        var (_, predNormalized) = Forward(xv);
-        // Reverse the instance normalization to return the forecast in the series' own units.
-        return ToFiniteT(wMean + (wScale * predNormalized));
+        var (xv, _, _) = NormalizeWindow(xvRaw);
+        var (_, pred) = Forward(xv);
+        return ToFiniteT(pred);
     }
 
     public override long ParameterCount => (long)_h * _l + _h + _h + 1 + _l + 1;
