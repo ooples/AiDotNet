@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -156,7 +156,14 @@ public class XMem<T> : NeuralNetworkBase<T>
         _longTermMemory = [];
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honour a paper-faithful step size. XMem (Cheng and Schwing 2022) trains in the 1e-5 range;
+        // Adam's bare default drove the parameter L2 straight to NaN on the first step once the
+        // encoder was actually reachable by gradients. Callers can still pass their own optimizer.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-5,
+            });
 
         InitializeLayers();
     }
@@ -331,6 +338,18 @@ public class XMem<T> : NeuralNetworkBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input) => SegmentFrame(input);
 
+    /// <summary>
+    /// Trains through the SAME segmentation path inference uses.
+    /// </summary>
+    /// <remarks>
+    /// Without this the base walked the flat Layers list instead, which is not a valid path through
+    /// this model at all — the encoder, memory-query and decoder stages are wired by SegmentWithMemory,
+    /// not by list order, so the walk failed outright with "Expected input depth 448, but got 128".
+    /// It also meant training optimized a different function from the one Predict evaluates, and the
+    /// two disagreed on output shape, so the loss compared mismatched tensors.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => SegmentFrame(input);
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -338,7 +357,8 @@ public class XMem<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            // Pass the configured optimizer through; the two-argument overload ignored it.
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -367,7 +387,17 @@ public class XMem<T> : NeuralNetworkBase<T>
         if (_useNativeMode)
         {
             var queryFeatures = EncodeFrame(frame);
-            var sensoryResponse = QueryMemory(_sensoryMemory, queryFeatures._shape);
+
+            // Add the query features into the sensory readout. queryFeatures was previously used ONLY
+            // to size the memory lookups, so the frame's CONTENT never reached the decoder: with the
+            // memory banks empty every response is zeros, the decoder saw a constant, and the model
+            // returned the same mask for any input — "identical output for distinct inputs, L2 = 0".
+            // It also meant no gradient reached the encoder, which is why the memorization loss barely
+            // moved. XMem's sensory memory is a per-frame state carried alongside the query features,
+            // so combining them here is what the architecture calls for, and TensorAdd is recorded so
+            // the encoder trains.
+            var sensoryResponse = Engine.TensorAdd(
+                QueryMemory(_sensoryMemory, queryFeatures._shape), queryFeatures);
             var workingResponse = QueryMemory(_workingMemory, [queryFeatures.Shape[0], _numFeatures / 2, queryFeatures.Shape[2], queryFeatures.Shape[3]]);
             var longTermResponse = QueryMemory(_longTermMemory, [queryFeatures.Shape[0], _numFeatures / 4, queryFeatures.Shape[2], queryFeatures.Shape[3]]);
 
@@ -512,10 +542,19 @@ public class XMem<T> : NeuralNetworkBase<T>
         var decoded = features;
         for (int i = 13; i < Layers.Count; i++)
         {
-            if (i < Layers.Count - 1)
+            // Only upsample while the mask is still SMALLER than the frame being segmented. This
+            // doubled once per decoder layer regardless, so the output overshot the target resolution
+            // by whatever the layer count happened to be: on a 32x32 clip the decoder produced a
+            // 2048x2048 mask. That is what made Predict allocate gigabytes and then fail the loss
+            // against a [4, 1, 32, 32] target with "[4, 1, 2048, 2048] and [4, 1, 32, 32] cannot be
+            // broadcast". The trailing loop below still tops the mask up when the decoder is too
+            // shallow to reach full resolution, so both directions stay covered.
+            if (i < Layers.Count - 1
+                && (decoded.Shape[2] < _inputHeight || decoded.Shape[3] < _inputWidth))
             {
                 decoded = Upsample2x(decoded);
             }
+
             decoded = Layers[i].Forward(decoded);
         }
 
@@ -631,7 +670,36 @@ public class XMem<T> : NeuralNetworkBase<T>
                 inputHeight: _inputHeight,
                 inputWidth: _inputWidth,
                 numFeatures: _numFeatures));
+
+            PinMemoryFusionInputDepth();
         }
+    }
+
+    /// <summary>
+    /// Pins the memory-fusion layer's input depth to the width of the concatenated memory readout.
+    /// </summary>
+    /// <remarks>
+    /// ConvolutionalLayer resolves its input depth lazily from the first tensor that reaches it, and
+    /// this model does NOT use its layers in list order — the encoder, the three memory branches, the
+    /// fusion layer and the decoder are wired by SegmentWithMemory. So the fusion layer was pinned by
+    /// a sequential shape walk to its list predecessor's width and then rejected the real readout with
+    /// "Expected input depth 128, but got 448". 448 is sensory + working + long-term, exactly the
+    /// total the layer factory computes for this layer and then never applies, since there is no
+    /// constructor overload that takes an input depth. Resolve it up front instead.
+    /// </remarks>
+    private void PinMemoryFusionInputDepth()
+    {
+        const int MemoryFusionLayerIndex = 12;
+        if (Layers.Count <= MemoryFusionLayerIndex) return;
+        if (Layers[MemoryFusionLayerIndex] is not LayerBase<T> fusion) return;
+
+        int fusedChannels = _numFeatures + (_numFeatures / 2) + (_numFeatures / 4);
+
+        // The encoder is four stride-2 convolutions, so the readout is the frame reduced by 16.
+        int featureHeight = Math.Max(1, _inputHeight / 16);
+        int featureWidth = Math.Max(1, _inputWidth / 16);
+
+        fusion.ResolveShapesOnly(new[] { fusedChannels, featureHeight, featureWidth });
     }
 
     #endregion
