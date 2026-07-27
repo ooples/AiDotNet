@@ -320,7 +320,12 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var p_t = projected3D.GetSliceAlongDimension(t, 1);
+            // RECORDED slice (Engine.TensorNarrow), not a bare GetSliceAlongDimension view — see the
+            // detailed rationale at the gated-recurrence loop below. A bare view is captured by the
+            // fused compiled plan as a graph LEAF frozen at trace time, so on replay it reads the
+            // abandoned trace-time storage instead of the plan's live pre-allocated buffer.
+            var p_t = Engine.Reshape(Engine.TensorNarrow(projected3D, 1, t, 1),
+                new[] { batchSize, _recurrenceDimension });
 
             var rGate = Engine.Sigmoid(Engine.TensorBroadcastAdd(
                 Engine.TensorMatMul(p_t, _recurrenceGateWeights),
@@ -412,9 +417,25 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var x_t = x.GetSliceAlongDimension(t, 1);
-            var r_t = recGate.GetSliceAlongDimension(t, 1);
-            var i_t = inpGate.GetSliceAlongDimension(t, 1);
+            // Take each per-timestep slice with the RECORDED engine op Engine.TensorNarrow (the same
+            // op the healthy RWKVLayer uses) instead of the bare tensor-level GetSliceAlongDimension.
+            //
+            // GetSliceAlongDimension returns a non-owning VIEW and is not a recorded graph op, so the
+            // fused compiled-training plan captures each view as a graph LEAF frozen at trace time.
+            // On replay the plan recomputes x / recGate / inpGate into its own PRE-ALLOCATED buffers,
+            // while the frozen views still reference the abandoned trace-time storage — so every
+            // timestep read stale memory. Measured on the #1789 Generated Q-S order audit: ops 5 and
+            // 7..23 (the per-timestep v_t = x_t @ W_v MatMuls) each reported
+            // `in0: producer=-1 len=256 max=0.000E+000` — an all-zero leaf produced by NO forward
+            // step — against a live weight of 0.125, while the parent feeding them measured 0.031.
+            // Once that abandoned storage is recycled for other tensors the same reads return garbage
+            // (magnitudes of 1e10..1e35 were observed), which squares past the float32 ceiling into
+            // Inf, NaNs the following LayerNorm, and turns every parameter gradient non-finite.
+            // TensorNarrow is a real recorded op, so the slice is recomputed from the live buffer on
+            // every replay. The math is identical — this only changes HOW the slice is taken.
+            var x_t = Engine.Reshape(Engine.TensorNarrow(x, 1, t, 1), new[] { batchSize, _recurrenceDimension });
+            var r_t = Engine.Reshape(Engine.TensorNarrow(recGate, 1, t, 1), new[] { batchSize, _recurrenceDimension });
+            var i_t = Engine.Reshape(Engine.TensorNarrow(inpGate, 1, t, 1), new[] { batchSize, _recurrenceDimension });
 
             // Value projection: v_t = x_t @ W_v   ([batch, recDim])
             var v_t = Engine.TensorMatMul(x_t, _valueProjectionWeights);

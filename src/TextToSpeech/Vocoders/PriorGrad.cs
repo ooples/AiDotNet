@@ -46,7 +46,8 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
 
     public override ModelOptions GetOptions() => _options;
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _preserveSuppliedOptimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -55,10 +56,11 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
         string modelPath,
         PriorGradOptions? options = null
     )
-        : base(architecture)
+        : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
     {
         _options = options ?? new PriorGradOptions();
         _useNativeMode = false;
+        _preserveSuppliedOptimizer = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -76,11 +78,12 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
         PriorGradOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture)
+        : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
     {
         _options = options ?? new PriorGradOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _preserveSuppliedOptimizer = optimizer is not null;
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -148,9 +151,9 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
             Layers.AddRange(
                 LayerHelper<T>.CreateDefaultDiffusionVocoderLayers(
                     _options.MelChannels,
-                    64,
+                    _options.HiddenDim,
                     _options.NumResBlocks,
-                    2,
+                    _options.NumHeads,
                     _options.DropoutRate
                 )
             );
@@ -196,8 +199,14 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -238,6 +247,15 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
         writer.Write(_options.NumDiffusionSteps);
         writer.Write(_options.DropoutRate);
         writer.Write(_options.NumResBlocks);
+        writer.Write(_options.HiddenDim);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.WeightDecay);
+        writer.Write(_options.OptimizerBatchSize);
+        writer.Write(_options.OptimizerBeta1);
+        writer.Write(_options.OptimizerBeta2);
+        writer.Write(_options.OptimizerEpsilon);
+        writer.Write(_options.MaxGradientNorm);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -252,9 +270,27 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
         _options.NumDiffusionSteps = reader.ReadInt32();
         _options.DropoutRate = reader.ReadDouble();
         _options.NumResBlocks = reader.ReadInt32();
+        // These architecture/optimizer fields were appended so model files written by older
+        // releases (whose payload ended after NumResBlocks) remain readable.
+        const int configurablePayloadBytes = (6 * sizeof(double)) + (3 * sizeof(int));
+        if (reader.BaseStream.Length - reader.BaseStream.Position >= configurablePayloadBytes)
+        {
+            _options.HiddenDim = reader.ReadInt32();
+            _options.NumHeads = reader.ReadInt32();
+            _options.LearningRate = reader.ReadDouble();
+            _options.WeightDecay = reader.ReadDouble();
+            _options.OptimizerBatchSize = reader.ReadInt32();
+            _options.OptimizerBeta1 = reader.ReadDouble();
+            _options.OptimizerBeta2 = reader.ReadDouble();
+            _options.OptimizerEpsilon = reader.ReadDouble();
+            _options.MaxGradientNorm = reader.ReadDouble();
+            MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
+        }
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
+        if (_useNativeMode && !_preserveSuppliedOptimizer)
+            _optimizer = CreateDefaultOptimizer();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
@@ -262,8 +298,59 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new PriorGrad<T>(Architecture, mp, _options);
-        return new PriorGrad<T>(Architecture, _options);
+            return new PriorGrad<T>(Architecture, mp, new PriorGradOptions(_options));
+
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? cloneOptimizer = _optimizer switch
+        {
+            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
+            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
+            _ => null
+        };
+        return new PriorGrad<T>(Architecture, new PriorGradOptions(_options), cloneOptimizer);
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        bool clipGradients = _options.MaxGradientNorm > 0.0;
+
+        // The official PriorGrad recipe uses Adam at 2e-4 with no weight decay. A non-zero
+        // user-supplied WeightDecay opts into AdamW while preserving every public setting.
+        if (_options.WeightDecay > 0.0)
+        {
+            return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    BatchSize = _options.OptimizerBatchSize,
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = _options.OptimizerBeta1,
+                    Beta2 = _options.OptimizerBeta2,
+                    Epsilon = _options.OptimizerEpsilon,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveBetas = false,
+                    UseAMSGrad = false,
+                    EnableGradientClipping = clipGradients,
+                    MaxGradientNorm = _options.MaxGradientNorm,
+                });
+        }
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                BatchSize = _options.OptimizerBatchSize,
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.OptimizerBeta1,
+                Beta2 = _options.OptimizerBeta2,
+                Epsilon = _options.OptimizerEpsilon,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = clipGradients,
+                MaxGradientNorm = _options.MaxGradientNorm,
+            });
     }
 
     private void ThrowIfDisposed()

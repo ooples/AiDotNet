@@ -291,9 +291,15 @@ public partial class Conv1DLayer<T> : LayerBase<T>
             }
             _inputChannels = candidateInputChannels;
             // Conv2D needs T >= dilation*(K-1)+1 for the dummy shape
-            // check; use that as the placeholder spatial dim.
+            // check; use that as the placeholder spatial dim. The placeholder MUST be rank-3
+            // [B, C, T]: ResolveFromShape runs the normal first-forward resolution, and
+            // OnFirstForward rejects anything that is not rank-3. Passing the rank-2 [C, T] shape
+            // (the batch axis was omitted) made every Clone / Deserialize path that reaches
+            // SetParameters before the first forward throw
+            // "Conv1DLayer requires rank-3 [B, C, T] input; got rank 2" — which is what broke
+            // Serialize_Deserialize_ShouldPreserveBehavior.
             int minSpatial = _dilation * (_kernelSize - 1) + 1;
-            ResolveFromShape(new[] { candidateInputChannels, minSpatial });
+            ResolveFromShape(new[] { 1, candidateInputChannels, minSpatial });
             _kernels = AllocateLazyWeight([_outputChannels, candidateInputChannels, 1, _kernelSize]);
             _biases = AllocateLazyWeight([_outputChannels]);
             RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
