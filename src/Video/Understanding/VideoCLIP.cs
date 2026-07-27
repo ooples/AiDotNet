@@ -689,7 +689,40 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
             attended = ApplyGELU(attended);
         }
 
-        return attended;
+        // Unfold the spatial axis back out of the batch dimension. Folding it in is the right way to
+        // attend over time at each spatial location, but the result was returned still folded, so
+        // every downstream stage saw a batch of batchSize*spatialDim: GlobalAveragePool then averaged
+        // within each spatial location instead of across them, and RemoveBatchDimension tried to copy
+        // that whole tensor into a destination sized for one video and threw "Destination is too
+        // short". Restoring the [batch, channels, time, space] layout makes the pool produce a single
+        // embedding per video, which is what the contrastive objective compares against text.
+        int outChannels = attended.Shape[1];
+        int outHeight = attended.Shape[2];
+        int outFrames = attended.Shape[3];
+        int outTemporal = outHeight * outFrames;
+
+        var unfolded = new Tensor<T>([batchSize, outChannels, outTemporal, spatialDim]);
+        int folded = 0;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int s = 0; s < spatialDim; s++)
+            {
+                for (int c = 0; c < outChannels; c++)
+                {
+                    for (int h = 0; h < outHeight; h++)
+                    {
+                        for (int t = 0; t < outFrames; t++)
+                        {
+                            unfolded[b, c, (h * outFrames) + t, s] = attended[folded, c, h, t];
+                        }
+                    }
+                }
+
+                folded++;
+            }
+        }
+
+        return unfolded;
     }
 
     private Tensor<T> ExtractEOSFeature(Tensor<T> features)

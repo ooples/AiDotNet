@@ -76,7 +76,6 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
         if (effectiveN < MaxLag + 3 || d < 2) return new Matrix<T>(d, d);
 
         var cov = ComputeCovarianceMatrix(data);
-        T eps = NumOps.FromDouble(1e-10);
         T threshold = NumOps.FromDouble(_correlationThreshold);
 
         // Phase 1: Build lagged covariance structure
@@ -138,11 +137,12 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     // Temporal orientation: determine direction using best lag
                     T bestItoJ = NumOps.Zero;
                     T bestJtoI = NumOps.Zero;
+                    int bestLagItoJ = 1;
                     for (int lag = 1; lag <= MaxLag; lag++)
                     {
                         T corrIJ = NumOps.Abs(ComputeLaggedCorrelation(data, i, j, lag, n));
                         T corrJI = NumOps.Abs(ComputeLaggedCorrelation(data, j, i, lag, n));
-                        if (NumOps.GreaterThan(corrIJ, bestItoJ)) bestItoJ = corrIJ;
+                        if (NumOps.GreaterThan(corrIJ, bestItoJ)) { bestItoJ = corrIJ; bestLagItoJ = lag; }
                         if (NumOps.GreaterThan(corrJI, bestJtoI)) bestJtoI = corrJI;
                     }
 
@@ -163,9 +163,16 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
                     if (iToJ)
                     {
-                        T varI = cov[i, i];
-                        if (NumOps.GreaterThan(varI, eps))
-                            result[i, j] = NumOps.Divide(cov[i, j], varI);
+                        // Weight the edge with the LAGGED regression coefficient at the lag that
+                        // actually carried the association. Every phase above reasons about lagged
+                        // structure, but the weight was previously the CONTEMPORANEOUS ratio
+                        // cov[i,j]/cov[i,i], which measures a different relationship entirely. On the
+                        // fork X1 <- X0 -> X3 that inverted the ranking: the same-time correlation
+                        // between the two children of X0 is strong (reported 1.1449 — impossible for
+                        // a correlation, because a covariance ratio is unbounded) while the true
+                        // X0->X1 edge, whose effect only appears one step later, was damped to 0.4877.
+                        // The lagged coefficient recovers the generating SEM's own coefficients.
+                        result[i, j] = ComputeLaggedRegressionCoefficient(data, i, j, bestLagItoJ, n);
                     }
                 }
             }
@@ -215,6 +222,44 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
         double dVarT = NumOps.ToDouble(varT);
         double denom = Math.Sqrt(Math.Max(dVarS, 1e-15) * Math.Max(dVarT, 1e-15));
         return NumOps.FromDouble(NumOps.ToDouble(covST) / denom);
+    }
+
+    /// <summary>
+    /// Least-squares coefficient of regressing <paramref name="target"/> at time t+lag on
+    /// <paramref name="source"/> at time t — cov(x_src(t), x_tgt(t+lag)) / var(x_src(t)). For a linear
+    /// SEM this is the structural coefficient on that lagged edge, so edge weights come back on the
+    /// same scale as the data-generating process and stay comparable across edges.
+    /// </summary>
+    private T ComputeLaggedRegressionCoefficient(Matrix<T> data, int source, int target, int lag, int n)
+    {
+        int effectiveN = n - lag;
+        if (effectiveN < 3) return NumOps.Zero;
+
+        T sumS = NumOps.Zero, sumT = NumOps.Zero;
+        for (int t = 0; t < effectiveN; t++)
+        {
+            sumS = NumOps.Add(sumS, data[t, source]);
+            sumT = NumOps.Add(sumT, data[t + lag, target]);
+        }
+
+        T nT = NumOps.FromDouble(effectiveN);
+        T meanS = NumOps.Divide(sumS, nT);
+        T meanT = NumOps.Divide(sumT, nT);
+
+        var centS = new Vector<T>(effectiveN);
+        var centT = new Vector<T>(effectiveN);
+        for (int t = 0; t < effectiveN; t++)
+        {
+            centS[t] = NumOps.Subtract(data[t, source], meanS);
+            centT[t] = NumOps.Subtract(data[t + lag, target], meanT);
+        }
+
+        double covST = NumOps.ToDouble(Engine.DotProduct(centS, centT));
+        double varS = NumOps.ToDouble(Engine.DotProduct(centS, centS));
+        // A source series with no variation carries no information about the target, so the edge
+        // gets zero weight rather than an arbitrarily large ratio.
+        if (varS < 1e-10) return NumOps.Zero;
+        return NumOps.FromDouble(covST / varS);
     }
 
     private T ComputePartialLaggedCorrelation(Matrix<T> data, int i, int j, int condVar, int n)
