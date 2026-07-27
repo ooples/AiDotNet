@@ -3982,6 +3982,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumVisionLayers = 2, NumTextLayers = 2, NumVisionHeads = 4, NumTextHeads = 4, " +
                     "VocabSize = 64, MaxSequenceLength = 8, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "StableVideoSR" && model.TypeParameterCount == 1)
+            {
+                // Timeout escalation for this fixture, in order: FP32 first (already the case - the
+                // scaffold derives from VideoSuperResolutionTestBase<float>), then iteration capping
+                // (HeavyTrainingTimeoutClassNames, which brought MoreData_ShouldNotDegrade from a 120 s
+                // timeout down to 41 s), and only then SHRINKING - which is this branch.
+                //
+                // Capping alone could not rescue three probes because the scaffold was constructing the
+                // model with NO options, i.e. at production scale: NumDenoisingSteps = 20 (a 20-step
+                // diffusion denoise loop per forward), NumFeatures = 320, NumTemporalLayers = 4. That is
+                // what made a single train step cost ~8-10 s, so Training_ShouldReduceLoss still timed
+                // out at 15 steps, TrainingError_ShouldNotExceedTestError straddled the 120 s gate
+                // (1 m 39 s, then a timeout), and LossStrictlyDecreasesOnMemorizationTask needed more
+                // warm-up steps than the 180 s gate allows.
+                //
+                // Shrink through the PUBLIC options only, exactly as the BiomedCLIP / OpenCLIP /
+                // SigLIP2 fixtures above do, and as the MoG fixture already does for 20-step diffusion
+                // at production scale. The denoise-loop depth is the dominant term, so it drops hardest;
+                // ScaleFactor and LatentDim are deliberately left at their defaults so the
+                // super-resolution output contract (and the TemporalDim / SuperResolved shape
+                // invariants that assert on it) is unchanged. Every training assertion still runs
+                // against the real forward/backward path.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.StableVideoSROptions { NumDenoisingSteps = 2, " +
+                    "NumFeatures = 64, NumTemporalLayers = 2 })";
+            }
             else if (model.ClassName == "OpenCLIP" && model.TypeParameterCount == 1)
             {
                 // Keep OpenCLIP's ViT-B/32 and 12-layer text defaults in production.
@@ -11163,16 +11192,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // PixelLM<float> completes the original 100-step memorization probe inside 90 seconds.
             // Its paper AdamW schedule needs the longer trajectory to clear warm-up, so preserve the
             // stronger original count there; only its 250-step MoreData probe needs capping.
-            // StableVideoSR runs its memorization probe in the NIGHTLY heavy lane (tagged
-            // HeavyTimeout further down, with a 600 s cap), so it can afford the longer trajectory that
-            // 15 steps could not: measured 0.270974 at step 1 rising to 0.419722 at step 15, i.e. still
-            // inside Adam's warm-up overshoot. 40 steps clears the hump and keeps the assertion real
-            // there instead of merely relocating a red test (40 x ~10 s stays inside the 600 s cap).
             sb.AppendLine(model.ClassName == "PixelLM"
                 ? "    protected override int MemorizationTaskIterations => 100;"
-                : model.ClassName == "StableVideoSR"
-                    ? "    protected override int MemorizationTaskIterations => 40;"
-                    : "    protected override int MemorizationTaskIterations => 15;");
+                : "    protected override int MemorizationTaskIterations => 15;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
             sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.5;");
         }
@@ -11268,51 +11290,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
         }
 
-        // StableVideoSR: two invariants remain out of reach of the PR-shard gates even after the
-        // HeavyTrainingTimeoutClassNames smoke cap above, because this model costs ~8-10 s per train
-        // step at its [4, 3, 32, 32] four-frame scaffold scale. Measured after the cap:
-        //   * Training_ShouldReduceLoss     still hits the 120 s gate at TrainingIterations*3 = 15 steps.
-        //   * LossStrictlyDecreasesOnMemorizationTask now COMPLETES (2 m 34 s) but reports 0.270974 at
-        //     step 1 rising to 0.419722 at step 15 - Adam's documented first-few-step overshoot, which
-        //     15 steps is simply not enough to clear, and more steps do not fit the 180 s gate.
-        // Those two constraints are mutually exclusive at this per-step cost, so this is genuine
-        // foundation-scale INFRASTRUCTURE cost, not a training defect. Follow the GLaMM precedent above:
-        // tag ONLY these two tests HeavyTimeout so the default PR shard (which appends
-        // &Category!=HeavyTimeout) skips them and the nightly heavy lane runs them with a budget that
-        // actually fits, while StableVideoSR's other 18 invariants stay in the PR shard at full scale.
-        // MemorizationTaskIterations is raised so the nightly run clears warm-up and the assertion is
-        // real there rather than merely relocated (40 steps x ~10 s stays inside the 600 s cap).
-        // The more-training-must-not-degrade property remains asserted in the PR shard by the siblings
-        // that DO fit: MoreData_ShouldNotDegrade and TrainingError_ShouldNotExceedTestError.
-        if (model.ClassName == "StableVideoSR")
-        {
-            sb.AppendLine();
-            sb.AppendLine("    [Xunit.Fact(Timeout = 600000)]");
-            sb.AppendLine("    [Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
-            sb.AppendLine("    public override async System.Threading.Tasks.Task Training_ShouldReduceLoss()");
-            sb.AppendLine("    {");
-            sb.AppendLine("        await base.Training_ShouldReduceLoss();");
-            sb.AppendLine("    }");
-            sb.AppendLine();
-            sb.AppendLine("    [Xunit.Fact(Timeout = 600000)]");
-            sb.AppendLine("    [Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
-            sb.AppendLine("    public override async System.Threading.Tasks.Task LossStrictlyDecreasesOnMemorizationTask()");
-            sb.AppendLine("    {");
-            sb.AppendLine("        await base.LossStrictlyDecreasesOnMemorizationTask();");
-            sb.AppendLine("    }");
-            // Third probe over the same gate. Measured twice under CI's serialized runner config: 1 m 39 s
-            // on one run and a hard 120 s timeout on the next, i.e. it straddles the limit rather than
-            // sitting safely inside it. It trains TrainingIterations steps and then evaluates BOTH a
-            // train and a test split, so at this model's ~8-10 s/step it cannot be brought under the gate
-            // by trimming repetition without making the train/test comparison meaningless.
-            sb.AppendLine();
-            sb.AppendLine("    [Xunit.Fact(Timeout = 600000)]");
-            sb.AppendLine("    [Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
-            sb.AppendLine("    public override async System.Threading.Tasks.Task TrainingError_ShouldNotExceedTestError()");
-            sb.AppendLine("    {");
-            sb.AppendLine("        await base.TrainingError_ShouldNotExceedTestError();");
-            sb.AppendLine("    }");
-        }
 
         // Gain-normalized enhancement-mask models intentionally remove a uniform input rescale:
         // MelBandRoFormer applies per-band LayerNorm, while FullSubNet+ applies LayerNorm after its
