@@ -367,6 +367,21 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         {
             if (_embeddingInitialized) return;
 
+            // Adopt an embedding that is ALREADY in place instead of allocating over it.
+            // DeepCopy/Clone installs the source layer's trained weights straight into this field
+            // through the generated SetTrainableParameters, which assigns the tensor but does not
+            // flip _embeddingInitialized. Gating solely on that flag meant the copy's first forward
+            // came through here, allocated a new tensor and re-randomized it, so a cloned model
+            // silently lost its trained embedding while every other layer copied correctly — the
+            // weights were not "dropped by serialization" at all, they were overwritten afterwards.
+            if (_embeddingTensor.Length > 0
+                && _embeddingTensor.Length == _vocabularySize * _embeddingDimension)
+            {
+                RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
+                _embeddingInitialized = true;
+                return;
+            }
+
             // Streaming-aware allocation: PaLM-E-scale models have
             // vocab × embed embedding matrices in the multi-GB range
             // (e.g. 256K × 8192 fp32 = 8 GB). Routing through
