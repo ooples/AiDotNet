@@ -3425,13 +3425,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 // The production ELECTRA fine-tuning default remains 5e-5. This generated fixture
                 // is a tiny randomly initialized encoder rather than a pretrained checkpoint;
-                // at 5e-5 it reaches a zero-loss floor by step 5 and Adam rebounds by step 15.
-                // Use the highest runner-verified stable public override for this smoke trajectory.
+                // at 1e-5 the Linux runner reaches a zero-loss floor by step 2 and AdamW rebounds
+                // by step 5. Use the conservative public override already proven by the sibling
+                // bounded transformer fixture; the production/paper-facing default stays unchanged.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputSize: 32, outputSize: 9) { RandomSeed = 1337 }, new AiDotNet.NER.Options.TransformerNEROptions { " +
                     "HiddenDimension = 32, NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 32, DropoutRate = 0.0, LearningRate = 0.00001 })";
+                    "NumLabels = 9, MaxSequenceLength = 32, DropoutRate = 0.0, LearningRate = 0.000001 })";
             }
             else if (model.ClassName == "FinBERTTone" && model.TypeParameterCount == 1)
             {
