@@ -83,7 +83,14 @@ public class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new SpiritLMOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -150,7 +157,8 @@ public class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -174,7 +182,10 @@ public class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Route training through the optimizer selected by the public constructor.
+            // Calling the parameterless overload silently falls back to the base Adam
+            // optimizer and ignores Spirit-LM's configured AdamW hyperparameters.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -252,9 +263,10 @@ public class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new SpiritLMOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new SpiritLM<T>(Architecture, mp, _options);
-        return new SpiritLM<T>(Architecture, _options);
+            return new SpiritLM<T>(Architecture, mp, options);
+        return new SpiritLM<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

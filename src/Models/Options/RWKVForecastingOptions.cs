@@ -54,6 +54,10 @@ public class RWKVForecastingOptions<T> : TimeSeriesRegressionOptions<T>
         NumHeads = other.NumHeads;
         NumLayers = other.NumLayers;
         DropoutRate = other.DropoutRate;
+        LearningRate = other.LearningRate;
+        AdamBeta1 = other.AdamBeta1;
+        AdamBeta2 = other.AdamBeta2;
+        AdamEpsilon = other.AdamEpsilon;
     }
 
     /// <summary>
@@ -85,4 +89,25 @@ public class RWKVForecastingOptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets the dropout rate for regularization. Default: 0.1.
     /// </summary>
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets Adam's initial learning rate. Default: 6e-4, matching the
+    /// smallest-model training recipe reported by the RWKV paper.
+    /// </summary>
+    public double LearningRate { get; set; } = 6e-4;
+
+    /// <summary>
+    /// Gets or sets Adam's first-moment decay. Default: 0.9.
+    /// </summary>
+    public double AdamBeta1 { get; set; } = 0.9;
+
+    /// <summary>
+    /// Gets or sets Adam's second-moment decay. Default: 0.99.
+    /// </summary>
+    public double AdamBeta2 { get; set; } = 0.99;
+
+    /// <summary>
+    /// Gets or sets Adam's numerical-stability epsilon. Default: 1e-8.
+    /// </summary>
+    public double AdamEpsilon { get; set; } = 1e-8;
 }
