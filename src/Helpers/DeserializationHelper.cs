@@ -233,6 +233,65 @@ public static class DeserializationHelper
 
             instance = ctor.Invoke(new object[0]);
         }
+        else if (genericDef == typeof(BiaffineSpanScorerLayer<>))
+        {
+            // Biaffine-NER span scorer (Yu et al., ACL 2020). Falls back to the last input
+            // dimension for the encoder width, and to the paper's FFNN size of 150.
+            int inputDim = TryGetInt(additionalParams, "InputDim")
+                ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (inputDim <= 0)
+            {
+                throw new InvalidOperationException(
+                    "BiaffineSpanScorerLayer requires a positive InputDim in metadata or input shape.");
+            }
+
+            int spanDim = TryGetInt(additionalParams, "SpanDim") ?? 150;
+            int numCategories = TryGetInt(additionalParams, "NumCategories")
+                ?? (outputShape.Length > 0 ? outputShape[^1] : 9);
+
+            instance = new BiaffineSpanScorerLayer<T>(inputDim, spanDim, numCategories);
+        }
+        else if (genericDef == typeof(ConvNeXtV2Block<>))
+        {
+            // ConvNeXt v2 block (Woo et al., 2023) as used by APNet2's ASP/PSP branches.
+            int channels = TryGetInt(additionalParams, "Channels")
+                ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (channels <= 0)
+            {
+                throw new InvalidOperationException(
+                    "ConvNeXtV2Block requires a positive Channels value in metadata or input shape.");
+            }
+
+            // The paper's expansion is 3x the block width; kernel size 7.
+            int intermediate = TryGetInt(additionalParams, "IntermediateChannels") ?? channels * 3;
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 7;
+
+            instance = new ConvNeXtV2Block<T>(channels, intermediate, kernelSize);
+        }
+        else if (genericDef == typeof(ClozeAttentionLayer<>))
+        {
+            // ABINet's Bidirectional Cloze Network attention (Fang et al., CVPR 2021).
+            int modelDim = TryGetInt(additionalParams, "ModelDim")
+                ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (modelDim <= 0)
+            {
+                throw new InvalidOperationException(
+                    "ClozeAttentionLayer requires a positive ModelDim in metadata or input shape.");
+            }
+
+            instance = new ClozeAttentionLayer<T>(modelDim);
+        }
+        else if (genericDef == typeof(TemporalShiftLayer<>))
+        {
+            // BSVD temporal fusion (Qi et al., 2022); r defaults to the paper's 8.
+            int ratio = TryGetInt(additionalParams, "ShiftedChannelRatio") ?? 8;
+            instance = new TemporalShiftLayer<T>(ratio);
+        }
+        else if (genericDef == typeof(StopGradientLayer<>))
+        {
+            // Parameter-free gradient barrier (ABINet's Autonomous principle).
+            instance = new StopGradientLayer<T>();
+        }
         else if (genericDef == typeof(CifAlignmentLayer<>))
         {
             int encoderDim = TryGetInt(additionalParams, "EncoderDim")
