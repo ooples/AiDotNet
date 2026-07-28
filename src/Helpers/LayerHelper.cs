@@ -7327,16 +7327,21 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates default CMGAN layers for conformer-based speech enhancement.
     /// </summary>
-    /// <param name="numFreqBins">Number of frequency bins (default: 201).</param>
-    /// <param name="conformerDim">Conformer hidden dimension (default: 256).</param>
-    /// <param name="numConformerLayers">Number of Conformer layers (default: 2).</param>
+    /// <param name="numFreqBins">Number of frequency bins (default: 201, from the paper's 400-point FFT).</param>
+    /// <param name="conformerDim">Conformer hidden dimension (default: 64, the paper's channel count).</param>
+    /// <param name="numConformerLayers">Number of two-stage Conformer blocks (default: 4, per the paper).</param>
     /// <param name="numAttentionHeads">Number of attention heads (default: 4).</param>
     /// <param name="dropoutRate">Dropout rate (default: 0.05).</param>
     /// <returns>A collection of layers for CMGAN speech enhancement.</returns>
+    /// <remarks>
+    /// Defaults follow Cao et al., INTERSPEECH 2022 (arXiv:2203.15149): four two-stage conformer
+    /// blocks at 64 channels. They previously read 2 blocks at 256 channels — half the published
+    /// depth at four times the published width.
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCMGANLayers(
         int numFreqBins = 201,
-        int conformerDim = 256,
-        int numConformerLayers = 2,
+        int conformerDim = 64,
+        int numConformerLayers = 4,
         int numAttentionHeads = 4,
         double dropoutRate = 0.05)
     {
@@ -7369,12 +7374,26 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>();
         }
 
-        // U-Net decoder with mask estimation
-        yield return new DenseLayer<T>(numFreqBins * 2, identityActivation);
+        // U-Net decoder feeding the decoupled output heads.
+        yield return new DenseLayer<T>(numFreqBins * 3, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // Output: magnitude mask + phase correction
-        yield return new DenseLayer<T>(numFreqBins * 2, sigmoidActivation);
+        // Decoupled output per Cao et al., INTERSPEECH 2022 (arXiv:2203.15149): the decoder
+        // splits into a MASK head (B x T x F x 1) and a COMPLEX head (B x T x F x 2) carrying
+        // real and imaginary components, which are then jointly incorporated to reconstruct the
+        // enhanced speech. That decoupling is the paper's central contribution.
+        //
+        // Emitted as one 3F-wide projection over this sequential stack: bins [0, F) are the
+        // magnitude mask and bins [F, 3F) are the interleaved real/imaginary pair, so a single
+        // layer expresses both heads. Consumers slice on that layout.
+        //
+        // Activation is IDENTITY, not sigmoid. The paper is explicit that "no activation
+        // function is applied for the complex output since it is unbounded" — real and imaginary
+        // components are signed, so the previous sigmoid head clamped them into (0, 1) and made
+        // half the complex plane unrepresentable. The prior head was also only 2F wide and
+        // labelled "magnitude mask + phase correction", i.e. it predicted phase directly rather
+        // than the paper's complex pair.
+        yield return new DenseLayer<T>(numFreqBins * 3, identityActivation);
     }
 
     /// <summary>

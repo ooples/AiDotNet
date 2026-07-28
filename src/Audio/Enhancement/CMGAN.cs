@@ -164,15 +164,18 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             }
         }
 
-        Tensor<T> mask;
+        Tensor<T> decoded;
         if (IsOnnxMode && OnnxEncoder is not null)
-            mask = OnnxEncoder.Run(stft);
+            decoded = OnnxEncoder.Run(stft);
         else
-            mask = Predict(stft);
-        var enhanced = ApplyMask(stft, mask);
+            decoded = Predict(stft);
+
+        // Reconstruct from BOTH decoder heads (mask + complex), per the paper. This replaces the
+        // previous ApplyMask -> ComputeISTFT pair, which used the magnitude branch alone and fed
+        // the untouched noisy phase into the inverse transform.
+        var result = ReconstructFromDecoupledHeads(stft, decoded, audio.Length);
 
         // Apply enhancement strength blending: output = strength * enhanced + (1 - strength) * original
-        var result = ComputeISTFT(enhanced, audio.Length);
         double strength = _options.EnhancementStrength;
         if (strength < 1.0)
         {
@@ -347,6 +350,70 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         if (_lastPhase is null)
             throw new InvalidOperationException("Phase not available. Call ComputeSTFT first.");
         return _stft.InverseFromMagnitudeAndPhase(magnitude, _lastPhase, originalLength);
+    }
+
+    /// <summary>
+    /// Reconstructs the enhanced waveform from the decoder's two decoupled heads, per
+    /// Cao et al., INTERSPEECH 2022 (arXiv:2203.15149).
+    /// </summary>
+    /// <remarks>
+    /// <para>The paper estimates the magnitude and the complex spectrogram in SEPARATE decoder
+    /// branches and then jointly incorporates them:</para>
+    /// <code>
+    ///   S_mag = (mask ⊙ |X|) · e^{jθx}      // magnitude branch, noisy phase
+    ///   S_cpx = Ŝr + j·Ŝi                    // complex branch, directly predicted
+    ///   Ŝ     = S_mag + S_cpx                // jointly incorporated
+    /// </code>
+    /// <para>Summing the branches is what lets the model correct phase. The previous
+    /// implementation only ever produced the magnitude branch and reconstructed with the
+    /// unmodified NOISY phase, so phase was never enhanced at all — which discards the paper's
+    /// central contribution.</para>
+    /// <para>Decoder layout is [mask(F) | interleaved real/imag(2F)] per frame, matching
+    /// <see cref="LayerHelper{T}.CreateDefaultCMGANLayers"/>.</para>
+    /// </remarks>
+    private Tensor<T> ReconstructFromDecoupledHeads(Tensor<T> noisyMagnitude, Tensor<T> decoded, int originalLength)
+    {
+        if (_lastPhase is null)
+            throw new InvalidOperationException("Phase not available. Call ComputeSTFT first.");
+
+        int f = _options.NumFreqBins;
+        int frames = f > 0 ? noisyMagnitude.Length / f : 0;
+
+        // Fall back to the magnitude-only path when the decoder output is not the expected
+        // 3F-per-frame layout (e.g. an ONNX graph exporting only a mask).
+        if (frames == 0 || decoded.Length < frames * 3 * f)
+        {
+            var maskedOnly = ApplyMask(noisyMagnitude, decoded);
+            return ComputeISTFT(maskedOnly, originalLength);
+        }
+
+        // Magnitude branch: mask the noisy magnitude, keep the noisy phase.
+        var maskedMagnitude = new Tensor<T>(noisyMagnitude._shape);
+        for (int t = 0; t < frames; t++)
+        {
+            int outBase = t * f;
+            int decBase = t * 3 * f;
+            for (int k = 0; k < f; k++)
+                maskedMagnitude[outBase + k] = NumOps.Multiply(decoded[decBase + k], noisyMagnitude[outBase + k]);
+        }
+
+        var spectrogram = ShortTimeFourierTransform<T>.PolarToComplex(maskedMagnitude, _lastPhase);
+
+        // Complex branch: add the directly-predicted real/imaginary pair.
+        for (int t = 0; t < frames; t++)
+        {
+            int specBase = t * f;
+            int decBase = t * 3 * f + f;
+            for (int k = 0; k < f; k++)
+            {
+                var current = spectrogram[specBase + k];
+                spectrogram[specBase + k] = new Complex<T>(
+                    NumOps.Add(current.Real, decoded[decBase + (2 * k)]),
+                    NumOps.Add(current.Imaginary, decoded[decBase + (2 * k) + 1]));
+            }
+        }
+
+        return _stft.Inverse(spectrogram, originalLength);
     }
 
     private static int NextPowerOfTwo(int v)
