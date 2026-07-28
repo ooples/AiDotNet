@@ -271,7 +271,12 @@ jobs:
         # dropped — they existed to work around MSBuild file-locking on Windows and
         # aren't needed on Linux. net471 cross-compiles on Linux via the modern SDK's
         # auto-included reference assembly pack.
-        run: dotnet build -c Release --no-restore
+        # Bound project-level compilation concurrency independently from the runner's
+        # four CPUs. With the generated source set, the default four-way build launches
+        # net8/net10/net471 csc processes together, reaches the 16-GB runner limit, and
+        # the kernel kills a compiler with exit 137. Two projects at a time retain
+        # parallel compilation without exceeding the measured memory envelope.
+        run: dotnet build -c Release --no-restore -m:2
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -1082,8 +1087,9 @@ jobs:
             'TopLevel - FederatedLearning',
             'TopLevel - Audio/Onnx/Tokenization'
           )
-          $serializeShard = $heavyShards -contains $shardName
-          $collectCoverage = -not $serializeShard
+          $heavyShard = $heavyShards -contains $shardName
+          $serializeShard = $heavyShard
+          $collectCoverage = -not $heavyShard
           Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 
           # Build the argument list as a PowerShell array so the `--`
@@ -1123,7 +1129,7 @@ jobs:
           # xUnit adapter. The opt-in AIDOTNET_TEST_TRACE_FILE below is written by every source-generated
           # test constructor before its model/component factory runs and streamed by the sampler, so an OOM has
           # an attributable [test-start] class marker in the live log.
-          $consoleVerbosity = if ($serializeShard) { 'detailed' } else { 'normal' }
+          $consoleVerbosity = if ($heavyShard) { 'detailed' } else { 'normal' }
           $dotnetArgs += @(
             '--logger', 'trx;LogFileName=test-results.trx',
             '--logger', "console;verbosity=$consoleVerbosity",
@@ -1141,7 +1147,7 @@ jobs:
           # shards we rewrite the copied runner config to serialize collection
           # execution (one model in flight at a time). Every other shard keeps
           # the parallel JSON default and runs full-speed.
-          if ($serializeShard) {
+          if ($heavyShard) {
             $projDir = Split-Path -Parent '${{ matrix.shard.project }}'
             $runnerJson = Join-Path $projDir 'bin/Release/${{ matrix.shard.framework }}/xunit.runner.json'
             if (Test-Path $runnerJson) {
@@ -1187,7 +1193,7 @@ jobs:
           # captures (a Start-Process grandchild's stdout was NOT captured — it produced zero output).
           # [Console]::Out is thread-safe and flushed per line, so samples stream immediately.
           $memSampler = $null
-          if ($serializeShard) {
+          if ($heavyShard) {
             $testTrace = Join-Path $results 'active-test.trace'
             $env:AIDOTNET_TEST_TRACE_FILE = $testTrace
             $memSampler = [powershell]::Create()
@@ -1362,7 +1368,10 @@ jobs:
 
       - name: Build (Release)
         # Windows-only MSBuild flags dropped — file-locking workarounds not needed on Linux.
-        run: dotnet build -c Release --no-restore
+        # Match the memory-safe project concurrency used by the artifact build. Sonar's
+        # compiler instrumentation only increases the need to avoid four large csc
+        # processes competing inside the 16-GB runner.
+        run: dotnet build -c Release --no-restore -m:2
 
       - name: End SonarCloud analysis
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250

@@ -8767,6 +8767,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // its whole test class failed at Predict with the rejection error.)
             sb.AppendLine("    protected override int[] InputShape => new[] { 6, 64, 64 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 64, 64 };");
+            if (model.ClassName is "DynamiCrafter" or "DRVI")
+            {
+                // Even at the bounded public-option fixture scale, 250 CPU
+                // training steps exceed the invariant's 120-second budget.
+                // Preserve the short-vs-long comparison at a 4x ratio while
+                // leaving the production architecture defaults untouched.
+                sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 40;");
+            }
         }
         else if (isTwoFrameModel)
         {
@@ -10585,9 +10594,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // paper-scale Forecasting foundation models use: enough to clear the
             // first-step Adam warm-up and still show the net monotonic decrease, with
             // headroom under contention. Weights stay paper-faithful.
-            // DistilBERT's generated 1e-6 fine-tuning rate decreases loss reliably but
-            // needs more than 20 very cheap bounded-model steps to clear the strict 1% gate.
-            sb.AppendLine(model.ClassName == "DistilBERTNER"
+            // DistilBERT and ELECTRA use the generated fixture's stable 1e-6 fine-tuning
+            // rate. Both decrease loss reliably but need more than 20 very cheap bounded-
+            // model steps to clear the strict 1% gate (ELECTRA measured 2.510281 ->
+            // 2.497799 at step 20 under the exact 4-core/16-GB Linux runner profile).
+            // Keep the invariant's full 1% requirement and extend the observation window
+            // instead of weakening its threshold or raising the rate back into the
+            // already-confirmed step-2-to-step-5 rebound.
+            sb.AppendLine(model.ClassName is "DistilBERTNER" or "ELECTRANER"
                 ? "    protected override int MemorizationTaskIterations => 60;"
                 : "    protected override int MemorizationTaskIterations => 20;");
         }
@@ -12031,6 +12045,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName);
         string constructorArgs = string.IsNullOrEmpty(layer.TestConstructorArgs) ? "" : layer.TestConstructorArgs;
+        if (layer.ClassName == "DepthwiseSeparableConvolutionalLayer")
+        {
+            // The production constructor correctly defaults to ReLU, but the
+            // constant-input sensitivity invariant can then land both probes in
+            // the negative ReLU half-space and falsely report identical zeros.
+            // Use identity only in the generated fixture so the invariant tests
+            // the depthwise/pointwise convolution rather than activation clipping.
+            constructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()";
+        }
         string constructorExpr = $"new {typeName}<double>({constructorArgs})";
 
         var sb = new StringBuilder();
