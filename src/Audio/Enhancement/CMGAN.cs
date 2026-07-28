@@ -218,9 +218,12 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <inheritdoc />
     public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio)
     {
-        // Compute STFT of noise-only audio to get spectral noise floor
+        // Compute STFT of noise-only audio to get spectral noise floor.
+        // Compressed with the same power law ComputeSTFT uses, because Enhance subtracts this
+        // profile from the compressed input spectrogram — mixing a raw profile into a
+        // compressed spectrogram would subtract wildly mismatched magnitudes.
         _stft.MagnitudeAndPhase(noiseOnlyAudio, out var magnitude, out _);
-        _noiseProfile = magnitude;
+        _noiseProfile = ApplyPowerLaw(magnitude, _options.PowerLawCompressionExponent);
     }
 
     #endregion
@@ -328,7 +331,32 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         _stft.MagnitudeAndPhase(audio, out var magnitude, out var phase);
         _lastPhase = phase;
-        return magnitude;
+
+        // Power-law compression |X|^c before the encoder, per Cao et al., INTERSPEECH 2022
+        // (arXiv:2203.15149), which uses c = 0.3. Speech magnitudes span a very large dynamic
+        // range, so an uncompressed spectrogram lets loud bins dominate the objective; the
+        // matching inverse is applied in ReconstructFromDecoupledHeads. The exponent is a public
+        // option (PowerLawCompressionExponent) and 1.0 disables compression.
+        return ApplyPowerLaw(magnitude, _options.PowerLawCompressionExponent);
+    }
+
+    /// <summary>
+    /// Raises every element to <paramref name="exponent"/>, preserving sign. Used for CMGAN's
+    /// power-law compression and its inverse.
+    /// </summary>
+    private Tensor<T> ApplyPowerLaw(Tensor<T> values, double exponent)
+    {
+        if (exponent == 1.0) return values;
+
+        var result = new Tensor<T>(values._shape);
+        for (int i = 0; i < values.Length; i++)
+        {
+            double v = NumOps.ToDouble(values.Data.Span[i]);
+            double magnitude = Math.Pow(Math.Abs(v), exponent);
+            result.Data.Span[i] = NumOps.FromDouble(v < 0 ? -magnitude : magnitude);
+        }
+
+        return result;
     }
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
@@ -384,6 +412,10 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         if (frames == 0 || decoded.Length < frames * 3 * f)
         {
             var maskedOnly = ApplyMask(noisyMagnitude, decoded);
+            // noisyMagnitude is power-law compressed, so expand before the inverse transform.
+            double fallbackExponent = _options.PowerLawCompressionExponent;
+            if (fallbackExponent != 0.0)
+                maskedOnly = ApplyPowerLaw(maskedOnly, 1.0 / fallbackExponent);
             return ComputeISTFT(maskedOnly, originalLength);
         }
 
@@ -410,6 +442,29 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 spectrogram[specBase + k] = new Complex<T>(
                     NumOps.Add(current.Real, decoded[decBase + (2 * k)]),
                     NumOps.Add(current.Imaginary, decoded[decBase + (2 * k) + 1]));
+            }
+        }
+
+        // Undo the power-law compression applied in ComputeSTFT. Everything above operates in
+        // the compressed domain (the mask scales a compressed magnitude and the complex head is
+        // trained against compressed targets), so the magnitude must be expanded by 1/c before
+        // the inverse transform while the phase angle is left untouched.
+        double c = _options.PowerLawCompressionExponent;
+        if (c != 1.0 && c != 0.0)
+        {
+            double inverseExponent = 1.0 / c;
+            for (int i = 0; i < spectrogram.Length; i++)
+            {
+                var bin = spectrogram[i];
+                double re = NumOps.ToDouble(bin.Real);
+                double im = NumOps.ToDouble(bin.Imaginary);
+                double compressedMagnitude = Math.Sqrt((re * re) + (im * im));
+                if (compressedMagnitude <= 0) continue;
+
+                double gain = Math.Pow(compressedMagnitude, inverseExponent) / compressedMagnitude;
+                spectrogram[i] = new Complex<T>(
+                    NumOps.FromDouble(re * gain),
+                    NumOps.FromDouble(im * gain));
             }
         }
 
