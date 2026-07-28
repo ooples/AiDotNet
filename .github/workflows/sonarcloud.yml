@@ -803,12 +803,65 @@ jobs:
               FullyQualifiedName~Generated.Po|FullyQualifiedName~Generated.Pr|
               FullyQualifiedName~Generated.Ps|FullyQualifiedName~Generated.Pu|
               FullyQualifiedName~Generated.Pw|FullyQualifiedName~Generated.Py)
-          - name: ModelFamily - Generated Layers Q-S
+          # Q-S was itself a 45-min CANCELLATION, exactly like N-Z and N-S before it.
+          # MEASURED (full local run, all correctness fixes in place): 203 classes,
+          # 83.8 min of summed per-test time, and ~125 min WALL — the ~1.5x factor is
+          # per-class construction/GC that per-test timings do not attribute. So the job
+          # could never pass on a 45-min budget regardless of how many tests were fixed.
+          #
+          # Split 5 ways by MEASURED per-class weight (not class count), which balances
+          # the binding metric — the MAX shard:
+          #     N=3 -> max 29.2 min (~44 min wall, no headroom)
+          #     N=4 -> max 30.5 min (WORSE: the splitter keeps runs contiguous so they
+          #                          stay prefix-expressible, and the greedy pass
+          #                          overloads the tail)
+          #     N=5 -> max 24.9 min (~37 min wall)  <-- chosen
+          #     N=6 -> max 25.1 min (no gain; the tail shard is contiguity-bound)
+          #
+          # Machine-verified: all 203 classes match EXACTLY ONE shard, union == the old
+          # Q-S set, gap-free, non-overlapping, and checked CASE-INSENSITIVELY because
+          # VSTest's FullyQualifiedName~ operator ignores case (a case-sensitive check
+          # emits prefixes that silently overlap — e.g. SPIRAL vs SpiralConvLayer).
+          # Weights are pre-float for the seven heaviest classes, so real times land
+          # BELOW these figures. Every shard name is added to $heavyShards below.
+          - name: ModelFamily - Generated Layers Q-R1
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
+            # 56 classes, 15.9 min. Heaviest: RecurrentGemmaLanguageModel 5.9m, RealESRGANVideo 2.3m.
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.R|FullyQualifiedName~Generated.S)
+              (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.RA|FullyQualifiedName~Generated.RB|FullyQualifiedName~Generated.RC|FullyQualifiedName~Generated.RE|FullyQualifiedName~Generated.RF|FullyQualifiedName~Generated.RI|FullyQualifiedName~Generated.RM|FullyQualifiedName~Generated.RN|FullyQualifiedName~Generated.RoBE)
+          - name: ModelFamily - Generated Layers R2-SAI
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            # 23 classes, 11.0 min. Heaviest: RWKV4LanguageModel 1.6m, RoomImpulseResponse 1.5m.
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.RP|FullyQualifiedName~Generated.RR|FullyQualifiedName~Generated.RS|FullyQualifiedName~Generated.RT|FullyQualifiedName~Generated.RV|FullyQualifiedName~Generated.RW|FullyQualifiedName~Generated.RoM|FullyQualifiedName~Generated.Robu|FullyQualifiedName~Generated.Rod|FullyQualifiedName~Generated.Roo|FullyQualifiedName~Generated.Rot|FullyQualifiedName~Generated.S4|FullyQualifiedName~Generated.S5|FullyQualifiedName~Generated.SAC|FullyQualifiedName~Generated.SAI)
+          - name: ModelFamily - Generated Layers SAL-SAM
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            # Only 8 classes but 15.6 min: the two heaviest classes in the whole shard
+            # (SALMONN 6.6m, SambaLanguageModel 6.2m) plus the SAM family. Kept together
+            # because SAL*/SAM* cannot be separated further by prefix.
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.SAL|FullyQualifiedName~Generated.SAM)
+          - name: ModelFamily - Generated Layers SAN-Sig
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            # 40 classes, 16.4 min. Heaviest: SECBERT 5.5m, SeACo 2.8m.
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.SAN|FullyQualifiedName~Generated.SAR|FullyQualifiedName~Generated.SC|FullyQualifiedName~Generated.SE|FullyQualifiedName~Generated.Sh|FullyQualifiedName~Generated.Sig)
+          - name: ModelFamily - Generated Layers Sil-Sy
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            # 76 classes, 24.9 min — the binding shard. Heaviest: SpERTNER 5.0m, SPIRAL 2.5m,
+            # SVTR 2.2m. Contiguity-bound: N=6 could not break it up further.
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.SU|FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sil|FullyQualifiedName~Generated.Sim|FullyQualifiedName~Generated.Sw|FullyQualifiedName~Generated.Sy)
           - name: ModelFamily - Generated Layers T-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -1057,7 +1110,11 @@ jobs:
             'ModelFamily - Generated Layers N-O',
             'ModelFamily - Generated Layers P A,C,I,L,N,P',
             'ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y',
-            'ModelFamily - Generated Layers Q-S',
+            'ModelFamily - Generated Layers Q-R1',
+            'ModelFamily - Generated Layers R2-SAI',
+            'ModelFamily - Generated Layers SAL-SAM',
+            'ModelFamily - Generated Layers SAN-Sig',
+            'ModelFamily - Generated Layers Sil-Sy',
             'ModelFamily - Generated Layers T-Z',
             'ModelFamily - NeuralNetworks A-F',
             'ModelFamily - NeuralNetworks G-L',
