@@ -115,7 +115,17 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         _options = options ?? new PaLMEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honor the optimizer configuration exposed by PaLMEOptions. The bare AdamW
+        // constructor uses its framework defaults, which previously made both
+        // LearningRate and WeightDecay ineffective unless callers supplied a complete
+        // optimizer instance.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -402,7 +412,10 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Use the optimizer selected by the public constructor. Falling back to
+            // the two-argument overload silently ignored both a caller-supplied
+            // optimizer and PaLMEOptions' training hyperparameters.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
