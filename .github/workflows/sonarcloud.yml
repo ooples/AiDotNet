@@ -701,12 +701,34 @@ jobs:
           # Bark, ChatTTS, Chatterbox, CosyVoice*, ...) whose per-model peak (~2.6 GB weights +
           # Adam state) stacks past the 16 GB envelope even serialized. Split A-F → A-C + D-F so
           # each serial half holds fewer heavy models at once. Gap-free + non-overlapping: union == A-F.
-          - name: ModelFamily - Generated Layers A-C
+          # Split from a single "Generated Layers A-C" shard, which measurably could not finish.
+          # A full local run under the CI profile (16 GB / 4 CPU, serialized, same filter) exited
+          # 124 having completed 1,313 of its 3,625 tests — 36% — so the shard needed roughly
+          # 2.5x its 45-minute budget. Capping helps but cannot close a gap that size on its own:
+          # the four most expensive classes alone (CASTLEAlgorithm 381s, CodeSwitchingASR 266s,
+          # CATSeg 189s, AudioPaLM 177s) are ~17 minutes alone.
+          #
+          # Split by leading letter, following the same prefix pattern already used for the M
+          # sub-shards. Three jobs run concurrently instead of one job serializing all three
+          # letters, so the wall-clock each must fit into is roughly a third of the work.
+          - name: ModelFamily - Generated Layers A
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C)
+              FullyQualifiedName~Generated.A
+          - name: ModelFamily - Generated Layers B
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              FullyQualifiedName~Generated.B
+          - name: ModelFamily - Generated Layers C
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              FullyQualifiedName~Generated.C
           - name: ModelFamily - Generated Layers D-F
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -1019,7 +1041,9 @@ jobs:
             'ModelFamily - Diffusion Stable',
             'ModelFamily - Diffusion Step-Sync',
             'ModelFamily - Diffusion T-Z',
-            'ModelFamily - Generated Layers A-C',
+            'ModelFamily - Generated Layers A',
+            'ModelFamily - Generated Layers B',
+            'ModelFamily - Generated Layers C',
             'ModelFamily - Generated Layers D-F',
             'ModelFamily - Generated Layers G-I',
             'ModelFamily - Generated Layers J-L',
