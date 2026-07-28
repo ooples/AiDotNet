@@ -4722,6 +4722,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 4, NumQuantiles = 3, DropoutRate = 0.0, " +
                     "WarmupSteps = 2, TotalSteps = 16 })";
             }
+            else if (model.ClassName == "Chronos" && model.TypeParameterCount == 1)
+            {
+                // Chronos is the paper's T5-Base tokenized forecaster: 768-wide, 12 layers,
+                // 12 heads, 3072 FFN, a 4,096-token quantization vocabulary, and NumSamples = 20
+                // sampled trajectories per forecast — so a single Predict is 20 passes through
+                // the whole stack. At that scale its memorization probe times out at 180 s.
+                //
+                // Bound only the INTERNALS. ContextLength and ForecastHorizon deliberately keep
+                // their paper values, because Chronos is tokenization-based and its training path
+                // emits rank-2/rank-3 [seq, vocab] logits: an earlier attempt routed it through
+                // TimeGPT's reduced rank-1 "8" forecast geometry and produced "Chronos training
+                // expects rank-2 or rank-3 vocabulary logits, got rank 1" on every training
+                // invariant. Leaving the two length options alone keeps the shape contract
+                // exactly as the forecasting branch already computes it, while NumSamples and the
+                // transformer width carry essentially all of the cost.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 512, outputSize: 64), " +
+                    "new AiDotNet.Models.Options.ChronosFinanceOptions<double> { ContextLength = 512, " +
+                    "ForecastHorizon = 64, NumTokens = 64, HiddenDimension = 32, NumLayers = 2, " +
+                    "NumHeads = 4, IntermediateSize = 64, NumSamples = 2, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "LLMTime" && model.TypeParameterCount == 1)
             {
                 // LLMTime keeps its paper defaults in production: a 512-context, 96-horizon,
