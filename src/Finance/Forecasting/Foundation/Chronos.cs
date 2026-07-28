@@ -987,20 +987,42 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// </summary>
     private void CaptureTokenScale(Tensor<T> values)
     {
-        T min = NumOps.MaxValue;
-        T max = NumOps.MinValue;
+        // Chronos uses MEAN SCALING followed by uniform binning over a FIXED [-15s, +15s]
+        // domain, where s is the mean of the absolute values of the historical context
+        // (Ansari et al. 2024, arXiv:2403.07815 — "mean scaling normalizes individual entries
+        // of the time series by the mean of the absolute values in the historical context",
+        // quantized uniformly within [-15s, 15s]).
+        //
+        // This previously captured the context MIN/MAX and binned over [min, max]. That is a
+        // different scheme with a substantive behavioural consequence: when the bin domain is
+        // pinned to the observed extremes, bin 0 IS the historical minimum and the top bin IS
+        // the historical maximum, so a detokenized forecast can never exceed the range already
+        // seen in the context — the model is structurally unable to predict a new high or low.
+        // The paper's fixed +/-15 domain exists precisely to leave that headroom, and it also
+        // makes the token coordinate system comparable across series instead of depending on
+        // each context's spread.
+        //
+        // The affine map is expressed through the existing min/range fields so the quantizer's
+        // (x - min) / range and Detokenize's scaled * range + min remain exact inverses:
+        //     min   = -15s   (low edge of the bin domain, original units)
+        //     range =  30s   (full width of the bin domain, original units)
+        T absSum = NumOps.Zero;
         for (int i = 0; i < values.Length; i++)
-        {
-            if (NumOps.LessThan(values.Data.Span[i], min)) min = values.Data.Span[i];
-            if (NumOps.GreaterThan(values.Data.Span[i], max)) max = values.Data.Span[i];
-        }
+            absSum = NumOps.Add(absSum, NumOps.Abs(values.Data.Span[i]));
 
-        var range = NumOps.Subtract(max, min);
-        if (NumOps.Equals(range, NumOps.Zero))
-            range = NumOps.One;
+        T scale = values.Length > 0
+            ? NumOps.Divide(absSum, NumOps.FromDouble(values.Length))
+            : NumOps.Zero;
 
-        _lastTokenMin = min;
-        _lastTokenRange = range;
+        // An all-zero (or empty) context has no meaningful scale; fall back to unit scale so
+        // the domain stays finite and the inverse remains well defined.
+        if (NumOps.Equals(scale, NumOps.Zero))
+            scale = NumOps.One;
+
+        // Half-width of the bin domain is user-configurable; it defaults to the paper's 15.
+        double bound = _options.QuantizationBound;
+        _lastTokenMin = NumOps.Multiply(NumOps.FromDouble(-bound), scale);
+        _lastTokenRange = NumOps.Multiply(NumOps.FromDouble(2.0 * bound), scale);
         _hasTokenScale = true;
     }
 
