@@ -773,13 +773,36 @@ jobs:
           # before their splits. Split N-Z → N-S + T-Z; N-S itself was STILL a
           # 55-min timeout (dense with the SAM / segmentation family: ODISE, OMGSeg,
           # OneFormer, SAM/SAM21/SAMHQ, SegFormer, SegMamba, SwinUNETR, ...), so split
-          # N-S again → N-P + Q-S. Gap-free + non-overlapping: union == N-S.
-          - name: ModelFamily - Generated Layers N-P
+          # N-S again → N-P + Q-S. N-P later exceeded the 45-min budget with 2,300+
+          # tests already green and no OOM, so split it by measured wall weight into
+          # N-O + P. P then reached the exact 45-min gate locally with 1,490/1,531 tests
+          # green and no OOM. Split P by measured second-letter buckets into two balanced
+          # jobs (798 + 759 tests after ParaformerLarge rejoined the PR lane). The filters
+          # are gap-free and non-overlapping over the generated P inventory; their union is
+          # the original P shard.
+          - name: ModelFamily - Generated Layers N-O
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O|FullyQualifiedName~Generated.P)
+              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O)
+          - name: ModelFamily - Generated Layers P A,C,I,L,N,P
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.Pa|FullyQualifiedName~Generated.Pc|
+              FullyQualifiedName~Generated.Pi|FullyQualifiedName~Generated.Pl|
+              FullyQualifiedName~Generated.Pn|FullyQualifiedName~Generated.Pp)
+          - name: ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.Pe|FullyQualifiedName~Generated.Ph|
+              FullyQualifiedName~Generated.Po|FullyQualifiedName~Generated.Pr|
+              FullyQualifiedName~Generated.Ps|FullyQualifiedName~Generated.Pu|
+              FullyQualifiedName~Generated.Pw|FullyQualifiedName~Generated.Py)
           - name: ModelFamily - Generated Layers Q-S
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -1031,7 +1054,9 @@ jobs:
             'ModelFamily - Generated Layers M A-Medi',
             'ModelFamily - Generated Layers M MedS-Meta',
             'ModelFamily - Generated Layers M MetaV-Mu',
-            'ModelFamily - Generated Layers N-P',
+            'ModelFamily - Generated Layers N-O',
+            'ModelFamily - Generated Layers P A,C,I,L,N,P',
+            'ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y',
             'ModelFamily - Generated Layers Q-S',
             'ModelFamily - Generated Layers T-Z',
             'ModelFamily - NeuralNetworks A-F',
