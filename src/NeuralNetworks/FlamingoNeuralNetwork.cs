@@ -93,7 +93,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     #region Shared Fields
 
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _embeddingDimension;
     private readonly int _maxSequenceLength;
@@ -154,7 +154,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         int imageSize = 224,
         int numPerceiverTokens = 64,
         int maxImagesInContext = 5,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         FlamingoOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -233,7 +233,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.Chinchilla,
         int numPerceiverLayers = 6,
         ITokenizer? tokenizer = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         FlamingoOptions? options = null,
         double learningRate = 1e-3)
@@ -1165,7 +1165,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        TrainWithTape(input, expectedOutput, _optimizer);
         SetTrainingMode(false);
     }
 

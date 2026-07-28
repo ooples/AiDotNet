@@ -65,7 +65,7 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _visionDim;
     private readonly int _languageDim;
     private readonly int _visionLayers;
@@ -133,7 +133,7 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int languageLayers = 4,
         int numIterations = 3,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ABINetOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -187,7 +187,7 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int languageLayers = 4,
         int numIterations = 3,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ABINetOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -550,7 +550,7 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             TrainWithTape(
                 PreprocessTextImage(input),
                 expectedOutput,
-                _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+                _optimizer);
         }
         finally
         {

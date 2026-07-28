@@ -133,7 +133,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     #region Shared Fields
 
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _embeddingDimension;
     private readonly int _maxSequenceLength;
@@ -176,7 +176,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         int maxSequenceLength = 77,
         int imageSize = 224,
         int audioSampleRate = 16000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ImageBindOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -265,7 +265,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         int imuTimesteps = 2000,
         int numVideoFrames = 2,
         ITokenizer? tokenizer = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ImageBindOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -1663,7 +1663,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
 
     /// <inheritdoc/>

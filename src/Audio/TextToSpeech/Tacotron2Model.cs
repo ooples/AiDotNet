@@ -162,7 +162,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private IOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -482,7 +482,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int fftSize = 1024,
         int hopLength = 256,
         int griffinLimIterations = 60,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         Tacotron2ModelOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
@@ -957,7 +957,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                     return Engine.TensorAdd(
                         afterPostnet, MeanSquaredDifference(_lastPrePostnetMel, expectedOutput));
                 },
-                _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+                _optimizer);
         }
         finally
         {

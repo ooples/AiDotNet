@@ -68,7 +68,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -146,7 +146,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         int numHeads = 12,
         int vocabSize = 30522,
         int visualBackboneChannels = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutLMv2Options? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -214,7 +214,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         int numHeads = 12,
         int vocabSize = 30522,
         int visualBackboneChannels = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutLMv2Options? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -242,7 +242,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
 
     #endregion
 
-    private IOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperDefaultOptimizer()
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperDefaultOptimizer()
     {
         // LayoutLMv2 Appendix B: Adam with lr=2e-5, weight decay=1e-2,
         // and (beta1,beta2)=(0.9,0.999). AdamW expresses the cited decoupled
@@ -904,7 +904,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         SetTrainingMode(true);
         try
         {
-            var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+            var gradientOptimizer = _optimizer
                 ?? throw new InvalidOperationException(
                     "LayoutLMv2 training requires an optimizer implementing " +
                     "IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");

@@ -105,7 +105,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     #region Shared Fields
 
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _embeddingDimension;
     private readonly int _maxSequenceLength;
@@ -166,7 +166,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         int embeddingDimension = 512,
         int maxSequenceLength = 77,
         int imageSize = 224,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VideoCLIPOptions? options = null)
         : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
@@ -245,7 +245,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         double frameRate = 1.0,
         TemporalAggregationType temporalAggregation = TemporalAggregationType.TemporalTransformer,
         ITokenizer? tokenizer = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VideoCLIPOptions? options = null)
         : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
@@ -1563,7 +1563,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

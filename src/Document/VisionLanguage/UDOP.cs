@@ -69,7 +69,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numEncoderLayers;
     private readonly int _numDecoderLayers;
@@ -160,7 +160,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         int numDecoderLayers = 12,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         UDOPOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -217,7 +217,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         int numDecoderLayers = 12,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         UDOPOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -825,7 +825,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         // complete update. Pass the constructor-supplied optimizer so a user-configured optimizer
         // actually drives the update (it is gradient-based — e.g. the default AdamOptimizer); when it is
         // not gradient-based the `as` yields null and TrainWithTape falls back to its default optimizer.
-        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        TrainWithTape(input, expectedOutput, _optimizer);
         SetTrainingMode(false);
     }
 
