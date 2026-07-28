@@ -9986,12 +9986,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "CMGAN")
             {
-                // CMGAN predicts a complex ratio mask for every input frame:
-                // NumFreqBins magnitude values plus NumFreqBins phase values.
-                // The generic audio scaffold supplies 64 frames and the native
-                // decoder therefore maps [1,64,32] to [1,64,2*201].
+                // CMGAN's decoder is DECOUPLED per Cao et al., INTERSPEECH 2022
+                // (arXiv:2203.15149): a magnitude-mask head (F) plus a complex head carrying
+                // real and imaginary components (2F), jointly incorporated to reconstruct the
+                // enhanced speech. So the per-frame width is 3F = 3*201 = 603.
+                // This previously read 2*201 = 402, which encoded the pre-paper
+                // "magnitude + phase" head — phase predicted directly instead of the paper's
+                // complex pair, and one head short.
+                // The generic audio scaffold supplies 64 frames, so [1,64,32] -> [1,64,603].
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 402 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 603 };");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
                 // Repetition caps belong here, not in HeavyTrainingTimeoutClassNames: that set
                 // also emits MoreDataTolerance, which this block already owns, so membership
