@@ -301,8 +301,9 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         // SupportsTraining true rather than an advertised-but-frozen head.
         //
         // A and C are constants w.r.t. the tape; only αB carries alpha's gradient.
-        var coeff = new Tensor<T>(new[] { B, S, S });   // A — multiplies α_t
-        var constant = new Tensor<T>(new[] { B, S, S }); // C — the split's fixed part
+        var coeff = new Tensor<T>(new[] { B, S, S });      // A — multiplies α_t
+        var prefixCoeff = new Tensor<T>(new[] { B, S, S }); // Bp — multiplies P_t = Σ_{s<t} α_s
+        var constant = new Tensor<T>(new[] { B, S, S });    // C — the fixed part
 
         // Per Gao 2022 Algorithm 1, executed per-batch independently:
         //   acc_α ← 0,  acc_h ← 0
@@ -320,6 +321,7 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         {
             T accAlpha = NumOps.Zero;
             int outIdx = 0;
+            int fireCount = 0;
 
             // Frames feeding the token currently being accumulated, so the tail emission can
             // renormalize exactly the weights that formed it.
@@ -337,18 +339,33 @@ public class CifAlignmentLayer<T> : LayerBase<T>
                     T remainderFraction = NumOps.Subtract(a, contribFraction); // α_t^r
 
                     // α_t^c = θ − acc completes THIS token. It is a function of the PRIOR
-                    // alphas, not of α_t, so it enters as a pure constant.
-                    constant[b, outIdx, t] = NumOps.Add(constant[b, outIdx, t], contribFraction);
+                    // alphas — and that dependence is now carried exactly rather than dropped.
+                    //
+                    // The accumulator obeys acc_t = acc_{t-1} + α_t − (θ if fired) in BOTH
+                    // branches, so it telescopes:
+                    //     acc_{t-1} = P_t − F·θ,   P_t = Σ_{s<t} α_s,   F = fires before t
+                    // which makes the split an exact affine function of the alphas:
+                    //     α_t^c = θ(1 + F) − P_t
+                    //     α_t^r = α_t − α_t^c = α_t + P_t − θ(1 + F)
+                    // Expressing it through the prefix sum is what lets the tape see a fire's
+                    // dependence on the ENTIRE preceding alpha sequence, instead of the earlier
+                    // truncation that held α_t^c constant.
+                    T thresholdTerm = NumOps.Multiply(thresh, NumOps.FromDouble(fireCount + 1));
 
-                    // α_t^r = α_t − α_t^c seeds the NEXT token: coefficient 1 on α_t, minus the
-                    // same constant.
+                    // Completing fraction closes THIS token: no α_t term, −1 on the prefix sum.
+                    constant[b, outIdx, t] = NumOps.Add(constant[b, outIdx, t], thresholdTerm);
+                    prefixCoeff[b, outIdx, t] = NumOps.Subtract(prefixCoeff[b, outIdx, t], NumOps.One);
+
+                    // Remainder seeds the NEXT token: +1 on α_t and +1 on the prefix sum.
                     if (outIdx + 1 < S)
                     {
                         coeff[b, outIdx + 1, t] = NumOps.Add(coeff[b, outIdx + 1, t], NumOps.One);
-                        constant[b, outIdx + 1, t] = NumOps.Subtract(constant[b, outIdx + 1, t], contribFraction);
+                        prefixCoeff[b, outIdx + 1, t] = NumOps.Add(prefixCoeff[b, outIdx + 1, t], NumOps.One);
+                        constant[b, outIdx + 1, t] = NumOps.Subtract(constant[b, outIdx + 1, t], thresholdTerm);
                     }
 
                     accAlpha = remainderFraction;
+                    fireCount++;
                     outIdx++;
                     pending.Clear();
                     pending.Add(t);
@@ -377,6 +394,7 @@ public class CifAlignmentLayer<T> : LayerBase<T>
                 foreach (int t in pending)
                 {
                     coeff[b, outIdx, t] = NumOps.Multiply(coeff[b, outIdx, t], invAlpha);
+                    prefixCoeff[b, outIdx, t] = NumOps.Multiply(prefixCoeff[b, outIdx, t], invAlpha);
                     constant[b, outIdx, t] = NumOps.Multiply(constant[b, outIdx, t], invAlpha);
                 }
                 outIdx++;
@@ -395,8 +413,25 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         var alphaRow = Engine.Reshape(alphaTensor, [B, 1, S]);
         var alphaB = Engine.TensorBatchMatMul(onesColumn, alphaRow);    // [B, S, S]
 
-        // W = A ⊙ αB + C, then out = W · h.
-        var weights = Engine.TensorAdd(Engine.TensorMultiply(coeff, alphaB), constant);
+        // Exclusive prefix sum P_t = Σ_{s<t} α_s, as a strictly-lower-triangular matmul so the
+        // tape records each P_t's dependence on every earlier alpha. This is the term that makes
+        // the split's dependence on the whole preceding sequence differentiable.
+        var lowerTriangular = new Tensor<T>(new[] { B, S, S });
+        for (int b = 0; b < B; b++)
+            for (int t = 0; t < S; t++)
+                for (int s = 0; s < t; s++)
+                    lowerTriangular[b, t, s] = NumOps.One;
+
+        var prefix = Engine.TensorBatchMatMul(lowerTriangular, alphaTensor);  // [B, S, 1]
+        var prefixRow = Engine.Reshape(prefix, [B, 1, S]);
+        var prefixB = Engine.TensorBatchMatMul(onesColumn, prefixRow);        // [B, S, S]
+
+        // W = A ⊙ αB + Bp ⊙ PB + C, then out = W · h.
+        var weights = Engine.TensorAdd(
+            Engine.TensorAdd(
+                Engine.TensorMultiply(coeff, alphaB),
+                Engine.TensorMultiply(prefixCoeff, prefixB)),
+            constant);
         var output = Engine.TensorBatchMatMul(weights, input);          // [B, S, D]
 
         return output;
