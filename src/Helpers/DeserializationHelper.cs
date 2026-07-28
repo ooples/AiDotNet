@@ -245,7 +245,14 @@ public static class DeserializationHelper
 
             double threshold = TryGetDouble(additionalParams, "Threshold") ?? 1.0;
             double tailThreshold = TryGetDouble(additionalParams, "TailThreshold") ?? 0.5;
-            instance = new CifAlignmentLayer<T>(encoderDim, threshold, tailThreshold);
+            // Restore the CIF training controls too, or a round-trip silently drops the paper's
+            // alpha scaling and quantity-loss settings back to their defaults. Both fall back to
+            // the paper values (Dong & Xu 2020: scaling on, lambda2 = 1.0) when absent, which is
+            // also what older payloads without these keys should deserialize to.
+            bool alphaScaling = TryGetBool(additionalParams, "AlphaScalingEnabled") ?? true;
+            double quantityLossWeight = TryGetDouble(additionalParams, "QuantityLossWeight") ?? 1.0;
+            instance = new CifAlignmentLayer<T>(
+                encoderDim, threshold, tailThreshold, alphaScaling, quantityLossWeight);
         }
         else if (genericDef == typeof(TabNetEncoderLayer<>))
         {
