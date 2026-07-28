@@ -221,13 +221,23 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
             return OnnxModel.Run(input);
 
         SetTrainingMode(false);
+        return ForwardDualBranch(input);
+    }
 
-        // ASP and PSP are PARALLEL branches over the same mel input. Layers holds both of them
-        // concatenated — that is only so parameter enumeration, serialization and device
-        // transfer see every weight — so the inherited "chain everything in Layers" pass would
-        // feed the amplitude branch's log-amplitude output into the phase branch and return
-        // something meaningless. Run the two branches independently, exactly as MelToWaveform
-        // does, and return the concatenated [amplitude | real | imaginary] prediction.
+    /// <summary>
+    /// Runs the ASP and PSP branches in parallel over the same mel input and returns the
+    /// concatenated [amplitude | real | imaginary] prediction.
+    /// </summary>
+    /// <remarks>
+    /// ASP and PSP are PARALLEL branches over the same mel input. <see cref="Layers"/> holds
+    /// both of them concatenated — that is only so parameter enumeration, serialization and
+    /// device transfer see every weight — so the inherited "chain everything in Layers" pass
+    /// would feed the amplitude branch's log-amplitude output into the phase branch and return
+    /// something meaningless. Both the inference path and the training path route through here
+    /// so they cannot drift apart.
+    /// </remarks>
+    private Tensor<T> ForwardDualBranch(Tensor<T> input)
+    {
         var amplitude = input;
         foreach (var l in _amplitudeLayers)
             amplitude = l.Forward(amplitude);
@@ -239,6 +249,24 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         return Engine.TensorConcatenate(
             new[] { amplitude, phase },
             axis: amplitude.Shape.Length - 1);
+    }
+
+    /// <summary>
+    /// Trains through the same parallel dual-branch forward that inference uses.
+    /// </summary>
+    /// <remarks>
+    /// The base implementation chains every layer in <see cref="Layers"/> sequentially. For a
+    /// dual-branch model that produces the phase branch's output alone — 2 * fftBins values
+    /// instead of the 3 * fftBins the model actually predicts — so the tape loss compared a
+    /// [1, 80, 1026] prediction against a [1, 80, 1539] target and training threw before a
+    /// single gradient was taken.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Subclasses that bypass the base forward must seed stochastic layers themselves,
+        // otherwise dropout masks vary run-to-run and the trajectory invariants flake.
+        EnsureLayerRandomSeedsWired();
+        return ForwardDualBranch(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)

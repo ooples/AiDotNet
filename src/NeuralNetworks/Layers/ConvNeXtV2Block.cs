@@ -86,6 +86,15 @@ public class ConvNeXtV2Block<T> : LayerBase<T>
         // initialization, so an untrained block reduces to the residual path.
         _grnGamma = new Tensor<T>(new[] { intermediateChannels });
         _grnBeta = new Tensor<T>(new[] { intermediateChannels });
+
+        // Register both so the engine tracks them as persistent trainable tensors. Without
+        // this the GRN pair is reported by ParameterCount and serialized by GetParameters()
+        // but accumulates no gradient, so gamma and beta stay pinned at their zero
+        // initialization forever — and since gamma = 0 makes GRN an exact identity, the
+        // block silently degrades to plain ConvNeXt v1 and the global response
+        // normalization the v2 paper (Woo et al., 2023 §3.2) introduces never engages.
+        RegisterTrainableParameter(_grnGamma, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_grnBeta, PersistentTensorRole.Biases);
     }
 
     /// <inheritdoc/>

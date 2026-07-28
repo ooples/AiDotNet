@@ -236,7 +236,8 @@ public class MinMo<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }

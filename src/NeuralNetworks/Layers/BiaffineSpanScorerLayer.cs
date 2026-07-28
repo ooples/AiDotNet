@@ -106,9 +106,16 @@ public class BiaffineSpanScorerLayer<T> : LayerBase<T>
         InitializeParameter(_additive, 2 * spanDim);
 
         // Register so the tape and ParameterBuffer see these tensors. Omitting this is silent:
-        // the layer still reports a parameter count through GetParameters() while
-        // GetTrainableParameters() returns nothing, and training then corrupts the parameter
-        // vector rather than failing loudly.
+        // GetTrainableParameters() still hands the optimizer all three tensors, so nothing
+        // throws and the parameter count looks right — but the engine never marks them
+        // persistent, no gradient is accumulated for them, and the biaffine term this layer
+        // exists to compute (Yu et al., ACL 2020 §3) never learns. Measured before this fix:
+        // BiaffineNER's memorization loss sat at 14.278996 for all 15 steps, and raising the
+        // learning rate 100x (1e-5 -> 1e-3) moved it only in the sixth decimal — the residual
+        // motion came entirely from the two boundary FFNNs, which ARE registered as sub-layers.
+        RegisterTrainableParameter(_bilinear, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_additive, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
