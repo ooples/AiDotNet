@@ -299,6 +299,21 @@ public class BiaffineSpanScorerLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Publishes the geometry deserialization needs. Without it the helper falls back to
+    /// defaults (spanDim = 150) and rebuilds a differently-shaped layer, which surfaces as a
+    /// parameter-count mismatch on clone rather than as a missing-metadata error.
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputDim"] = _inputDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["SpanDim"] = _spanDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["NumCategories"] = _numCategories.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <inheritdoc/>
     public override void ResetState()
     {
         _startFfnn.ResetState();

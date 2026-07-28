@@ -131,6 +131,14 @@ public class TemporalShiftLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["ShiftedChannelRatio"] = _shiftedChannelRatio.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <inheritdoc/>
     public override void ResetState()
     {
     }

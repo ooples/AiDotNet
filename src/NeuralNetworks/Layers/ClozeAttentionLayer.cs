@@ -198,6 +198,14 @@ public class ClozeAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["ModelDim"] = _modelDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <inheritdoc/>
     public override void ResetState()
     {
         _query.ResetState();
