@@ -65,13 +65,22 @@ public class CMGANOptions : ModelOptions
     /// <remarks>
     /// <para>Conformer layers combine self-attention and convolution for both global and local
     /// pattern recognition in the time-frequency domain.</para>
+    /// <para>Paper default: the CMGAN generator uses FOUR two-stage conformer blocks
+    /// (Cao et al., INTERSPEECH 2022, arXiv:2203.15149). This previously defaulted to 2,
+    /// which is half the published depth.</para>
     /// </remarks>
-    public int NumConformerLayers { get; set; } = 2;
+    public int NumConformerLayers { get; set; } = 4;
 
     /// <summary>
     /// Gets or sets the Conformer hidden dimension.
     /// </summary>
-    public int ConformerDim { get; set; } = 256;
+    /// <remarks>
+    /// <para>Paper default: 64 channels (Cao et al., INTERSPEECH 2022, arXiv:2203.15149,
+    /// Sec. "Experimental setup"). This previously defaulted to 256 — FOUR TIMES the published
+    /// width — which made the model both unfaithful to the paper and needlessly expensive:
+    /// CMGAN was 54 s of training probes on the A-C shard largely because of this.</para>
+    /// </remarks>
+    public int ConformerDim { get; set; } = 64;
 
     /// <summary>
     /// Gets or sets the number of attention heads in Conformer layers.

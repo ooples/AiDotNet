@@ -1219,7 +1219,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Trim ONLY the repeated iterations: paper architectures, production defaults,
         // numerical tolerances and decrease thresholds are unchanged, and every training
         // assertion still executes against the real forward/backward path.
-        "CogVideo", "AVID", "ABINet", "AMT", "ABME", "BiMVFI",
+        "CogVideo", "AVID", "AMT", "ABME", "BiMVFI",
+        // Second A-C wave, measured on the LOCAL 16 GB/4 CPU run rather than the CI log. The
+        // cancelled CI job only reached 58% of the shard, so its slowest-class ranking was
+        // badly skewed: these classes were either never reached or under-counted, yet they
+        // dominate the real budget. Per-class training-probe cost from the local run:
+        //   APNet2 181s, BSVD 136s, Concerto 133s, CogVLM2 102s, CIFEncoder 89s,
+        //   BiomedParse 60s, CMGAN 56s, BasicVSRPlusPlus 30s.
+        // (BSVD is excluded here — it owns a convergence block already, see below.)
+        "Concerto", "CogVLM2", "BiomedParse",
+        // NOT added — each already emits iteration overrides from another branch, so membership
+        // here double-emits (CS0102, confirmed by build). They need in-place tightening:
+        //   APNet2           181s — emits both MoreData counts
+        //   CIFEncoder        75s — emits all five (TrainingIterations, both MoreData counts,
+        //                           MoreDataTolerance, memorization count + threshold)
+        //   CMGAN             54s — emits MoreDataTolerance
+        //   BasicVSRPlusPlus  30s — emits MoreDataTolerance, memorization count + threshold
+        // ABINet is NOT here: this branch's 1-vs-2 MoreData probe made it FAIL. Measured on the
+        // local 16 GB/4 CPU A-C run: 1-iteration loss 253.52232 vs 2-iteration loss 255.38773,
+        // a 1.87 rise against the 0.5 tolerance — but with BOTH parameter snapshots finite
+        // (nonfinite=0) and effectively identical L2 (83.70252 vs 83.72267). That is Adam
+        // warm-up overshoot, not degradation; it passed before capping because the generic
+        // 50+200 probe ran far past the hump. It takes the warm-up treatment in
+        // BoundedGeneratedTrainingClassNames instead (5-vs-15), which still caps the cost
+        // but clears the transient. The two sets must stay disjoint.
         // Deliberately NOT added to this set — every one of them ALREADY emits iteration
         // overrides from another branch, so listing them here double-emits (CS0102, confirmed
         // by build). Their caps exist but are evidently too loose for the A-C budget, so they
@@ -1271,6 +1294,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // only: the paper architecture, numerical tolerances and decrease thresholds are unchanged,
         // and every training assertion still executes against the real forward/backward path.
         "RemoteCLIP",
+        // ABINet joins the warm-up group for exactly RemoteCLIP's reason, measured on the local
+        // 16 GB/4 CPU A-C run: at a 1-vs-2 probe its Adam moments are still inside the
+        // first-few-step overshoot (253.52232 -> 255.38773) while both parameter snapshots stay
+        // finite with near-identical L2 (83.70252 vs 83.72267) — a warm-up artefact, not
+        // divergence. Comparing 5 steps against 15 clears the hump and keeps the DEFAULT tight
+        // tolerance, which is strictly better than relaxing MoreDataTolerance to 0.5 the way the
+        // paper-scale branch does. Still far cheaper than the generic 50+200 probe it replaces.
+        "ABINet",
     };
 
     // Attribute metadata names
@@ -5708,6 +5739,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumAttentionHeads = 2, FeedForwardExpansionFactor = 2, NumMels = 64, " +
                     "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "CIFEncoder" && model.TypeParameterCount == 1)
+            {
+                // CIFEncoder retains the paper's 512-wide, 12-layer, 8-head Conformer encoder
+                // with a 2048-wide feed-forward path and 5,000-entry vocabulary in production.
+                // 75 s of training probes on the local 16 GB/4 CPU A-C run — and it is ALREADY
+                // fully capped by the FP32 audio branch (which emits TrainingIterations, both
+                // MoreData counts, MoreDataTolerance and the memorization count/threshold), so
+                // the repetition lever is spent and the residual cost is per-step scale. Same
+                // situation as Chronos: only a fixture bound reaches it.
+                // Exercise the same mel -> Conformer encoder -> CIF alignment -> vocabulary head
+                // topology at CI-smoke scale; NumMels=64 matches the generated [1,64,32] audio
+                // fixture. CifThreshold stays at its paper value of 1.0 — it is an alignment
+                // firing threshold, not a size knob, so scaling it would change behaviour rather
+                // than cost. Production defaults and customization are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.ConformerFamily.CIFEncoderOptions { SampleRate = 16000, " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 2, FeedForwardDim = 64, CifThreshold = 1.0, " +
+                    "NumMels = 64, VocabSize = 64, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "ContextNet" && model.TypeParameterCount == 1)
             {
                 // ContextNet retains the paper's 512-wide, 23-block squeeze-and-excitation
@@ -8866,6 +8920,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // narrow model-specific absolute allowance (0.04% of the
                 // observed 0.232 loss), rather than weakening the global test.
                 sb.AppendLine("    protected override double TrainingLossReductionTolerance => 1e-4;");
+                // Repetition caps live here rather than in HeavyTrainingTimeoutClassNames: that
+                // set also emits TrainingLossReductionTolerance, which this block already owns
+                // at a deliberately narrow 1e-4, so membership would both double-emit (CS0102)
+                // and clobber the tuned value with the generic 0.5.
+                //
+                // BSVD is 130 s of training probes on the local 16 GB/4 CPU A-C run —
+                // MoreData 66 s and memorization 35 s — because both still ran their generic
+                // 50+200 and 100-step budgets. Deliberately NOT capped to 1-vs-2: that is the
+                // aggressive setting that pushed ABINet inside its Adam warm-up hump and turned
+                // a passing probe red. 5-vs-15 clears warm-up while still cutting the MoreData
+                // probe from 250 steps to 20, and it preserves the narrow tolerance above
+                // instead of relaxing it.
+                sb.AppendLine("    protected override int MoreDataShortIterations => 5;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 15;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
             }
             if (model.ClassName == "TimeSformer")
             {
@@ -9924,6 +9993,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 402 };");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
+                // Repetition caps belong here, not in HeavyTrainingTimeoutClassNames: that set
+                // also emits MoreDataTolerance, which this block already owns, so membership
+                // double-emits (CS0102, confirmed by build).
+                //
+                // CMGAN is 54 s of training probes on the local 16 GB/4 CPU A-C run because the
+                // shapes above are the only thing bounded — the iteration counts still ran the
+                // generic 50+200 MoreData and 100-step memorization budgets. Predicting a
+                // 402-wide complex ratio mask for all 64 frames makes every step costly, so the
+                // repeat counts dominate. This block already relaxes MoreDataTolerance to 0.5,
+                // which covers the first-few-step Adam overshoot, so the aggressive 1-vs-2 that
+                // pushed ABINet red is safe here; memorization keeps the standard bounded 15.
+                sb.AppendLine("    protected override int TrainingIterations => 2;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
             }
             else if (model.ClassName == "ConformerFP")
             {
@@ -11050,6 +11134,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // bounded heavy model here uses. The default threshold is retained, so a genuinely
             // broken optimizer still fails.
             sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
+            // The MoreData and memorization caps above left CLIPA's remaining training probes
+            // on the default iteration count, and they are now its dominant cost. Local
+            // 16 GB/4 CPU A-C run: 191 s total, of which Training_ShouldReduceLoss is 46 s,
+            // TrainingError_ShouldNotExceedTestError 42 s and Training_ShouldChangeParameters
+            // 22 s — collectively far more than the 23 s memorization probe the earlier cap
+            // targeted. Training_ShouldReduceLoss runs TrainingIterations*3 steps, so 2 keeps
+            // six real steps (enough to clear warm-up and show the descent) at roughly a third
+            // of the cost. Tolerances and thresholds are untouched.
+            sb.AppendLine("    protected override int TrainingIterations => 2;");
         }
 
         // DiffCutSegmentation keeps its Stable-Diffusion encoder widths
@@ -11153,7 +11246,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // and keeps the DEFAULT tight tolerance, which is strictly better than relaxing
             // MoreDataTolerance the way the paper-scale branch does.
             bool needsOptimizerWarmup =
-                model.ClassName is "Mamba2LanguageModel" or "Zamba2LanguageModel" or "RemoteCLIP";
+                model.ClassName is "Mamba2LanguageModel" or "Zamba2LanguageModel" or "RemoteCLIP"
+                    or "ABINet";
             sb.AppendLine($"    protected override int TrainingIterations => {(model.ClassName == "Zamba2LanguageModel" ? 15 : 5)};");
             sb.AppendLine($"    protected override int MoreDataShortIterations => {(needsOptimizerWarmup ? 5 : 1)};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {(needsOptimizerWarmup ? 15 : model.ClassName == "DEVA" ? 10 : 2)};");
