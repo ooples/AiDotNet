@@ -2498,7 +2498,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         => className == "FlamingoNeuralNetwork" ? 32
          : className == "MiniGPT4" ? 28
          : className is "DEVA" or "DepthAnythingV2" or "FLIP" or "GeminiVision" or "Gemma3" or "ImageBindNeuralNetwork" or "InternVL" or "InternVL2" or "InternVL25" or "InternVL3"
-             or "OneFormer" or "OpenCLIP" or "Pix2Struct" or "SEEM" or "ShowO" or "SigLIP2" or "MetaCLIP" ? 32
+             or "OneFormer" or "OpenCLIP" or "Pix2Struct" or "SEEM" or "ShowO" or "ShowO2" or "SigLIP2" or "MetaCLIP" ? 32
          // Shard M MedS-Meta: these three are already <float> AND already carry iteration caps from
          // their family branches, and their probes still overran the 120/180 s gate (MetaCLIP alone
          // failed 8 invariants). Neither exposes a usable width knob — MedSAMModelSize declares only
@@ -5576,6 +5576,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 2, " +
                     "NumHeads = 2, VocabSize = 64, NumVisualTokens = 64, ImageTokenCount = 4, " +
                     "DiffusionSteps = 2, MaxSequenceLength = 16, MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "ShowO2" && model.TypeParameterCount == 1)
+            {
+                // Show-o2 keeps the released 7B-class configuration as its production default:
+                // DecoderDim 4096 x 32 decoder layers, VisionDim 1024 x 24 vision layers, 32 heads,
+                // ImageSize 512, VocabSize 32000 and 16384 visual tokens. Its sibling ShowO was
+                // already bounded (1.3B, reached 11 GB) but Show-o2 was missed, and it OOM-killed
+                // the Q-S shard: System.OutOfMemoryException on DifferentInputs_ShouldProduceDifferent-
+                // Outputs (1 m 21 s), DifferentImages_DifferentEmbeddings (23 s),
+                // ImageOnly_ShouldProduceOutput (1 m 2 s) and Training_ShouldReduceLoss (19 s),
+                // cascading into Training_ShouldChangeParameters / ScaledInput / Metadata /
+                // OptimizerStep at 1 ms each once the process had no headroom left. Same 7B-class
+                // OOM as SEEDX and SlowFastLLaVA, and the same remedy: exercise the identical
+                // patch-tokenization -> shared omni-attention -> visual-token-head topology through
+                // the PUBLIC options at CI-smoke scale. Production defaults are unchanged.
+                // GetVisionSpatialSize above is updated in lockstep so the emitted InputShape and
+                // this architecture's inputHeight/inputWidth agree at 32.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Unified.ShowO2Options { ImageSize = 32, " +
+                    "OutputImageSize = 32, VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, " +
+                    "NumDecoderLayers = 2, NumHeads = 2, VocabSize = 64, NumVisualTokens = 64, " +
+                    "MaxSequenceLength = 16, MaxGenerationLength = 8, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "SEEM" && model.TypeParameterCount == 1)
             {
