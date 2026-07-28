@@ -139,7 +139,8 @@ public class BSVD<T> : VideoDenoisingBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultBSVDLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w,
                 numFeatures: _options.NumFeatures, temporalFrames: temporalFrames,
-                numUNetStages: _options.NumUNetStages));
+                numUNetStages: _options.NumUNetStages,
+                shiftedChannelRatio: _options.ShiftedChannelRatio));
         }
     }
 
