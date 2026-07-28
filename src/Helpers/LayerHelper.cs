@@ -11567,7 +11567,19 @@ public static class LayerHelper<T>
         // then run bidirectional attention over the continuous token sequence.
         if (visionDim != languageDim)
             yield return new DenseLayer<T>(languageDim, identityActivation);
-        yield return new MultiHeadAttentionLayer<T>(8, (languageDim) / (8), identityActivation);
+
+        // ABINet's BIDIRECTIONAL principle: the language model is a Bidirectional Cloze Network,
+        // not ordinary self-attention. Each position attends to every OTHER position in both
+        // directions but is masked out of attending to itself (paper Eq. 3: M[i,j] = 0 for
+        // i != j, -inf for i == j). Blocking the diagonal is what makes it a cloze — the
+        // representation at a position is built purely from its context, so predicting the
+        // character there cannot copy the character itself.
+        //
+        // This previously used a plain MultiHeadAttentionLayer, which leaks each position into
+        // its own prediction. The layer's UseCausalMask option is not a substitute: a triangular
+        // mask would also remove all right-hand context and collapse the LM to unidirectional,
+        // which is the very thing the paper's BCN exists to avoid.
+        yield return new ClozeAttentionLayer<T>(languageDim);
         yield return new LayerNormalizationLayer<T>();
 
         // Fusion with iterative refinement
