@@ -22911,21 +22911,29 @@ public static class LayerHelper<T>
         yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Branchformer blocks: parallel self-attention + cgMLP branches, then concat-merge
+        // Branchformer blocks, per Peng et al., ICML 2022 (arXiv:2207.02971).
+        //
+        // These were previously emitted as loose layers under a comment claiming "parallel
+        // self-attention + cgMLP branches, then concat-merge". A flat layer list cannot express
+        // that: the emitted sequence ran attention -> norm -> dense(cgmlpDim) -> dense -> norm,
+        // i.e. attention FOLLOWED BY an MLP, which is an ordinary transformer block. The parallel
+        // arrangement is the paper's entire contribution — running the two context types side by
+        // side so the merge can weigh them — and a sequential composition of the same pieces is
+        // just a Conformer-style block wearing the name.
+        //
+        // The cgMLP branch was also missing its Convolutional Spatial Gating Unit entirely: it
+        // was a plain GeLU expansion and projection, with no half-split, no depth-wise
+        // convolution and no gating multiply.
+        //
+        // BranchformerBlock holds both branches and the merge inside ONE layer, so no default
+        // forward pass can flatten them back into a chain.
         for (int i = 0; i < numLayers; i++)
         {
-            // Branch 1: Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            // Branch 2: Convolutional Gating MLP (cgMLP)
-            yield return new DenseLayer<T>(cgmlpDim, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-
-            // Concat merge projection (2*dim -> dim)
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new BranchformerBlock<T>(
+                modelDim: encoderDim,
+                numHeads: numAttentionHeads,
+                cgmlpHiddenDim: cgmlpDim,
+                kernelSize: 31);
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
