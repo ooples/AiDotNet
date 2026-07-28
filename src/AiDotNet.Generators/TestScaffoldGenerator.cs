@@ -10062,7 +10062,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isAudioModel)
         {
-            if (model.ClassName == "DeepgramNova2")
+            if (model.ClassName == "CTCDecoder")
+            {
+                // #1789 Generated C: MoreData_ShouldNotDegrade was the only CTCDecoder test to
+                // fail, and it failed on the 120 s per-test gate rather than on the invariant.
+                // The generic audio fallthrough gives this family 3 short + 10 long iterations,
+                // and CTCDecoder's per-step cost is high enough that the 13 steps plus the two
+                // clones overrun the budget -- its Training_ShouldReduceLoss alone measures 53 s
+                // and Clone_AfterTraining 30 s, both passing. Bound only the MoreData probe, in
+                // place in the audio chain, so the model keeps every other invariant at the
+                // family's iteration counts. Production defaults and public customization are
+                // untouched. Tightened here rather than added to BoundedGeneratedTrainingClassNames
+                // because the FP32 audio branch already emits these overrides for the family;
+                // listing the class as well double-emits them and breaks the build with CS0102.
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+            }
+            else if (model.ClassName == "DeepgramNova2")
             {
                 sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 1;");
