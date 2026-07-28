@@ -316,6 +316,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         // Generated A-M shard foundation-scale training timeouts (#1719): DPT-Large depth, 768-dim VLMs.
         "MiDaS", "METER", "DocPedia", "MERT", "LXMERT",
+        // Shard M MedS-Meta. These three exhausted the float -> cap -> shrink ladder, each rung
+        // measured rather than assumed:
+        //   float  - all three already emit as <base>TestBase<float> via the A-Z shard rule.
+        //   cap    - MedSAM/MedSAM2 carry MoreData 2/6 plus tolerance and MetaCLIP the full 5/15 set
+        //            from their family branches; adding them to HeavyTrainingTimeoutClassNames would
+        //            re-emit those members and fail the build with CS0102.
+        //   shrink - MedSAM/MedSAM2 had NO reachable width knob (GetModelConfig hard-coded the ViT-Base
+        //            and Hiera presets, and their ModelSize enums expose no smaller option), and
+        //            MetaCLIPOptions carries no dimension properties at all. MedSAMOptions and
+        //            MedSAM2Options have since been given real ChannelDims/Depths/DecoderDim knobs
+        //            (null = the published preset, so production is unchanged) -- that part is worth
+        //            keeping on its own merits -- but the generated fixture still does not pick them up,
+        //            so the shrink cannot currently be applied from the generator.
+        // Excluded from PR shards under the same rule as the entries above; they continue to run
+        // nightly, where the 45-minute job cap does not apply.
+        "MedSAM", "MedSAM2", "MetaCLIP",
+        // MelBandRoFormer / MelGAN: same ladder, same outcome. Both are already <float>, and both
+        // already receive MoreDataShort/LongIterations (MelBandRoFormer also MoreDataTolerance) from
+        // their audio family branch, so HeavyTrainingTimeoutClassNames would re-emit those members and
+        // fail the build with CS0102 — the cap rung is closed. Their remaining failures are the
+        // memorization / training probes at the 180 s gate, not MoreData, so the existing caps do not
+        // reach them. Excluded from PR shards; they continue to run nightly.
+        "MelBandRoFormer", "MelGAN",
         // InternViT: InternViT-6B vision encoder — default config is EmbeddingDim 3200, 48 transformer
         // layers, 25 heads (Chen et al. 2024, InternVL). A single fp32 CPU forward over 112px/14px = 64
         // patch tokens through 48 layers of 3200-dim O(n^2) attention inherently exceeds the 120s per-test
@@ -972,6 +995,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> HeavyTrainingTimeoutClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
+        // Shard M MedS-Meta: both are already <float> via the A-Z shard rule and carry NO iteration
+        // overrides from any family branch (verified against the emitted fixtures), so the cap is the
+        // genuine next rung rather than a duplicate — a family that already emits these members turns
+        // this into a CS0102 double-emit. Their failures are pure gate overruns:
+        //   MemFlow - MoreData_ShouldNotDegrade at 120 s (x2).
+        //   MedSegDiffV2 / MedSegDiffV2Segmentation / MegaTTS2 - already <float> via the A-Z rule and
+        //     carrying NO overrides from any family branch (verified against the emitted fixtures, all
+        //     five members: TrainingIterations, MemorizationTaskIterations, MoreDataShort/LongIterations
+        //     and MoreDataTolerance). Each fails only MoreData_ShouldNotDegrade at 120 s, so the cap is
+        //     the correct next rung.
+        "MedSegDiffV2", "MedSegDiffV2Segmentation", "MegaTTS2",
+        // MelodyExtractor is deliberately NOT here: its audio family branch already emits
+        // MoreDataTolerance, so adding it produced "CS0102: already contains a definition for
+        // MoreDataTolerance". Checking only the ITERATION overrides is not sufficient — this block
+        // emits MoreDataTolerance as well, so a model whose family emits ANY of those five members
+        // must take a different rung.
+        "MemFlow",
         // BasicVSR (Chan et al. 2021): fp32 was applied first, but its bidirectional recurrent
         // propagation still made the default 50+200 MoreData probe hit 120 s in isolation. Keep the
         // paper-scale model and trim only the multi-iteration generated invariants to smoke counts.
@@ -2428,14 +2468,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// this helper for both the architecture's <c>inputHeight</c>/<c>inputWidth</c> args
     /// and the test class's <c>InputShape</c> override so they always agree.
     /// </summary>
-    private static int GetVisionSpatialSize(string className)
+    private static int GetVisionSpatialSize(string rawClassName)
+    {
+        // Strip the generic arity suffix before matching, exactly as
+        // GetForecastingPaperContextLength already does ("TimeMoE`1" -> "TimeMoE"). Without this every
+        // comparison below silently fails for a generic model, so an entry added here is a NO-OP and
+        // the model keeps the 128 default -- which is what happened to MedSAM2 and MetaCLIP.
+        int tickIdx = rawClassName.IndexOf('`');
+        string className = tickIdx > 0 ? rawClassName.Substring(0, tickIdx) : rawClassName;
+        return GetVisionSpatialSizeCore(className);
+    }
+
+    private static int GetVisionSpatialSizeCore(string className)
         // These models use reduced spatial sizes only in generated CI fixtures after float was
         // measured insufficient. Keep emitted inputs in lockstep with those fixture architectures;
         // each production options type retains its paper-faithful ImageSize default.
         => className == "FlamingoNeuralNetwork" ? 32
          : className == "MiniGPT4" ? 28
          : className is "DEVA" or "DepthAnythingV2" or "FLIP" or "GeminiVision" or "Gemma3" or "ImageBindNeuralNetwork" or "InternVL" or "InternVL2" or "InternVL25" or "InternVL3"
-             or "OneFormer" or "OpenCLIP" or "Pix2Struct" or "SEEM" or "ShowO" or "SigLIP2" ? 32
+             or "OneFormer" or "OpenCLIP" or "Pix2Struct" or "SEEM" or "ShowO" or "SigLIP2" or "MetaCLIP" ? 32
+         // Shard M MedS-Meta: these three are already <float> AND already carry iteration caps from
+         // their family branches, and their probes still overran the 120/180 s gate (MetaCLIP alone
+         // failed 8 invariants). Neither exposes a usable width knob — MedSAMModelSize declares only
+         // ViTBase, and MetaCLIPOptions exposes only MaxEntriesPerConcept — so after float and caps the
+         // resolution is the one remaining lever. 128 -> 64 quarters the feature map while staying
+         // above the stride floor that made a 32px XDecoder fixture collapse to a 1x1 map and silently
+         // produce zero gradients. Production ImageSize defaults are untouched.
+         // MedSAM is deliberately NOT here. MEASURED: at 128px it failed ONE invariant
+         // (DifferentInputs_AfterTraining, 120 s); dropping it to 64px made it fail EIGHT. Its
+         // encoder needs the larger map, so the resolution lever moves it AWAY from green — the same
+         // over-shrink that collapsed XDecoder's feature map. Its sibling MedSAM2 and MetaCLIP both
+         // improved at 64px, so this is per-model, not per-family.
+         : className == "MedSAM2" ? 64
          : IsPatchVisionModel(className) ? 112
          : 128;
 
@@ -2995,6 +3059,88 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "EmbeddingDim = 32, NumLayers = 1, NumHeads = 4, NumDecoderLayers = 1, " +
                     "DecoderEmbeddingDim = 32, NumDecoderHeads = 4, VocabSize = 64, MaxOutputTokens = 16, " +
                     "UseDaViT = false, LearningRate = 1e-5 })";
+            }
+            else if (model.ClassName == "MedSAM2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.Medical.", System.StringComparison.Ordinal))
+            {
+                // Same treatment and same reasoning as the MedSAM branch below: float and caps are
+                // already applied and its probes still overran the gate, and its encoder was equally
+                // unreachable — even MedSAM2ModelSize.Tiny hard-coded a 96/192/384/768 Hiera stack.
+                // MedSAM2Options now exposes ChannelDims / Depths / DecoderDim (null = paper preset),
+                // so the fixture requests a smoke-scale encoder through the public API. Stage count
+                // stays at 4 so the stride math and decoder skips line up.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2Options { " +
+                    "ChannelDims = new[] { 16, 32, 48, 64 }, Depths = new[] { 1, 1, 1, 1 }, " +
+                    "DecoderDim = 32 })";
+            }
+            else if (model.ClassName == "MedSAM" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.Medical.", System.StringComparison.Ordinal))
+            {
+                // Shard M MedS-Meta, SHRINK rung. Float and caps are both already applied (MoreData 2/6
+                // plus tolerance from its family branch) and its probes still overran the 120/180 s gate.
+                // MedSAM had NO reachable width knob at all: GetModelConfig hard-coded the ViT-Base
+                // preset ([64,128,320,768] over depths [2,2,4,12], decoder 256 -- ~90M params) and
+                // MedSAMModelSize declares only ViTBase, so every caller got the full paper encoder.
+                // Rather than work around that with a resolution hack, MedSAMOptions now exposes
+                // ChannelDims / Depths / DecoderDim (null = the paper preset, so production is
+                // unchanged) and the fixture asks for a smoke-scale encoder here.
+                // Stage count is kept at 4 so the stride math and the decoder's skip connections still
+                // line up; only the widths and per-stage block counts come down.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAMOptions { " +
+                    "ChannelDims = new[] { 16, 32, 48, 64 }, Depths = new[] { 1, 1, 1, 1 }, " +
+                    "DecoderDim = 32 })";
+            }
+            else if (model.ClassName == "MelodyExtractor" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.MusicAnalysis.", System.StringComparison.Ordinal))
+            {
+                // Shard M MedS-Meta. Already <float> (AudioNNModelTestBase<float>), and the CAP rung is
+                // unavailable: its audio family branch already emits MoreDataTolerance, so adding it to
+                // HeavyTrainingTimeoutClassNames produced "CS0102: already contains a definition for
+                // MoreDataTolerance". That leaves the shrink. Its single failure is
+                // MoreData_ShouldNotDegrade at 120 s, and its paper defaults carry the cost: a 256-wide
+                // 4-layer stack over 128 mel bands feeding a 360-bin pitch head (5-cent resolution over
+                // six octaves). All four properties are verified present on MelodyExtractorOptions.
+                // NumMels stays in lockstep with the emitted InputShape's 64x32 probe rather than the
+                // paper's 128. Production defaults are untouched.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.MusicAnalysis.MelodyExtractorOptions { " +
+                    "HiddenDim = 32, NumLayers = 1, NumPitchBins = 32, NumMels = 32 })";
+            }
+            else if (model.ClassName == "MeloTTS" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.EndToEnd.", System.StringComparison.Ordinal))
+            {
+                // Shard M MedS-Meta. MeloTTS is already <float> (TTSModelTestBase<float>) and its family
+                // branch already caps MoreData (3/10), yet LossStrictlyDecreasesOnMemorizationTask still
+                // overran the 180 s gate — so per float -> cap -> shrink, the shrink is what is left.
+                // Its emitted fixture is ALREADY tiny (InputShape {8, 80}), so the cost is internal, not
+                // in the probe: MeloTTS builds the full VITS stack via CreateDefaultVITSLayers, and
+                // NumFlowSteps dominates it (each normalizing-flow step is a full coupling pass).
+                // Only properties verified to exist on EndToEndTtsOptions are set here — HiddenDim /
+                // NumEncoderLayers / NumDecoderLayers / NumHeads are NOT declared on it, and setting an
+                // undeclared property is a CS0117 in the generated fixture.
+                // Production paper defaults in MeloTTSOptions are untouched.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 8, inputWidth: 80, inputDepth: 1, outputSize: 8), " +
+                    "new AiDotNet.TextToSpeech.EndToEnd.MeloTTSOptions { " +
+                    "NumFlowSteps = 1, InterChannels = 32, FilterChannels = 64, " +
+                    "EncoderDim = 32, DecoderDim = 32 })";
             }
             else if (model.ClassName == "GeminiVision" && model.TypeParameterCount == 1)
             {
@@ -8975,6 +9121,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // and gradient-flow invariants all pass. Compare a real warm-up window (10 steps)
             // with the measured convergence window (50 steps); this keeps the more-training
             // invariant meaningful without testing optimizer drift after the smoke model is fit.
+        }
+        else if (model.ClassName == "MetaCLIP")
+        {
+            // Shard M MedS-Meta, SHRINK rung. Float and caps are both already applied to all three
+            // (MedSAM/MedSAM2 carry MoreData 2/6 + tolerance, MetaCLIP the full 5/15 set) and their
+            // probes still overran the 120/180 s gate. Neither exposes a usable width knob —
+            // MedSAMModelSize declares only ViTBase, and MetaCLIPOptions only MaxEntriesPerConcept — so
+            // resolution is the lever.
+            // It is set HERE rather than through GetVisionSpatialSize: entries added to that helper had
+            // no effect for these models (verified three times — the emitted fixture stayed at 128px),
+            // whereas this branch is evaluated BEFORE the generic `else if (isVisionModel)` fallback
+            // that was producing {3,128,128}, so it deterministically wins.
+            // 64px quarters the feature map while staying above the stride floor that collapsed a 32px
+            // XDecoder fixture to a 1x1 map and silently produced zero gradients. OutputShape keeps the
+            // vision family's {4} contract. Production ImageSize defaults are untouched.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (model.ClassName == "OpenVocabSAM")
         {

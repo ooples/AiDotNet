@@ -23,6 +23,36 @@ public class MedSAM2Options : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        ChannelDims = other.ChannelDims is null ? null : (int[])other.ChannelDims.Clone();
+        Depths = other.Depths is null ? null : (int[])other.Depths.Clone();
+        DecoderDim = other.DecoderDim;
     }
 
+    /// <summary>
+    /// Per-stage channel widths of the hierarchical image encoder. Null (the default) uses the paper
+    /// configuration for the selected <c>MedSAM2ModelSize</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The presets in <c>GetModelConfig</c> (Tiny [96,192,384,768], Base [112,224,448,896], Large
+    /// [144,288,576,1152]) were previously the only reachable configurations, so even the smallest
+    /// build was a full Hiera encoder. Exposing these keeps every preset exactly as published — null
+    /// selects the preset — while allowing a bounded fixture or a memory-constrained deployment.
+    /// </para>
+    /// <para><b>For Beginners:</b> this sets how wide each stage of the image encoder is. Larger values
+    /// give a more capable but slower and more memory-hungry model. Leave unset for the published
+    /// configuration.</para>
+    /// </remarks>
+    public int[]? ChannelDims { get; set; }
+
+    /// <summary>
+    /// Number of transformer blocks per encoder stage. Null (the default) uses the paper configuration.
+    /// Must match the length of <see cref="ChannelDims"/> when both are supplied.
+    /// </summary>
+    public int[]? Depths { get; set; }
+
+    /// <summary>
+    /// Width of the mask decoder. Null (the default) uses the paper configuration (256).
+    /// </summary>
+    public int? DecoderDim { get; set; }
 }
