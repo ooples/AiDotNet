@@ -1240,8 +1240,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // combined — and they are the actual reason the shard does not finish. None carried a
         // repetition bound, so each ran the generic 50+200-step MoreData probe and the 100-step
         // memorization probe.
-        "CASTLEAlgorithm", "CodeSwitchingASR", "CATSeg", "AudioPaLM",
-        "APNet", "CogVLM", "CGNNAlgorithm", "AudioSep",
+        "CASTLEAlgorithm", "CATSeg", "CogVLM", "CGNNAlgorithm",
+        // NOT added — every AUDIO model in this wave already receives iteration overrides from
+        // the audio branch, so membership here double-emits (CS0102, confirmed by build):
+        //   CodeSwitchingASR 266s, AudioPaLM 177s, APNet 113s, AudioSep 56s — 612s combined.
+        //
+        // The audio branch emits those overrides GENERICALLY, by family rather than by class
+        // name, so grepping the emission region for a class name does not predict the collision.
+        // Only a build does. The reliable rule is simpler than the grep: if the model is in the
+        // audio family, assume it is already covered and tighten it in place instead.
         // NOT added — each already emits iteration overrides from another branch, so membership
         // here double-emits (CS0102, confirmed by build). They need in-place tightening:
         //   APNet2           181s — emits both MoreData counts
@@ -5748,6 +5755,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
                     "NumAttentionHeads = 2, FeedForwardExpansionFactor = 2, NumMels = 64, " +
                     "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "CodeSwitchingASR" && model.TypeParameterCount == 1)
+            {
+                // 266 s of training probes in the first completed A-C run — the second most
+                // expensive class in the shard. The audio branch already caps its repetition
+                // counts to the floor (2 training steps, 1-vs-2 MoreData, 2 memorization), so
+                // capping is spent and the residual cost is per-step scale: an 18-layer,
+                // 512-wide encoder over a 15,000-entry vocabulary. Exercise the same
+                // mel -> encoder -> vocabulary topology at CI-smoke scale through public
+                // options; production keeps its paper-scale defaults.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions { SampleRate = 16000, " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 2, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
+                    "DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "AudioSep" && model.TypeParameterCount == 1)
+            {
+                // 56 s of training probes, again with repetition already at the audio branch's
+                // floor. Its cost is the separation stack: 6 layers at 256-wide over a 2048-point
+                // FFT with 128 mel bins. Same topology at smoke scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Classification.AudioSepOptions { SampleRate = 16000, " +
+                    "FftSize = 128, HopLength = 64, NumMels = 64, FMin = 0, FMax = 8000, " +
+                    "CLAPEmbeddingDim = 32, SeparationDim = 32, NumSeparationLayers = 1, " +
+                    "NumHeads = 2 })";
             }
             else if (model.ClassName == "CIFEncoder" && model.TypeParameterCount == 1)
             {
