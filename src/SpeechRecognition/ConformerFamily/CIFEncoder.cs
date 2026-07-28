@@ -77,7 +77,30 @@ public class CIFEncoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("CIFEncoder does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultCTCDecoderLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardDim: _options.FeedForwardDim, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            // Builds the CIF stack, including the integrate-and-fire alignment stage this model
+            // is named for. It previously used CreateDefaultCTCDecoderLayers, an encoder plus a
+            // CTC vocabulary head with no firing mechanism anywhere in the graph.
+            Layers.AddRange(LayerHelper<T>.CreateDefaultCIFEncoderLayers(
+                encoderDim: _options.EncoderDim,
+                numLayers: _options.NumEncoderLayers,
+                numAttentionHeads: _options.NumAttentionHeads,
+                feedForwardDim: _options.FeedForwardDim,
+                numMels: _options.NumMels,
+                vocabSize: _options.VocabSize,
+                cifThreshold: _options.CifThreshold,
+                dropoutRate: _options.DropoutRate));
+        }
+    }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }

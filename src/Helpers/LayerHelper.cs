@@ -20515,6 +20515,61 @@ public static class LayerHelper<T>
     /// Creates default layers for a CTC decoder ASR model.
     /// Architecture: Mel projection → N Transformer encoder layers → CTC head.
     /// </summary>
+    /// <summary>
+    /// Creates the CIF encoder stack per Dong &amp; Xu 2020,
+    /// "CIF: Continuous Integrate-and-Fire for End-to-End Speech Recognition" (arXiv:1905.11235).
+    /// </summary>
+    /// <remarks>
+    /// <para>The defining component is the continuous integrate-and-fire alignment stage: a
+    /// weight predictor scores each encoder frame, the weights are integrated until they cross a
+    /// unit-mass threshold, and the accumulated features then fire as one token representation.
+    /// That is what turns a frame sequence into a token sequence with soft monotonic
+    /// alignment.</para>
+    /// <para>CIFEncoder previously built <see cref="CreateDefaultCTCDecoderLayers"/>, which is an
+    /// encoder followed by a CTC vocabulary head and contains no integrate-and-fire stage at all
+    /// — so the model named for CIF did not implement CIF. Its own class documentation described
+    /// the firing mechanism while the graph performed CTC decoding.</para>
+    /// <para>The alignment layer sits between the acoustic encoder and the vocabulary head, which
+    /// is where the paper places it: the encoder produces frames, CIF converts them to tokens,
+    /// and the head classifies those tokens.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCIFEncoderLayers(
+        int encoderDim = 512,
+        int numLayers = 12,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 2048,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double cifThreshold = 1.0,
+        double dropoutRate = 0.1)
+    {
+        var gelu = (IActivationFunction<T>)new GELUActivation<T>();
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Acoustic encoder: mel projection followed by self-attention blocks.
+        yield return new DenseLayer<T>(encoderDim, gelu);
+        yield return new LayerNormalizationLayer<T>();
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        (int heads, _) = ChooseDivisibleHeadConfig(encoderDim, numAttentionHeads);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(heads, encoderDim / heads);
+            yield return new LayerNormalizationLayer<T>();
+            yield return new DenseLayer<T>(feedForwardDim, gelu);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(encoderDim, identity);
+            yield return new LayerNormalizationLayer<T>();
+        }
+
+        // The integrate-and-fire alignment the model is named for.
+        yield return new CifAlignmentLayer<T>(encoderDim, cifThreshold);
+
+        // Vocabulary head over the fired token representations.
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(vocabSize, identity);
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultCTCDecoderLayers(
         int encoderDim = 512,
         int numLayers = 6,
