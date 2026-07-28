@@ -233,6 +233,25 @@ public static class DeserializationHelper
 
             instance = ctor.Invoke(new object[0]);
         }
+        else if (genericDef == typeof(BranchformerBlock<>))
+        {
+            // Branchformer encoder block (Peng et al., ICML 2022) — parallel attention + cgMLP.
+            int modelDim = TryGetInt(additionalParams, "ModelDim")
+                ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (modelDim <= 0)
+            {
+                throw new InvalidOperationException(
+                    "BranchformerBlock requires a positive ModelDim in metadata or input shape.");
+            }
+
+            int numHeads = TryGetInt(additionalParams, "NumHeads") ?? 8;
+            // The paper pairs a 256-512 model width with a 2048-3072 cgMLP hidden width, i.e.
+            // roughly 6x; fall back to that ratio rather than a fixed literal.
+            int cgmlpHidden = TryGetInt(additionalParams, "CgmlpHiddenDim") ?? modelDim * 6;
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 31;
+
+            instance = new BranchformerBlock<T>(modelDim, numHeads, cgmlpHidden, kernelSize);
+        }
         else if (genericDef == typeof(BiaffineSpanScorerLayer<>))
         {
             // Biaffine-NER span scorer (Yu et al., ACL 2020). Falls back to the last input
