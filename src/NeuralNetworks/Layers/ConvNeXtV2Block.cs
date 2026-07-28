@@ -191,6 +191,25 @@ public class ConvNeXtV2Block<T> : LayerBase<T>
         };
 
         int expected = sizes.Sum() + _grnGamma.Length + _grnBeta.Length;
+
+        // The sub-layers allocate their weights lazily on first Forward, so before the block has
+        // ever run, sizes[] are all zero and `expected` collapses to just the GRN parameters.
+        // Restoring a trained block into a fresh instance then failed with
+        // "Expected 384 parameters, got 1583104". Materialize the children against this block's
+        // known geometry first, so the layout matches the source we are restoring from.
+        if (sizes.Sum() == 0 && parameters.Length > _grnGamma.Length + _grnBeta.Length)
+        {
+            var probe = new Tensor<T>(new[] { 1, 1, _channels });
+            _ = Forward(probe);
+
+            sizes = new[]
+            {
+                _depthwise.GetParameters().Length, _norm.GetParameters().Length,
+                _pointwiseExpand.GetParameters().Length, _pointwiseProject.GetParameters().Length
+            };
+            expected = sizes.Sum() + _grnGamma.Length + _grnBeta.Length;
+        }
+
         if (parameters.Length != expected)
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
 

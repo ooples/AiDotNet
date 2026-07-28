@@ -11549,6 +11549,17 @@ public static class LayerHelper<T>
         yield return new MultiHeadAttentionLayer<T>(8, (visionDim) / (8), identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
+        // ABINet's AUTONOMOUS principle (Fang et al., CVPR 2021, arXiv:2103.06495): gradient
+        // flow is BLOCKED between the vision model and the language model, so the two train as
+        // independent functional units and the LM is forced to learn explicit language modelling
+        // instead of becoming an extension of the visual features. The paper's ablation measures
+        // roughly 0.9% worse accuracy when that gradient is allowed through.
+        //
+        // The stack above is the VM and everything below is the LM, so the barrier goes exactly
+        // here. Without it the model implemented only one of the three principles it is named
+        // for — Autonomous, Bidirectional, Iterative.
+        yield return new StopGradientLayer<T>();
+
         // Language refinement consumes the visual token embeddings produced
         // above. An EmbeddingLayer here was structurally invalid in a
         // sequential graph: it interpreted continuous visual features as
@@ -35320,8 +35331,13 @@ public static class LayerHelper<T>
 
         // Biaffine scorer: the two boundary FFNNs live inside it so start and end
         // representations stay distinct, exactly as the paper specifies.
+        //
+        // Width note: BidirectionalLayer with mergeMode = true MERGES the two directions rather
+        // than concatenating them (CalculateOutputShape returns the inner shape unchanged), so
+        // the stack's width here is biLstmHiddenSize, not 2x it. Assuming concatenation gave
+        // "configured for inputDim=400 but got D=200" on every BiaffineNER invariant.
         yield return new BiaffineSpanScorerLayer<T>(
-            inputDim: 2 * biLstmHiddenSize,
+            inputDim: biLstmHiddenSize,
             spanDim: spanEmbeddingDimension,
             numCategories: numLabels);
     }
