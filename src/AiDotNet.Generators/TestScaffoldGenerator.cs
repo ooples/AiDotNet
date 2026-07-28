@@ -4722,33 +4722,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 4, NumQuantiles = 3, DropoutRate = 0.0, " +
                     "WarmupSteps = 2, TotalSteps = 16 })";
             }
-            else if (model.ClassName == "Chronos" && model.TypeParameterCount == 1)
-            {
-                // Chronos keeps the paper's T5-base tokenized forecaster in production:
-                // ContextLength 512, 768-wide, 12 layers, 12 heads, 3072 FFN, a 4,096-token
-                // quantization vocabulary, and NumSamples = 20 sampled trajectories per
-                // forecast — so a single Predict is 20 passes through the stack.
-                //
-                // It is the single most expensive class in the A-C shard: 212 s across its
-                // training probes (memorization 95 s, MoreData 28 s, TrainingError 22 s,
-                // Training_ShouldReduceLoss 19 s) in run 30286528012, at ~4.75 s per train
-                // step. Its repetition counts are ALREADY at the floor the forecasting-
-                // foundation branch allows (TrainingIterations 1, MoreData 1-vs-2,
-                // memorization 20), so capping is exhausted and the residual cost is pure
-                // per-step scale — which is what this bound addresses.
-                //
-                // Exercise the same tokenization -> encoder-decoder -> sampled-decoding path
-                // through the public options at CI-smoke scale, exactly as its sibling
-                // ChronosBolt already does above. NumSamples is cut hardest because it
-                // multiplies every forward pass. Production research defaults are unchanged.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 64, outputSize: 8), " +
-                    "new AiDotNet.Models.Options.ChronosFinanceOptions<double> { ContextLength = 64, " +
-                    "ForecastHorizon = 8, NumTokens = 64, HiddenDimension = 32, NumLayers = 2, " +
-                    "NumHeads = 4, IntermediateSize = 64, NumSamples = 2, DropoutRate = 0.0 })";
-            }
             else if (model.ClassName == "LLMTime" && model.TypeParameterCount == 1)
             {
                 // LLMTime keeps its paper defaults in production: a 512-context, 96-horizon,
@@ -11027,12 +11000,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // fixture kept feeding the paper-scale 512-element context into a 64-context model and
             // every invariant failed with "ReshapeLayer per-sample input element count (512) does not
             // match output element count (64)".
-            // Chronos joins them too: its bounded constructor above uses the same
-            // ContextLength 64 / ForecastHorizon 8 geometry, so it needs the same ctx and
-            // output-shape pair. Without this the fixture would keep feeding the paper-scale
-            // 512-element context into a 64-context model (and expect its paper 64-wide
-            // forecast instead of the fixture's 8), failing every invariant on shape.
-            bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT" || model.ClassName == "LLMTime" || model.ClassName == "Chronos";
+            // Chronos is deliberately NOT in this group. It is tokenization-based: its training
+            // path emits rank-2/rank-3 [seq, vocab] logits and detokenizes them, so the rank-1
+            // "8" forecast shape TimeGPT/LLMTime use is not a legal contract for it. Routing it
+            // here produced "Chronos training expects rank-2 or rank-3 vocabulary logits, got
+            // rank 1" across all five of its training invariants on the local 16 GB run.
+            bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT" || model.ClassName == "LLMTime";
             bool usesReducedRwkvFixture = model.ClassName == "RWKVForecaster";
             bool usesReducedAutoformerFixture = model.ClassName == "Autoformer";
             int paperCtx = usesReducedChronosBoltFixture

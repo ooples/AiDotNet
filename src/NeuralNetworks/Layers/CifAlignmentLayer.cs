@@ -188,6 +188,18 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         // Dong & Xu 2020 — see the note in Forward on why the paper's conv1d + FC collapses
         // to a single affine map over that window.
         _alphaPredictor = new DenseLayer<T>(1, (IActivationFunction<T>)new SigmoidActivation<T>());
+
+        // Register the predictor as a CHILD layer so recursive parameter discovery finds its
+        // weights — the equivalent of PyTorch's nn.Module child registration.
+        //
+        // Without this, GetTrainableParameters() returned an EMPTY set while GetParameters()
+        // reported 49 elements, because DenseLayer allocates its weights lazily on first Forward
+        // and nothing ever registered them with the base layer. That mismatch was harmless while
+        // SupportsTraining was false (the engine ignored the layer), but the moment the layer
+        // became trainable it desynchronized the flat parameter vector from the tensor set the
+        // tape and ParameterBuffer actually track — producing "Parameter[0] is NaN after
+        // training" in every CIF consumer (SenseVoiceLarge, Paraformer, CIFEncoder).
+        RegisterSubLayer(_alphaPredictor);
     }
 
     /// <inheritdoc/>
@@ -425,6 +437,28 @@ public class CifAlignmentLayer<T> : LayerBase<T>
 
         return windowed;
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Delegates to the alpha predictor. The base implementation returns only tensors registered
+    /// directly on THIS layer and does not recurse into children, so without this override a
+    /// composite layer reports an empty trainable set: <c>GetParameters()</c> returned 49
+    /// elements while <c>GetTrainableParameters()</c> returned none. That mismatch is invisible
+    /// while <see cref="SupportsTraining"/> is false, but once the layer trains it desynchronizes
+    /// the flat parameter vector from the tensor set the tape and <c>ParameterBuffer</c> track,
+    /// which surfaced as "Parameter[0] is NaN after training" in every CIF consumer.
+    /// </remarks>
+    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
+        => _alphaPredictor.GetTrainableParameters();
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Forwards buffer-backed views straight through to the alpha predictor so the tensors used
+    /// during <see cref="Forward"/> are the same references the ParameterBuffer holds — the
+    /// tape's reference-identity alignment check requires that.
+    /// </remarks>
+    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
+        => _alphaPredictor.SetTrainableParameters(parameters);
 
     public override Vector<T> GetParameters() => _alphaPredictor.GetParameters();
 
