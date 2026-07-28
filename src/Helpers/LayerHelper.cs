@@ -7996,23 +7996,51 @@ public static class LayerHelper<T>
         int inputWidth = 128,
         int numFeatures = 64,
         int temporalFrames = 5,
-        int numUNetStages = 2)
+        int numUNetStages = 2,
+        int shiftedChannelRatio = 8)
     {
+        var relu = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // Frames are kept on their own axis as [T, C, H, W] and T is treated as the batch
+        // dimension, so every 2D convolution runs PER FRAME while TemporalShiftLayer moves
+        // information across frames between them. That separation is the whole point of the
+        // design: cheap per-frame spatial convolutions, with temporal fusion supplied by a
+        // parameter-free shift.
+        //
+        // Previously these stages delegated to CreateDefaultVideoDenoisingLayers, which folds
+        // the frames into the channel axis (inCh = inputChannels * temporalFrames) before the
+        // first convolution. Once that happens there is no temporal axis left, no shift is
+        // possible, and the network is a per-frame denoiser reading a fixed stack — the
+        // sliding-window arrangement the paper contrasts itself against.
         for (int stage = 0; stage < Math.Max(1, numUNetStages); stage++)
         {
-            // Stage 0 receives the temporally-stacked frames; later stages refine a single
-            // already-denoised frame, so they no longer carry the temporal stack.
-            int stageFrames = stage == 0 ? temporalFrames : 1;
+            // Encoder. A shift precedes each convolution so the features it mixes are the ones
+            // about to be convolved, matching the paper's "temporal fusion followed by 2D
+            // convolution" block order.
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, relu);
 
-            foreach (var layer in CreateDefaultVideoDenoisingLayers(
-                         inputChannels: inputChannels,
-                         inputHeight: inputHeight,
-                         inputWidth: inputWidth,
-                         numFeatures: numFeatures,
-                         temporalFrames: stageFrames))
-            {
-                yield return layer;
-            }
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, relu);
+
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, relu);
+
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, relu);
+
+            // Bottleneck.
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, relu);
+
+            // Decoder.
+            yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, relu);
+            yield return new DeconvolutionalLayer<T>(numFeatures, 3, 2, 1, relu);
+            yield return new DeconvolutionalLayer<T>(numFeatures, 3, 2, 1, relu);
+
+            // Each stage returns to image space so the next U-Net refines a denoised frame,
+            // which is what makes the pair a W-Net rather than one deeper U-Net.
+            yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
         }
     }
 
