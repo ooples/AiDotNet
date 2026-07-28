@@ -159,7 +159,14 @@ public class AudioPaLM<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the configured optimizer. The constructor resolves _optimizer from the
+            // caller's argument (falling back to AdamW), but this call site used the
+            // no-optimizer TrainWithTape overload, whose `optimizer` parameter then defaulted to
+            // null and silently trained on the base engine's fallback — discarding both the
+            // AdamW default and any user-supplied optimizer. Same defect already fixed in
+            // AlignTTS and across the R/S-lane models in this branch; it surfaced here as
+            // LossStrictlyDecreasesOnMemorizationTask failing.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

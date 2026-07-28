@@ -436,7 +436,22 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
                               IInitializationStrategy<T>? initializationStrategy = null,
                               IActivationFunction<T>? nonlinearityForInit = null,
                               int groups = 1)
-        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new ReLUActivation<T>())
+        // Linear by default, matching PyTorch nn.Conv2d and Keras Conv2D, both of which apply no
+        // activation unless one is requested. This previously defaulted to ReLU, which is the
+        // same defect this PR fixed in DenseLayer: every caller that wanted a plain convolution —
+        // a projection, a logit head, a residual branch — silently got its negative
+        // pre-activations clamped to zero.
+        //
+        // It is directly observable: with a uniform input, a convolution outputs
+        // sum(w) * value + b, so if that is negative the ReLU maps EVERY uniform input to the
+        // same zero. That is what
+        // ConvolutionalLayerTests.Forward_DifferentInputs_ShouldProduceDifferentOutputs reported
+        // as "Layer produces identical output for inputs [0.1,...] and [0.9,...]" — the layer was
+        // not ignoring its input, the default activation was erasing it.
+        //
+        // Callers wanting a nonlinearity pass one explicitly, exactly as they now do for
+        // DenseLayer.
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
