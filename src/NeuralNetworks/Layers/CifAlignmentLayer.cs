@@ -139,6 +139,9 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         _encoderDim = encoderDim;
         _threshold = NumOps.FromDouble(threshold);
         _tailThreshold = NumOps.FromDouble(tailThreshold);
+        // Input is the concatenated [h_{u-1} | h_u | h_{u+1}] window (3 x encoderDim), per
+        // Dong & Xu 2020 — see the note in Forward on why the paper's conv1d + FC collapses
+        // to a single affine map over that window.
         _alphaPredictor = new DenseLayer<T>(1, (IActivationFunction<T>)new SigmoidActivation<T>());
     }
 
@@ -168,7 +171,21 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         // we run it on the input *before* the CIF integrate-and-fire so
         // its gradient path (through the loss on aligned outputs) is
         // independent of the non-differentiable threshold crossing.
-        var alphaTensor = _alphaPredictor.Forward(input);  // [B, S, 1]
+        //
+        // Dong & Xu 2020 (arXiv:1905.11235) compute α_u from a WINDOW centred on h_u —
+        // "pass a window centered at h_u (e.g. [h_{u-1}, h_u, h_{u+1}]) to a 1-dimensional
+        // convolutional layer and then a fully connected layer with one output unit and a
+        // sigmoid activation". This previously fed h_u alone, so α could not see its
+        // neighbours — and a firing boundary is defined by the CHANGE between adjacent
+        // frames, which is precisely the information a single-frame predictor cannot access.
+        //
+        // The window is materialized as the concatenation [h_{u-1} | h_u | h_{u+1}] with
+        // zero padding at the sequence edges. A width-3 conv1d followed by a 1-unit FC, with
+        // no activation between them, composes to a single affine map of that 3D-wide window,
+        // so one Dense(1, sigmoid) over the concatenation is mathematically equivalent to the
+        // paper's conv+FC pair while keeping this layer's parameter/gradient plumbing intact.
+        var windowed = BuildAlphaWindow(input, B, S, D);
+        var alphaTensor = _alphaPredictor.Forward(windowed);  // [B, S, 1]
 
         var output = new Tensor<T>(new[] { B, S, D });
         T thresh = _threshold;
@@ -254,6 +271,44 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Materializes the alpha predictor's context window: for each timestep <c>u</c>, the
+    /// concatenation <c>[h_{u-1} | h_u | h_{u+1}]</c>, zero-padded at the sequence edges.
+    /// </summary>
+    /// <remarks>
+    /// Dong &amp; Xu 2020 (arXiv:1905.11235) predict the firing weight from a window centred on
+    /// <c>h_u</c> rather than from <c>h_u</c> alone, so the predictor can see the frame-to-frame
+    /// change that marks a token boundary.
+    /// </remarks>
+    private static Tensor<T> BuildAlphaWindow(Tensor<T> input, int B, int S, int D)
+    {
+        var windowed = new Tensor<T>(new[] { B, S, 3 * D });
+
+        for (int b = 0; b < B; b++)
+        {
+            for (int s = 0; s < S; s++)
+            {
+                int outBase = ((b * S) + s) * 3 * D;
+
+                for (int offset = -1; offset <= 1; offset++)
+                {
+                    int src = s + offset;
+                    int slot = (offset + 1) * D;
+
+                    // Edge frames have no neighbour on one side; zero-pad so the window stays
+                    // a fixed 3D width and the predictor's weights keep a stable meaning.
+                    if (src < 0 || src >= S) continue;
+
+                    int inBase = ((b * S) + src) * D;
+                    for (int d = 0; d < D; d++)
+                        windowed[outBase + slot + d] = input[inBase + d];
+                }
+            }
+        }
+
+        return windowed;
+    }
+
     public override Vector<T> GetParameters() => _alphaPredictor.GetParameters();
 
     /// <inheritdoc/>
