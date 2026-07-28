@@ -185,28 +185,33 @@ public class MelSpectrogram<T>
         if (_fMax > sampleRate / 2.0)
             throw new ArgumentOutOfRangeException(nameof(fMax), "fMax cannot exceed Nyquist frequency.");
 
-        // Store FFT parameters for direct GPU operations
-        _nFft = nFft;
-        _hopLength = hopLength ?? nFft / 4;
-
-        // Initialize STFT (uses HanningWindow by default - industry standard for audio)
+        // Initialize STFT FIRST (uses HanningWindow by default - industry standard for audio).
+        // It rounds a non-power-of-two nFft UP (Whisper's paper-faithful 400 -> 512), so its
+        // Power() emits _stft.NFft/2+1 bins. The filterbank, window tensor and the direct GPU
+        // path must all be built from that EFFECTIVE size, otherwise ApplyMelFilterbank throws
+        // "Power spectrogram has 257 frequency bins but filterbank expects 201".
         _stft = new ShortTimeFourierTransform<T>(
             nFft: nFft,
             hopLength: hopLength,
             windowFunction: windowFunction);
 
-        // Create Mel filterbank
-        _melFilterbank = CreateMelFilterbank(nMels, nFft, sampleRate, _fMin, _fMax);
+        // Store FFT parameters for direct GPU operations
+        _nFft = _stft.NFft;
+        // Hop is derived from the REQUESTED nFft, matching librosa's default of nFft/4.
+        _hopLength = hopLength ?? nFft / 4;
+
+        // Create Mel filterbank against the effective FFT size
+        _melFilterbank = CreateMelFilterbank(nMels, _nFft, sampleRate, _fMin, _fMax);
 
         // Create window tensor for direct IEngine operations
         var window = windowFunction ?? new HanningWindow<T>();
-        var windowVector = window.Create(nFft);
-        var windowData = new T[nFft];
-        for (int i = 0; i < nFft; i++)
+        var windowVector = window.Create(_nFft);
+        var windowData = new T[_nFft];
+        for (int i = 0; i < _nFft; i++)
         {
             windowData[i] = windowVector[i];
         }
-        _windowTensor = new Tensor<T>(windowData, new[] { nFft });
+        _windowTensor = new Tensor<T>(windowData, new[] { _nFft });
     }
 
     /// <summary>
