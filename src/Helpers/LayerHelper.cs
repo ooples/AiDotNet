@@ -35149,6 +35149,70 @@ public static class LayerHelper<T>
     /// boundary + content features), and a span classifier (Dense to label scores).
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Creates the Biaffine-NER stack per Yu et al., ACL 2020,
+    /// "Named Entity Recognition as Dependency Parsing" (arXiv:2005.07150).
+    /// </summary>
+    /// <remarks>
+    /// <para>The paper's pipeline is: contextual encoder -&gt; stacked BiLSTM -&gt; two separate
+    /// boundary FFNNs -&gt; biaffine scorer over every (start, end) pair. Biaffine-NER previously
+    /// shared <see cref="CreateDefaultSpanBasedNERLayers"/> with SpERT and PURE, which emits a
+    /// transformer encoder followed by two dense layers — no BiLSTM, no separate start/end
+    /// representations, and crucially NO bilinear term. The bilinear coupling of the two
+    /// boundaries is the paper's entire contribution, so the model was Biaffine in name only.</para>
+    /// <para>Defaults follow the paper's hyperparameter table: BiLSTM size 200 with 3 layers and
+    /// dropout 0.4, FFNN size 150 with dropout 0.2, embeddings dropout 0.5.</para>
+    /// <para>The scorer outputs a flattened <c>S x S</c> span grid over <c>numLabels</c>
+    /// categories, one of which is the non-entity class — the paper classifies every span rather
+    /// than sampling negatives.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBiaffineNERLayers(
+        int hiddenDimension = 1024,
+        int numAttentionHeads = 16,
+        int numTransformerLayers = 24,
+        int intermediateDimension = 4096,
+        int spanEmbeddingDimension = 150,
+        int numLabels = 9,
+        double dropoutRate = 0.2,
+        int biLstmHiddenSize = 200,
+        int biLstmLayers = 3,
+        double biLstmDropout = 0.4,
+        double embeddingsDropout = 0.5)
+    {
+        // Embeddings dropout (paper: 0.5) applied before the contextual encoder.
+        if (embeddingsDropout > 0) yield return new DropoutLayer<T>(embeddingsDropout);
+
+        // Stacked contextual encoder. Kept LAZY (no embeddingSize) for the same reason the
+        // shared span-NER factory does: the eager constructor materializes every block up front,
+        // which at BERT-Large scale is prohibitive under the generated-test memory budget.
+        (int nerHeads, _) = ChooseDivisibleHeadConfig(hiddenDimension, numAttentionHeads);
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                numHeads: nerHeads,
+                feedForwardDim: intermediateDimension);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Stacked BiLSTM over the encoder output (paper: size 200, 3 layers, dropout 0.4).
+        // Each direction contributes biLstmHiddenSize, so the merged width is twice that.
+        for (int i = 0; i < biLstmLayers; i++)
+        {
+            yield return new BidirectionalLayer<T>(
+                new LSTMLayer<T>(biLstmHiddenSize),
+                mergeMode: true,
+                activationFunction: (IActivationFunction<T>?)null);
+            if (biLstmDropout > 0) yield return new DropoutLayer<T>(biLstmDropout);
+        }
+
+        // Biaffine scorer: the two boundary FFNNs live inside it so start and end
+        // representations stay distinct, exactly as the paper specifies.
+        yield return new BiaffineSpanScorerLayer<T>(
+            inputDim: 2 * biLstmHiddenSize,
+            spanDim: spanEmbeddingDimension,
+            numCategories: numLabels);
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultSpanBasedNERLayers(
         int hiddenDimension = 768,
         int numAttentionHeads = 12,
