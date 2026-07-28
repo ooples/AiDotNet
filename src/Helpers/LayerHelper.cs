@@ -20511,6 +20511,75 @@ public static class LayerHelper<T>
     /// Creates default layers for the HiFi-GAN vocoder (Kong et al., 2020).
     /// Architecture: Mel input → Upsampling blocks with MRF → Waveform output.
     /// </summary>
+    /// <summary>
+    /// Creates the APNet2 amplitude branch (ASP) per Du et al., 2023,
+    /// "APNet2: High-Quality and High-Efficiency Neural Vocoder with Direct Prediction of
+    /// Amplitude and Phase Spectra" (arXiv:2311.11545).
+    /// </summary>
+    /// <remarks>
+    /// <para>APNet2 does NOT do time-domain upsampling. It predicts the log-amplitude and the
+    /// wrapped phase spectra directly and reconstructs the waveform with an inverse STFT. Routing
+    /// it through <see cref="CreateDefaultHiFiGANLayers"/> gave it exactly the upsampling
+    /// generator the paper sets out to replace.</para>
+    /// <para>ASP is: input convolution -&gt; k ConvNeXt v2 blocks -&gt; output convolution
+    /// producing <c>fftSize / 2 + 1</c> log-amplitude coefficients per frame.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAPNet2AmplitudeLayers(
+        int numMels = 80,
+        int channels = 512,
+        int intermediateChannels = 1536,
+        int numBlocks = 8,
+        int kernelSize = 7,
+        int fftSize = 1024)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection from the mel band count to the backbone width.
+        yield return new DenseLayer<T>(channels, identity);
+        yield return new LayerNormalizationLayer<T>();
+
+        for (int i = 0; i < numBlocks; i++)
+            yield return new ConvNeXtV2Block<T>(channels, intermediateChannels, kernelSize);
+
+        // Log-amplitude coefficients, one per frequency bin. Linear: log-amplitude is unbounded.
+        yield return new DenseLayer<T>((fftSize / 2) + 1, identity);
+    }
+
+    /// <summary>
+    /// Creates the APNet2 phase branch (PSP) per Du et al., 2023 (arXiv:2311.11545).
+    /// </summary>
+    /// <remarks>
+    /// <para>PSP mirrors the amplitude branch but ends in the paper's <b>phase parallel
+    /// estimation architecture</b>: two parallel linear convolutional layers produce a
+    /// pseudo-real and a pseudo-imaginary part, and the phase calculation formula
+    /// <c>Phi = atan2(imaginary, real)</c> converts them into a directly wrapped phase. That
+    /// parallel pair is what lets the network output phase in <c>(-pi, pi]</c> without ever
+    /// needing an unwrapping step, and it is the branch's defining element.</para>
+    /// <para>The two heads are emitted as a single <c>2 * (fftSize / 2 + 1)</c> projection whose
+    /// first half is the real part and second half the imaginary part; the model applies the
+    /// arctangent when it reconstructs. Neither head takes an activation, since both parts are
+    /// unbounded and the wrapping comes from the arctangent rather than a squashing function.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAPNet2PhaseLayers(
+        int numMels = 80,
+        int channels = 512,
+        int intermediateChannels = 1536,
+        int numBlocks = 8,
+        int kernelSize = 7,
+        int fftSize = 1024)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(channels, identity);
+        yield return new LayerNormalizationLayer<T>();
+
+        for (int i = 0; i < numBlocks; i++)
+            yield return new ConvNeXtV2Block<T>(channels, intermediateChannels, kernelSize);
+
+        // Phase parallel estimation: [real | imaginary], each (fftSize / 2 + 1) wide.
+        yield return new DenseLayer<T>(2 * ((fftSize / 2) + 1), identity);
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultHiFiGANLayers(
         int numMels = 80,
         int upsampleInitialChannel = 512,

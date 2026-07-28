@@ -123,8 +123,15 @@ public class BiaffineSpanScorerLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // The NER stack passes unbatched [S, D] token representations, so accept rank 2 by
+        // promoting to a single-element batch and squeezing the batch axis back off the result.
+        // Rank 3 [B, S, D] is passed through unchanged.
+        bool unbatched = input.Shape.Length == 2;
+        if (unbatched)
+            input = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
+
         if (input.Shape.Length != 3)
-            throw new ArgumentException($"BiaffineSpanScorerLayer expects rank-3 [B, S, D], got rank {input.Shape.Length}.", nameof(input));
+            throw new ArgumentException($"BiaffineSpanScorerLayer expects rank-2 [S, D] or rank-3 [B, S, D], got rank {input.Shape.Length}.", nameof(input));
 
         int B = input.Shape[0];
         int S = input.Shape[1];
@@ -193,7 +200,9 @@ public class BiaffineSpanScorerLayer<T> : LayerBase<T>
             Engine.TensorAdd(bilinearGrid, startGrid),
             Engine.TensorAdd(endGrid, biasGrid));
 
-        return Engine.Reshape(summed, [B, S * S, C]);
+        return unbatched
+            ? Engine.Reshape(summed, [S * S, C])
+            : Engine.Reshape(summed, [B, S * S, C]);
     }
 
     private Tensor<T> BroadcastMatrix(Tensor<T> matrix, int batch, int rows, int cols)

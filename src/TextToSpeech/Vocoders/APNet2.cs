@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -50,6 +51,12 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
     private bool _useNativeMode;
     private bool _disposed;
 
+    /// <summary>Amplitude spectrum predictor (ASP) branch.</summary>
+    private readonly List<ILayer<T>> _amplitudeLayers = new();
+
+    /// <summary>Phase spectrum predictor (PSP) branch, ending in the parallel estimator.</summary>
+    private readonly List<ILayer<T>> _phaseLayers = new();
+
     public APNet2(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -100,77 +107,60 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(melSpectrogram);
-        // Run mel through learned vocoder layers for feature extraction
-        var layerFeatures = melSpectrogram;
-        foreach (var l in Layers)
-            layerFeatures = l.Forward(layerFeatures);
-        int melLen = layerFeatures.Length;
-        int waveLen = melLen * _options.HopSize;
-        int fftBins = _options.FftSize / 2 + 1;
-        // ResNet backbone: deeper feature extraction using layer-processed features
-        double[] resFeatures = new double[melLen];
-        for (int t = 0; t < melLen; t++)
+        // ASP and PSP are PARALLEL branches over the same mel input, per Du et al. 2023
+        // (arXiv:2311.11545). ASP emits log-amplitude coefficients; PSP emits the pseudo-real
+        // and pseudo-imaginary pair that the phase calculation formula turns into a wrapped
+        // phase. The waveform is then reconstructed by inverse STFT.
+        //
+        // This replaces a fabricated inference path that ignored the network entirely: it
+        // derived amplitude as Math.Exp(feat * (1 - freqRatio * 0.4) + 0.3) * 0.15 and phase as
+        // omega * t + feat * 0.15 from hand-tuned constants, then summed only the first 32 bins
+        // through a hand-rolled cosine transform. No amount of training could have changed its
+        // output.
+        var amplitudeFeatures = melSpectrogram;
+        foreach (var l in _amplitudeLayers)
+            amplitudeFeatures = l.Forward(amplitudeFeatures);
+
+        var phaseFeatures = melSpectrogram;
+        foreach (var l in _phaseLayers)
+            phaseFeatures = l.Forward(phaseFeatures);
+
+        int fftBins = (_options.FftSize / 2) + 1;
+        int frames = amplitudeFeatures.Length / fftBins;
+        if (frames <= 0)
+            throw new InvalidOperationException(
+                $"APNet2 amplitude branch produced {amplitudeFeatures.Length} values, which is not a whole number of {fftBins}-bin frames.");
+
+        var spectrogram = new Tensor<Complex<T>>(new[] { frames, fftBins });
+        for (int t = 0; t < frames; t++)
         {
-            double x = NumOps.ToDouble(layerFeatures[t]);
-            double h = Math.Max(0, x * 0.8 + 0.1); // ReLU
-            double residual = h * 0.6 + x * 0.4; // skip connection
-            resFeatures[t] = residual;
-        }
-        // Amplitude head with multi-resolution awareness
-        double[,] amplitude = new double[melLen, fftBins];
-        for (int t = 0; t < melLen; t++)
-        {
-            double feat = resFeatures[t];
             for (int f = 0; f < fftBins; f++)
             {
-                double freqRatio = (double)f / fftBins;
-                amplitude[t, f] = Math.Exp(feat * (1.0 - freqRatio * 0.4) + 0.3) * 0.15;
+                // ASP predicts LOG amplitude, so exponentiate to recover the magnitude.
+                double logAmplitude = NumOps.ToDouble(amplitudeFeatures[(t * fftBins) + f]);
+                double magnitude = Math.Exp(logAmplitude);
+
+                // Phase parallel estimation: two heads give a pseudo-real and pseudo-imaginary
+                // component, and Phi = atan2(imag, real) yields a phase already wrapped into
+                // (-pi, pi] with no unwrapping step.
+                int phaseBase = t * 2 * fftBins;
+                double real = NumOps.ToDouble(phaseFeatures[phaseBase + f]);
+                double imaginary = NumOps.ToDouble(phaseFeatures[phaseBase + fftBins + f]);
+                double phi = Math.Atan2(imaginary, real);
+
+                spectrogram[(t * fftBins) + f] = new Complex<T>(
+                    NumOps.FromDouble(magnitude * Math.Cos(phi)),
+                    NumOps.FromDouble(magnitude * Math.Sin(phi)));
             }
         }
-        // Phase head with instantaneous frequency constraint
-        double[,] phase = new double[melLen, fftBins];
-        for (int f = 0; f < fftBins; f++)
-        {
-            double omega = 2.0 * Math.PI * f * _options.HopSize / _options.FftSize;
-            for (int t = 0; t < melLen; t++)
-            {
-                double basePhase = omega * t;
-                double phaseCorrection = resFeatures[t] * 0.15;
-                phase[t, f] = basePhase + phaseCorrection;
-            }
-        }
-        // Multi-resolution iSTFT reconstruction
-        var waveform = new Tensor<T>([waveLen]);
-        for (int t = 0; t < melLen; t++)
-        {
-            int center = t * _options.HopSize;
-            for (
-                int n = 0;
-                n < _options.FftSize && center + n - _options.FftSize / 2 < waveLen;
-                n++
-            )
-            {
-                int idx = center + n - _options.FftSize / 2;
-                if (idx < 0)
-                    continue;
-                double sample = 0;
-                for (int f = 0; f < Math.Min(fftBins, 32); f++)
-                    sample +=
-                        amplitude[t, f]
-                        * Math.Cos(phase[t, f] + 2.0 * Math.PI * f * n / _options.FftSize);
-                double window = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * n / _options.FftSize));
-                waveform[idx] = NumOps.FromDouble(
-                    NumOps.ToDouble(waveform[idx]) + sample * window * 0.005
-                );
-            }
-        }
-        // Normalize
-        double maxVal = 0;
-        for (int i = 0; i < waveLen; i++)
-            maxVal = Math.Max(maxVal, Math.Abs(NumOps.ToDouble(waveform[i])));
-        if (maxVal > 1e-6)
-            for (int i = 0; i < waveLen; i++)
-                waveform[i] = NumOps.FromDouble(NumOps.ToDouble(waveform[i]) / maxVal);
+
+        int waveLen = frames * _options.HopSize;
+        var stft = new ShortTimeFourierTransform<T>(
+            nFft: _options.FftSize,
+            hopLength: _options.HopSize,
+            windowLength: _options.WindowLength);
+
+        var waveform = stft.Inverse(spectrogram, waveLen);
         return waveform;
     }
 
@@ -194,15 +184,34 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         }
         if (_options.DropoutRate > double.Epsilon)
             throw new InvalidOperationException(
-                "APNet2Options.DropoutRate is configured but the paper-faithful HiFi-GAN generator (Kong 2020) applies no dropout; leave DropoutRate at 0 for native mode or supply explicit Architecture.Layers."
+                "APNet2Options.DropoutRate is configured but the paper's ConvNeXt v2 backbone (Du et al., 2023) applies no dropout; leave DropoutRate at 0 for native mode or supply explicit Architecture.Layers."
             );
-        Layers.AddRange(
-            LayerHelper<T>.CreateDefaultHiFiGANLayers(
-                _options.MelChannels,
-                512,
-                _options.FftSize / 2 + 1
-            )
-        );
+
+        // APNet2 is a DUAL-BRANCH predictor: an amplitude spectrum predictor (ASP) and a phase
+        // spectrum predictor (PSP), both fed the same mel input and combined through an inverse
+        // STFT. This previously used CreateDefaultHiFiGANLayers — a time-domain upsampling
+        // generator, which is precisely the architecture the paper replaces.
+        _amplitudeLayers.AddRange(LayerHelper<T>.CreateDefaultAPNet2AmplitudeLayers(
+            numMels: _options.MelChannels,
+            channels: _options.ConvNeXtChannels,
+            intermediateChannels: _options.ConvNeXtIntermediateChannels,
+            numBlocks: _options.NumConvNeXtBlocks,
+            kernelSize: _options.DepthwiseKernelSize,
+            fftSize: _options.FftSize));
+
+        _phaseLayers.AddRange(LayerHelper<T>.CreateDefaultAPNet2PhaseLayers(
+            numMels: _options.MelChannels,
+            channels: _options.ConvNeXtChannels,
+            intermediateChannels: _options.ConvNeXtIntermediateChannels,
+            numBlocks: _options.NumConvNeXtBlocks,
+            kernelSize: _options.DepthwiseKernelSize,
+            fftSize: _options.FftSize));
+
+        // Both branches go into Layers so parameter enumeration, serialization and device
+        // transfer see every weight. They are executed as parallel branches in MelToWaveform,
+        // not as one sequential stack.
+        Layers.AddRange(_amplitudeLayers);
+        Layers.AddRange(_phaseLayers);
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
