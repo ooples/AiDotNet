@@ -112,6 +112,18 @@ public class ClozeAttentionLayer<T> : LayerBase<T>
         return unbatched ? Engine.Reshape(result, [S, D]) : result;
     }
 
+    /// <summary>
+    /// Materializes the lazily-allocated Q/K/V/output projections from the known model width,
+    /// without executing them. Guarded by <c>IsShapeResolved</c>.
+    /// </summary>
+    private void ResolveChildShapes()
+    {
+        if (!_query.IsShapeResolved) _query.ResolveFromShape(new[] { 1, 1, _modelDim });
+        if (!_key.IsShapeResolved) _key.ResolveFromShape(new[] { 1, 1, _modelDim });
+        if (!_value.IsShapeResolved) _value.ResolveFromShape(new[] { 1, 1, _modelDim });
+        if (!_output.IsShapeResolved) _output.ResolveFromShape(new[] { 1, 1, _modelDim });
+    }
+
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
@@ -136,15 +148,15 @@ public class ClozeAttentionLayer<T> : LayerBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var targets = new[] { _query, _key, _value, _output };
-        var sizes = targets.Select(t => t.GetParameters().Length).ToArray();
 
-        // Sub-layers allocate lazily on first Forward; materialize before validating so a
-        // restore into a fresh instance lines up with the source layout.
-        if (sizes.Sum() == 0 && parameters.Length > 0)
-        {
-            _ = Forward(new Tensor<T>(new[] { 1, 1, _modelDim }));
-            sizes = targets.Select(t => t.GetParameters().Length).ToArray();
-        }
+        // The four projections allocate lazily on first Forward. Resolve their shapes from the
+        // known model width rather than running a probe forward: ResolveFromShape allocates the
+        // parameters and nothing else, whereas a probe would execute the full attention — mask,
+        // softmax and both matmuls — purely for a side effect, and leave state behind that a
+        // behaviour-preservation test then detects.
+        ResolveChildShapes();
+
+        var sizes = targets.Select(t => t.GetParameters().Length).ToArray();
 
         if (parameters.Length != sizes.Sum())
             throw new ArgumentException($"Expected {sizes.Sum()} parameters, got {parameters.Length}.", nameof(parameters));

@@ -111,6 +111,20 @@ public class BiaffineSpanScorerLayer<T> : LayerBase<T>
         // vector rather than failing loudly.
     }
 
+    /// <summary>
+    /// Materializes the lazily-allocated boundary FFNNs from this layer's known geometry,
+    /// without executing them.
+    /// </summary>
+    /// <remarks>
+    /// Both FFNNs consume the encoder width, so both resolve against <c>[1, 1, inputDim]</c>.
+    /// Guarded by <c>IsShapeResolved</c>, so this is a no-op once the layer has run.
+    /// </remarks>
+    private void ResolveChildShapes()
+    {
+        if (!_startFfnn.IsShapeResolved) _startFfnn.ResolveFromShape(new[] { 1, 1, _inputDim });
+        if (!_endFfnn.IsShapeResolved) _endFfnn.ResolveFromShape(new[] { 1, 1, _inputDim });
+    }
+
     private void InitializeParameter(Tensor<T> tensor, int fanIn)
     {
         // Xavier/Glorot scale; deterministic so repeated construction is reproducible.
@@ -232,6 +246,11 @@ public class BiaffineSpanScorerLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // The boundary FFNNs allocate lazily on first Forward. Resolve their shapes from this
+        // layer's known geometry first, or restoring a trained scorer into a fresh instance
+        // compares the payload against a count of just the bilinear/additive/bias tensors.
+        ResolveChildShapes();
+
         var start = _startFfnn.GetParameters();
         var end = _endFfnn.GetParameters();
         int expected = start.Length + end.Length + _bilinear.Length + _additive.Length + _bias.Length;
