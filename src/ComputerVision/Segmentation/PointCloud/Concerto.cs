@@ -33,27 +33,38 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// - Serialized point processing with space-filling curves
 /// </para>
 /// <para>
-/// <b>Reference — UNRESOLVED, do not cite this class as paper-faithful.</b> This type's
-/// attribution is currently inconsistent in three ways and needs an owner decision:
+/// <b>Reference:</b> "Concerto: Joint 2D-3D Self-Supervised Learning Emerges Spatial
+/// Representations" (arXiv:2510.23607).
 /// </para>
-/// <list type="number">
-/// <item>This doc previously cited <i>Wu et al., "Sonata and Concerto: Mamba for 3D Point
-/// Clouds", arXiv 2024</i>. No such paper exists; the reference was fabricated and has been
-/// removed.</item>
-/// <item>The <c>[ResearchPaper]</c> attribute points at <i>Mamba3D: Enhancing Local Features for
-/// 3D Point Cloud Analysis via State Space Model</i> (arXiv:2404.14966, Han et al.) — a real
-/// paper, but a different model by different authors, whose mechanism is Local Norm Pooling with
-/// a bidirectional SSM rather than the hybrid Mamba/Transformer described below.</item>
-/// <item>The actual published <i>Concerto</i> (arXiv:2510.23607) is a joint 2D-3D
-/// SELF-SUPERVISED LEARNING method, not a supervised segmentation backbone. The implementation
-/// here matches neither it nor Mamba3D exactly: it describes global Mamba branches with local
-/// Transformer attention over serialized points, which is closer to the Serialized Point Mamba /
-/// Point Transformer V3 line of work.</item>
+/// <para>
+/// <b>Migration in progress — this class does not yet implement that paper.</b> Its attribution
+/// was previously wrong in three separate ways: a fabricated reference ("Sonata and Concerto:
+/// Mamba for 3D Point Clouds", which does not exist), a <c>[ResearchPaper]</c> attribute pointing
+/// at Mamba3D (arXiv:2404.14966 — a real but unrelated model by different authors), and an
+/// implementation matching neither. The citation now names the real Concerto, and
+/// <see cref="ConcertoOptions"/> carries that paper's hyperparameters.
+/// </para>
+/// <para>
+/// What the published method actually is, and what still has to be built here:
+/// </para>
+/// <list type="bullet">
+/// <item><b>3D intra-modal self-distillation.</b> A Point Transformer V3 student is trained to
+/// match a momentum-updated (EMA) teacher under a DINOv2-style online-clustering cross-entropy
+/// objective at decoder upcast level 2. Neither the teacher/student pair nor the clustering loss
+/// exists here yet.</item>
+/// <item><b>2D-3D cross-modal joint embedding.</b> A frozen DINOv2-L encoder at 518x518 supplies
+/// image patch features; 3D points are projected into the image and depth-checked for visibility
+/// (|d_c - d_proj| &lt; 0.01 m), point features falling in a patch are mean-pooled, and the result
+/// is matched to the image patch embedding by cosine similarity at upcast level 3. This requires
+/// paired imagery plus camera intrinsics and extrinsics, which this type's current API does not
+/// accept.</item>
+/// <item><b>Objective.</b> The two terms are combined at the paper's 2:2 weight ratio.</item>
 /// </list>
 /// <para>
-/// Until this is resolved, treat the implementation as an unattributed hybrid Mamba-Transformer
-/// backbone. Resolving it means either renaming and re-citing this class to the paper it actually
-/// implements, or reimplementing it to match the published Concerto.
+/// Because Concerto is a PRETRAINING method, segmentation is a downstream probe on the learned
+/// representation rather than the training objective. <see cref="ISemanticSegmentation{T}"/> is
+/// retained so existing consumers keep working, but the current backbone is the previous
+/// unattributed hybrid Mamba/Transformer stack, not PTv3, and no self-supervised objective runs.
 /// </para>
 /// </remarks>
 /// <example>
@@ -73,7 +84,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Mamba3D: Enhancing Local Features for 3D Point Cloud Analysis via State Space Model", "https://arxiv.org/abs/2404.14966", Year = 2024, Authors = "Xu Han, Yuan Tang, Zhaoxuan Wang, Xianzhi Li")]
+[ResearchPaper("Concerto: Joint 2D-3D Self-Supervised Learning Emerges Spatial Representations", "https://arxiv.org/abs/2510.23607", Year = 2025)]
 public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly ConcertoOptions _options;
