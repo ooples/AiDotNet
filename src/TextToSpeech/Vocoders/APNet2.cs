@@ -219,11 +219,26 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
+
         SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+
+        // ASP and PSP are PARALLEL branches over the same mel input. Layers holds both of them
+        // concatenated — that is only so parameter enumeration, serialization and device
+        // transfer see every weight — so the inherited "chain everything in Layers" pass would
+        // feed the amplitude branch's log-amplitude output into the phase branch and return
+        // something meaningless. Run the two branches independently, exactly as MelToWaveform
+        // does, and return the concatenated [amplitude | real | imaginary] prediction.
+        var amplitude = input;
+        foreach (var l in _amplitudeLayers)
+            amplitude = l.Forward(amplitude);
+
+        var phase = input;
+        foreach (var l in _phaseLayers)
+            phase = l.Forward(phase);
+
+        return Engine.TensorConcatenate(
+            new[] { amplitude, phase },
+            axis: amplitude.Shape.Length - 1);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
