@@ -1228,6 +1228,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         //   BiomedParse 60s, CMGAN 56s, BasicVSRPlusPlus 30s.
         // (BSVD is excluded here — it owns a convergence block already, see below.)
         "Concerto", "CogVLM2", "BiomedParse",
+        // Third A-C wave, from the FIRST full-shard run that actually completed its 45 minutes
+        // (exit 124 at 1,313 of 3,625 tests). That profile is very different from the truncated
+        // CI log the earlier waves were derived from: the CI job never reached these classes at
+        // all, or reached them late enough to under-count them, so none of them had any
+        // treatment. Measured per-class cost from that run:
+        //   CASTLEAlgorithm 381s, CodeSwitchingASR 266s, CATSeg 189s, AudioPaLM 177s,
+        //   APNet 113s, CogVLM 87s, CGNNAlgorithm 56s, AudioSep 56s.
+        //
+        // Together these are roughly 1,325 s — more than every class the first two waves capped
+        // combined — and they are the actual reason the shard does not finish. None carried a
+        // repetition bound, so each ran the generic 50+200-step MoreData probe and the 100-step
+        // memorization probe.
+        "CASTLEAlgorithm", "CodeSwitchingASR", "CATSeg", "AudioPaLM",
+        "APNet", "CogVLM", "CGNNAlgorithm", "AudioSep",
         // NOT added — each already emits iteration overrides from another branch, so membership
         // here double-emits (CS0102, confirmed by build). They need in-place tightening:
         //   APNet2           181s — emits both MoreData counts
