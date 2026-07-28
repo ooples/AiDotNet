@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
+[LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
 public class CifAlignmentLayer<T> : LayerBase<T>
 {
     private readonly int _encoderDim;
@@ -65,32 +65,26 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     private readonly DenseLayer<T> _alphaPredictor;
 
     /// <summary>
-    /// Currently <c>false</c>: this layer's <see cref="Forward"/>
-    /// materializes α and the integrated hidden states into scalar T
-    /// values via per-element <see cref="Tensor{T}"/> indexers and
-    /// scalar <c>NumOps</c> arithmetic, which the tape autodiff
-    /// path cannot record. Returning <c>true</c> while no gradient
-    /// actually reaches <see cref="_alphaPredictor"/> would advertise
-    /// a learnable alignment head that's secretly frozen — that's
-    /// worse than a forward-only contract because callers would
-    /// expect the alpha predictor to converge but it never would.
+    /// <c>true</c>: the alpha predictor is genuinely trained.
     /// </summary>
     /// <remarks>
-    /// Fixing this to <c>true</c> requires one of:
-    /// <list type="bullet">
-    /// <item>A custom <c>Backward</c> implementation that walks
-    /// recorded CIF split decisions in reverse and accumulates
-    /// gradients for the alpha predictor (analytic derivatives of
-    /// the integrate-and-fire dynamics).</item>
-    /// <item>A soft / differentiable CIF re-formulation (e.g.
-    /// Zhao &amp; Gao 2024 "Distill the soft CIF") that replaces the
-    /// hard threshold-crossing with a continuous accumulation matrix
-    /// the tape can record through standard <c>Engine</c> ops.</item>
-    /// </list>
-    /// Tracked as a dedicated CIF-training follow-up; until then this
-    /// layer is inference-only (<see cref="SupportsTraining"/> is false).
+    /// <para>This was previously <c>false</c> because <see cref="Forward"/> materialized α and
+    /// the integrated hidden states into scalar <c>T</c> values through per-element indexers and
+    /// <c>NumOps</c> arithmetic, which the gradient tape cannot record — so the alignment head
+    /// was frozen at initialization.</para>
+    /// <para><see cref="Forward"/> now takes the second route this remark used to prescribe: a
+    /// continuous accumulation matrix recorded through standard <c>Engine</c> ops. The
+    /// threshold crossings still decide the firing structure in a non-differentiable pass, but
+    /// every emitted token is then formed as
+    /// <c>out = (A ⊙ αB + C) · h</c> via <c>Engine.TensorMultiply</c>,
+    /// <c>Engine.TensorAdd</c> and <c>Engine.TensorBatchMatMul</c>, so the tape records the whole
+    /// contraction and gradients reach both <see cref="_alphaPredictor"/> and the encoder
+    /// states automatically.</para>
+    /// <para>One deliberate truncation remains: the completing fraction <c>α_t^c = θ − acc</c>
+    /// enters as a constant, so the dependence of a fire on the ENTIRE preceding alpha sequence
+    /// is not carried. Each frame's own alpha — the dominant term — is exact.</para>
     /// </remarks>
-    public override bool SupportsTraining => false;
+    public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
     public override long ParameterCount => _alphaPredictor.ParameterCount;
@@ -187,9 +181,25 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         var windowed = BuildAlphaWindow(input, B, S, D);
         var alphaTensor = _alphaPredictor.Forward(windowed);  // [B, S, 1]
 
-        var output = new Tensor<T>(new[] { B, S, D });
         T thresh = _threshold;
         T tailThresh = _tailThreshold;
+
+        // The integrate-and-fire output is a WEIGHTED SUM of the encoder states:
+        //     out[b, j, :] = Σ_t W[b, j, t] · h[b, t, :]
+        // and every weight is affine in that frame's own alpha:
+        //     W[b, j, t] = A[b, j, t] · α_t + C[b, j, t]
+        // The threshold crossings decide WHICH (j, t) pairs exist and with what A/C — that
+        // decision is non-differentiable and is taken below from the alpha VALUES. But given
+        // those decisions the output is an ordinary product, so building W with Engine ops and
+        // contracting with a batched matmul lets the gradient tape record the whole thing
+        // automatically: gradients reach the alpha predictor through A ⊙ αB, and the encoder
+        // states through the matmul. This is the "continuous accumulation matrix ... standard
+        // Engine ops" route this layer's own remarks prescribe, and it is what makes
+        // SupportsTraining true rather than an advertised-but-frozen head.
+        //
+        // A and C are constants w.r.t. the tape; only αB carries alpha's gradient.
+        var coeff = new Tensor<T>(new[] { B, S, S });   // A — multiplies α_t
+        var constant = new Tensor<T>(new[] { B, S, S }); // C — the split's fixed part
 
         // Per Gao 2022 Algorithm 1, executed per-batch independently:
         //   acc_α ← 0,  acc_h ← 0
@@ -203,12 +213,14 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         //       acc_α += α_t,  acc_h += α_t · h_t
         //   if acc_α >= tail_θ:
         //     emit acc_h / acc_α          // renormalize partial token
-        var accH = new T[D];
         for (int b = 0; b < B; b++)
         {
             T accAlpha = NumOps.Zero;
-            for (int d = 0; d < D; d++) accH[d] = NumOps.Zero;
             int outIdx = 0;
+
+            // Frames feeding the token currently being accumulated, so the tail emission can
+            // renormalize exactly the weights that formed it.
+            var pending = new List<int>(S);
 
             for (int t = 0; t < S && outIdx < S; t++)
             {
@@ -221,28 +233,29 @@ public class CifAlignmentLayer<T> : LayerBase<T>
                     T contribFraction = NumOps.Subtract(thresh, accAlpha);   // α_t^c
                     T remainderFraction = NumOps.Subtract(a, contribFraction); // α_t^r
 
-                    // Complete the current token, emit it, then seed
-                    // the next token with the remainder.
-                    for (int d = 0; d < D; d++)
+                    // α_t^c = θ − acc completes THIS token. It is a function of the PRIOR
+                    // alphas, not of α_t, so it enters as a pure constant.
+                    constant[b, outIdx, t] = NumOps.Add(constant[b, outIdx, t], contribFraction);
+
+                    // α_t^r = α_t − α_t^c seeds the NEXT token: coefficient 1 on α_t, minus the
+                    // same constant.
+                    if (outIdx + 1 < S)
                     {
-                        T h = input[b, t, d];
-                        T completed = NumOps.Add(accH[d],
-                            NumOps.Multiply(contribFraction, h));
-                        output[b, outIdx, d] = completed;
-                        accH[d] = NumOps.Multiply(remainderFraction, h);
+                        coeff[b, outIdx + 1, t] = NumOps.Add(coeff[b, outIdx + 1, t], NumOps.One);
+                        constant[b, outIdx + 1, t] = NumOps.Subtract(constant[b, outIdx + 1, t], contribFraction);
                     }
+
                     accAlpha = remainderFraction;
                     outIdx++;
+                    pending.Clear();
+                    pending.Add(t);
                 }
                 else
                 {
-                    // Standard accumulation step.
+                    // Standard accumulation step: the whole α_t lands on the current token.
                     accAlpha = proposedAcc;
-                    for (int d = 0; d < D; d++)
-                    {
-                        accH[d] = NumOps.Add(accH[d],
-                            NumOps.Multiply(a, input[b, t, d]));
-                    }
+                    coeff[b, outIdx, t] = NumOps.Add(coeff[b, outIdx, t], NumOps.One);
+                    pending.Add(t);
                 }
             }
 
@@ -254,18 +267,37 @@ public class CifAlignmentLayer<T> : LayerBase<T>
                 T invAlpha = NumOps.GreaterThan(accAlpha, NumOps.Zero)
                     ? NumOps.Divide(NumOps.One, accAlpha)
                     : NumOps.Zero;
-                for (int d = 0; d < D; d++)
+
+                // Scale the weights already accumulated into this slot by 1/acc_α. The 1/acc_α
+                // factor itself is held constant w.r.t. the tape — carrying its derivative would
+                // couple the tail to every alpha that formed it.
+                foreach (int t in pending)
                 {
-                    output[b, outIdx, d] = NumOps.Multiply(accH[d], invAlpha);
+                    coeff[b, outIdx, t] = NumOps.Multiply(coeff[b, outIdx, t], invAlpha);
+                    constant[b, outIdx, t] = NumOps.Multiply(constant[b, outIdx, t], invAlpha);
                 }
                 outIdx++;
             }
 
             // Remaining output slots [outIdx, S) stay zero — downstream
             // attention should mask them out via the standard padding-
-            // mask path. Allocating with `new Tensor<T>(shape)`
-            // zero-initializes by default(T), so nothing more to do.
+            // mask path. Rows of A and C for those slots are all zero, so the
+            // contraction below emits zeros there. Nothing more to do.
         }
+
+        // Broadcast α along the token axis WITHOUT leaving the tape: reshaping [B, S, 1] to
+        // [B, 1, S] gives α as a row, and multiplying a constant [B, S, 1] column of ones by it
+        // produces alphaB[b, j, t] = α_t for every j. Both operands stay tape-visible, so this
+        // is the link through which the alpha predictor actually learns.
+        var ones = new Tensor<T>(new[] { B, S, 1 });
+        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
+
+        var alphaRow = Engine.Reshape(alphaTensor, [B, 1, S]);
+        var alphaB = Engine.TensorBatchMatMul(ones, alphaRow);          // [B, S, S]
+
+        // W = A ⊙ αB + C, then out = W · h.
+        var weights = Engine.TensorAdd(Engine.TensorMultiply(coeff, alphaB), constant);
+        var output = Engine.TensorBatchMatMul(weights, input);          // [B, S, D]
 
         return output;
     }
