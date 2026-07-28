@@ -249,12 +249,15 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         var onesColumn = new Tensor<T>(new[] { B, S, 1 });
         for (int i = 0; i < onesColumn.Length; i++) onesColumn[i] = NumOps.One;
 
-        // Σα per batch as a tape-visible reduction: [B, 1, S] x [B, S, 1] = [B, 1, 1].
-        var alphaRowForSum = Engine.Reshape(alphaTensor, [B, 1, S]);
-        var alphaSum = Engine.TensorBatchMatMul(alphaRowForSum, onesColumn);   // [B, 1, 1]
-
         if (TargetTokenCount is int targetCount && targetCount > 0)
         {
+            // Σα per batch as a tape-visible reduction: [B, 1, S] x [B, S, 1] = [B, 1, 1].
+            // Computed ONLY when a target length is supplied. Building it unconditionally left a
+            // tape node whose result never reached the output on the inference path, which is
+            // both wasted work and a dangling contribution to gradient accumulation.
+            var alphaRowForSum = Engine.Reshape(alphaTensor, [B, 1, S]);
+            var alphaSum = Engine.TensorBatchMatMul(alphaRowForSum, onesColumn);   // [B, 1, 1]
+
             var target = new Tensor<T>(new[] { B, 1, 1 });
             for (int i = 0; i < target.Length; i++) target[i] = NumOps.FromDouble(targetCount);
 
