@@ -220,26 +220,29 @@ public class ConvNeXtV2Block<T> : LayerBase<T>
         int expected = sizes.Sum() + _grnGamma.Length + _grnBeta.Length;
 
         // The sub-layers allocate their weights lazily on first Forward, so before the block has
-        // ever run, sizes[] are all zero and `expected` collapses to just the GRN parameters —
-        // restoring a trained block into a fresh instance failed with "Expected 384 parameters,
-        // got 1583104".
+        // ever run `expected` counts only the children that happen to be materialized already —
+        // restoring a trained block into a fresh instance failed with "Expected 224 parameters,
+        // got 1856".
         //
         // Resolve the children's shapes directly. This is the framework's own mechanism for
         // materializing a lazy layer without executing it: it allocates parameters from a known
         // input shape and nothing else. Running a synthetic probe Forward instead would evaluate
         // GRN at a degenerate sequence length of 1 and leave the layer in a state the caller
         // never asked for.
-        if (sizes.Sum() == 0)
-        {
-            ResolveChildShapes();
+        //
+        // Call it unconditionally. Guarding on `sizes.Sum() == 0` never fired: _depthwise is
+        // sized eagerly in the constructor, so the sum is already non-zero on a fresh block and
+        // the three genuinely-lazy children (_norm, _pointwiseExpand, _pointwiseProject) were
+        // left unresolved. ResolveChildShapes is itself per-child IsShapeResolved-guarded, so
+        // this is a no-op once the block has run.
+        ResolveChildShapes();
 
-            sizes = new[]
-            {
-                _depthwise.GetParameters().Length, _norm.GetParameters().Length,
-                _pointwiseExpand.GetParameters().Length, _pointwiseProject.GetParameters().Length
-            };
-            expected = sizes.Sum() + _grnGamma.Length + _grnBeta.Length;
-        }
+        sizes = new[]
+        {
+            _depthwise.GetParameters().Length, _norm.GetParameters().Length,
+            _pointwiseExpand.GetParameters().Length, _pointwiseProject.GetParameters().Length
+        };
+        expected = sizes.Sum() + _grnGamma.Length + _grnBeta.Length;
 
         if (parameters.Length != expected)
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
