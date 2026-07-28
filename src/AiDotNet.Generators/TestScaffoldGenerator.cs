@@ -950,6 +950,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // during its 250-step convergence probe. SpeakerVerifier is also training-bound and
         // shares the same audio scaffold. Apply the required precision-first mitigation.
         "RealESRGANVideo", "RevAI", "SeedASR", "SeedTTS", "SlowFast", "SpeakerVerifier",
+        // Generated Q-S BUDGET, rung 1 of the ladder (float -> cap -> shrink -> HeavyTimeout).
+        // MEASURED per-class totals from the full Q-S run (run4, all correctness fixes in place):
+        //   SALMONN 395.0s, SambaLanguageModel 374.1s, RecurrentGemmaLanguageModel 353.3s,
+        //   SECBERT 331.3s, SpERTNER 300.7s, SeACo 168.2s, RepViTSAM 117.5s
+        // Those seven alone are ~34 min of a 45-min shard budget, and the full shard extrapolates to
+        // ~125 min (2.8x over) — the reason the job was CANCELLED rather than failing.
+        // NONE of them had rung 1 applied. SambaLanguageModel is the clearest case: it already
+        // carries an iteration cap in HeavyTrainingTimeoutClassNames but was never floated, i.e. the
+        // ladder was entered at rung 2 and the cheapest lever skipped. SeACo likewise already has a
+        // CI-smoke constructorExpr (rung 3) without rung 1.
+        // Float halves the per-step footprint and is the least invasive rung: architecture, iteration
+        // counts, tolerances and thresholds are all untouched, and every production model keeps its
+        // paper defaults. Caps/shrinks stay available as rungs 2-3 for whatever is still over budget
+        // after this is measured.
+        "SALMONN", "SambaLanguageModel", "RecurrentGemmaLanguageModel", "SECBERT", "SpERTNER",
+        "SeACo", "RepViTSAM",
         // Generated N-P: PointNet++ is a training-bound hierarchical point-cloud model. Its
         // paper-default set-abstraction stack exceeded the 120-second MoreData budget at fp64.
         // Apply the required precision-first mitigation; the architecture and its defaults stay intact.
