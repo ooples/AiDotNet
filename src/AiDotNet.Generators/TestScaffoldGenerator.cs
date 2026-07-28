@@ -428,17 +428,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // so the whole DOVETests class runs in the nightly heavy lane at full scale like its VSR
         // siblings (MIAVSR / MGLDVSR), keeping it off the default per-test-timeout gate.
         "DOVE",
-        // ParaformerLarge: foundation-scale CIF ASR (Alibaba 2023). Its default
-        // ParaformerLargeOptions build a genuinely huge stack — a warm-up forward reports
-        // ~661M trainable parameters (GetParameters().Length = 661,219,029; ~2.6 GB as float),
-        // with a large-vocab CTC/CIF head. A 100-iteration LossStrictlyDecreasesOnMemorizationTask
-        // (and the 10-iter DifferentInputs/Clone/Training/MoreData tests) cannot complete inside the
-        // 120-180s per-test budget on a CPU runner — verified locally: every training test times out
-        // at 120000/180000 ms before finishing. At that scale the auto-selected BF16 8-bit optimizer
-        // path also surfaces a separate "Source array was not long enough" error in CI (tracked as a
-        // follow-up issue; not reproducible locally because training times out first). Runs in the
-        // nightly heavy lane, matching the other foundation-scale models here.
-        "ParaformerLarge",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
@@ -722,7 +711,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // runner or overflowed numerically in their FP64 generated fixtures. Apply the project's
         // precision-first policy; their production defaults and public configuration stay unchanged.
         "HawkLanguageModel", "GLALanguageModel", "GatedDeltaNetLanguageModel",
-        "InternVL2", "Paraformer", "Pix2Struct", "RWKVForecaster", "SeedVR", "SigLIP2",
+        "InternVL2", "Paraformer", "ParaformerLarge", "Pix2Struct", "RWKVForecaster", "SeedVR", "SigLIP2",
         // Zamba/Zamba2's 32,000-way language-model heads make their uncapped 50/200-step
         // MoreData probes exceed the 120-second gate. Keep the explicit precision-first
         // classification even though the current T-Z resource-shard rule also selects them.
@@ -5414,6 +5403,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\", " +
                     "LearningRate = 1e-5, WeightDecay = 0.01 }) " +
                     "{ StreamingTraining = AiDotNet.Enums.StreamingTrainingMode.ForceOn }";
+            }
+            else if (model.ClassName == "ParaformerLarge" && model.TypeParameterCount == 1)
+            {
+                // Paraformer-Large retains the paper's 1024-wide, 50-layer, 16-head production
+                // defaults. Generated invariants exercise the same public Conformer/CIF sizing
+                // controls at CI smoke scale after the precision-first and iteration-cap steps.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions { " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
+                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
+                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
             }
             else if (model.ClassName == "NoiseRobustASR" && model.TypeParameterCount == 1)
             {
@@ -10338,20 +10341,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 if (Fp32TestClassNames.Contains(model.ClassName))
                 {
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
-                    // Chirp3's first two Adam updates are a measured warm-up transient: the loss rises at
-                    // step 2 before its normal descent begins. Compare after that transient while keeping
-                    // the same real training path, paper-default optimizer, and fully customizable model.
+                    // Chirp3 and ParaformerLarge have a measured Adam warm-up transient: the loss rises
+                    // at step 2 before its normal descent begins. Compare after that transient while
+                    // keeping the same real training path, paper-default optimizer, and customizable model.
                     // Other floated audio models retain the cheaper 1-vs-2 convergence smoke probe.
                     // RoomImpulseResponse shows the same measured warm-up transient as Chirp3: its
                     // MoreData probe compared 1 iteration against 2 and the loss was still RISING
                     // there, so "more data" read as degradation while training was healthy. Compare
                     // after the transient (2 vs 5) on the same real training path, keeping the
                     // paper-default optimizer and the DEFAULT tolerance rather than relaxing it.
-                    sb.AppendLine(model.ClassName is "Chirp3" or "RoomImpulseResponse"
+                    sb.AppendLine(model.ClassName is "Chirp3" or "RoomImpulseResponse" or "ParaformerLarge"
                         ? "    protected override int MoreDataShortIterations => 2;"
                         : "    protected override int MoreDataShortIterations => 1;");
                     sb.AppendLine(model.ClassName is "Chirp3" or "RoomImpulseResponse"
                         ? "    protected override int MoreDataLongIterations => 5;"
+                        : model.ClassName == "ParaformerLarge"
+                            ? "    protected override int MoreDataLongIterations => 15;"
                         : model.ClassName is "FastEmit" or "EmformerRNNT"
                             ? "    protected override int MoreDataLongIterations => 10;"
                         : model.ClassName == "DannaSep"
@@ -10373,7 +10378,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // so a decrease assertion cannot hold there however the threshold is set. Give
                     // it the same 15-step budget so the probe clears the hump and sees the genuine
                     // net decrease; 15 float steps stay well under the 180 s timeout.
-                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse"
+                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge"
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
