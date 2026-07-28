@@ -7972,6 +7972,50 @@ public static class LayerHelper<T>
     /// The caller is responsible for upsampling to full resolution if needed.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Creates the BSVD denoising backbone per Qi et al., 2022,
+    /// "Real-time Streaming Video Denoising with Bidirectional Buffers" (arXiv:2207.06937).
+    /// </summary>
+    /// <remarks>
+    /// <para>BSVD's backbone is a <b>W-Net</b>: two light-weight U-Nets in sequence, the second
+    /// refining the first. The paper's ablation measures +0.40 dB for that second stage. Routing
+    /// BSVD through <see cref="CreateDefaultVideoDenoisingLayers"/> gave it a SINGLE
+    /// encoder/decoder, so the refinement stage was absent.</para>
+    /// <para>The first stage consumes the temporally-stacked input and the second consumes the
+    /// first stage's output, matching the paper's sequential arrangement.</para>
+    /// <para><b>Not yet implemented:</b> the Temporal Shift Modules used during training, and the
+    /// Bidirectional Buffer Blocks that replace them at inference to give streaming operation with
+    /// <c>floor(C_f / r)</c> channels shifted per direction. Those are BSVD's streaming mechanism;
+    /// <see cref="AiDotNet.Video.Options.BSVDOptions.ShiftedChannelRatio"/> is carried for them.
+    /// Until they exist this builds the W-Net topology with frames stacked as channels, which is
+    /// the sliding-window arrangement the paper contrasts itself against.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBSVDLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64,
+        int temporalFrames = 5,
+        int numUNetStages = 2)
+    {
+        for (int stage = 0; stage < Math.Max(1, numUNetStages); stage++)
+        {
+            // Stage 0 receives the temporally-stacked frames; later stages refine a single
+            // already-denoised frame, so they no longer carry the temporal stack.
+            int stageFrames = stage == 0 ? temporalFrames : 1;
+
+            foreach (var layer in CreateDefaultVideoDenoisingLayers(
+                         inputChannels: inputChannels,
+                         inputHeight: inputHeight,
+                         inputWidth: inputWidth,
+                         numFeatures: numFeatures,
+                         temporalFrames: stageFrames))
+            {
+                yield return layer;
+            }
+        }
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultVideoDenoisingLayers(
         int inputChannels = 3,
         int inputHeight = 128,
