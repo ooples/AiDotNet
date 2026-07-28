@@ -661,7 +661,22 @@ public partial class RWKV7Block<T> : LayerBase<T>
         {
             _recurrentState = ComputeFinalWkvState(
                 state, Aall, aRate, kappaAll, kTildeAll, Vall, batchSize, seqLen);
-            _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1) : xPrev;
+            // .Clone() is REQUIRED, not defensive. GetSliceAlongDimension returns a VIEW over x's
+            // buffer, and x is an Engine/tape intermediate whose storage is arena/pool-rented for the
+            // duration of THIS forward only. Storing the bare view in a field that outlives the
+            // forward (and the caller's TensorArena scope) means the NEXT inference call reads
+            // storage that has already been returned to the pool and overwritten by whatever
+            // allocated next — so the token-shift term becomes garbage and the block emits NaN.
+            // That is exactly the observed Q-S shard signature: RWKVForecaster's single-Predict
+            // invariant (ForwardPass_ShouldBeFinite_AfterTraining) passes while the two that Predict
+            // MORE THAN ONCE after training (DifferentInputs_AfterTraining_ShouldProduceDifferent-
+            // Outputs, Clone_AfterTraining_ShouldPreserveLearnedWeights) report L2/||trained|| = NaN,
+            // and why it "passes in isolation and fails once earlier tests have run" — whether the
+            // recycled buffer still happens to hold the old values is pure allocation history.
+            // Every other writer of this field already clones (SetPreviousToken / SetRecurrentState),
+            // and the sibling RWKVLayer.cs does `x.GetSliceAlongDimension(seqLen - 1, 1).Clone()` for
+            // this same token-shift cache; the delta-rule rewrite dropped the copy here.
+            _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1).Clone() : xPrev.Clone();
         }
 
         // Cache for backward
@@ -812,7 +827,9 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // would leak the last training token into a later inference call.
         if (!IsTrainingMode && seqLen > 0)
         {
-            _prevChannelToken = x.GetSliceAlongDimension(seqLen - 1, 1);
+            // Same required copy as the time-mixing token-shift cache above: a bare slice view over
+            // this forward's arena-rented buffer would be read back after that storage was recycled.
+            _prevChannelToken = x.GetSliceAlongDimension(seqLen - 1, 1).Clone();
         }
 
         return Engine.Reshape(y, new[] { batchSize, seqLen, _modelDimension });
