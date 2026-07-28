@@ -538,6 +538,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "SEEM",               // segment-everything transformer — GradientFlow timeout
         "RVRT",               // recurrent video restoration transformer — LossStrictlyDecreases / ScaledInput timeout
         "Squeezeformer",      // Conformer-variant ASR — Training_ShouldReduceLoss 180 s timeout
+        // RNN-T (Graves 2012) transducer ASR. It was already emitted as <float> — the A-I/N-Z
+        // resource-bound-shard rule floats every supported family regardless of roster membership —
+        // but the audio branch's smoke iteration caps are gated on EXPLICIT roster membership, so
+        // RNNTransducer kept the generic 50 + 200-iteration MoreData probe and hit
+        // "Test execution timed out after 120000 milliseconds" in the Q-S shard (measured). Roster
+        // membership is the documented mechanism for picking those caps up (see the block header
+        // above): it does not change the model, only the generated probe's repetition count.
+        "RNNTransducer",
         "QueryMeldNet",       // OptimizerStep / OutputDimension timeout
         "SpeakerDiarizedASR", // diarized ASR — DifferentInputs timeout
         "StyleTTSZS",         // zero-shot style TTS — DifferentInputs / Metadata timeout
@@ -3858,7 +3866,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
                     "NumLabels = 9, MaxSequenceLength = 8, LearningRate = 5e-5, DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "FireRedTTS" && model.TypeParameterCount == 1)
+            else if ((model.ClassName == "FireRedTTS" || model.ClassName == "SparkTTS"
+                      || model.ClassName == "SPEARTTS")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
                 // FireRedTTS production defaults are foundation-scale: an 8x1024 codec-token
                 // head behind a 2048-wide, 24-layer autoregressive decoder. SpeakerConsistency
@@ -3867,12 +3879,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // embedding -> text encoder -> codec-LM -> token-head topology at smoke scale.
                 // Dropout stays disabled so the exact deterministic-speaker assertion remains
                 // meaningful; production defaults and inference behavior are unchanged.
+                //
+                // SparkTTS and SPEAR-TTS join from the Q-S shard for the same reason, measured:
+                // SparkTTS keeps Qwen2.5's 1536-wide / 28-layer decoder over a 1x4096 codec head
+                // and OOM-killed the shard (System.OutOfMemoryException out of
+                // FusedLinearBackwardCore with the test host at ~10 GB resident), taking the rest
+                // of its own class down with it — 9 cascaded failures including several that
+                // reported in 1-3 s because the process had no headroom left. SPEAR-TTS is the
+                // same stack at 1024-wide / 12 layers with an 8x1024 head. Both are now also on
+                // the IsCodecLMTokenModel list, so the fixture feeds the discrete token IDs their
+                // EmbeddingLayer-first stack declares instead of 640 continuous mel features.
+                string codecBasedOptionsType = model.ClassName switch
+                {
+                    "SparkTTS" => "AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions",
+                    "SPEARTTS" => "AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions",
+                    _ => "AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions",
+                };
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions { NumCodebooks = 1, " +
+                    $"new {codecBasedOptionsType} {{ NumCodebooks = 1, " +
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
@@ -10007,7 +10035,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // step 1 = 15.629474 rising to step 2 = 72.217690. Fifteen steps clear the hump
                     // and expose the genuine decrease while keeping the DEFAULT decrease threshold
                     // intact (no tolerance is relaxed).
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "SpeechT5" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    // StyleTTS 2 joins AudioLM / IndexTTS2 / SpeechT5 for the identical measured
+                    // reason (Q-S shard): judged between step 1 and step 2 its probe sits inside the
+                    // first Adam update's warm-up rise — measured step 1 = 1.398995 rising to
+                    // step 2 = 1.454038 — while the SAME model's Training_ShouldReduceLoss over its
+                    // 6 steps passes, i.e. the trajectory is healthy and only the 2-step window is
+                    // unrepresentative. Fifteen steps clear the hump (measured 946 ms / 983 ms, so
+                    // the added steps are free). StyleTTS is the same VITS-derived encoder+flow+
+                    // decoder stack emitted from this same branch and was reported failing the same
+                    // invariant in the shard, so it takes the same window. The DEFAULT 1 % decrease
+                    // threshold is untouched — this ADDS training steps rather than relaxing a bound.
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "SpeechT5" or "StyleTTS" or "StyleTTS2" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                 }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling
@@ -13510,6 +13548,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "IndexTTS" or "IndexTTS2" or "OuteTTS"
             or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone" or "SpeechGPT" or "SpiritLM" or "SoundStorm"
             or "Amphion" or "Dia" or "GLM4Voice"
+            // SparkTTS and SPEAR-TTS build the SAME CreateDefaultCodecLMLayers stack (EmbeddingLayer
+            // with InputMode.Indices first) but were missing from this list, so the generic deep
+            // end-to-end TTS branch fed them continuous [8, 80] mel-style features. The embedding
+            // then indexed on 640 rounded near-zero "token IDs" and the fixture's effective output
+            // became [8, 80, NumCodebooks*CodebookSize] — for SparkTTS that is 640 positions x 4096
+            // logits through a 1536-wide, 28-layer decoder, which OOM-killed the Q-S shard mid-run
+            // (10 GB resident in FusedLinearBackward) and cascaded into every following invariant of
+            // the class. Route both through the discrete-token contract their layer stack actually
+            // declares, exactly like their FireRedTTS / CosyVoice siblings.
+            or "SparkTTS" or "SPEARTTS"
             || IsValleCodecLMModel(className);
     }
 
@@ -13548,6 +13596,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "CosyVoiceClone" => 16,
             "Chatterbox" => 16,
             "FireRedTTS" => 16,
+            // SparkTTS / SPEAR-TTS: CI-smoke fixtures below pin NumCodebooks = 1, CodebookSize = 16,
+            // so their codec head is 1 x 16 wide (production stays 1 x 4096 / 8 x 1024).
+            "SparkTTS" => 16,
+            "SPEARTTS" => 16,
             "F5TTS" => 16,
             "FishSpeech" or "FishSpeechV15" => 32,
             "GLM4Voice" => 32,
