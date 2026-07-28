@@ -33,7 +33,27 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// - Serialized point processing with space-filling curves
 /// </para>
 /// <para>
-/// <b>Reference:</b> Wu et al., "Sonata and Concerto: Mamba for 3D Point Clouds", arXiv 2024.
+/// <b>Reference — UNRESOLVED, do not cite this class as paper-faithful.</b> This type's
+/// attribution is currently inconsistent in three ways and needs an owner decision:
+/// </para>
+/// <list type="number">
+/// <item>This doc previously cited <i>Wu et al., "Sonata and Concerto: Mamba for 3D Point
+/// Clouds", arXiv 2024</i>. No such paper exists; the reference was fabricated and has been
+/// removed.</item>
+/// <item>The <c>[ResearchPaper]</c> attribute points at <i>Mamba3D: Enhancing Local Features for
+/// 3D Point Cloud Analysis via State Space Model</i> (arXiv:2404.14966, Han et al.) — a real
+/// paper, but a different model by different authors, whose mechanism is Local Norm Pooling with
+/// a bidirectional SSM rather than the hybrid Mamba/Transformer described below.</item>
+/// <item>The actual published <i>Concerto</i> (arXiv:2510.23607) is a joint 2D-3D
+/// SELF-SUPERVISED LEARNING method, not a supervised segmentation backbone. The implementation
+/// here matches neither it nor Mamba3D exactly: it describes global Mamba branches with local
+/// Transformer attention over serialized points, which is closer to the Serialized Point Mamba /
+/// Point Transformer V3 line of work.</item>
+/// </list>
+/// <para>
+/// Until this is resolved, treat the implementation as an unattributed hybrid Mamba-Transformer
+/// backbone. Resolving it means either renaming and re-citing this class to the paper it actually
+/// implements, or reimplementing it to match the published Concerto.
 /// </para>
 /// </remarks>
 /// <example>
