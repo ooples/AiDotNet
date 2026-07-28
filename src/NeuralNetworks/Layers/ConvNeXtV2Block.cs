@@ -275,6 +275,21 @@ public class ConvNeXtV2Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Publishes the block geometry. The expansion ratio is NOT always 3x — APNet2's bounded CI
+    /// fixtures use other ratios — so deserialization must read the real value rather than infer
+    /// it, or the rebuilt block has the wrong parameter count.
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Channels"] = _channels.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["IntermediateChannels"] = _intermediateChannels.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["KernelSize"] = _kernelSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <inheritdoc/>
     public override void ResetState()
     {
         _depthwise.ResetState();
