@@ -226,7 +226,25 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        // Emotion recognition is single-label multi-class: return softmax PROBABILITIES at inference so
+        // the output is non-negative and sums to 1, matching every sibling in this family — HuBERTSER
+        // (Engine.Softmax in PredictCore), WavLMSER/PANNs/AST (softmax/sigmoid in PostprocessOutput,
+        // AST's comment cites ClassOutput_ShouldBeNonNegative by name). Wav2Small was the only one
+        // returning raw logits from the identity-activation head, so AudioClassifierTestBase's
+        // non-negativity invariant held only by luck of the random init. Training is unaffected: it
+        // runs through the base ForwardForTraining (raw logits), so a logit loss is never
+        // double-softmaxed.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var c = input; foreach (var l in Layers) c = l.Forward(c);
+            return Engine.Softmax(c, axis: -1);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
