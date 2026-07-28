@@ -77,7 +77,16 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     {
         _options = options ?? new RoomImpulseResponseOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Build the default optimizer from the model's OWN configured rate. A bare
+        // AdamWOptimizer(this) silently takes AdamWOptimizerOptions' global 1e-3 default and drops
+        // RoomImpulseResponseOptions.LearningRate (1e-4) — a 10x over-rate on a model whose output
+        // head is RIRLength-wide.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
@@ -199,7 +208,15 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the model's configured optimizer. The 2-arg TrainWithTape resolves
+            // optimizer: null and falls back to NeuralNetworkBase's lazily-created DEFAULT Adam at
+            // its global 1e-3 rate, so _optimizer — including any instance the CALLER supplied to
+            // the constructor — was never used for a single step, and _options.LearningRate (1e-4)
+            // had no effect on training at all. That 10x over-rate is what produced the measured
+            // first-step loss HUMP the generated audio probes had been working around with wider
+            // iteration windows (memorization 0.645785 -> 0.926694 at step 2; MoreData still rising
+            // between 2 and 5 steps).
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
