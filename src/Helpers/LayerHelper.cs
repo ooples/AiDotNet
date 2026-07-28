@@ -34243,11 +34243,19 @@ public static class LayerHelper<T>
         int llmFfnDim = llmDim * 4;
 
         // === Character/Byte Embedding (E2 TTS Eskimez et al. 2024 §3.1) ===
-        // Input is discrete text/acoustic token IDs [seq], embedded to
-        // [seq, textEncoderDim] before the transformer stack consumes them.
+        // Discrete text/acoustic token IDs [batch, seq] are embedded to
+        // [batch, seq, textEncoderDim] before the transformer stack consumes them.
+        //
+        // InputMode stays at the layer's Auto default rather than being forced to Indices.
+        // Auto applies the same shape/value split PyTorch draws between nn.Embedding and
+        // nn.Linear: integral values inside [0, vocabSize) are looked up as token IDs — the
+        // paper path, unchanged — and anything else is linearly projected. Forcing Indices
+        // removed that fallback, so a continuous conditioning tensor [batch, seq, feats] was
+        // read as seq*feats token IDs and came out rank-4 [batch, seq, feats, dim]. Every
+        // downstream shape was then wrong: AudioLM's training forward produced
+        // [1, 64, 32, 80] against an [1, 80] target and threw before taking a gradient.
         var tokenEmbedding = new EmbeddingLayer<T>(vocabSize, textEncoderDim)
         {
-            InputMode = EmbeddingInputMode.Indices,
             ScaleBySqrtDimension = true
         };
         yield return tokenEmbedding;

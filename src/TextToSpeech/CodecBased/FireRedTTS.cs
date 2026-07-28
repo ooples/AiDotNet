@@ -150,7 +150,8 @@ public class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }

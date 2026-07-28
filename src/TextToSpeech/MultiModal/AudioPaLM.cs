@@ -135,7 +135,8 @@ public class AudioPaLM<T> : TtsModelBase<T>, IEndToEndTts<T>
                     _options.NumEncoderLayers,
                     _options.NumDecoderLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
