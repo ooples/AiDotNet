@@ -23244,6 +23244,88 @@ public static class LayerHelper<T>
     /// Creates default layers for a deep 1D-CNN based CTC model (Jasper/QuartzNet style).
     /// Architecture: N residual CNN blocks → CTC head.
     /// </summary>
+    /// <summary>
+    /// Creates the ContextNet encoder per Han et al., INTERSPEECH 2020 (arXiv:2005.03191).
+    /// </summary>
+    /// <remarks>
+    /// <para>ContextNet is 23 convolution blocks C0..C22. C0 and C22 hold a single convolution
+    /// layer; every other block holds <paramref name="numSubBlocks"/> (5 in the paper). Channel
+    /// widths follow the paper's three groups, each scaled by <paramref name="widthScaling"/>
+    /// (the paper's α, evaluated at 0.5 / 1 / 2 for small / medium / large):</para>
+    /// <list type="bullet">
+    /// <item>C0–C10: 256·α</item>
+    /// <item>C11–C21: 512·α</item>
+    /// <item>C22: 640·α</item>
+    /// </list>
+    /// <para>Every block ends in a squeeze-and-excitation module — global average pooling into
+    /// two fully connected layers with a sigmoid gate — which is the paper's titular "global
+    /// context" contribution. Progressive downsampling reaches the paper's 8x reduction through
+    /// stride-2 convolutions at C3, C7 and C14, and the activation is Swish throughout.</para>
+    /// <para>This replaces routing ContextNet through the generic deep-CNN/CTC factory, which
+    /// had NO squeeze-and-excitation at all, a single uniform width, no strided downsampling and
+    /// ReLU — i.e. it omitted the paper's defining mechanism entirely.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultContextNetLayers(
+        int numBlocks = 23,
+        int numSubBlocks = 5,
+        int numMels = 80,
+        int vocabSize = 1024,
+        int kernelSize = 5,
+        int squeezeExcitationRatio = 8,
+        double widthScaling = 1.0,
+        double dropoutRate = 0.1)
+    {
+        var swish = (IActivationFunction<T>)new SwishActivation<T>();
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+        var sigmoid = (IActivationFunction<T>)new SigmoidActivation<T>();
+
+        // Paper channel groups, scaled by alpha and floored at 1 channel.
+        int Width(int block)
+        {
+            int baseWidth = block <= 10 ? 256 : block <= 21 ? 512 : 640;
+            return Math.Max(1, (int)Math.Round(baseWidth * widthScaling));
+        }
+
+        // 8x total downsampling via stride-2 at C3, C7 and C14 (paper §3).
+        static bool IsDownsampling(int block) => block is 3 or 7 or 14;
+
+        for (int block = 0; block < numBlocks; block++)
+        {
+            int channels = Width(block);
+            // C0 and the final block are single-convolution blocks; the rest are numSubBlocks deep.
+            bool isSingle = block == 0 || block == numBlocks - 1;
+            int subBlocks = isSingle ? 1 : numSubBlocks;
+
+            for (int sub = 0; sub < subBlocks; sub++)
+            {
+                // Only the last convolution of a downsampling block carries the stride, so the
+                // reduction happens once per block rather than once per sub-block.
+                int stride = IsDownsampling(block) && sub == subBlocks - 1 ? 2 : 1;
+                yield return new Conv1DLayer<T>(
+                    outputChannels: channels,
+                    kernelSize: kernelSize,
+                    dilation: 1,
+                    stride: stride,
+                    padding: null,
+                    activation: swish);
+                yield return new LayerNormalizationLayer<T>();
+            }
+
+            // Squeeze-and-excitation: the global-context gate the paper is named for. Skipped on
+            // the single-convolution end blocks, matching the paper's block structure.
+            if (!isSingle)
+            {
+                yield return new SqueezeAndExcitationLayer<T>(
+                    channels, squeezeExcitationRatio, swish, sigmoid);
+
+                if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // CTC vocabulary head — linear, so the logits stay unbounded for the CTC loss.
+        yield return new DenseLayer<T>(vocabSize, identity);
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultDeepCNNCTCLayers(
         int encoderDim = 512,
         int numBlocks = 10,
