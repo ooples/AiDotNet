@@ -121,6 +121,24 @@ public class ConvNeXtV2Block<T> : LayerBase<T>
     /// sequence axis, divides by the mean channel response, then applies a learned scale and
     /// offset around a residual.
     /// </summary>
+    /// <summary>
+    /// Materializes the lazily-allocated sub-layers from this block's known geometry, without
+    /// executing them.
+    /// </summary>
+    /// <remarks>
+    /// The depth-wise convolution runs channels-first, so it resolves against <c>[1, C, 1]</c>;
+    /// everything after it is channels-last, and the projection consumes the EXPANDED width
+    /// rather than the block width. Each call is guarded by <c>IsShapeResolved</c>, so this is a
+    /// no-op once the block has run.
+    /// </remarks>
+    private void ResolveChildShapes()
+    {
+        if (!_depthwise.IsShapeResolved) _depthwise.ResolveFromShape(new[] { 1, _channels, 1 });
+        if (!_norm.IsShapeResolved) _norm.ResolveFromShape(new[] { 1, 1, _channels });
+        if (!_pointwiseExpand.IsShapeResolved) _pointwiseExpand.ResolveFromShape(new[] { 1, 1, _channels });
+        if (!_pointwiseProject.IsShapeResolved) _pointwiseProject.ResolveFromShape(new[] { 1, 1, _intermediateChannels });
+    }
+
     private Tensor<T> ApplyGlobalResponseNormalization(Tensor<T> x, int B, int S, int I)
     {
         // Per-channel L2 over the sequence axis: sqrt(sum_s x^2) -> [B, 1, I].
@@ -193,14 +211,18 @@ public class ConvNeXtV2Block<T> : LayerBase<T>
         int expected = sizes.Sum() + _grnGamma.Length + _grnBeta.Length;
 
         // The sub-layers allocate their weights lazily on first Forward, so before the block has
-        // ever run, sizes[] are all zero and `expected` collapses to just the GRN parameters.
-        // Restoring a trained block into a fresh instance then failed with
-        // "Expected 384 parameters, got 1583104". Materialize the children against this block's
-        // known geometry first, so the layout matches the source we are restoring from.
-        if (sizes.Sum() == 0 && parameters.Length > _grnGamma.Length + _grnBeta.Length)
+        // ever run, sizes[] are all zero and `expected` collapses to just the GRN parameters —
+        // restoring a trained block into a fresh instance failed with "Expected 384 parameters,
+        // got 1583104".
+        //
+        // Resolve the children's shapes directly. This is the framework's own mechanism for
+        // materializing a lazy layer without executing it: it allocates parameters from a known
+        // input shape and nothing else. Running a synthetic probe Forward instead would evaluate
+        // GRN at a degenerate sequence length of 1 and leave the layer in a state the caller
+        // never asked for.
+        if (sizes.Sum() == 0)
         {
-            var probe = new Tensor<T>(new[] { 1, 1, _channels });
-            _ = Forward(probe);
+            ResolveChildShapes();
 
             sizes = new[]
             {
