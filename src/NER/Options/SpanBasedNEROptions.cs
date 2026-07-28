@@ -186,6 +186,22 @@ public class SpanBasedNEROptions
     }
 
     /// <summary>
+    /// Gets or sets whether negative spans are sub-sampled during training.
+    /// </summary>
+    /// <value>Defaults to <c>true</c>, matching SpERT's recipe.</value>
+    /// <remarks>
+    /// <para>Span-based NER models differ on this point, so it cannot be expressed by
+    /// <see cref="NegativeSpanSampleRatio"/> alone. SpERT (Eberts &amp; Ulges) draws a fixed number
+    /// of negative spans per sentence, which is what the ratio controls. Biaffine-NER
+    /// (Yu et al., ACL 2020) instead enumerates EVERY span with start &lt;= end and classifies it,
+    /// using a dedicated non-entity category rather than sampling.</para>
+    /// <para>Set to <c>false</c> to enumerate all spans; <see cref="NegativeSpanSampleRatio"/> is
+    /// then unused. It is a separate flag rather than a zero ratio because the ratio validates
+    /// as &gt;= 1.</para>
+    /// </remarks>
+    public bool UseNegativeSampling { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the NER model variant.
     /// </summary>
     public NERModelVariant Variant { get; set; } = NERModelVariant.Base;
@@ -235,6 +251,7 @@ public class SpanBasedNEROptions
         _dropoutRate = other._dropoutRate;
         _learningRate = other._learningRate;
         _negativeSpanSampleRatio = other._negativeSpanSampleRatio;
+        UseNegativeSampling = other.UseNegativeSampling;
         Variant = other.Variant;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);

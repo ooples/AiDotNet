@@ -86,7 +86,7 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
         SpanBasedNEROptions? options = null)
-        : base(architecture, modelPath, options ?? new SpanBasedNEROptions(),
+        : base(architecture, modelPath, options ?? new BiaffineNEROptions(),
             "Biaffine-NER", "Yu et al., ACL 2020")
     {
     }
@@ -98,22 +98,35 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
         NeuralNetworkArchitecture<T> architecture,
         SpanBasedNEROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, options ?? new SpanBasedNEROptions(),
+        : base(architecture, options ?? new BiaffineNEROptions(),
             "Biaffine-NER", "Yu et al., ACL 2020", optimizer)
     {
     }
 
+    /// <summary>
+    /// The Biaffine-NER specific options, when supplied. Falls back to the paper's published
+    /// values for the BiLSTM and embedding-dropout settings that only this model defines.
+    /// </summary>
+    private BiaffineNEROptions BiaffineOptions =>
+        NEROptions as BiaffineNEROptions ?? _defaultBiaffineOptions;
+
+    private static readonly BiaffineNEROptions _defaultBiaffineOptions = new();
+
     /// <inheritdoc />
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers()
     {
-        return LayerHelper<T>.CreateDefaultSpanBasedNERLayers(
+        return LayerHelper<T>.CreateDefaultBiaffineNERLayers(
             hiddenDimension: NEROptions.HiddenDimension,
             numAttentionHeads: NEROptions.NumAttentionHeads,
             numTransformerLayers: NEROptions.NumTransformerLayers,
             intermediateDimension: NEROptions.IntermediateDimension,
             spanEmbeddingDimension: NEROptions.SpanEmbeddingDimension,
             numLabels: NEROptions.NumLabels,
-            dropoutRate: NEROptions.DropoutRate);
+            dropoutRate: NEROptions.DropoutRate,
+            biLstmHiddenSize: BiaffineOptions.BiLstmHiddenSize,
+            biLstmLayers: BiaffineOptions.BiLstmLayers,
+            biLstmDropout: BiaffineOptions.BiLstmDropout,
+            embeddingsDropout: BiaffineOptions.EmbeddingsDropout);
     }
 
     /// <inheritdoc />
