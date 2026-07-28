@@ -5759,32 +5759,41 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "APNet" && model.TypeParameterCount == 1)
             {
                 // 113 s of training probes with repetition already at the audio branch's floor,
-                // so this is per-step scale. APNetOptions declares no sizing of its own; the cost
-                // comes from VocoderOptions — a 512-channel stack and, more importantly,
-                // NumDiffusionSteps = 50, which multiplies every forward by fifty.
+                // so this is per-step scale.
+                //
+                // APNet reads only SampleRate, MelChannels, HopSize, FftSize and DropoutRate from
+                // its options — verified against the implementation rather than assumed from the
+                // options surface. UpsampleInitialChannels and NumDiffusionSteps are inherited
+                // from VocoderOptions but never consumed here, so setting them would bound
+                // nothing; the spectral geometry is the whole lever.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 64, outputSize: 64), " +
                     "new AiDotNet.TextToSpeech.Vocoders.APNetOptions { SampleRate = 22050, " +
-                    "MelChannels = 64, HopSize = 64, FftSize = 128, " +
-                    "UpsampleInitialChannels = 32, NumDiffusionSteps = 2 })";
+                    "MelChannels = 64, HopSize = 64, FftSize = 128, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "AudioPaLM" && model.TypeParameterCount == 1)
             {
                 // 177 s of training probes, again with repetition already floored. Note this is
                 // the TextToSpeech.MultiModal AudioPaLM — there are TWO classes with this name,
                 // and the generated test targets this one (see
-                // AiDotNet_TextToSpeech_MultiModal_AudioPaLMTests). Its sizing comes from
-                // EndToEndTtsOptions: 192-wide encoder/decoder, a 768-wide filter stack, and
-                // NumDiffusionSteps = 50 multiplying every forward.
+                // AiDotNet_TextToSpeech_MultiModal_AudioPaLMTests).
+                //
+                // The options it actually reads, verified against the implementation: EncoderDim,
+                // DecoderDim, HiddenDim, NumEncoderLayers, NumDecoderLayers, NumHeads,
+                // NumFlowSteps, MaxTextLength, MelChannels and HopSize. InterChannels,
+                // FilterChannels and NumDiffusionSteps are inherited from EndToEndTtsOptions but
+                // never consumed, so bounding them would achieve nothing — the layer counts and
+                // widths are what carry the cost.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 64, outputSize: 64), " +
                     "new AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions { " +
-                    "EncoderDim = 32, DecoderDim = 32, InterChannels = 32, FilterChannels = 64, " +
-                    "NumFlowSteps = 1, NumDiffusionSteps = 2 })";
+                    "EncoderDim = 32, DecoderDim = 32, HiddenDim = 32, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, " +
+                    "NumFlowSteps = 1, MaxTextLength = 16, MelChannels = 64, HopSize = 64 })";
             }
             else if (model.ClassName == "CodeSwitchingASR" && model.TypeParameterCount == 1)
             {

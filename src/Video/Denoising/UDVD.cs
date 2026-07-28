@@ -140,7 +140,7 @@ public class UDVD<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

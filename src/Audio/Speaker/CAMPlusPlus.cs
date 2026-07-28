@@ -239,7 +239,7 @@ public class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, IS
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

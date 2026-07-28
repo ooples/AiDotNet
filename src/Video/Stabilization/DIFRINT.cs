@@ -463,7 +463,7 @@ public class DIFRINT<T> : VideoStabilizationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

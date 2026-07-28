@@ -370,7 +370,7 @@ public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

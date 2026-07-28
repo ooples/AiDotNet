@@ -67,7 +67,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private string? _onnxModelPath;
-    private IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _cnnChannels;
     private int _rnnHiddenSize;
     private int _rnnLayers;
@@ -123,7 +123,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int rnnHiddenSize = 256,
         int rnnLayers = 2,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRNNOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -172,7 +172,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int rnnHiddenSize = 256,
         int rnnLayers = 2,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         CRNNOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -742,7 +742,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
                 TrainWithTape(preprocessedInput, expectedOutput, gradientOptimizer);
             else
-                TrainWithTape(preprocessedInput, expectedOutput);
+                TrainWithTape(preprocessedInput, expectedOutput, _optimizer);
         }
         finally
         {

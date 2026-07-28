@@ -474,7 +474,7 @@ public class UPRNet<T> : FrameInterpolationBase<T>
             // by gradient descent on the per-level Conv weights via
             // numerical-style finite-difference handled inside the engine's
             // tape (Layers contains the convs, so the optimizer sees them).
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

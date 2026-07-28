@@ -402,7 +402,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

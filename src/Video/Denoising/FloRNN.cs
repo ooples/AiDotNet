@@ -143,7 +143,7 @@ public class FloRNN<T> : VideoDenoisingBase<T>
             if (_optimizer is not null)
                 TrainWithTape(input, expected, _optimizer);
             else
-                TrainWithTape(input, expected);
+                TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
