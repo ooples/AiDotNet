@@ -67,7 +67,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _encoderDim;
     private readonly int _decoderDim;
     private readonly int _encoderLayers;
@@ -125,7 +125,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int decoderLayers = 12,
         int numHeads = 16,
         int vocabSize = 50265,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DessurtOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -178,7 +178,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int decoderLayers = 12,
         int numHeads = 16,
         int vocabSize = 50265,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DessurtOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -217,7 +217,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     /// both constructors, so every optimizer and hyperparameter remains fully
     /// customizable.
     /// </remarks>
-    private IOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperDefaultOptimizer()
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperDefaultOptimizer()
         => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -616,7 +616,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             // runs to drift upward. Use the caller-supplied optimizer as the
             // single source of truth and fail loudly if it cannot drive tape
             // gradients instead of silently substituting the base optimizer.
-            var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+            var gradientOptimizer = _optimizer
                 ?? throw new InvalidOperationException(
                     "Dessurt training requires an optimizer implementing " +
                     "IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
