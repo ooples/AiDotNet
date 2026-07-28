@@ -223,7 +223,15 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the configured optimizer. The constructor resolves _optimizer from the
+            // caller's argument (falling back to AdamW), but this call site used the
+            // no-optimizer TrainWithTape overload, whose `optimizer` parameter then defaulted
+            // to null and silently trained on the base engine's fallback instead — so both the
+            // AdamW default AND any user-supplied optimizer were discarded. That is what drove
+            // the memorization probe divergence measured on the A-C shard: step 1 loss
+            // 20.729160 rising to step 2 loss 101.557045, a ~5x blow-up rather than a warm-up
+            // transient.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
