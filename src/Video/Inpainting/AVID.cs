@@ -158,7 +158,7 @@ public class AVID<T> : VideoInpaintingBase<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

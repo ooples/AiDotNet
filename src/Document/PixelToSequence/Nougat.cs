@@ -68,7 +68,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _hiddenDim;
     private int _numEncoderLayers;
     private int _numDecoderLayers;
@@ -131,7 +131,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 10,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -200,7 +200,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 10,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -754,7 +754,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         EnsureNativeInitialized();
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
         UpdateParameters(CollectGradients());
         SetTrainingMode(false);

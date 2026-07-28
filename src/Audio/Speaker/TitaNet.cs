@@ -295,7 +295,7 @@ public class TitaNet<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeak
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

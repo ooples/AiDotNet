@@ -254,7 +254,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, target);
+            TrainWithTape(input, target, _optimizer);
         }
         finally
         {

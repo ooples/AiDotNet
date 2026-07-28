@@ -235,7 +235,7 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

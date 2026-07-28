@@ -146,7 +146,7 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

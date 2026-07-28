@@ -68,7 +68,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _visionDim;
     private readonly int _languageDim;
     private readonly int _visionLayers;
@@ -146,7 +146,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         int languageLayers = 32,
         int numHeads = 32,
         int vocabSize = 32000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocOwlOptions? options = null,
         int? visionNumHeads = null)
@@ -201,7 +201,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         int languageLayers = 32,
         int numHeads = 32,
         int vocabSize = 32000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocOwlOptions? options = null,
         int? visionNumHeads = null)
@@ -617,7 +617,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
         UpdateParameters(CollectGradients());
         SetTrainingMode(false);

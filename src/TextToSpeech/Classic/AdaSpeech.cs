@@ -231,7 +231,14 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the configured optimizer. The constructor resolves _optimizer from the
+            // caller's argument (falling back to AdamW), but this call site used the
+            // no-optimizer TrainWithTape overload, whose `optimizer` parameter then defaulted to
+            // null and silently trained on the base engine's fallback. It surfaced as
+            // LossStrictlyDecreasesOnMemorizationTask blowing up 10.779730 -> 64.533493 in a
+            // single step. Fourth instance of this defect in the branch, after AlignTTS,
+            // AudioPaLM and the R/S-lane cluster.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

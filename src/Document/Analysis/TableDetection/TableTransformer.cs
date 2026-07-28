@@ -69,7 +69,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
     private InferenceSession? _onnxStructureSession;
     private string? _onnxDetectionModelPath;
     private string? _onnxStructureModelPath;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _hiddenDim;
     private int _numEncoderLayers;
     private int _numDecoderLayers;
@@ -150,7 +150,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int numDecoderLayers = 6,
         int numHeads = 8,
         int numQueries = 100,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TableTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -215,7 +215,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int numDecoderLayers = 6,
         int numHeads = 8,
         int numQueries = 100,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TableTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -1178,7 +1178,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
             // not match GetParameters() (a layer's gradient count differs from its
             // ParameterCount), throwing in Engine.Subtract once the forward stopped
             // crashing. TrainWithTape owns the whole step.
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

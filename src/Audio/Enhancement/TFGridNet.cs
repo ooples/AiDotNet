@@ -316,7 +316,7 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

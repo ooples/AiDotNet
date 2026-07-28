@@ -258,7 +258,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, target);
+            TrainWithTape(input, target, _optimizer);
         }
         finally
         {

@@ -65,7 +65,7 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _backboneChannels;
     private readonly int _featureChannels;
     private readonly int _numKernels;
@@ -135,7 +135,7 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int backboneChannels = 256,
         int featureChannels = 256,
         int numKernels = 7,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
         // PSENet's kernel-prediction heads output per-pixel maps that the paper trains with
@@ -186,7 +186,7 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int backboneChannels = 256,
         int featureChannels = 256,
         int numKernels = 7,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
         // PSENet's kernel-prediction heads output per-pixel maps that the paper trains with
@@ -613,7 +613,7 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         // update. That double/unclipped update diverged training on the deep ResNet+FPN stack
         // (memorization loss 0.38 -> 18615). TrainWithTape owns the whole clipped optimizer
         // step, matching every other native model (e.g. the Finance forecasting transformers).
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
         SetTrainingMode(false);
     }
 

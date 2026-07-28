@@ -69,7 +69,7 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -142,7 +142,7 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int vocabSize = 250002,
         int visualBackboneChannels = 256,
         int numLanguages = 53,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutXLMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -201,7 +201,7 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int vocabSize = 250002,
         int visualBackboneChannels = 256,
         int numLanguages = 53,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutXLMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -922,7 +922,7 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
         SetTrainingMode(false);
     }
 

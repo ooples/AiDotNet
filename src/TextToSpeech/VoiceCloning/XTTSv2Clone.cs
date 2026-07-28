@@ -264,7 +264,7 @@ public class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

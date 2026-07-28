@@ -570,7 +570,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

@@ -644,7 +644,7 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
         }
 
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
 
         // Set inference mode
         SetTrainingMode(false);

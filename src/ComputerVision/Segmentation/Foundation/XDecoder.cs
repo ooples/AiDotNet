@@ -270,7 +270,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

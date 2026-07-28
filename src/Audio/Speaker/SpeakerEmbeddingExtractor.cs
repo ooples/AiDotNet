@@ -575,7 +575,7 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

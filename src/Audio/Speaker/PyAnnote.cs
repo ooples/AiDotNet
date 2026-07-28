@@ -281,7 +281,7 @@ public class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

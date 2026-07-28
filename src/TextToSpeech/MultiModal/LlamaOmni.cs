@@ -205,7 +205,7 @@ public class LlamaOmni<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

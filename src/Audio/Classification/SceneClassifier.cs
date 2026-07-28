@@ -604,7 +604,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

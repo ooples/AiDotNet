@@ -65,7 +65,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numEncoderLayers;
     private readonly int _numDecoderLayers;
@@ -126,7 +126,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 18,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         Pix2StructOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -197,7 +197,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 18,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         Pix2StructOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -586,7 +586,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         EnsureNativeInitialized();
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
         UpdateParameters(CollectGradients());
         SetTrainingMode(false);

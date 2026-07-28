@@ -207,7 +207,7 @@ public class MaskAdapter<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

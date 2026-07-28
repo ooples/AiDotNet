@@ -574,7 +574,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             // previous code then ALSO ran a manual UpdateParameters(CollectGradients()) gradient-descent step
             // on top of it — a double update that reads gradients TrainWithTape already consumed and pushes
             // the weights past the tape's step. One tape step is the correct, complete update.
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
