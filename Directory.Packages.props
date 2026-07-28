@@ -274,8 +274,19 @@
 
          Bumped 0.118.0 -> 0.119.0: replaces the unpublished 0.118.10-q8 development pin with the
          released package containing the serving branch's required Tensors APIs. Managed and native
-         packages are coreleased in lockstep. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.120.0" />
+         packages are coreleased in lockstep.
+
+         Bumped 0.120.0 -> 0.120.1: brings AiDotNet.Tensors #895 — the paper-faithful RWKV-7
+         delta-rule kernel. REQUIRED to compile: RWKV7Block calls the 7-argument
+         Engine.Rwkv7SequenceForward(r, kappa, kTilde, v, decayLogit, iclRate, numHeads) overload,
+         which does not exist in 0.120.0 (that build fails with CS1501). 0.120.1 also carries #895's
+         review fixes: the DirectGpu Rwkv7SequenceForward override now falls back to the CPU base
+         while a GradientTape / GraphMode is active (the GPU path previously recorded no backward, so
+         gradients for rProj / kappa / kTilde / vProj / decayLogit / iclRate were silently zero
+         whenever a tape was live), and the generic-path kappa normalisation now guards the divisor
+         instead of relying on a 1e-12 seed that flushes to zero in Half/BFloat16 and produced
+         0 * Inf = NaN. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.120.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.119.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.119.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.119.0" />
