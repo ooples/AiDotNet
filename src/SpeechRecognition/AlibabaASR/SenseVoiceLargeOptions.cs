@@ -58,7 +58,26 @@ public class SenseVoiceLargeOptions : ModelOptions
     public int DecoderDim { get; set; } = 512;
     public int NumDecoderLayers { get; set; } = 6;
     public int FeedForwardDim { get; set; } = 2048;
-    public bool UseCifAlignment { get; set; } = true;
+    /// <summary>
+    /// Whether to insert a CIF (continuous integrate-and-fire) monotonic-alignment stage between
+    /// the encoder and decoder.
+    /// </summary>
+    /// <value>
+    /// Defaults to <c>false</c>. SenseVoice-Large is an AUTOREGRESSIVE ENCODER-DECODER
+    /// (An et al., "FunAudioLLM", arXiv:2407.04051), and the paper describes no CIF stage and no
+    /// Paraformer-style non-autoregressive decoder for either SenseVoice variant. The
+    /// autoregressive decoder performs the alignment itself, so a CIF stage is not part of this
+    /// architecture.
+    /// </value>
+    /// <remarks>
+    /// <para>This previously defaulted to <c>true</c>, inherited from the shared Paraformer layer
+    /// factory that SenseVoice is built on. CIF genuinely belongs to Paraformer (Gao et al. 2022)
+    /// and to the CIF paper (Dong &amp; Xu 2020) — not to SenseVoice. SenseVoice-Small already
+    /// defaulted to <c>false</c>, so only the Large variant carried the extra stage.</para>
+    /// <para>Kept as a public option rather than removed, so callers who deliberately want a
+    /// Paraformer-style non-autoregressive variant can still opt in.</para>
+    /// </remarks>
+    public bool UseCifAlignment { get; set; } = false;
     public double LearningRate { get; set; } = 1e-4;
     public double WeightDecay { get; set; } = 0.01;
 }

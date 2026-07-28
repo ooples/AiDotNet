@@ -5776,7 +5776,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.SpeechRecognition.AlibabaASR.SenseVoiceLargeOptions { SampleRate = 16000, " +
                     "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
                     "NumAttentionHeads = 2, DecoderDim = 32, NumDecoderLayers = 1, FeedForwardDim = 64, " +
-                    "UseCifAlignment = true, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
+                    // SenseVoice-Large is an autoregressive encoder-decoder (arXiv:2407.04051);
+                    // the paper describes no CIF stage for either SenseVoice variant. This
+                    // fixture previously forced UseCifAlignment = true, which both diverged from
+                    // the paper and put a CIF layer in the graph.
+                    "UseCifAlignment = false, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
                     "DropoutRate = 0.0, Language = \"en\", LearningRate = 1e-4, WeightDecay = 0.01 })";
             }
             else if (model.ClassName == "SpeechGPTASR" && model.TypeParameterCount == 1)
