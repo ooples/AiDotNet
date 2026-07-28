@@ -99,8 +99,18 @@ public class BSVD<T> : VideoDenoisingBase<T>
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
+                // Optimizer settings taken from the reference implementation's training config
+                // (ChenyangQiQi/BSVD, options/train/bsvd_c64_unblind.yml), not guessed:
+                //   optim_g: Adam, lr 1e-3, betas [0.9, 0.99], weight_decay 0
+                //   use_grad_clip: 5
+                // beta2 = 0.99 rather than the 0.999 default adapts the second moment about ten
+                // times faster, which materially shortens Adam's early-step overshoot; combined
+                // with the grad-norm bound it is what keeps the first iterations well-behaved.
+                Beta1 = _options.AdamBeta1,
+                Beta2 = _options.AdamBeta2,
+                WeightDecay = 0.0,
                 EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
+                MaxGradientNorm = _options.GradientClipNorm
             });
         IsBlindDenoising = true;
         InitializeLayers();
