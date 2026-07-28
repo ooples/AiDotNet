@@ -90,6 +90,41 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     public override long ParameterCount => _alphaPredictor.ParameterCount;
 
     /// <summary>
+    /// Whether the paper's training-time alpha scaling is applied. Defaults to <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// Dong &amp; Xu 2020 §3.2 scale the weights by <c>S~ / Σα</c> during training so the number
+    /// of integrated embeddings is forced to match the target token count. Scaling only happens
+    /// when <see cref="TargetTokenCount"/> is set and the layer is in training mode; inference is
+    /// unaffected, matching the paper.
+    /// </remarks>
+    public bool AlphaScalingEnabled { get; set; }
+
+    /// <summary>
+    /// Weight <c>λ₂</c> on the quantity loss. Defaults to the paper's <c>1.0</c>.
+    /// </summary>
+    public double QuantityLossWeight { get; set; }
+
+    /// <summary>
+    /// Target token count <c>S~</c> for the current batch, set by the consumer before a training
+    /// forward pass. <c>null</c> (the default) disables both alpha scaling and the quantity loss.
+    /// </summary>
+    /// <remarks>
+    /// CIF's alignment supervision needs the label length, which a layer cannot infer from its
+    /// input. Models that train CIF end-to-end should assign this from the target sequence before
+    /// calling Forward, then read <see cref="LastQuantityLoss"/> and add
+    /// <c>QuantityLossWeight * LastQuantityLoss</c> to their objective.
+    /// </remarks>
+    public int? TargetTokenCount { get; set; }
+
+    /// <summary>
+    /// The most recent <c>|Σα − S~|</c>, averaged over the batch, or zero when
+    /// <see cref="TargetTokenCount"/> is unset. Multiply by <see cref="QuantityLossWeight"/> and
+    /// add to the training objective.
+    /// </summary>
+    public T LastQuantityLoss { get; private set; } = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>
     /// Initializes a new CIF alignment layer.
     /// </summary>
     /// <param name="encoderDim">Encoder hidden-state dimension <c>D</c>
@@ -100,9 +135,25 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     /// post-sequence remainder ≥ this triggers one final fire so a
     /// half-formed token isn't lost. Gao 2022 §3.2 prescribes
     /// <c>0.5</c>.</param>
-    public CifAlignmentLayer(int encoderDim, double threshold = 1.0, double tailThreshold = 0.5)
+    /// <param name="alphaScalingEnabled">
+    /// Whether to apply the paper's training-time alpha scaling. Dong &amp; Xu 2020 §3.2 multiply
+    /// every weight by <c>S~ / Σα</c> so the integrated count matches the target token count.
+    /// Defaults to <c>true</c> (the paper's strategy); requires <see cref="TargetTokenCount"/>.
+    /// </param>
+    /// <param name="quantityLossWeight">
+    /// Weight <c>λ₂</c> on the quantity loss <c>|Σα − S~|</c>. Dong &amp; Xu 2020 use
+    /// <c>1.0</c>, which is the default. Set to <c>0</c> to disable the term.
+    /// </param>
+    public CifAlignmentLayer(
+        int encoderDim,
+        double threshold = 1.0,
+        double tailThreshold = 0.5,
+        bool alphaScalingEnabled = true,
+        double quantityLossWeight = 1.0)
         : base(new[] { -1, -1, encoderDim }, new[] { -1, -1, encoderDim })
     {
+        AlphaScalingEnabled = alphaScalingEnabled;
+        QuantityLossWeight = quantityLossWeight;
         if (encoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(encoderDim));
         // Reject non-finite thresholds first: NaN slips past every relational guard below
         // (NaN < 1.0, NaN > threshold are both false), and ±Inf would corrupt the cumulative
@@ -180,6 +231,43 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         // paper's conv+FC pair while keeping this layer's parameter/gradient plumbing intact.
         var windowed = BuildAlphaWindow(input, B, S, D);
         var alphaTensor = _alphaPredictor.Forward(windowed);  // [B, S, 1]
+
+        // A constant ones column, reused below for both the alpha sum and the broadcasts. Every
+        // combination with it goes through Engine ops so the tape keeps tracking alpha.
+        var onesColumn = new Tensor<T>(new[] { B, S, 1 });
+        for (int i = 0; i < onesColumn.Length; i++) onesColumn[i] = NumOps.One;
+
+        // Σα per batch as a tape-visible reduction: [B, 1, S] x [B, S, 1] = [B, 1, 1].
+        var alphaRowForSum = Engine.Reshape(alphaTensor, [B, 1, S]);
+        var alphaSum = Engine.TensorBatchMatMul(alphaRowForSum, onesColumn);   // [B, 1, 1]
+
+        if (TargetTokenCount is int targetCount && targetCount > 0)
+        {
+            var target = new Tensor<T>(new[] { B, 1, 1 });
+            for (int i = 0; i < target.Length; i++) target[i] = NumOps.FromDouble(targetCount);
+
+            // Quantity loss |Σα − S~| (Dong & Xu 2020 §3.2, weighted by λ₂ = 1.0 by default).
+            // Built from Engine ops so a consumer that folds it into the objective keeps a live
+            // gradient path back to the alpha predictor.
+            var quantityLoss = Engine.TensorAbs(Engine.TensorSubtract(alphaSum, target));
+            T lossSum = NumOps.Zero;
+            for (int i = 0; i < quantityLoss.Length; i++) lossSum = NumOps.Add(lossSum, quantityLoss[i]);
+            LastQuantityLoss = B > 0 ? NumOps.Divide(lossSum, NumOps.FromDouble(B)) : NumOps.Zero;
+
+            // Alpha scaling: multiply every weight by S~/Σα so the integrated count matches the
+            // target. Training-time only, exactly as the paper specifies — at inference the
+            // target length is unknown and the raw alphas decide the output length.
+            if (AlphaScalingEnabled && IsTrainingMode)
+            {
+                var ratio = Engine.TensorDivide(target, alphaSum);                 // [B, 1, 1]
+                var ratioBroadcast = Engine.TensorBatchMatMul(onesColumn, ratio);  // [B, S, 1]
+                alphaTensor = Engine.TensorMultiply(alphaTensor, ratioBroadcast);
+            }
+        }
+        else
+        {
+            LastQuantityLoss = NumOps.Zero;
+        }
 
         T thresh = _threshold;
         T tailThresh = _tailThreshold;
@@ -289,11 +377,8 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         // [B, 1, S] gives α as a row, and multiplying a constant [B, S, 1] column of ones by it
         // produces alphaB[b, j, t] = α_t for every j. Both operands stay tape-visible, so this
         // is the link through which the alpha predictor actually learns.
-        var ones = new Tensor<T>(new[] { B, S, 1 });
-        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
-
         var alphaRow = Engine.Reshape(alphaTensor, [B, 1, S]);
-        var alphaB = Engine.TensorBatchMatMul(ones, alphaRow);          // [B, S, S]
+        var alphaB = Engine.TensorBatchMatMul(onesColumn, alphaRow);    // [B, S, S]
 
         // W = A ⊙ αB + C, then out = W · h.
         var weights = Engine.TensorAdd(Engine.TensorMultiply(coeff, alphaB), constant);
