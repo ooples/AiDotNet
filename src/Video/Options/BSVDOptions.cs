@@ -73,6 +73,30 @@ public class BSVDOptions : NeuralNetworkOptions
     /// <summary>Gets or sets the number of U-Net encoder/decoder levels.</summary>
     public int NumLevels { get; set; } = 3;
 
+    /// <summary>
+    /// Gets or sets the number of sequential U-Nets in the denoising backbone.
+    /// </summary>
+    /// <value>Defaults to 2 — the paper's W-Net.</value>
+    /// <remarks>
+    /// <para>Qi et al. 2022 (arXiv:2207.06937) build the backbone from "two light-weight U-Nets"
+    /// forming a W-Net, and their ablation measures +0.40 dB for the second stage over a single
+    /// U-Net. The shared video-denoising factory previously used here emitted only one
+    /// encoder/decoder stack.</para>
+    /// <para><b>For Beginners:</b> The video is cleaned twice in a row — the second pass refines
+    /// what the first left behind. Setting this to 1 gives the cheaper single-pass model.</para>
+    /// </remarks>
+    public int NumUNetStages { get; set; } = 2;
+
+    /// <summary>
+    /// Gets or sets the shifted-channel ratio <c>r</c> used by temporal fusion.
+    /// </summary>
+    /// <value>Defaults to 8, the paper's value.</value>
+    /// <remarks>
+    /// Per the paper, <c>floor(C_f / r)</c> channels shift per direction, so a larger <c>r</c>
+    /// mixes fewer channels across time.
+    /// </remarks>
+    public int ShiftedChannelRatio { get; set; } = 8;
+
     #endregion
 
     #region Model Loading
@@ -88,7 +112,13 @@ public class BSVDOptions : NeuralNetworkOptions
     #region Training
 
     /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 1e-4;
+    /// <value>Defaults to 1e-3, the paper's initial Adam learning rate.</value>
+    /// <remarks>
+    /// Qi et al. 2022 (arXiv:2207.06937) train with Adam at an initial 1e-3, decayed by 0.7 every
+    /// 50,000 iterations over 700,000 iterations. This previously defaulted to 1e-4, an order of
+    /// magnitude below the published value.
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-3;
 
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.0;

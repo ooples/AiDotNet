@@ -47,10 +47,14 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Blind Spot Video Denoising: Bidirectional Streaming for Real-Time Video Denoising",
-    "https://arxiv.org/abs/2206.03428",
+// BSVD stands for Bidirectional Streaming Video Denoising. The previous title here,
+// "Blind Spot Video Denoising", named an unrelated technique — blind-spot networks are a
+// self-supervised denoising family — and the arXiv id pointed elsewhere. Corrected to the
+// published title and identifier.
+[ResearchPaper("Real-time Streaming Video Denoising with Bidirectional Buffers",
+    "https://arxiv.org/abs/2207.06937",
     Year = 2022,
-    Authors = "Zhenyue Qi, Yiran Zhong, Dongwei Ren, Wangmeng Zuo")]
+    Authors = "Chenyang Qi, Junming Chen, Xin Yang, Qifeng Chen")]
 public class BSVD<T> : VideoDenoisingBase<T>
 {
     private readonly BSVDOptions _options;
@@ -132,9 +136,10 @@ public class BSVD<T> : VideoDenoisingBase<T>
             // depth dimension is just `channels`, but the conv was built for
             // `channels * 5` (the helper's default temporalFrames=5).
             int temporalFrames = Architecture.InputFrames > 0 ? Architecture.InputFrames : 5;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoDenoisingLayers(
+            Layers.AddRange(LayerHelper<T>.CreateDefaultBSVDLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w,
-                numFeatures: _options.NumFeatures, temporalFrames: temporalFrames));
+                numFeatures: _options.NumFeatures, temporalFrames: temporalFrames,
+                numUNetStages: _options.NumUNetStages));
         }
     }
 
