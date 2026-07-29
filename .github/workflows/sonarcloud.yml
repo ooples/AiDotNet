@@ -1170,7 +1170,12 @@ jobs:
             'TopLevel - Audio/Onnx/Tokenization'
           )
           $heavyShard = $heavyShards -contains $shardName
-          $serializeShard = $heavyShard
+          # Generated D-F's formerly multi-GB fixtures are now FP32/bounded, and an exact
+          # 4-core/16-GB trace stays near 1 GB while serial execution uses only 1-2 cores and
+          # cannot fit the 45-minute budget. Keep heavy-shard coverage disabled and memory
+          # telemetry enabled, but let this one shard use the repository's four-thread xUnit
+          # default. All other heavy shards retain one-at-a-time model loading.
+          $serializeShard = $heavyShard -and $shardName -ne 'ModelFamily - Generated Layers D-F'
           $collectCoverage = -not $heavyShard
           Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 
@@ -1229,7 +1234,7 @@ jobs:
           # shards we rewrite the copied runner config to serialize collection
           # execution (one model in flight at a time). Every other shard keeps
           # the parallel JSON default and runs full-speed.
-          if ($heavyShard) {
+          if ($serializeShard) {
             $projDir = Split-Path -Parent '${{ matrix.shard.project }}'
             $runnerJson = Join-Path $projDir 'bin/Release/${{ matrix.shard.framework }}/xunit.runner.json'
             if (Test-Path $runnerJson) {
