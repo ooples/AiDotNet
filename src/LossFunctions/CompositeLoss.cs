@@ -128,8 +128,41 @@ public class CompositeLoss<T> : LossFunctionBase<T>
         for (int i = 0; i < _losses.Length; i++)
         {
             var term = _losses[i].ComputeTapeLoss(predicted, target);
+
+            // Loss implementations disagree on the SHAPE of their scalar result: some return a rank-1
+            // [1] tensor and others a rank-0 scalar []. Adding those directly throws
+            // "Tensor shapes must match. Got [1] and []", which aborts the training step and shows up
+            // as the misleading "no parameters changed after training" -- measured with focal ([1])
+            // plus dice ([]) on SAM2. Normalise every term to [1] first; the reshape is an Engine op,
+            // so the tape is preserved.
+            if (term.Length == 1 && term.Shape.Length != 1)
+            {
+                term = Engine.Reshape(term, new[] { 1 });
+            }
+
             var scaled = Engine.TensorMultiplyScalar(term, _weights[i]);
-            accumulated = accumulated is null ? scaled : Engine.TensorAdd(accumulated, scaled);
+
+            if (accumulated is null)
+            {
+                accumulated = scaled;
+                continue;
+            }
+
+            bool sameShape = accumulated.Shape.Length == scaled.Shape.Length;
+            for (int d = 0; sameShape && d < scaled.Shape.Length; d++)
+            {
+                sameShape = accumulated.Shape[d] == scaled.Shape[d];
+            }
+
+            if (!sameShape)
+            {
+                throw new InvalidOperationException(
+                    $"Composite loss term {i} produced shape [{string.Join(",", scaled.Shape)}] but the " +
+                    $"running total has shape [{string.Join(",", accumulated.Shape)}]. All terms must " +
+                    "reduce the same prediction to a comparable scalar.");
+            }
+
+            accumulated = Engine.TensorAdd(accumulated, scaled);
         }
 
         return accumulated!;
