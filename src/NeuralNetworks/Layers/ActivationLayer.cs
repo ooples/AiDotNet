@@ -82,6 +82,10 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => false;
 
+    /// <inheritdoc/>
+    /// <remarks>An activation is applied elementwise, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <summary>
     /// Creates a new activation layer that applies a scalar activation function to each value individually.
     /// <para>

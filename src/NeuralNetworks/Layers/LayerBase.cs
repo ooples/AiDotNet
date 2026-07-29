@@ -604,8 +604,89 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <param name="input">The input tensor whose shape determines the deferred dims.</param>
     protected virtual void OnFirstForward(Tensor<T> input)
     {
-        // Default: do nothing. Layers with deferred shape override this.
+        // Shape-preserving layers adopt the incoming shape. Everything else defers to its own
+        // override; the base default stays a no-op so no existing layer changes behaviour.
+        if (!IsShapePreserving) return;
+
+        var shape = input.Shape.ToArray();
+        if (shape.Length < 2) return;
+
+        var perSample = new int[shape.Length - 1];
+        Array.Copy(shape, 1, perSample, 0, perSample.Length);
+        ResolveShapes(perSample, perSample);
     }
+
+    /// <summary>
+    /// <c>true</c> for layers whose output has exactly the same shape as their input.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Such layers declare wildcard shapes because they accept anything, and
+    /// <see cref="GetOutputShape"/> returns the DECLARED shape — so without this they keep
+    /// reporting <c>[-1]</c> even after being resolved. Anything that walks a layer list deriving
+    /// each layer's input from the previous layer's output then hits a wildcard and stops, which
+    /// leaves every subsequent layer lazy.
+    /// </para>
+    /// <para>
+    /// Keras takes the opposite default: <c>Layer.compute_output_shape</c> returns the input shape
+    /// unchanged unless a layer overrides it. This flag is the opt-in equivalent — nothing changes
+    /// for a layer that does not set it.
+    /// </para>
+    /// </remarks>
+    protected virtual bool IsShapePreserving => false;
+
+    /// <summary>
+    /// Verifies, once, that what <see cref="Forward"/> actually produced matches the shape this
+    /// layer reports.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Neither PyTorch nor Keras does this. PyTorch has no static shape contract to check; Keras
+    /// computes output shapes but never reconciles them against a real forward. A layer that
+    /// reports one shape and produces another is silently wrong, and the damage shows up far from
+    /// the cause.
+    /// </para>
+    /// <para>
+    /// Every defect of this class found while stabilising the generated model suites was exactly
+    /// that disagreement, and each took hours to locate by hand: ABINet reporting 1,718,624
+    /// parameters where the same model after a forward reported 4,281,376; ReshapeLayer counting
+    /// 256 elements against a 131072-element target; APNet2's restored clone predicting
+    /// differently from the model it was cloned from. This turns all of them into an immediate,
+    /// named failure at the layer that caused it.
+    /// </para>
+    /// <para>
+    /// Runs only on the first forward after resolution, so it costs one shape comparison per layer
+    /// per model instance.
+    /// </para>
+    /// </remarks>
+    /// <param name="output">The tensor <see cref="Forward"/> returned.</param>
+    protected void VerifyReportedOutputShape(Tensor<T> output)
+    {
+        if (_reportedOutputShapeVerified) return;
+        _reportedOutputShapeVerified = true;
+
+        var reported = GetOutputShape();
+        if (reported is null || reported.Length == 0) return;
+        if (ShapeContainsSentinel(reported)) return;   // still deferred; nothing to check yet
+
+        var actual = output.Shape.ToArray();
+        // Reported shapes exclude the batch axis; compare against the actual per-sample shape.
+        if (actual.Length != reported.Length + 1) return;
+
+        for (int i = 0; i < reported.Length; i++)
+        {
+            if (reported[i] == actual[i + 1]) continue;
+
+            throw new InvalidOperationException(
+                $"{GetType().Name} reports an output shape of [{string.Join(", ", reported)}] but its forward " +
+                $"produced [{string.Join(", ", actual)}] (per-sample [{string.Join(", ", actual.Skip(1))}]). " +
+                "A layer whose declared shape disagrees with what it computes corrupts every consumer " +
+                "that sizes itself from the declaration — parameter-vector slicing, chain resolution and " +
+                "ONNX export all read it.");
+        }
+    }
+
+    private bool _reportedOutputShapeVerified;
 
     /// <summary>
     /// Resolves a deferred-shape layer's input and output shapes. Call from inside an

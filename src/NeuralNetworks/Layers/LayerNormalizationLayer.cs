@@ -147,6 +147,10 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc/>
+    /// <remarks>Normalization is elementwise over the feature axis, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <summary>
     /// Indicates whether this layer supports GPU-resident execution.
     /// </summary>

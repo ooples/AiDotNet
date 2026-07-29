@@ -177,6 +177,10 @@ public class DropoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc/>
+    /// <remarks>Dropout masks elements in place, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DropoutLayer{T}"/> class.
     /// </summary>
