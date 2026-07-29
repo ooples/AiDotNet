@@ -623,7 +623,20 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var resolved = new int[input.Shape.Length];
         for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
-        ResolveShapes(resolved, resolved);
+
+        // The output keeps the embedding width but NOT the sequence length. A decoder emits one
+        // position per TARGET token, which is not this layer's input length and is not the same
+        // from call to call -- UDOP drives it with 4 positions and then 2.
+        //
+        // Declaring output == input made the declaration not merely wrong but stale: it froze
+        // whatever the first input happened to be, and every later forward contradicted it
+        // ([4, 32] declared, [2, 32] produced). There is no single correct constant, so the
+        // sequence axis stays dynamic and only the width is committed to.
+        var declaredOutput = new int[resolved.Length];
+        for (int i = 0; i < resolved.Length; i++) declaredOutput[i] = LayerShape.Dynamic;
+        declaredOutput[resolved.Length - 1] = _embeddingSize;
+
+        ResolveShapes(resolved, declaredOutput);
     }
 
     /// <summary>

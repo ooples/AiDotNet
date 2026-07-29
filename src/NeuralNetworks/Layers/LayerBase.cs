@@ -527,6 +527,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         && OutputShape is not null && !ShapeContainsSentinel(OutputShape);
 
     /// <summary>
+    /// <c>true</c> once first-forward setup has run, whether or not every axis ended up concrete.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="EnsureInitializedFromInput"/> used to gate first-forward setup on
+    /// <see cref="IsShapeResolved"/>, which asks whether every declared axis is a concrete
+    /// number. That is a different question from "has this layer been set up", and the two come
+    /// apart for any layer with a genuinely dynamic axis.
+    /// </para>
+    /// <para>
+    /// A transformer decoder is the clear case: its parameters depend only on the embedding
+    /// width, known as soon as it sees an input, but its OUTPUT length is the target length and
+    /// changes call to call. Gating on "every axis concrete" forced it to choose between
+    /// declaring a length it does not keep -- UDOP's decoder declared [4, 32] then produced
+    /// [2, 32] -- and never counting as set up, re-running setup on every pass.
+    /// </para>
+    /// </remarks>
+    private bool _firstForwardRan;
+
+    /// <summary>
     /// Proactively declares this layer's parameter shapes WITHOUT requiring a forward pass.
     /// Returns <c>true</c> if the layer is in a state where shape-dependent post-processing
     /// (LoRA wrapping, parameter introspection, ONNX export prep) can run successfully —
@@ -706,8 +726,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (resolvedOutputShape is null) throw new ArgumentNullException(nameof(resolvedOutputShape));
         if (ShapeContainsSentinel(resolvedInputShape))
             throw new ArgumentException("Resolved input shape still contains a -1 placeholder.", nameof(resolvedInputShape));
-        if (ShapeContainsSentinel(resolvedOutputShape))
-            throw new ArgumentException("Resolved output shape still contains a -1 placeholder.", nameof(resolvedOutputShape));
+        // The OUTPUT may legitimately keep a dynamic axis. A layer whose output length is decided
+        // by something other than its own input -- a decoder emitting one position per TARGET
+        // token, cross-attention emitting one per query -- has no honest concrete value to give,
+        // and forcing one is what produced declarations the forward then contradicted.
+        //
+        // The INPUT still must be concrete: it is the shape actually being handed to this layer,
+        // so a dynamic entry there means the caller does not know what it is passing.
+        //
+        // Keras allows exactly this asymmetry, returning None per axis from compute_output_shape
+        // while build(input_shape) receives a real shape. See LayerShape for the richer form,
+        // where a dynamic axis can also be NAMED so two of them can be asserted equal.
 
         InputShape = resolvedInputShape;
         InputShapes = new[] { resolvedInputShape };
@@ -865,9 +894,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <param name="input">The input tensor whose shape resolves the deferred dims.</param>
     protected void EnsureInitializedFromInput(Tensor<T> input)
     {
-        if (!IsShapeResolved)
+        if (!_firstForwardRan && !IsShapeResolved)
         {
             OnFirstForward(input);
+            _firstForwardRan = true;
             RegisterStreamingWeightsWithPool();
         }
         EnsureInitialized();
