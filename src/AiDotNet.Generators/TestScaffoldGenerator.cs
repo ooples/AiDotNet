@@ -5882,6 +5882,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, " +
                     "VocabSize = 4, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
             }
+            else if (model.ClassName == "SpeakerLM" && model.TypeParameterCount == 1)
+            {
+                // SpeakerLMOptions.DropoutRate defaults to 0.1, and the training invariants compare
+                // losses ACROSS Train calls. Dropout resamples its mask every forward, so those losses
+                // are drawn from different subnetworks and are not comparable: memorization read
+                // "loss did not strictly decrease" and MoreData read a degradation purely from mask
+                // noise, with parameters barely moving. Disable dropout for the fixture exactly as the
+                // Chirp / ConformerFP / SeACo / SpeechEmotionRecognizer branches do; the production
+                // default stays 0.1 and every dimension remains configurable. Widths are also brought
+                // to CI-smoke scale (paper defaults: 768-wide, 6 layers, 12 heads, 256-d embedding).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Speaker.SpeakerLMOptions { NumMels = 64, EmbeddingDim = 32, " +
+                    "LMHiddenDim = 32, NumLMLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "SeedASR" && model.TypeParameterCount == 1)
             {
                 // Seed-ASR retains its large multilingual encoder/LLM defaults in production.
