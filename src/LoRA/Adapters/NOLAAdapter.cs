@@ -131,7 +131,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
         get
         {
             int inputSize = GetInputShape()[0];
-            int outputSize = GetOutputShape()[0];
+            int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
             int loraParams = (inputSize * Rank) + (Rank * outputSize);
             int nolaParams = 2 * _numBasis;  // coefficients for A and B
             return (double)loraParams / nolaParams;
@@ -316,7 +316,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private Matrix<T> ReconstructMatrixB()
     {
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         Matrix<T> matrixB = new Matrix<T>(Rank, outputSize);
 
         // Linear combination of basis matrices
@@ -375,7 +375,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
         // Compute NOLA contribution: input * A * B * scaling
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert input to matrix [batchSize, inputSize]
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);

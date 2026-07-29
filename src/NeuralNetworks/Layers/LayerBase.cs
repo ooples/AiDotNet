@@ -1592,6 +1592,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </remarks>
     public int[] GetOutputShape() => OutputShape;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Built from the declared <see cref="OutputShape"/>, whose -1 entries denote axes this layer
+    /// cannot fix. Layers that can name those axes -- so two of them can be asserted equal at
+    /// runtime -- override this to supply the names.
+    /// </remarks>
+    public virtual LayerShape GetOutputLayerShape() => new LayerShape(OutputShape);
+
 
     /// <summary>
     /// Gets the weight matrix for layers that have trainable weights.

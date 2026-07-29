@@ -605,7 +605,7 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Calculate dimensions
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

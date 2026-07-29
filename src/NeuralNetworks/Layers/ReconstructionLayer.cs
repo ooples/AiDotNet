@@ -131,8 +131,8 @@ public class ReconstructionLayer<T> : LayerBase<T>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
-        metadata["Hidden1Dim"] = _fc1.GetOutputShape()[0].ToString();
-        metadata["Hidden2Dim"] = _fc2.GetOutputShape()[0].ToString();
+        metadata["Hidden1Dim"] = _fc1.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0].ToString();
+        metadata["Hidden2Dim"] = _fc2.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0].ToString();
         metadata["UseVectorActivation"] = _useVectorActivation.ToString();
         return metadata;
     }

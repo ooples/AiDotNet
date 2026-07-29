@@ -961,7 +961,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 { "EncodedSize", EncodedSize },
                 { "LayerCount", Layers.Count },
                 { "IsSymmetric", true },
-                { "LayerSizes", Layers.Select(l => l.GetOutputShape()[0]).ToArray() }
+                { "LayerSizes", Layers.Select(l => l.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]).ToArray() }
             }
         };
     }

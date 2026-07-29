@@ -122,7 +122,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Calculate scaling
         _scaling = NumOps.Divide(_loraLayer.Alpha, NumOps.FromDouble(rank));
@@ -172,7 +172,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         get
         {
             int inputSize = GetInputShape()[0];
-            int outputSize = GetOutputShape()[0];
+            int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
             int lohaParams = 2 * Rank * inputSize * outputSize;
             return _freezeBaseLayer ? lohaParams : (_baseLayer.ParameterCount + lohaParams);
         }
@@ -239,7 +239,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
     {
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert input to matrix [batchSize, inputSize]
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -296,7 +296,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
         int batchSize = lastInput.Shape[0];
         int inputSize = lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert to matrices
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -601,7 +601,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Compute LoHa weight delta: sum over rank of (A[r] ⊙ B[r]) * scaling
         Matrix<T> lohaDelta = new Matrix<T>(inputSize, outputSize);

@@ -24,7 +24,7 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
             scalarActivation: source.ScalarActivation ?? new AiDotNet.ActivationFunctions.IdentityActivation<float>())
     {
         _inputSize = source.GetInputShape()[0];
-        _outputSize = source.GetOutputShape()[0];
+        _outputSize = source.GetOutputLayerShape().RequireConcrete("Sizing a quantized dense layer's weight block")[0];
 
         if (source.VectorActivation != null)
             throw new InvalidOperationException("QuantizedDenseLayer scalar-activation ctor called for a vector-activation layer.");
@@ -47,7 +47,7 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
             vectorActivation: vectorActivation)
     {
         _inputSize = source.GetInputShape()[0];
-        _outputSize = source.GetOutputShape()[0];
+        _outputSize = source.GetOutputLayerShape().RequireConcrete("Sizing a quantized dense layer's weight block")[0];
 
         var weights = source.GetWeights();
         var biases = source.GetBiases();

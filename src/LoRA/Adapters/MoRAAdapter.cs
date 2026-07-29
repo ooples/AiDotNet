@@ -175,7 +175,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         : base(baseLayer, rank, alpha, freezeBaseLayer)
     {
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         if (inputSize != outputSize)
         {
@@ -359,7 +359,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
     protected override LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         // Minimal rank=1 to minimize memory overhead of unused layer
         return new LoRALayer<T>(inputSize, outputSize, 1, alpha);
     }
@@ -511,7 +511,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
                 // The _loraLayer is created in CreateLoRALayer, so it should be available.
                 // Its parameter count is needed for the base class's internal parameter management.
                 // CreateLoRALayer uses rank=1 for the placeholder LoRA layer.
-                int loraLayerParams = (int)(_loraLayer?.ParameterCount ?? (GetInputShape()[0] * 1 + GetOutputShape()[0] * 1));
+                int loraLayerParams = (int)(_loraLayer?.ParameterCount ?? (GetInputShape()[0] * 1 + GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0] * 1));
                 return baseLayerParams + loraLayerParams;
             }
             else
@@ -535,7 +535,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         fullAdaptation = fullAdaptation.Multiply(scalingFactor);
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Get the original base layer weights
         DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;

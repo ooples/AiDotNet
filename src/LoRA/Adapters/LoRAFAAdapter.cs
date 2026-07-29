@@ -183,7 +183,7 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> loraGrads = _loraLayer.GetParameterGradients();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int rank = _loraLayer.Rank;
         int matrixAParamCount = inputSize * rank;
         int matrixBParamCount = rank * outputSize;
@@ -302,7 +302,7 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
         // Both DenseLayer and FullyConnectedLayer store parameters as [weights..., biases...]
         // We need to add the LoRA weights to the base weights
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

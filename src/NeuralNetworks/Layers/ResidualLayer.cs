@@ -577,7 +577,7 @@ public class ResidualLayer<T> : LayerBase<T>
             // DenseLayer still deserialize via the fallback path below.
             metadata["InnerLayerType"] = _innerLayer.GetType().AssemblyQualifiedName ?? _innerLayer.GetType().FullName ?? string.Empty;
             metadata["InnerInputSize"] = _innerLayer.GetInputShape()[0].ToString();
-            metadata["InnerOutputSize"] = _innerLayer.GetOutputShape()[0].ToString();
+            metadata["InnerOutputSize"] = _innerLayer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0].ToString();
         }
         return metadata;
     }

@@ -192,7 +192,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize delta weights and velocity matrices
         // Use [inputSize, outputSize] to match DenseLayer's industry standard convention
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int inputSize = GetInputShape()[0];
         _deltaWeights = new Matrix<T>(inputSize, outputSize);
         _velocity = new Matrix<T>(inputSize, outputSize);
@@ -496,7 +496,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

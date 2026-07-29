@@ -127,7 +127,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
             if (_scalingVectorD == null || _scalingVectorB == null)
             {
                 // Return expected size based on layer dimensions and rank
-                int outputSize = GetOutputShape()[0];
+                int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
                 int veraParams = outputSize + Rank;
                 return _freezeBaseLayer ? veraParams : (_baseLayer.ParameterCount + veraParams);
             }
@@ -174,7 +174,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Ensure shared matrices are initialized
         if (_sharedMatrixA == null || _sharedMatrixB == null)
@@ -316,7 +316,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         // VeRA doesn't use a standard LoRA layer, but we need to satisfy the base class
         // Create a minimal LoRA layer that won't be used
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // IMPORTANT: Initialize scaling vectors here because this is called from the base constructor
         // BEFORE ParameterCount is accessed. If we wait until the VeRAAdapter constructor body,
@@ -366,7 +366,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         // VeRA forward: d * (B * A * input) * b * scaling
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert input to matrix [batchSize, inputSize]
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -623,7 +623,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int rank = _scalingVectorB.Length;
 
         // Compute VeRA weight contribution: d * B * A * b * scaling
