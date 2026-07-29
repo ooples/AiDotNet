@@ -5296,24 +5296,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 4, NumQuantiles = 3, DropoutRate = 0.0, " +
                     "WarmupSteps = 2, TotalSteps = 16 })";
             }
-            else if (model.ClassName == "LLMTime" && model.TypeParameterCount == 1)
-            {
-                // LLMTime keeps its paper defaults in production: a 512-context, 96-horizon,
-                // 768-wide, 12-layer transformer that additionally draws NumSamples = 20 sampled
-                // trajectories per forecast, so a single Predict is 20 passes through the stack.
-                // On the J-L shard that produced ELEVEN OutOfMemoryExceptions — the whole class
-                // cascaded, because once one test OOMs the ones after it have no headroom left.
-                // Exercise the same tokenization -> transformer -> sampled-decoding path through
-                // the public options at CI-smoke scale, mirroring the TimeGPT bound below.
-                // NumSamples is cut hardest since it multiplies every forward.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 64, outputSize: 8), " +
-                    "new AiDotNet.Models.Options.LLMTimeOptions<double> { ContextLength = 64, " +
-                    "ForecastHorizon = 8, HiddenDimension = 64, NumLayers = 2, NumHeads = 4, " +
-                    "NumSamples = 2, DropoutRate = 0.0 })";
-            }
             else if (model.ClassName == "Sundial" && model.TypeParameterCount == 1)
             {
                 // Sundial retains its paper-scale 2,048-step context, 1,024-wide,
@@ -11935,12 +11917,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // [B, ForecastHorizon, NumQuantiles], not the default [1, 1]).
             bool usesReducedChronosBoltFixture = model.ClassName == "ChronosBolt";
             bool usesReducedSundialFixture = model.ClassName == "Sundial";
-            // LLMTime shares TimeGPT's reduced geometry exactly (ContextLength 64 / ForecastHorizon 8
-            // in its constructorExpr), so it takes the same ctx/output-shape pair. Without this the
-            // fixture kept feeding the paper-scale 512-element context into a 64-context model and
-            // every invariant failed with "ReshapeLayer per-sample input element count (512) does not
-            // match output element count (64)".
-            bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT" || model.ClassName == "LLMTime";
+            bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT";
+            // LLMTime's constructorExpr special-case builds it at ContextLength = 32 (HiddenDimension
+            // 32, ForecastHorizon 8) — NOT the 64 TimeGPT uses. It was previously grouped with the
+            // TimeGPT fixture, whose paperCtx is 64, so the fixture fed a 64-element series into a
+            // 32-context model and every LLMTime invariant threw "ReshapeLayer per-sample input
+            // element count (64) does not match output element count (32)". Its geometry is its own:
+            // input context 32 (matching GetForecastingPaperContextLength), forecast horizon 8.
+            bool usesReducedLlmTimeFixture = model.ClassName == "LLMTime";
             bool usesReducedRwkvFixture = model.ClassName == "RWKVForecaster";
             bool usesReducedAutoformerFixture = model.ClassName == "Autoformer";
             int paperCtx = usesReducedChronosBoltFixture
@@ -11958,7 +11942,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 ? "8, 3"
                 : usesReducedSundialFixture
                     ? "8"
-                : usesReducedTimeGptFixture || usesReducedRwkvFixture
+                : usesReducedTimeGptFixture || usesReducedRwkvFixture || usesReducedLlmTimeFixture
                     ? "8"
                 : usesReducedAutoformerFixture
                     ? "1, 4, 4"
