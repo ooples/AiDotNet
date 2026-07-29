@@ -5882,6 +5882,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, " +
                     "VocabSize = 4, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
             }
+            else if (model.ClassName == "SALMONN" && model.TypeParameterCount == 1)
+            {
+                // SALMONNOptions.DropoutRate defaults to 0.1 and this fixture used the
+                // architecture-only constructor, so dropout was ACTIVE while the training invariants
+                // compared losses across Train calls. Dropout resamples its mask every forward, so
+                // those losses come from different subnetworks and are not comparable -- the same
+                // defect just proven on SpeakerLM, where zeroing it took the class from 25/28 to 28/28.
+                // Architecture args are byte-identical to what the generic path emitted; only dropout
+                // changes. Production default stays 0.1.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Multimodal.SALMONNOptions { DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "SECBERT" && model.TypeParameterCount == 1)
+            {
+                // Same dropout-noise defect as SALMONN/SpeakerLM: SECBERTOptions<T>.DropoutRate
+                // defaults to 0.1 and the fixture used the architecture-only constructor, so
+                // LossStrictlyDecreasesOnMemorizationTask was comparing losses drawn from different
+                // dropout subnetworks (measured 0.516456 -> 1.140175 with parameters barely moving).
+                // Architecture args match what the generic path emitted; only dropout changes.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    "new AiDotNet.Models.Options.SECBERTOptions<double> { DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "SpeakerLM" && model.TypeParameterCount == 1)
             {
                 // SpeakerLMOptions.DropoutRate defaults to 0.1, and the training invariants compare
