@@ -4494,7 +4494,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
                     "NumLabels = 9, MaxSequenceLength = 16, MaxSpanLength = 4, " +
                     "SpanEmbeddingDimension = 32, NegativeSpanSampleRatio = 5, " +
-                    "DropoutRate = 0.0, LearningRate = 1e-5 })";
+                    "DropoutRate = 0.0, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "BLINKNER" && model.TypeParameterCount == 1)
             {

@@ -316,7 +316,7 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
             // and sequences are truncated to MaxSequenceLength before label alignment.
             var preprocessed = PreprocessTokens(input);
             int validatedSeqLen = preprocessed.Rank == 3 ? preprocessed.Shape[1] : preprocessed.Shape[0];
-            var alignedExpected = PreprocessLabels(expected, validatedSeqLen);
+            var alignedExpected = BuildTrainingTargets(expected, validatedSeqLen);
             // Use the model's configured optimizer. Falling back to NeuralNetworkBase's
             // default Adam step ignores SpanBasedNEROptions.LearningRate (5e-5 for
             // SpERT) and is large enough to make the generated memorization test diverge.
@@ -324,6 +324,20 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         }
         finally { SetTrainingMode(false); }
     }
+
+    /// <summary>
+    /// Shapes the supervision the model is trained against, given token-level labels.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to per-token labels aligned to the encoder's sequence length, which is what a
+    /// token-classification head consumes. Span-scoring heads that emit one score per candidate
+    /// span override this to build span-level supervision instead.
+    /// </remarks>
+    /// <param name="labels">The caller's token-level labels.</param>
+    /// <param name="seqLen">The encoder's validated sequence length.</param>
+    /// <returns>The target tensor to pair with the model's output.</returns>
+    protected virtual Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen)
+        => PreprocessLabels(labels, seqLen);
 
     /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)

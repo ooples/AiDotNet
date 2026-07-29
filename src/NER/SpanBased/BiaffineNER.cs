@@ -137,4 +137,128 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
             return new BiaffineNER<T>(Architecture, p, optionsCopy);
         return new BiaffineNER<T>(Architecture, optionsCopy);
     }
+
+    /// <summary>
+    /// Builds span-level supervision: one label per candidate (start, end) pair.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Yu, Bohnet and Poesio (ACL 2020) score every span into an l x l x c tensor, where c is
+    /// the entity category count PLUS ONE for a dedicated non-entity class, and optimise softmax
+    /// cross-entropy over it. The scorer already emits exactly that tensor, flattened to
+    /// [l * l, c].
+    /// </para>
+    /// <para>
+    /// The supervision did not match it. The base pairs the model's output with per-TOKEN
+    /// labels, [l], so a 16-token sentence produced 256 span rows against 16 labels. Nothing
+    /// related the two, the gradient was identically zero, and the memorization loss sat at
+    /// 14.278996 for all 15 steps while Adam still moved 1.69M parameters by its normalized
+    /// step -- motion that looks like training but carries no signal.
+    /// </para>
+    /// <para>
+    /// Token labels annotate single-token entities, so span (i, j) takes token i's category when
+    /// i == j and the non-entity class otherwise. Class 0 is the non-entity class, matching the
+    /// paper's "+1" slot. Spans with j &lt; i are not entities by the paper's s &lt;= e
+    /// constraint and are labelled non-entity too.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen)
+    {
+        var tokenLabels = PreprocessLabels(labels, seqLen);
+
+        var spanTargets = new Tensor<T>([seqLen * seqLen]);
+        for (int start = 0; start < seqLen; start++)
+        {
+            // A single-token entity occupies the diagonal; every other pair is a non-entity
+            // span and keeps the zero the tensor is already filled with.
+            var category = tokenLabels.Rank == 1 ? tokenLabels[start] : tokenLabels[0, start];
+            spanTargets[(start * seqLen) + start] = category;
+        }
+
+        // The target is a leaf, so the sampled rows are copied directly rather than gathered
+        // through the engine — no gradient flows through it and TensorIndexSelect is 2D-only.
+        var sampled = SampledSpanIndices(seqLen);
+        var sampledTargets = new Tensor<T>([sampled.Length]);
+        for (int i = 0; i < sampled.Length; i++)
+            sampledTargets[i] = spanTargets[sampled[i]];
+
+        return sampledTargets;
+    }
+
+    /// <summary>
+    /// Restricts the training forward to the sampled spans, so the objective sees the same rows
+    /// its targets describe.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var allSpans = base.ForwardForTraining(input);
+
+        // TensorIndexSelect is 2D-only, so a batched [B, l*l, c] output is left alone; the
+        // generated fixtures produce the unbatched [l*l, c] form the sampling targets.
+        if (allSpans.Rank != 2)
+            return allSpans;
+
+        int rows = allSpans.Shape[0];
+        int seqLen = (int)Math.Round(Math.Sqrt(rows));
+        if (seqLen * seqLen != rows)
+            return allSpans;
+
+        var indices = SampledSpanIndices(seqLen);
+        var indexTensor = new Tensor<int>([indices.Length]);
+        for (int i = 0; i < indices.Length; i++) indexTensor[i] = indices[i];
+
+        return Engine.TensorIndexSelect(allSpans, indexTensor, axis: 0);
+    }
+
+    /// <summary>
+    /// Chooses which of the l*l candidate spans participate in the loss: every diagonal span,
+    /// plus <c>NegativeSpanSampleRatio</c> negatives per token.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Scoring every span makes the label distribution overwhelmingly non-entity — for a
+    /// 16-token sentence, 240 of 256 spans — and the cheapest way to minimise the loss is to
+    /// predict "non-entity" everywhere. That is a real degenerate solution, and the network
+    /// collapsed into it: distinct inputs produced identical outputs after training.
+    /// Negative sampling is the paper's own remedy, and
+    /// <see cref="SpanBasedNEROptions.NegativeSpanSampleRatio"/> already existed to configure
+    /// it while nothing read it.
+    /// </para>
+    /// <para>
+    /// The selection is deterministic and label-independent, because the training forward has
+    /// no access to the labels and must pick exactly the rows the target builder picks. Spans
+    /// longer than <see cref="SpanBasedNEROptions.MaxSpanLength"/> are excluded from the
+    /// negative pool, and spans with end &lt; start are never candidates at all — the paper
+    /// constrains s &lt;= e.
+    /// </para>
+    /// </remarks>
+    private int[] SampledSpanIndices(int seqLen)
+    {
+        int ratio = Math.Max(0, NEROptions.NegativeSpanSampleRatio);
+        int maxSpan = NEROptions.MaxSpanLength > 0 ? NEROptions.MaxSpanLength : seqLen;
+
+        var selected = new List<int>(seqLen * (1 + ratio));
+        for (int i = 0; i < seqLen; i++)
+            selected.Add((i * seqLen) + i);
+
+        int budget = seqLen * ratio;
+        if (budget > 0)
+        {
+            var pool = new List<int>();
+            for (int start = 0; start < seqLen; start++)
+                for (int end = start + 1; end < seqLen && (end - start + 1) <= maxSpan; end++)
+                    pool.Add((start * seqLen) + end);
+
+            if (pool.Count > 0)
+            {
+                int stride = Math.Max(1, pool.Count / budget);
+                for (int k = 0; k < pool.Count && selected.Count < seqLen + budget; k += stride)
+                    selected.Add(pool[k]);
+            }
+        }
+
+        selected.Sort();
+
+        return selected.ToArray();
+    }
 }
