@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
@@ -97,7 +98,12 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
                 InitialLearningRate = _options.LearningRate,
                 Beta1 = 0.8,
                 Beta2 = 0.99,
-                WeightDecay = 0.01
+                WeightDecay = 0.01,
+                // "the exponential decay strategy with a decreasing factor of 0.999 per epoch".
+                // Without it the rate stays at its initial value for the whole run, so late
+                // training keeps taking early-training-sized steps.
+                LearningRateScheduler = new ExponentialLRScheduler(_options.LearningRate, gamma: 0.999),
+                SchedulerStepMode = SchedulerStepMode.StepPerEpoch
             });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

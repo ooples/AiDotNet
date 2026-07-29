@@ -8,6 +8,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
 
@@ -174,7 +175,11 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                InitialLearningRate = _options.LearningRate,
+                // "decayed to 1e-5 after 6 epochs" -- a single 10x step at epoch 6.
+                LearningRateScheduler = new MultiStepLRScheduler(
+                    _options.LearningRate, milestones: new[] { 6 }, gamma: 0.1),
+                SchedulerStepMode = SchedulerStepMode.StepPerEpoch
             });
 
         ImageSize = imageWidth;
