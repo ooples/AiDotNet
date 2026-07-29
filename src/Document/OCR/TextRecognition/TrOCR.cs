@@ -182,7 +182,11 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _patchSize = patchSize;
         _vocabSize = vocabSize;
         _maxSequenceLength = maxSequenceLength;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         ImageSize = Math.Max(imageHeight, imageWidth);
         MaxSequenceLength = maxSequenceLength;
@@ -253,7 +257,11 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _patchSize = patchSize;
         _vocabSize = vocabSize;
         _maxSequenceLength = maxSequenceLength;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         ImageSize = Math.Max(imageHeight, imageWidth);
         MaxSequenceLength = maxSequenceLength;

@@ -89,7 +89,11 @@ public class GaVS<T> : VideoStabilizationBase<T>
     {
         _options = options ?? new GaVSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         SmoothingWindowSize = _options.SmoothingWindow;
         InitializeLayers();
     }
