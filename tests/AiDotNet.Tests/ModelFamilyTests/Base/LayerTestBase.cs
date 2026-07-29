@@ -785,14 +785,38 @@ public abstract class LayerTestBase
         //      ParameterCount is NonZeroCount + OutputFeatures, confirming the stored values are
         //      the trainable set.
         // Dense parameters keep the exact previous behaviour (flat index over Length).
+        // Access the sparse payload through DataVector.AsSpan(), NOT through the Values property:
+        // `public T[] Values => DataVector.ToArray()` allocates a FRESH COPY on every access, so the
+        // earlier `sp.Values[i] = v` wrote into a throwaway array and never perturbed the parameter.
+        // Both finite-difference evaluations therefore saw identical weights, making the numerical
+        // gradient exactly 0 for every sparse entry while the analytical gradient was non-zero —
+        // which is what produced "disagrees ... on 5/12 sampled trainable scalars" (the entries that
+        // "agreed" were simply the ones whose analytical gradient was also ~0). Same copy-versus-view
+        // trap as Tensor<T>.ToVector(); AsSpan() is the documented zero-copy path.
         static int TrainableScalarCount(Tensor<double> p) =>
             p is SparseTensor<double> sp ? sp.NonZeroCount : p.Length;
         static double ReadScalar(Tensor<double> p, int i) =>
-            p is SparseTensor<double> sp ? sp.Values[i] : p[i];
+            p is SparseTensor<double> sp ? sp.DataVector[i] : p[i];
         static void WriteScalar(Tensor<double> p, int i, double v)
         {
-            if (p is SparseTensor<double> sp) sp.Values[i] = v;
+            if (p is SparseTensor<double> sp) sp.DataVector[i] = v;
             else p[i] = v;
+        }
+        // The analytical gradient of a SPARSE parameter is not necessarily sparse. When it comes back
+        // DENSE, index i (a position in the sparse nnz payload) addresses a completely different
+        // matrix entry in a dense flat buffer, so comparing them positionally checks unrelated
+        // numbers. Map through the COO coordinates instead. A sparse gradient shares the parameter's
+        // payload layout, so it is read directly.
+        static double ReadAnalyticalScalar(Tensor<double> grad, Tensor<double> param, int i)
+        {
+            if (grad is SparseTensor<double> gsp) return gsp.DataVector[i];
+            if (param is SparseTensor<double> psp)
+            {
+                int cols = psp.Shape[psp.Shape.Length - 1];
+                int flat = psp.RowIndices[i] * cols + psp.ColumnIndices[i];
+                return flat >= 0 && flat < grad.Length ? grad.DataVector[flat] : 0.0;
+            }
+            return grad[i];
         }
 
         foreach (var param in trainableParams)
@@ -815,7 +839,7 @@ public abstract class LayerTestBase
                 WriteScalar(param, idx, original);
 
                 double numerical = (lossPlus - lossMinus) / (2.0 * Eps);
-                double analytical = ReadScalar(analyticalGrad, idx);
+                double analytical = ReadAnalyticalScalar(analyticalGrad, param, idx);
                 double absDiff = Math.Abs(numerical - analytical);
                 double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
 
