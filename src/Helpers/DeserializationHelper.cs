@@ -306,6 +306,12 @@ public static class DeserializationHelper
             int ratio = TryGetInt(additionalParams, "ShiftedChannelRatio") ?? 8;
             instance = new TemporalShiftLayer<T>(ratio);
         }
+        else if (genericDef == typeof(GatedFusionLayer<>))
+        {
+            // ABINet's gated fusion of the vision and language streams (Fang et al., CVPR 2021).
+            int width = TryGetInt(additionalParams, "Width") ?? 1;
+            instance = new GatedFusionLayer<T>(width);
+        }
         else if (genericDef == typeof(StopGradientLayer<>))
         {
             // Parameter-free gradient barrier (ABINet's Autonomous principle).

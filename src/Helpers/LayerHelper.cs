@@ -11621,10 +11621,12 @@ public static class LayerHelper<T>
     /// Creates ABINet's language model (LM): the gradient barrier followed by the Bidirectional
     /// Cloze Network.
     /// </summary>
+    /// <param name="charsetSize">Character set size — the width of the probability vectors the LM consumes.</param>
     /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
     /// <param name="languageDim">Language model dimension (default: 512).</param>
     /// <returns>The layers forming ABINet's language model.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultABINetLanguageLayers(
+        int charsetSize,
         int visionDim = 512,
         int languageDim = 512)
     {
@@ -11634,22 +11636,30 @@ public static class LayerHelper<T>
         // flow is BLOCKED between the vision model and the language model, so the two train as
         // independent functional units and the LM is forced to learn explicit language modelling
         // instead of becoming an extension of the visual features. The paper's ablation measures
-        // roughly 0.9% worse accuracy when that gradient is allowed through.
+        // roughly 0.9% worse accuracy when that gradient is allowed through. The paper blocks
+        // "at input vectors", so the barrier heads this branch.
         //
-        // The barrier heads the LM branch. It is only sound because the VM carries its own loss
-        // term: in the paper the VM is supervised by L_v, so blocking the LM's gradient removes
-        // one path into the VM rather than every path. Placed in a single-loss sequential chain
-        // this same layer left the entire vision encoder with no gradient source at all, and the
-        // memorization loss sat flat at 0.2746 across 20 steps.
+        // It is only sound because the VM carries its own loss term: in the paper the VM is
+        // supervised by L_v, so blocking the LM's gradient removes one path into the VM rather
+        // than every path. Placed in a single-loss sequential chain this same layer left the
+        // entire vision encoder with no gradient source at all, and the memorization loss sat
+        // flat at 0.2746 across 20 steps.
         yield return new StopGradientLayer<T>();
 
-        // Language refinement consumes the visual token embeddings produced
-        // above. An EmbeddingLayer here was structurally invalid in a
-        // sequential graph: it interpreted continuous visual features as
-        // discrete character IDs. Project only when the language width differs,
-        // then run bidirectional attention over the continuous token sequence.
-        if (visionDim != languageDim)
-            yield return new DenseLayer<T>(languageDim, identityActivation);
+        // The LM consumes CHARACTER PROBABILITY VECTORS, not visual features. The paper is
+        // explicit: "the LM is regarded as an independent model of spelling correction which
+        // takes probability vectors of characters as input and outputs probability
+        // distributions of expected characters". This branch is therefore fed the vision head's
+        // charset-wide logits, and the softmax here turns them into the probability vectors the
+        // BCN is defined over.
+        //
+        // Feeding it the raw visual features instead — as this did — makes the "language model"
+        // a second vision stage operating on image features, which is precisely the entanglement
+        // the Autonomous principle exists to prevent.
+        yield return new ActivationLayer<T>((IVectorActivationFunction<T>)new SoftmaxActivation<T>());
+
+        // Project the probability vectors up to the LM's working width.
+        yield return new DenseLayer<T>(languageDim, identityActivation);
 
         // ABINet's BIDIRECTIONAL principle: the language model is a Bidirectional Cloze Network,
         // not ordinary self-attention. Each position attends to every OTHER position in both
@@ -11664,6 +11674,11 @@ public static class LayerHelper<T>
         // which is the very thing the paper's BCN exists to avoid.
         yield return new ClozeAttentionLayer<T>(languageDim);
         yield return new LayerNormalizationLayer<T>();
+
+        // The gated fusion interpolates between the vision and language streams elementwise, so
+        // both must be the same width. Project when the LM runs narrower or wider than the VM.
+        if (languageDim != visionDim)
+            yield return new DenseLayer<T>(visionDim, identityActivation);
     }
 
     /// <summary>
@@ -11680,6 +11695,13 @@ public static class LayerHelper<T>
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Paper section 3.4: the vision and language features are combined by a learned GATE,
+        //   G = sigmoid([F_v, F_l] W_f),  F_f = G * F_v + (1 - G) * F_l
+        // rather than by feeding the language output alone into a refinement stack. This branch
+        // previously never saw F_v at all, so nothing in the model actually fused the two
+        // streams and the "fusion" was just more language-model depth.
+        yield return new GatedFusionLayer<T>(visionDim);
 
         for (int i = 0; i < numIterations; i++)
         {
@@ -11708,9 +11730,13 @@ public static class LayerHelper<T>
     /// Creates default ABINet (Autonomous, Bidirectional, Iterative) layers as one flat chain.
     /// </summary>
     /// <remarks>
-    /// Retained for callers that supply the whole stack as <c>Architecture.Layers</c>. The model's
-    /// native path builds the three branches separately so each can carry its paper loss term.
+    /// The returned sequence is NOT a runnable chain and is retained only so existing callers
+    /// keep compiling. ABINet's real topology forks and rejoins: the language model consumes the
+    /// vision head's character probabilities, and the fusion gate consumes the vision AND
+    /// language features together. A flat list cannot express either join, so the model's native
+    /// path builds the three branches separately. Use the branch factories directly.
     /// </remarks>
+    [Obsolete("ABINet's topology forks and rejoins and cannot be expressed as a flat chain. Use CreateDefaultABINetVisionLayers, CreateDefaultABINetLanguageLayers, CreateDefaultABINetFusionLayers and CreateDefaultABINetBranchHead.")]
     /// <param name="imageWidth">Input image width (default: 128).</param>
     /// <param name="imageHeight">Input image height (default: 32).</param>
     /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
@@ -11728,7 +11754,7 @@ public static class LayerHelper<T>
     {
         foreach (var l in CreateDefaultABINetVisionLayers(imageWidth, imageHeight, visionDim))
             yield return l;
-        foreach (var l in CreateDefaultABINetLanguageLayers(visionDim, languageDim))
+        foreach (var l in CreateDefaultABINetLanguageLayers(charsetSize, visionDim, languageDim))
             yield return l;
         foreach (var l in CreateDefaultABINetFusionLayers(visionDim, numIterations, charsetSize))
             yield return l;
