@@ -624,6 +624,24 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     protected void NotifyEpochStart(int currentEpoch)
     {
+        // Crossing into epoch N means epoch N-1 just ended. Raising the epoch-end event here is
+        // what gives EVERY optimizer an epoch cadence, rather than the one that happened to call
+        // OnEpochEnd itself.
+        //
+        // All 28 gradient optimizers call NotifyEpochStart at the top of their epoch loop, but
+        // only AdamOptimizer called OnEpochEnd at the bottom of its own. So for the other 27, a
+        // user-configured StepPerEpoch or WarmupThenEpoch schedule never advanced: the learning
+        // rate stayed at its initial value for the entire run no matter what schedule was
+        // attached. That is a configured-but-inert mechanism, and silent -- the schedule is
+        // accepted, stored, and simply never consulted.
+        //
+        // Ticking on entry rather than on exit means the final epoch raises no end event. Nothing
+        // observes it: a schedule only affects steps that come after it, and there are none.
+        if (currentEpoch > 0)
+        {
+            OnEpochEnd();
+        }
+
         GradientOptions.DataSampler?.OnEpochStart(currentEpoch);
     }
 
