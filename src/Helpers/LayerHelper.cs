@@ -6356,26 +6356,17 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Encoder transformer layers
+        // Encoder residual-attention blocks. Whisper's encoder is a stack of
+        // residual attention blocks; emitting attention/FFN/norm as unrelated
+        // flat layers drops both residual paths and is not the paper architecture.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDim) / (numHeads));
-
-            // Layer normalization (pre-LN architecture)
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feed-forward network
-            yield return new DenseLayer<T>(ffDim, geluActivation);
-            yield return new DenseLayer<T>(modelDim, identityActivation);
-
-            // Layer normalization
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: modelDim,
+                numHeads: numHeads,
+                ffnDim: ffDim,
+                dropoutRate: dropoutRate,
+                ffnActivation: geluActivation);
         }
 
         // Final encoder layer normalization
@@ -8339,18 +8330,31 @@ public static class LayerHelper<T>
         int h = inputHeight;
         int w = inputWidth;
 
-        // Shallow feature extraction
-        yield return new ConvolutionalLayer<T>(embedDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+        // Shallow feature extraction. The released VRT applies its activation in
+        // the reconstruction/upsampling path; conv_first itself is linear.
+        yield return new ConvolutionalLayer<T>(embedDim, 3, 1, 1,
+            new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Multi-scale feature extraction with encoder structure
         int currentDim = embedDim;
         for (int i = 0; i < 3; i++)
         {
-            // Temporal mutual self-attention approximated with conv blocks
+            // Temporal mutual self-attention approximated with shape-preserving
+            // convolutional branches. A real TMSA block is pre-norm attention plus
+            // an FFN and adds BOTH branches back to the running feature tensor. The
+            // old flat conv chain omitted those skips, so gradients had to cross the
+            // complete encoder/body without an identity path and the paper Adam
+            // schedule diverged even on a one-example memorization task. Keep each
+            // approximation graph-faithful by publishing the branch through the
+            // framework's registered ResidualLayer composite.
             for (int j = 0; j < numBlocks / 4; j++)
             {
-                yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
-                yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+                yield return new ResidualLayer<T>(
+                    new ConvolutionalLayer<T>(currentDim, 3, 1, 1,
+                        new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>));
+                yield return new ResidualLayer<T>(
+                    new ConvolutionalLayer<T>(currentDim, 3, 1, 1,
+                        new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>));
             }
 
             if (i < 2)
@@ -8362,10 +8366,12 @@ public static class LayerHelper<T>
             }
         }
 
-        // Bottleneck with deep features
+        // The paper's deepest RTMSA group is residual as well.
         for (int i = 0; i < numBlocks / 2; i++)
         {
-            yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            yield return new ResidualLayer<T>(
+                new ConvolutionalLayer<T>(currentDim, 3, 1, 1,
+                    new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>));
         }
 
         // Decoder with upsampling for super-resolution
@@ -8392,9 +8398,14 @@ public static class LayerHelper<T>
             h *= 2; w *= 2;
         }
 
-        // Final reconstruction
-        yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
+        // VRT adds the reconstructed body back to its feature stream before the
+        // final projection. Preserve that identity path in this layer-level
+        // approximation too.
+        yield return new ResidualLayer<T>(
+            new ConvolutionalLayer<T>(currentDim, 3, 1, 1,
+                new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>));
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1,
+            new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8728,16 +8739,28 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Working memory network (medium resolution)
-        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        var workingMemoryInput = new ConvolutionalLayer<T>(
+            numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        workingMemoryInput.ResolveShapesOnly(new[] { numFeatures, h, w });
+        yield return workingMemoryInput;
         yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Long-term memory network (compressed)
-        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        // This is another branch from the full query feature map, not a continuation
+        // of the working-memory branch. Resolve the non-sequential input explicitly
+        // so NeuralNetworkBase's generic lazy-shape walk cannot bind it to numFeatures/2.
+        var longTermMemoryInput = new ConvolutionalLayer<T>(
+            numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        longTermMemoryInput.ResolveShapesOnly(new[] { numFeatures, h, w });
+        yield return longTermMemoryInput;
         yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Memory fusion (combines sensory + working + long-term)
         int totalFusionChannels = numFeatures + numFeatures / 2 + numFeatures / 4;
-        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        var memoryFusion = new ConvolutionalLayer<T>(
+            numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        memoryFusion.ResolveShapesOnly(new[] { totalFusionChannels, h, w });
+        yield return memoryFusion;
 
         // Decoder with upsampling
         yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -17725,19 +17748,23 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new LayerNormalizationLayer<T>();
 
-        // Deep transformer encoder (TabPFN uses many layers)
+        // Deep transformer encoder. TabPFN's encoder is a residual Transformer;
+        // attention and the feed-forward sublayer refine the same representation
+        // rather than replacing it. The former bare MHA -> LayerNorm -> Dense ->
+        // Dense -> LayerNorm chain omitted both residual highways. At twelve
+        // layers it could fit briefly, then drift away from an already-good
+        // solution during continued prior fitting (the generated 50-vs-200-step
+        // regression probe reproduced that failure in both float and double).
+        // TransformerEncoderBlock supplies the paper topology: residual
+        // self-attention plus residual GELU FFN with normalization.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
-            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: embeddingDimension,
+                numHeads: numHeads,
+                ffnDim: embeddingDimension * 4,
+                dropoutRate: dropoutRate,
+                ffnActivation: new GELUActivation<T>());
         }
 
         // Output head
@@ -23959,7 +23986,6 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int fusionFfnDim = fusionDim * 4;
 
         // === Vision Feature Projection ===
@@ -23987,9 +24013,6 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>();
         }
 
-        // === Joint Transformer Encoder (BERT-style) ===
-        yield return new LayerNormalizationLayer<T>();
-
         // Snap the head count to a divisor of fusionDim so the attention layer's
         // embeddingDimension (heads * headDim) equals fusionDim EXACTLY. With the
         // raw `numHeads, fusionDim / numHeads` form, any model whose fusionDim is
@@ -23998,18 +24021,21 @@ public static class LayerHelper<T>
         // layer whose lazy weights resolve to the truncated dim and then throw a
         // shape mismatch against the fusionDim-wide residual stream on first
         // forward. See ChooseDivisibleHeadConfig for the snap-to-divisor rationale.
-        var (fusionHeads, fusionHeadDim) = ChooseDivisibleHeadConfig(fusionDim, numHeads);
+        var (fusionHeads, _) = ChooseDivisibleHeadConfig(fusionDim, numHeads);
 
         for (int i = 0; i < numFusionLayers; i++)
         {
-            // Multi-head self-attention over concatenated vision+text tokens
-            yield return new MultiHeadAttentionLayer<T>(fusionHeads, fusionHeadDim);
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward network
-            yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            // UNITER and the other single-stream BERT-family models use a real
+            // Transformer encoder block: self-attention and GELU FFN, each with
+            // its own residual connection and normalization. A flat attention →
+            // dense chain discards the residual stream and is not the architecture
+            // described by any of the papers represented by this helper.
+            yield return new TransformerEncoderBlock<T>(
+                fusionDim,
+                fusionHeads,
+                fusionFfnDim,
+                dropoutRate,
+                geluActivation);
         }
     }
 
@@ -29620,7 +29646,11 @@ public static class LayerHelper<T>
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        // VideoLISA's visual branch is initialized from SAM, whose encoder uses residual
+        // blocks and batch-independent normalization. A Conv(ReLU)->BatchNorm chain is not
+        // equivalent: with the small/single-video batches used for dense segmentation it can
+        // collapse the representation and produce identical masks for distinct frames.
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
         int h = inputHeight, w = inputWidth, inC = inputChannels;
 
         for (int stage = 0; stage < channelDims.Length; stage++)
@@ -29630,14 +29660,24 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, activationFunction: null);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
+            if (stage == 0)
+            {
+                // SAM adds absolute positional information to the patch embeddings before
+                // normalization. Besides preserving spatial identity for mask decoding, placing
+                // it here prevents normalization from making the visual path invariant to a
+                // uniform rescaling of every pixel.
+                yield return new PositionalEncodingLayer<T>(h, w);
+            }
+            yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(outC), outC);
+            yield return new ActivationLayer<T>(silu);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
+                yield return new ResidualLayer<T>(
+                    new ConvolutionalLayer<T>(outC, 3, 1, 1, activationFunction: null), silu);
+                yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(outC), outC);
             }
 
             inC = outC;
@@ -29651,12 +29691,56 @@ public static class LayerHelper<T>
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        // The paper uses SAM's promptable mask decoder to return dense masks. Reverse the
+        // encoder's 32x spatial reduction (2x, 2x, 2x, then 4x) instead of leaving logits
+        // at the 1/32-resolution bottleneck.
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, activationFunction: null);
+        yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(decoderDim), decoderDim);
+        yield return new ActivationLayer<T>(silu);
+
+        for (int stage = 0; stage < 3; stage++)
+        {
+            yield return new DeconvolutionalLayer<T>(decoderDim, 4, 2, 1, activationFunction: null);
+            yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(decoderDim), decoderDim);
+            yield return new ActivationLayer<T>(silu);
+            yield return new ResidualLayer<T>(
+                new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, activationFunction: null), silu);
+        }
+
+        yield return new DeconvolutionalLayer<T>(decoderDim, 4, 4, 0, activationFunction: null);
+        yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(decoderDim), decoderDim);
+        yield return new ActivationLayer<T>(silu);
+        yield return new ResidualLayer<T>(
+            new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, activationFunction: null), silu);
         yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+    }
+
+    /// <summary>
+    /// Selects a GroupNorm group count that keeps at least four channels in each group.
+    /// VideoLISA reaches a 1x1 bottleneck, where a one-channel group would contain only one
+    /// value and therefore normalize the entire visual signal to zero.
+    /// </summary>
+    private static int ChooseVideoLISAGroupCount(int numChannels)
+    {
+        if (numChannels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numChannels), numChannels, "Channel count must be positive.");
+        }
+
+        int[] candidates = [32, 16, 8, 4, 2, 1];
+        foreach (int candidate in candidates)
+        {
+            if (numChannels % candidate == 0 && numChannels / candidate >= 4)
+            {
+                return candidate;
+            }
+        }
+
+        return 1;
     }
 
     #endregion
@@ -32752,7 +32836,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new ExtendedLSTMLayer<T>(maxSeqLength, modelDimension, numHeads);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // Language-model head emits raw logits. XLSTMLanguageModel pairs this with
+        // CrossEntropyWithLogitsLoss, which performs max-shifted log-softmax inside
+        // the loss for finite gradients on eager and compiled training paths.
+        yield return new DenseLayer<T>(vocabSize, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

@@ -273,12 +273,17 @@
          replaces the broken external FaissNet IVF/PQ path.
 
          Bumped 0.118.0 -> 0.119.0: replaces the unpublished 0.118.10-q8 development pin with the
-         released package containing the serving branch's required Tensors APIs. Managed and native
-         packages are coreleased in lockstep. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.119.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.119.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.119.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.119.0" />
+         released package containing the serving branch's required Tensors APIs.
+
+         Bumped 0.119.0 -> 0.120.2: brings the 0.120.0 fused-linear live-gradient fix and the 0.120.2
+         compiled-training COW write-intent boundary. The latter privatizes every registered shared
+         parameter before graph specialization captures writable backing arrays, preserving clone
+         isolation without disabling fused compiled training. Managed and native packages are
+         coreleased in lockstep. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.120.2" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.120.2" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.120.2" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.120.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />

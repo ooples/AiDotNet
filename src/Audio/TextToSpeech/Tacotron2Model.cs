@@ -302,6 +302,14 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     public int MaxDecoderSteps => _maxDecoderSteps;
 
+    /// <summary>
+    /// Tacotron2's autoregressive decoder keeps several component views over
+    /// the published layer graph. Rebuilding those aliases through the normal
+    /// layer deserializer preserves trained predictions exactly; tensor-only
+    /// COW rebinding leaves a small post-training decoder drift.
+    /// </summary>
+    protected override bool SupportsCopyOnWriteDeepCopy => false;
+
     #endregion
 
     #region Constructors
@@ -584,20 +592,49 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _postNetLayers.Clear();
         Layers.AddRange(layers);
 
+        BindNativeLayersFromPublishedList();
+    }
+
+    /// <summary>
+    /// Rebinds the private paper-component views to the framework-visible
+    /// <see cref="Layers"/> instances.
+    /// </summary>
+    /// <remarks>
+    /// Base deserialization replaces every element in <see cref="Layers"/>.
+    /// Keeping the constructor-created objects in these private lists made
+    /// Predict bypass the restored/trained weights even though GetParameters
+    /// correctly reported them. The native forward and all framework services
+    /// must reference the same layer instances.
+    /// </remarks>
+    private void BindNativeLayersFromPublishedList()
+    {
+        _embedding = null;
+        _encoderLstm = null;
+        _stopTokenLayer = null;
+        _encoderConvLayers.Clear();
+        _attentionLayers.Clear();
+        _decoderLstmLayers.Clear();
+        _postNetLayers.Clear();
+
         // Distribute to internal sub-lists for forward pass
         int idx = 0;
-        for (int i = 0; i < _numEncoderConvLayers && idx < layers.Count; i++)
-            _encoderConvLayers.Add(layers[idx++]);
-        if (idx < layers.Count)
-            _encoderLstm = layers[idx++];
-        for (int i = 0; i < 4 && idx < layers.Count; i++)
-            _attentionLayers.Add(layers[idx++]);
-        for (int i = 0; i < 5 && idx < layers.Count; i++) // prenet(2) + lstm(2) + mel(1)
-            _decoderLstmLayers.Add(layers[idx++]);
-        if (idx < layers.Count)
-            _stopTokenLayer = layers[idx++];
-        while (idx < layers.Count)
-            _postNetLayers.Add(layers[idx++]);
+        if (idx < Layers.Count && Layers[idx] is EmbeddingLayer<T> embedding)
+            _embedding = embedding;
+        if (_embedding is not null)
+            idx++;
+
+        for (int i = 0; i < _numEncoderConvLayers && idx < Layers.Count; i++)
+            _encoderConvLayers.Add(Layers[idx++]);
+        if (idx < Layers.Count)
+            _encoderLstm = Layers[idx++];
+        for (int i = 0; i < 4 && idx < Layers.Count; i++)
+            _attentionLayers.Add(Layers[idx++]);
+        for (int i = 0; i < 5 && idx < Layers.Count; i++) // prenet(2) + recurrent projections(2) + mel(1)
+            _decoderLstmLayers.Add(Layers[idx++]);
+        if (idx < Layers.Count)
+            _stopTokenLayer = Layers[idx++];
+        while (idx < Layers.Count)
+            _postNetLayers.Add(Layers[idx++]);
     }
 
     private static IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
@@ -884,6 +921,9 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         writer.Write(_fftSize);
         writer.Write(_hopLength);
         writer.Write(_griffinLimIterations);
+        // Added at the tail for backward compatibility with model payloads
+        // written before attentionFilters was persisted.
+        writer.Write(_attentionFilters);
     }
 
     /// <summary>
@@ -916,12 +956,13 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _fftSize = reader.ReadInt32();
         _hopLength = reader.ReadInt32();
         _griffinLimIterations = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _attentionFilters = reader.ReadInt32();
 
-        // Reinitialize layers with restored parameters if needed
-        if (_useNativeMode && _encoderConvLayers.Count == 0)
-        {
-            InitializeLayers();
-        }
+        // Base deserialization has recreated the published Layers list by this
+        // point. Rebind native component views to those restored instances.
+        if (_useNativeMode)
+            BindNativeLayersFromPublishedList();
     }
 
     /// <summary>
@@ -1002,7 +1043,9 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         // Autoregressive decoding
         var melFrames = new List<Tensor<T>>();
-        var prevMel = new Tensor<T>([1, NumMels]);
+        // NVIDIA Tacotron2's pre-net consumes n_mel_channels *
+        // n_frames_per_step values (the grouped previous decoder output).
+        var prevMel = new Tensor<T>([1, NumMels * _numMelsPerFrame]);
         var attentionWeights = new Tensor<T>([1, phonemes.Shape[^1]]);
         var decoderState = new Tensor<T>([1, _decoderDim]);
 
@@ -1040,7 +1083,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             }
 
             // Update previous mel for next step
-            prevMel = ExtractLastMelFrame(melOutput);
+            prevMel = melOutput;
         }
 
         // Combine mel frames
@@ -1070,22 +1113,23 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         var encoderOutput = _encoderLstm?.Forward(encoderInput) ?? encoderInput;
 
-        int numFrames = targetMel.Shape[1];
+        int numFrames = targetMel.Rank >= 2 ? targetMel.Shape[^2] : 0;
         var melFrames = new List<Tensor<T>>();
         var attentionWeights = new Tensor<T>([1, phonemes.Shape[^1]]);
         var decoderState = new Tensor<T>([1, _decoderDim]);
 
-        for (int step = 0; step < numFrames / _numMelsPerFrame; step++)
+        int decoderSteps = (numFrames + _numMelsPerFrame - 1) / _numMelsPerFrame;
+        for (int step = 0; step < decoderSteps; step++)
         {
             // Teacher forcing: step 0 gets GO frame (zeros), step>0 gets previous ground-truth
             Tensor<T> prevMel;
             if (step == 0)
             {
-                prevMel = new Tensor<T>(new[] { 1, _numMelsPerFrame });
+                prevMel = new Tensor<T>(new[] { 1, NumMels * _numMelsPerFrame });
             }
             else
             {
-                prevMel = ExtractMelFrame(targetMel, (step - 1) * _numMelsPerFrame);
+                prevMel = ExtractMelFrameGroup(targetMel, (step - 1) * _numMelsPerFrame);
             }
 
             var prenetOut = prevMel;
@@ -1117,13 +1161,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             residual = postConv.Forward(residual);
         }
 
-        var refined = new Tensor<T>(melSpectrogram._shape);
-        for (int i = 0; i < melSpectrogram.Length; i++)
-        {
-            refined[i] = NumOps.Add(melSpectrogram[i], residual[i]);
-        }
-
-        return refined;
+        return Engine.TensorAdd(melSpectrogram, residual);
     }
 
     private Tensor<T> ForwardOnnx(Tensor<T> phonemes)
@@ -1201,60 +1239,44 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         return Engine.TensorConcatenate(new[] { a2d, b2d }, axis: 1);
     }
 
-    private Tensor<T> ExtractLastMelFrame(Tensor<T> melOutput)
+    private Tensor<T> ExtractMelFrameGroup(Tensor<T> mel, int firstFrame)
     {
-        int lastMelStart = melOutput.Shape[^1] - NumMels;
-        var frame = new Tensor<T>([1, NumMels]);
-
-        for (int m = 0; m < NumMels; m++)
+        var group = new Tensor<T>([1, NumMels * _numMelsPerFrame]);
+        int availableFrames = mel.Rank >= 2 ? mel.Shape[^2] : 0;
+        for (int f = 0; f < _numMelsPerFrame; f++)
         {
-            frame[0, m] = melOutput.Rank >= 2
-                ? melOutput[0, lastMelStart + m]
-                : melOutput[lastMelStart + m];
+            int frame = firstFrame + f;
+            if (frame >= availableFrames)
+                break;
+            for (int m = 0; m < NumMels; m++)
+            {
+                group[0, f * NumMels + m] = mel.Rank >= 3
+                    ? mel[0, frame, m]
+                    : mel[frame, m];
+            }
         }
-
-        return frame;
-    }
-
-    private Tensor<T> ExtractMelFrame(Tensor<T> mel, int frameIdx)
-    {
-        var frame = new Tensor<T>([1, NumMels]);
-
-        for (int m = 0; m < NumMels; m++)
-        {
-            frame[0, m] = mel.Rank >= 3
-                ? mel[0, frameIdx, m]
-                : (mel.Rank >= 2 ? mel[frameIdx, m] : NumOps.Zero);
-        }
-
-        return frame;
+        return group;
     }
 
     private Tensor<T> CombineMelFrames(List<Tensor<T>> frames)
     {
-        int totalFrames = frames.Count * _numMelsPerFrame;
-        var result = new Tensor<T>([1, totalFrames, NumMels]);
+        if (frames.Count == 0)
+            return new Tensor<T>([1, 0, NumMels]);
 
-        int frameIdx = 0;
-        foreach (var frame in frames)
+        // Keep decoder outputs connected to the gradient tape. The old manual
+        // element copy created a fresh leaf tensor, so the mel loss had no path
+        // back to any decoder/encoder parameter and every Train call was a no-op.
+        var melFrames = new List<Tensor<T>>(frames.Count * _numMelsPerFrame);
+        foreach (var groupedOutput in frames)
         {
             for (int f = 0; f < _numMelsPerFrame; f++)
             {
-                for (int m = 0; m < NumMels; m++)
-                {
-                    int srcIdx = f * NumMels + m;
-                    if (srcIdx < frame.Shape[^1])
-                    {
-                        result[0, frameIdx, m] = frame.Rank >= 2
-                            ? frame[0, srcIdx]
-                            : frame[srcIdx];
-                    }
-                }
-                frameIdx++;
+                int start = f * NumMels;
+                if (start + NumMels <= groupedOutput.Shape[^1])
+                    melFrames.Add(Engine.TensorNarrow(groupedOutput, groupedOutput.Rank - 1, start, NumMels));
             }
         }
-
-        return result;
+        return Engine.TensorStack(melFrames.ToArray(), axis: 1);
     }
 
     private Tensor<T> ModifyDuration(Tensor<T> melSpectrogram, double factor)

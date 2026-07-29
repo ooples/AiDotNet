@@ -314,6 +314,34 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         {
             // Double-check under the lock: another thread may have materialized while we waited.
             if (!_weightsDeferred) return;
+
+            // ParameterBuffer/deserialization/copy-on-write may rebind the zero-sized
+            // placeholders to fully materialized trained tensors before this fresh
+            // layer's first Forward. Those tensors are authoritative. Synchronize the
+            // deferred-state latch instead of allocating over them, matching PyTorch's
+            // lazy-module materialization contract. The old behavior silently replaced
+            // every shared GQA projection on a COW clone's first prediction
+            // (VideoLLaMA2 Clone_AfterTraining).
+            bool reboundWeightsAreMaterialized =
+                WeightsAlreadyAllocated(
+                    _queryWeights, _embeddingDimension, _numHeads * _headDimension)
+                && WeightsAlreadyAllocated(
+                    _keyWeights, _embeddingDimension, _numKVHeads * _headDimension)
+                && WeightsAlreadyAllocated(
+                    _valueWeights, _embeddingDimension, _numKVHeads * _headDimension)
+                && WeightsAlreadyAllocated(
+                    _outputWeights, _numHeads * _headDimension, _embeddingDimension)
+                && WeightsAlreadyAllocated(_outputBias, _embeddingDimension)
+                && (!_useProjectionBias
+                    || (WeightsAlreadyAllocated(_queryBias, _numHeads * _headDimension)
+                        && WeightsAlreadyAllocated(_keyBias, _numKVHeads * _headDimension)
+                        && WeightsAlreadyAllocated(_valueBias, _numKVHeads * _headDimension)));
+            if (reboundWeightsAreMaterialized)
+            {
+                _weightsDeferred = false;
+                return;
+            }
+
             _queryWeights = new Tensor<T>([_embeddingDimension, _numHeads * _headDimension]);
             _keyWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
             _valueWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);

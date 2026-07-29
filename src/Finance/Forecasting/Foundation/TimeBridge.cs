@@ -140,7 +140,7 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -164,7 +164,7 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -184,6 +184,19 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         _modelSize = options.ModelSize;
         _bridgeDimension = options.BridgeDimension;
         _useStationarityGating = options.UseStationarityGating;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        TimeBridgeOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
     }
 
     #endregion
@@ -212,6 +225,9 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
+
+    /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -281,7 +297,8 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
             DropoutRate = _dropout,
             ModelSize = _modelSize,
             BridgeDimension = _bridgeDimension,
-            UseStationarityGating = _useStationarityGating
+            UseStationarityGating = _useStationarityGating,
+            LearningRate = _options.LearningRate
         });
     }
 
@@ -460,6 +477,40 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
             current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// TimeBridge normalizes the input and adds a batch axis before its
+    /// helper-created reshape layer. Mirror that preparation here instead of
+    /// feeding a raw rank-1 series into the base class's flat activation walk.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            var activations = new Dictionary<string, Tensor<T>>();
+            var current = ApplyInstanceNormalization(input);
+            if (current.Rank == 1)
+                current = current.Reshape(new[] { 1, current.Length });
+
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+
+            return activations;
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
