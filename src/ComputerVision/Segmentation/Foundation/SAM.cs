@@ -2,6 +2,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -80,6 +81,13 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     private bool _useNativeMode;
     private string? _onnxModelPath;
     private InferenceSession? _onnxSession;
+    /// <summary>
+    /// Linear-warmup length in optimizer steps, from Kirillov et al. 2023 ("Segment Anything",
+    /// §A Training algorithm): the 8e-4 learning rate is reached only after warming up over the
+    /// first 250 iterations.
+    /// </summary>
+    private const int SamWarmupSteps = 250;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _disposed;
     private int _encoderLayerEnd;
@@ -154,6 +162,36 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
                 WeightDecay = _options.WeightDecay,
                 UseAdaptiveLearningRate = false,
                 UseAdaptiveBetas = false,
+                // Kirillov et al. 2023 ("Segment Anything", §A Training algorithm) reaches its
+                // lr only AFTER a LINEAR WARMUP over the first 250 iterations, then holds it until
+                // the step decays at 60k/86.6k of 90k iterations. SAMOptions.LearningRate is that
+                // post-warmup PEAK, so applying it from step 0 was not paper-faithful. Constant
+                // decay after warmup is faithful for every horizon the suite exercises -- the
+                // paper's first step decay is at 60k iterations, far beyond any test.
+                //
+                // Measured effect: this removes the first-step overshoot that drove
+                // Training_ShouldReduceLoss and MoreData_ShouldNotDegrade (loss was RISING
+                // 0.44 -> 29.95) and takes SAM from 3 failures to 1. It does NOT fix
+                // LossStrictlyDecreasesOnMemorizationTask: with warmup the divergence is only
+                // DELAYED (0.694916 -> 7.090303 by step 300, past the 250-step warmup), and the
+                // generated fixture already runs at LearningRate = 1e-5 -- 1/80th of the paper's
+                // peak -- so the remaining divergence is NOT a learning-rate-scale problem. That
+                // is a separate open defect in this model's training path, still under
+                // investigation; the warmup here is correct on its own merits.
+                LearningRateScheduler = new LinearWarmupScheduler(
+                    baseLearningRate: _options.LearningRate,
+                    warmupSteps: SamWarmupSteps,
+                    totalSteps: 0,
+                    // Start at ONE STEP's worth of the peak rather than exactly 0. A 0 start makes the
+                    // first optimizer step a no-op, which left parameters bit-identical after a single
+                    // Train call and tripped GradientFlow_ShouldBeNonZeroAndFinite ("No parameters
+                    // changed after training"). Ramping from base/warmupSteps is the standard linear
+                    // warmup (equivalent to PyTorch LinearLR with start_factor = 1/warmup_steps) and
+                    // still reaches the paper's peak exactly at step warmupSteps.
+                    warmupInitLr: _options.LearningRate / SamWarmupSteps,
+                    decayMode: LinearWarmupScheduler.DecayMode.Constant),
+                // Warmup is defined per ITERATION, so the schedule must advance per optimizer step.
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             });
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
