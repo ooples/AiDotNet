@@ -685,6 +685,10 @@ public static class DeserializationHelper
         {
             instance = CreateSTCConnectorLayer<T>(additionalParams);
         }
+        else if (genericDef == typeof(ConformerBlockLayer<>))
+        {
+            instance = CreateConformerBlockLayer<T>(inputShape, additionalParams);
+        }
         else if (genericDef == typeof(HippoMemoryCellLayer<>))
         {
             instance = new HippoMemoryCellLayer<T>(
@@ -3113,6 +3117,37 @@ public static class DeserializationHelper
         }
 
         return attention;
+    }
+
+    /// <summary>
+    /// Reconstructs a <see cref="ConformerBlockLayer{T}"/> from the metadata persisted by
+    /// <c>ConformerBlockLayer.GetMetadata</c> (ModelDim/NumHeads/FfnExpansionFactor/ConvKernelSize
+    /// plus the rotary settings). Sub-layer weights travel in the flat parameter vector, so only the
+    /// structural configuration is needed here.
+    /// </summary>
+    private static object CreateConformerBlockLayer<T>(int[] inputShape, Dictionary<string, object>? additionalParams)
+    {
+        int modelDim = TryGetInt(additionalParams, "ModelDim")
+            ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+        if (modelDim <= 0)
+        {
+            throw new InvalidOperationException(
+                "ConformerBlockLayer deserialization requires a positive ModelDim (from metadata or input shape).");
+        }
+
+        int numHeads = TryGetInt(additionalParams, "NumHeads") ?? ResolveDefaultHeadCount(modelDim);
+        if (numHeads <= 0 || modelDim % numHeads != 0)
+        {
+            throw new InvalidOperationException(
+                $"ConformerBlockLayer deserialization: ModelDim {modelDim} is not divisible by NumHeads {numHeads}.");
+        }
+
+        int ffnExpansionFactor = TryGetInt(additionalParams, "FfnExpansionFactor") ?? 4;
+        int convKernelSize = TryGetInt(additionalParams, "ConvKernelSize") ?? 5;
+        double ropeTheta = TryGetDouble(additionalParams, "RopeTheta") ?? 10000.0;
+        int maxSeq = TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
+
+        return new ConformerBlockLayer<T>(modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq);
     }
 
     /// <summary>

@@ -231,6 +231,78 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
+    /// Projects a weighted directed graph onto a DAG by retaining the strongest
+    /// edges that do not introduce a directed cycle.
+    /// </summary>
+    /// <remarks>
+    /// Continuous acyclicity penalties approach zero numerically but do not make
+    /// every finite-iteration solution exactly acyclic. Thresholding such a
+    /// solution can therefore leave a small residual cycle. The standard
+    /// strongest-edge projection below preserves as much of the learned weighted
+    /// structure as possible while enforcing the public DAG contract.
+    /// </remarks>
+    protected Matrix<T> EnforceAcyclic(Matrix<T> weights)
+    {
+        int d = weights.Rows;
+        var edges = new List<(int From, int To, T Weight, double Magnitude)>();
+        for (int from = 0; from < d; from++)
+        {
+            for (int to = 0; to < d; to++)
+            {
+                if (from == to) continue;
+                T weight = weights[from, to];
+                double magnitude = Math.Abs(NumOps.ToDouble(weight));
+                if (magnitude > 0.0)
+                    edges.Add((from, to, weight, magnitude));
+            }
+        }
+
+        edges.Sort((left, right) =>
+        {
+            int byMagnitude = right.Magnitude.CompareTo(left.Magnitude);
+            if (byMagnitude != 0) return byMagnitude;
+            int bySource = left.From.CompareTo(right.From);
+            return bySource != 0 ? bySource : left.To.CompareTo(right.To);
+        });
+
+        var dag = new Matrix<T>(d, d);
+        foreach (var edge in edges)
+        {
+            // Adding from -> to creates a cycle exactly when to already reaches from.
+            if (!HasDirectedPath(dag, edge.To, edge.From))
+                dag[edge.From, edge.To] = edge.Weight;
+        }
+
+        return dag;
+    }
+
+    private bool HasDirectedPath(Matrix<T> graph, int start, int target)
+    {
+        if (start == target) return true;
+
+        int d = graph.Rows;
+        var visited = new bool[d];
+        var pending = new Stack<int>();
+        pending.Push(start);
+
+        while (pending.Count > 0)
+        {
+            int node = pending.Pop();
+            if (node == target) return true;
+            if (visited[node]) continue;
+            visited[node] = true;
+
+            for (int next = 0; next < d; next++)
+            {
+                if (!visited[next] && Math.Abs(NumOps.ToDouble(graph[node, next])) > 0.0)
+                    pending.Push(next);
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Thresholds the weight matrix, with covariance-based fallback when no edges survive.
     /// Use this instead of ThresholdAndClean when the original data is available.
     /// </summary>

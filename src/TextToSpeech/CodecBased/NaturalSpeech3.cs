@@ -159,7 +159,7 @@ public class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -237,9 +237,10 @@ public class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new NaturalSpeech3Options(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new NaturalSpeech3<T>(Architecture, mp, _options);
-        return new NaturalSpeech3<T>(Architecture, _options);
+            return new NaturalSpeech3<T>(Architecture, mp, options);
+        return new NaturalSpeech3<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

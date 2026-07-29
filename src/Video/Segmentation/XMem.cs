@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -343,6 +343,18 @@ public class XMem<T> : NeuralNetworkBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input) => SegmentFrame(input);
 
+    /// <summary>
+    /// Trains through the SAME segmentation path inference uses.
+    /// </summary>
+    /// <remarks>
+    /// Without this the base walked the flat Layers list instead, which is not a valid path through
+    /// this model at all — the encoder, memory-query and decoder stages are wired by SegmentWithMemory,
+    /// not by list order, so the walk failed outright with "Expected input depth 448, but got 128".
+    /// It also meant training optimized a different function from the one Predict evaluates, and the
+    /// two disagreed on output shape, so the loss compared mismatched tensors.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => SegmentFrame(input);
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -622,6 +634,18 @@ public class XMem<T> : NeuralNetworkBase<T>
         return concat;
     }
 
+    /// <summary>
+    /// Runs the decoder over the fused readout to produce the mask.
+    /// </summary>
+    /// <remarks>
+    /// The decoder stack built by CreateDefaultXMemLayers ALREADY carries its own UpsamplingLayer(2)
+    /// between convolution stages — four of them, which is exactly the stride-16 to full-resolution
+    /// climb the paper describes ("iteratively upsamples by 2x at a time"), ending in a 1-channel
+    /// sigmoid mask head. This method additionally called Upsample2x once per layer on top of that, so
+    /// the mask was upsampled twice over and a 32x32 clip decoded to 2048x2048. Let the layers do the
+    /// upsampling they were built to do; the loop below only tops the mask up if a shallower decoder
+    /// leaves it short of the frame.
+    /// </remarks>
     private Tensor<T> DecodeMask(Tensor<T> features)
     {
         var decoded = features;
@@ -634,7 +658,6 @@ public class XMem<T> : NeuralNetworkBase<T>
 
         return decoded;
     }
-
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
         return Engine.TensorConcatenate([a, b], axis: 1);
@@ -709,7 +732,36 @@ public class XMem<T> : NeuralNetworkBase<T>
                 inputHeight: _inputHeight,
                 inputWidth: _inputWidth,
                 numFeatures: _numFeatures));
+
+            PinMemoryFusionInputDepth();
         }
+    }
+
+    /// <summary>
+    /// Pins the memory-fusion layer's input depth to the width of the concatenated memory readout.
+    /// </summary>
+    /// <remarks>
+    /// ConvolutionalLayer resolves its input depth lazily from the first tensor that reaches it, and
+    /// this model does NOT use its layers in list order — the encoder, the three memory branches, the
+    /// fusion layer and the decoder are wired by SegmentWithMemory. So the fusion layer was pinned by
+    /// a sequential shape walk to its list predecessor's width and then rejected the real readout with
+    /// "Expected input depth 128, but got 448". 448 is sensory + working + long-term, exactly the
+    /// total the layer factory computes for this layer and then never applies, since there is no
+    /// constructor overload that takes an input depth. Resolve it up front instead.
+    /// </remarks>
+    private void PinMemoryFusionInputDepth()
+    {
+        const int MemoryFusionLayerIndex = 12;
+        if (Layers.Count <= MemoryFusionLayerIndex) return;
+        if (Layers[MemoryFusionLayerIndex] is not LayerBase<T> fusion) return;
+
+        int fusedChannels = _numFeatures + (_numFeatures / 2) + (_numFeatures / 4);
+
+        // The encoder is four stride-2 convolutions, so the readout is the frame reduced by 16.
+        int featureHeight = Math.Max(1, _inputHeight / 16);
+        int featureWidth = Math.Max(1, _inputWidth / 16);
+
+        fusion.ResolveShapesOnly(new[] { fusedChannels, featureHeight, featureWidth });
     }
 
     #endregion

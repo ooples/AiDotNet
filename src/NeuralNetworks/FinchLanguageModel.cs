@@ -50,6 +50,7 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
+    private readonly double _learningRate;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -76,7 +77,8 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         int numHeads = 8,
         int maxSeqLength = 512,
         ILossFunction<T>? lossFunction = null,
-        FinchOptions? options = null)
+        FinchOptions? options = null,
+        double learningRate = 0.001)
         : base(architecture,
             // Raw-logit LM head → cross-entropy-with-logits (fused log-softmax + NLL), not the
             // TextGeneration default CategoricalCrossEntropy (which log()s un-normalized logits and
@@ -90,6 +92,7 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         _numLayers = numLayers;
         _numHeads = numHeads;
         _maxSeqLength = maxSeqLength;
+        _learningRate = learningRate;
         InitializeLayers();
     }
 
@@ -138,8 +141,19 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         }
 
         var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
+        var safeGradients = new Vector<T>(gradients.Length);
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            double gradient = NumOps.ToDouble(gradients[i]);
+            // RWKV-6 recurrent products can transiently overflow on an
+            // unscaled smoke batch. Keep the update finite and bounded so one
+            // bad element cannot poison the entire model state.
+            if (double.IsNaN(gradient) || double.IsInfinity(gradient)) gradient = 0.0;
+            gradient = Math.Max(-1.0, Math.Min(1.0, gradient));
+            safeGradients[i] = NumOps.FromDouble(gradient);
+        }
+        T learningRate = NumOps.FromDouble(_learningRate);
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(safeGradients, learningRate));
         SetParameters(currentParams);
     }
 
@@ -183,7 +197,7 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new FinchLanguageModel<T>(
             Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, _options);
+            _maxSeqLength, LossFunction, _options, _learningRate);
     }
 
     #endregion

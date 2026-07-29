@@ -95,7 +95,16 @@ public class CreditRuleFacadeTrainingTests
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
     }
 
-    private static NeuralNetwork<double> BuildMlp()
+    // SEEDED weight init, for the same reason BuildDeepBlobNet below is seeded: without
+    // architecture.RandomSeed the FullyConnectedLayer weights come from the PROCESS-SHARED
+    // RNG, which sibling tests in this class mutate (the transformer test's ResetToCpu, and
+    // every other test that draws from it). That made the UNTRAINED baseline accuracy
+    // (beforeAcc) vary run-to-run — observed anywhere from near-chance to 0.933 on this
+    // easily-separable 3-blob task — so ConfigureCreditRule_TrainsMlp_HeldOutAccuracyBeatsChance
+    // failed on a DIFFERENT theory case in CI than it did locally, i.e. an order-dependent
+    // flake rather than a real per-rule regression. Seeding pins the baseline so the
+    // improvement assertion measures the credit RULE, not the luck of the shared RNG.
+    private static NeuralNetwork<double> BuildMlp(int initSeed = 1234)
     {
         var layers = new List<ILayer<double>>
         {
@@ -108,7 +117,10 @@ public class CreditRuleFacadeTrainingTests
             complexity: NetworkComplexity.Simple,
             inputSize: MlpDim,
             outputSize: MlpClasses,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = initSeed,
+        };
         return new NeuralNetwork<double>(architecture);
     }
 
@@ -172,11 +184,22 @@ public class CreditRuleFacadeTrainingTests
             .BuildAsync();
 
         double afterAcc = Accuracy<double>(result.Predict, testX, testLabels, MlpClasses);
-
         Assert.True(afterAcc >= minAccuracy,
             $"{rule}: held-out accuracy {afterAcc:F3} did not reach {minAccuracy:F2} (chance={1.0 / MlpClasses:F3}, before={beforeAcc:F3}).");
-        Assert.True(afterAcc > beforeAcc + 0.10,
-            $"{rule}: accuracy did not improve enough (before={beforeAcc:F3}, after={afterAcc:F3}).");
+
+        // Accuracy is capped at 1.0, so a bare "afterAcc > beforeAcc + 0.10" is UNSATISFIABLE
+        // once the baseline exceeds 0.90 — a rule that trains to a PERFECT 1.000 from a lucky
+        // 0.933 baseline needs 1.033 to pass and is reported as "did not improve enough"
+        // (exactly how DirectFeedbackAlignment failed). Require the +0.10 gain against the
+        // headroom that actually exists: normally the full 0.10, but never more than the
+        // distance left to the ceiling. The regression this guards — the facade handing back
+        // the UNTRAINED baseline — still fails, because that yields afterAcc == beforeAcc and
+        // therefore zero gain against any positive requirement.
+        double headroom = 1.0 - beforeAcc;
+        double requiredGain = Math.Min(0.10, headroom);
+        Assert.True(afterAcc >= beforeAcc + requiredGain,
+            $"{rule}: accuracy did not improve enough (before={beforeAcc:F3}, after={afterAcc:F3}, "
+            + $"required gain={requiredGain:F3} of available headroom={headroom:F3}).");
     }
 
     /// <summary>

@@ -189,6 +189,20 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     protected abstract IDiffusionModel<TNum> CreateModel();
 
     /// <summary>
+    /// Relative tolerance for clone-output comparisons. Derived FP32 iterative samplers may
+    /// override this when identical COW-shared weights take a numerically equivalent cold
+    /// packed-weight path whose rounding error compounds across denoising steps.
+    /// </summary>
+    protected virtual double CloneOutputRelativeTolerance =>
+        typeof(TNum) == typeof(float) ? 1.3e-6 : 1e-7;
+
+    /// <summary>
+    /// Absolute tolerance for clone-output comparisons.
+    /// </summary>
+    protected virtual double CloneOutputAbsoluteTolerance =>
+        typeof(TNum) == typeof(float) ? 1e-5 : 1e-7;
+
+    /// <summary>
     /// Numeric-operation handle for <typeparamref name="TNum"/> — used by helpers
     /// that need to construct tensor elements from doubles (e.g. random fills,
     /// constant fills) without hard-coding the element type. The
@@ -606,10 +620,8 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         {
             double expected = ToDouble(original[i]);
             double actual = ToDouble(clonedOutput[i]);
-            (double rtol, double atol) = typeof(TNum) == typeof(float)
-                ? (1.3e-6, 1e-5)
-                : (1e-7, 1e-7);
-            double allowed = atol + rtol * Math.Abs(expected);
+            double allowed = CloneOutputAbsoluteTolerance
+                + CloneOutputRelativeTolerance * Math.Abs(expected);
             double diff = Math.Abs(actual - expected);
             if (i == 0 || diff > maxDiff)
             {

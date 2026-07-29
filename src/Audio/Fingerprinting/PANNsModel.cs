@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Optimizers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
@@ -60,6 +61,10 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public override ModelOptions GetOptions() => _options;
 
     /// <inheritdoc/>
+    public override double MaxGradNormValue
+        => _options.EnableGradientClipping ? _options.MaxGradientNorm : 0.0;
+
+    /// <inheritdoc/>
     public string Name => _useNativeMode ? "PANNs-Native" : "PANNs-ONNX";
 
     /// <inheritdoc/>
@@ -107,8 +112,15 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PANNsModelOptions();
-        _optimizer = optimizer;
         ValidateOptions(_options);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = _options.EnableGradientClipping,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = true;
@@ -163,6 +175,10 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             throw new ArgumentOutOfRangeException(nameof(o.DropoutRate), o.DropoutRate, "DropoutRate must be in [0, 1).");
         if (o.HeadDropoutRate < 0.0 || o.HeadDropoutRate >= 1.0)
             throw new ArgumentOutOfRangeException(nameof(o.HeadDropoutRate), o.HeadDropoutRate, "HeadDropoutRate must be in [0, 1).");
+        if (o.LearningRate <= 0.0 || double.IsNaN(o.LearningRate) || double.IsInfinity(o.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(o.LearningRate), o.LearningRate, "LearningRate must be finite and > 0.");
+        if (o.MaxGradientNorm <= 0.0 || double.IsNaN(o.MaxGradientNorm) || double.IsInfinity(o.MaxGradientNorm))
+            throw new ArgumentOutOfRangeException(nameof(o.MaxGradientNorm), o.MaxGradientNorm, "MaxGradientNorm must be finite and > 0.");
     }
 
     #endregion

@@ -7166,6 +7166,14 @@ public static class LayerHelper<T>
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
+        // Kong et al.'s released CNN14 normalizes each mel bin before the
+        // convolution stack: [B, 1, time, mel] -> [B, mel, time, 1], bn0,
+        // then transpose back. TransposeLayer permutations address the logical
+        // (non-batch) axes, and [2,1,0] is self-inverse for this layout.
+        yield return new TransposeLayer<T>(new[] { 2, 1, 0 });
+        yield return new BatchNormalizationLayer<T>(numMels);
+        yield return new TransposeLayer<T>(new[] { 2, 1, 0 });
+
         // CNN14: each paper block is Conv(3x3) -> BN -> ReLU ->
         // Conv(3x3) -> BN -> ReLU -> AvgPool(2x2). The public width/depth
         // options scale that same topology; their defaults reproduce the
@@ -11340,37 +11348,44 @@ public static class LayerHelper<T>
         int numHeads = 12,
         int vocabSize = 30522)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Patch embedding: conv with kernel=16, stride=16 on full image → (imageSize/16)^2 patches
-        yield return new ConvolutionalLayer<T>(visionDim, 16, 16, 0);
-        yield return new LayerNormalizationLayer<T>();
+        if (imageSize < 16 || imageSize % 16 != 0)
+            throw new ArgumentOutOfRangeException(nameof(imageSize), imageSize,
+                "Image size must be a positive multiple of the 16-pixel patch size.");
+        if (visionLayers < 0)
+            throw new ArgumentOutOfRangeException(nameof(visionLayers));
+        if (fusionLayers < 0)
+            throw new ArgumentOutOfRangeException(nameof(fusionLayers));
+        if (numHeads <= 0 || visionDim % numHeads != 0 || fusionDim % numHeads != 0)
+            throw new ArgumentException("Attention heads must evenly divide both visionDim and fusionDim.", nameof(numHeads));
 
-        for (int i = 0; i < Math.Min(visionLayers, 6); i++)
+        int numPatches = (imageSize / 16) * (imageSize / 16);
+
+        // Convert channels-first RGB pixels to a token sequence before LayerNorm/attention.
+        // The previous ConvolutionalLayer left [C,H,W] in channels-first layout, causing
+        // attention to interpret image width as embedding width. It then routed continuous
+        // visual activations through EmbeddingLayer as if they were integer token IDs.
+        yield return new PatchEmbeddingLayer<T>(16, visionDim, expectedInputChannels: 3);
+        yield return new LayerNormalizationLayer<T>();
+        yield return new PositionalEncodingLayer<T>(numPatches, visionDim);
+
+        for (int i = 0; i < visionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionDim * 4, geluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, visionDim * 4, visionDim);
         }
 
-        // Text encoder
-        yield return new EmbeddingLayer<T>(vocabSize, textDim);
-        yield return new PositionalEncodingLayer<T>(512, textDim);
-        yield return new LayerNormalizationLayer<T>();
+        // The single-tensor neural-network contract carries visual tokens. Project them
+        // into the configured fusion width instead of treating pixels as vocabulary IDs.
+        if (visionDim != fusionDim)
+            yield return new DenseLayer<T>(fusionDim, identityActivation);
 
-        // Fusion layers
         for (int i = 0; i < fusionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (fusionDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(fusionDim * 4, geluActivation);
-            yield return new DenseLayer<T>(fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, fusionDim * 4, fusionDim);
         }
 
+        _ = textDim;
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 
@@ -20308,6 +20323,72 @@ public static class LayerHelper<T>
     #region Speech Recognition Layers
 
     /// <summary>
+    /// Builds a USM / Chirp encoder from GENUINE Conformer blocks (Zhang et al. 2023,
+    /// arXiv:2303.01037 §2.1 — "We use the convolution-augmented transformer, or Conformer, with
+    /// relative attention as an encoder"; block per Gulati et al. 2020, arXiv:2005.08100 Eq. 1).
+    /// Structure: log-Mel projection + LayerNorm → N <see cref="NeuralNetworks.Layers.ConformerBlockLayer{T}"/>
+    /// → LayerNorm + vocabulary projection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This exists because neither factory the Chirp models previously used is a Conformer:
+    /// <c>CreateDefaultProprietaryASRLayers</c> emits residual-FREE MHA/LN/FFN blocks (so the encoder
+    /// has no gradient highway and cannot reduce its loss — the #1208/#1221 degeneracy), and
+    /// <c>CreateDefaultConformerLayers</c> is a residual PRE-LN TRANSFORMER whose own comment concedes
+    /// its position-wise FFN stands in for a convolution module that "was never a real convolution".
+    /// <see cref="NeuralNetworks.Layers.ConformerBlockLayer{T}"/> implements the paper block exactly:
+    /// two half-step macaron FFNs around relative-attention self-attention and a real convolution
+    /// module (pointwise → GLU → depthwise → norm → Swish → pointwise).
+    /// </para>
+    /// <para>
+    /// Known remaining deviation, documented rather than hidden: the paper's front-end is a
+    /// convolutional subsampling stack that reduces the frame rate 4×. This builder keeps the linear
+    /// mel projection the existing ASR fixtures are shaped around, so the encoder preserves its time
+    /// axis. That affects compute, not the block structure the failing training invariant depends on.
+    /// </para>
+    /// </remarks>
+    /// <param name="encoderDim">Encoder width d_model. USM uses 1024 (0.6B) / 1536 (2B).</param>
+    /// <param name="numLayers">Conformer block count. USM uses 24 (0.6B) / 32 (2B).</param>
+    /// <param name="numAttentionHeads">Attention heads. USM uses 8 (0.6B) / 16 (2B).</param>
+    /// <param name="feedForwardExpansionFactor">Macaron FFN expansion. Conformer paper default 4.</param>
+    /// <param name="convKernelSize">Depthwise kernel. USM reports a 5-frame convolution kernel.</param>
+    /// <param name="numMels">Input log-Mel channel count.</param>
+    /// <param name="vocabSize">Output vocabulary size for the CTC projection.</param>
+    /// <param name="dropoutRate">Dropout applied after the input projection.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultUSMConformerLayers(
+        int encoderDim = 1024,
+        int numLayers = 24,
+        int numAttentionHeads = 8,
+        int feedForwardExpansionFactor = 4,
+        int convKernelSize = 5,
+        int numMels = 128,
+        int vocabSize = 32000,
+        double dropoutRate = 0.1)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        int heads = ChooseDivisibleHeadConfig(encoderDim, numAttentionHeads).heads;
+
+        // --- Feature projection: log-Mel -> encoder width ---
+        yield return new DenseLayer<T>(encoderDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>();
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Conformer encoder blocks (the paper's Equation 1) ---
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new ConformerBlockLayer<T>(
+                encoderDim, heads, feedForwardExpansionFactor, convKernelSize);
+        }
+
+        // --- CTC output head ---
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(vocabSize, identityActivation);
+    }
+
+    /// <summary>
     /// Creates default layers for the Conformer ASR model (Gulati et al., 2020).
     /// Architecture: Conv-subsampling → N Conformer blocks (FF/Attn/Conv/FF macaron) → CTC head.
     /// </summary>
@@ -22749,18 +22830,25 @@ public static class LayerHelper<T>
         int numMels = 80,
         int vocabSize = 5000,
         double dropoutRate = 0.1,
-        int maxSequenceLength = 750)
+        int maxSequenceLength = 750,
+        bool useLayerNormalization = false)
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
         int ffDim = encoderDim * feedForwardExpansionFactor;
 
-        // Conv subsampling
+        // The sequence tensors are [batch, time, features]. Resolve BatchNorm with
+        // the explicit feature width so its first rank-3 forward takes the documented
+        // features-last flattening path instead of inferring an image channel axis.
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return useLayerNormalization
+            ? new LayerNormalizationLayer<T>()
+            : new BatchNormalizationLayer<T>(encoderDim);
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return useLayerNormalization
+            ? new LayerNormalizationLayer<T>()
+            : new BatchNormalizationLayer<T>(encoderDim);
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Squeezeformer blocks with temporal U-Net (micro-macro structure)
@@ -22774,7 +22862,9 @@ public static class LayerHelper<T>
             // Depthwise separable convolution module
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>();
+            yield return useLayerNormalization
+                ? new LayerNormalizationLayer<T>()
+                : new BatchNormalizationLayer<T>(encoderDim * 2);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
@@ -23137,7 +23227,8 @@ public static class LayerHelper<T>
         int numMels = 80,
         int vocabSize = 8404,
         double dropoutRate = 0.1,
-        int maxSequenceLength = 750)
+        int maxSequenceLength = 750,
+        bool useCifAlignment = true)
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
@@ -23196,7 +23287,8 @@ public static class LayerHelper<T>
         // bound on N (the predicted token count). Unused trailing
         // slots are zero-padded — downstream MHA / cross-attention
         // ignores them through standard padding-mask handling.
-        yield return new CifAlignmentLayer<T>(encoderDim);
+        if (useCifAlignment)
+            yield return new CifAlignmentLayer<T>(encoderDim);
 
         // Paraformer decoder (non-autoregressive)
         if (encoderDim != decoderDim)
@@ -27946,7 +28038,8 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDEVAEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
+        int[] channelDims, int[] depths, double dropRate,
+        bool useGroupNormalization = false)
     {
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         int h = inputHeight, w = inputWidth, inC = inputChannels;
@@ -27958,14 +28051,32 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad,
+                useGroupNormalization ? null : relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
+            if (useGroupNormalization)
+            {
+                yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+                yield return new ActivationLayer<T>(relu);
+            }
+            else
+            {
+                yield return new BatchNormalizationLayer<T>();
+            }
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1,
+                    useGroupNormalization ? null : relu);
+                if (useGroupNormalization)
+                {
+                    yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+                    yield return new ActivationLayer<T>(relu);
+                }
+                else
+                {
+                    yield return new BatchNormalizationLayer<T>();
+                }
             }
 
             inC = outC;
@@ -32884,15 +32995,18 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateGriffinLayers(
         int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512)
+        int modelDimension = 2048,
+        int numLayers = 24,
+        int maxSeqLength = 2048,
+        int recurrenceDimension = 2560)
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
-            yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
+            yield return new RealGatedLinearRecurrenceLayer<T>(
+                maxSeqLength, modelDimension, recurrenceDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // Return raw logits and fuse log-softmax with cross-entropy in the model loss.
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -32901,15 +33015,18 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateHawkLayers(
         int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512)
+        int modelDimension = 2048,
+        int numLayers = 24,
+        int maxSeqLength = 2048,
+        int recurrenceDimension = 2560)
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
-            yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
+            yield return new RealGatedLinearRecurrenceLayer<T>(
+                maxSeqLength, modelDimension, recurrenceDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // Return raw logits and fuse log-softmax with cross-entropy in the model loss.
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -34480,6 +34597,105 @@ public static class LayerHelper<T>
 
         // === Output projection (text embedding for API consumption) ===
         yield return new DenseLayer<T>(decoderDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates the Mega-TTS acoustic stack (Jiang et al. 2023, arXiv:2306.03509).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mega-TTS's contribution is not a new block type but an <i>inductive bias</i>: speech is
+    /// decomposed into content, timbre, prosody and phase, and each is modelled with the structure
+    /// that matches its nature (§3.1). This builder emits that decomposition in five contiguous
+    /// groups, which <c>MegaTTS.ExtractLayerReferences</c> slices apart by the counts below:
+    /// </para>
+    /// <list type="number">
+    /// <item><b>Content encoder</b> — phoneme embedding + <c>numEncoderLayers</c> residual Pre-LN
+    /// FFT blocks. Content is a discrete, order-sensitive sequence, so it gets a full transformer.</item>
+    /// <item><b>Prosody encoder</b> — projection + <c>numProsodyLayers</c> blocks + a
+    /// <c>prosodyDim</c>-wide bottleneck. Deliberately narrow (paper: 20): the bottleneck is what
+    /// stops prosody from carrying timbre or content (§3.2).</item>
+    /// <item><b>Timbre encoder</b> — projection + <c>numTimbreLayers</c> blocks, consumed by the
+    /// model through a temporal MEAN POOL so the result is time-invariant by construction. That
+    /// pooling is the paper's central bias: timbre cannot vary over the utterance, so the
+    /// architecture is not given the capacity to make it vary (§3.1).</item>
+    /// <item><b>P-LLM</b> — embedding over the prosody codebook + <c>numPLLMLayers</c> blocks +
+    /// a projection back to codebook logits. Predicts prosody codes autoregressively from content
+    /// and timbre, which is what makes zero-shot prosody transfer possible (§3.3).</item>
+    /// <item><b>Mel decoder</b> — fusion projection + <c>numDecoderLayers</c> blocks + output
+    /// projection to <c>melChannels</c>. Phase is deliberately NOT modelled; it is left to the
+    /// vocoder (§3.1).</item>
+    /// </list>
+    /// <para>
+    /// Every block is a residual Pre-LN <see cref="TransformerEncoderBlock{T}"/>. This matters:
+    /// the flat MHA→Norm→FFN→Norm chain MegaTTS previously borrowed from
+    /// <c>CreateDefaultProprietaryTTSLayers</c> has no residual path, so each block REPLACED rather
+    /// than refined the hidden state and the model converged to a uniform output — the #1380
+    /// collapse mechanism, reproduced on the J-M shard as an L2 of 3.5e-10 between the outputs for
+    /// two distinct inputs.
+    /// </para>
+    /// </remarks>
+    internal static IEnumerable<ILayer<T>> CreateDefaultMegaTTSLayers(
+        int encoderDim = 192,
+        int decoderDim = 192,
+        int melChannels = 80,
+        int prosodyDim = 20,
+        int prosodyCodebookSize = 1024,
+        int timbreDim = 192,
+        int pllmDim = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numProsodyLayers = 2,
+        int numTimbreLayers = 2,
+        int numPLLMLayers = 4,
+        int numHeads = 8,
+        int numPLLMHeads = 8,
+        double dropoutRate = 0.1,
+        int vocabSize = 256)
+    {
+        IActivationFunction<T> gelu = new GELUActivation<T>();
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+
+        // --- 1. Content encoder -------------------------------------------------------------
+        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim, numHeads: numHeads, ffnDim: encoderDim * 4, dropoutRate: dropoutRate);
+
+        // --- 2. Prosody encoder (bottlenecked) ----------------------------------------------
+        int prosodyHidden = Math.Max(prosodyDim * 4, numHeads);
+        yield return new DenseLayer<T>(prosodyHidden, gelu);
+        for (int i = 0; i < numProsodyLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: prosodyHidden, numHeads: numHeads, ffnDim: prosodyHidden * 4, dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(prosodyDim, identity);
+
+        // --- 3. Timbre encoder (mean-pooled by the model into one global vector) ------------
+        yield return new DenseLayer<T>(timbreDim, gelu);
+        for (int i = 0; i < numTimbreLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: timbreDim, numHeads: numHeads, ffnDim: timbreDim * 4, dropoutRate: dropoutRate);
+
+        // --- 4. Prosody latent language model ------------------------------------------------
+        // Consumes the continuous prosody latent rather than hard code indices, and emits a
+        // distribution over the codebook which the final projection turns back into a prosody
+        // embedding. That keeps the paper's "predict the prosody code" formulation while staying
+        // differentiable end to end, so the P-LLM trains with the rest of the stack instead of
+        // needing a separate non-differentiable argmin/straight-through stage.
+        yield return new DenseLayer<T>(pllmDim, gelu);
+        for (int i = 0; i < numPLLMLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: pllmDim, numHeads: numPLLMHeads, ffnDim: pllmDim * 4, dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(prosodyCodebookSize, identity);
+        // The learned codebook itself: soft code assignment -> prosody embedding.
+        yield return new DenseLayer<T>(prosodyDim, identity);
+
+        // --- 5. Mel decoder -------------------------------------------------------------------
+        yield return new DenseLayer<T>(decoderDim, gelu);
+        for (int i = 0; i < numDecoderLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: decoderDim, numHeads: numHeads, ffnDim: decoderDim * 4, dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(melChannels, identity);
     }
 
     /// <summary>

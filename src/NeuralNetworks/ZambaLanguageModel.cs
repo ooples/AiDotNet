@@ -77,7 +77,14 @@ public class ZambaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         ZambaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // Zamba's LM head emits RAW LOGITS (DenseLayer with no activation, see
+            // LayerHelper.CreateZambaLayers), so the loss must be cross-entropy-with-logits (fused
+            // log-softmax + NLL, == PyTorch nn.CrossEntropyLoss) — the same pairing
+            // RWKV4LanguageModel already uses. The TextGeneration DEFAULT is CategoricalCrossEntropy,
+            // which expects softmax PROBABILITIES and takes log(predicted): feeding it un-normalized
+            // logits makes the objective degenerate, because every non-positive logit is clamped to the
+            // 1e-7 floor where TensorClamp has ZERO gradient, so those classes never train.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ZambaOptions();
         Options = _options;

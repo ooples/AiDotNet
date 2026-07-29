@@ -216,6 +216,35 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode)
+        {
+            return activations;
+        }
+
+        // GPT4TS preprocesses and batches a rank-1 series before its sequential
+        // layer stack. The base implementation skips that model-specific path and
+        // feeds [context] directly to ReshapeLayer, which interprets it as context
+        // one-element samples. Follow the native forward contract before capturing
+        // the layers, using the protected engine supplied by NeuralNetworkBase.
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+        {
+            current = Engine.Reshape(current, new[] { 1, current.Length });
+        }
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)

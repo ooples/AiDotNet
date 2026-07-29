@@ -52,7 +52,6 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, T> _valueTable;
     private Dictionary<string, int> _policy;
     private Dictionary<string, Dictionary<int, List<(string nextState, T reward, T probability)>>> _model;
-    private Random _random;
 
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -74,7 +73,6 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         _valueTable = new Dictionary<string, T>();
         _policy = new Dictionary<string, int>();
         _model = new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
-        _random = RandomHelper.CreateSecureRandom();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -84,7 +82,11 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         // Initialize policy for new states
         if (!_policy.ContainsKey(stateKey))
         {
-            _policy[stateKey] = _random.Next(_options.ActionSize);
+            // Policy iteration permits any initial policy. A deterministic initial
+            // action makes unseen-state behavior reproducible across clones and
+            // serialization boundaries; policy improvement will replace it as soon
+            // as the transition model provides evidence for a better action.
+            _policy[stateKey] = 0;
             _valueTable[stateKey] = NumOps.Zero;
         }
 

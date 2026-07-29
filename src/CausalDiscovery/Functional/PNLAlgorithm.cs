@@ -100,6 +100,13 @@ public class PNLAlgorithm<T> : FunctionalBase<T>
                     else
                         W[j, i] = NumOps.FromDouble(weight);
                 }
+                else
+                {
+                    // The variables are strongly related, but the finite-sample PNL
+                    // independence scores cannot resolve their direction. Do not erase
+                    // the adjacency: use the stable variable order as an acyclic tie-break.
+                    W[i, j] = NumOps.FromDouble(weight);
+                }
             }
         }
 

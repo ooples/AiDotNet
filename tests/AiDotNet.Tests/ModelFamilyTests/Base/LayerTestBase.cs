@@ -772,26 +772,50 @@ public abstract class LayerTestBase
 
         var rng = RandomHelper.CreateSeededRandom(7777);
 
+        // SPARSE parameters (SparseLinearLayer's SparseTensor<T> weights) mirror
+        // torch.autograd.gradcheck's "masked" semantics: it walks a sparse tensor's STORED (nnz)
+        // entries via indices()/values() and perturbs only those, never densifying. Two reasons
+        // this matters here rather than being a style choice:
+        //   1. Flat indexing a SparseTensor throws outright — "GetFlat is not supported on sparse
+        //      tensors. Use SparseTensor-specific APIs or call ToDense() first." — so the check
+        //      cannot even run against one.
+        //   2. Densifying would be WORSE than the crash: it would perturb STRUCTURAL ZEROS, which
+        //      are not trainable parameters and therefore have no analytical gradient, producing
+        //      false mismatches and an inflated parameter count. SparseLinearLayer's own
+        //      ParameterCount is NonZeroCount + OutputFeatures, confirming the stored values are
+        //      the trainable set.
+        // Dense parameters keep the exact previous behaviour (flat index over Length).
+        static int TrainableScalarCount(Tensor<double> p) =>
+            p is SparseTensor<double> sp ? sp.NonZeroCount : p.Length;
+        static double ReadScalar(Tensor<double> p, int i) =>
+            p is SparseTensor<double> sp ? sp.Values[i] : p[i];
+        static void WriteScalar(Tensor<double> p, int i, double v)
+        {
+            if (p is SparseTensor<double> sp) sp.Values[i] = v;
+            else p[i] = v;
+        }
+
         foreach (var param in trainableParams)
         {
-            if (param is null || param.Length == 0) continue;
+            if (param is null || TrainableScalarCount(param) == 0) continue;
             if (!analyticalGrads.TryGetValue(param, out var analyticalGrad) || analyticalGrad is null)
                 continue;
 
-            int sampleCount = Math.Min(MaxSampledPerParam, param.Length);
+            int trainableCount = TrainableScalarCount(param);
+            int sampleCount = Math.Min(MaxSampledPerParam, trainableCount);
             for (int s = 0; s < sampleCount; s++)
             {
-                int idx = rng.Next(0, param.Length);
+                int idx = rng.Next(0, trainableCount);
 
-                double original = param[idx];
-                param[idx] = original + Eps;
+                double original = ReadScalar(param, idx);
+                WriteScalar(param, idx, original + Eps);
                 var lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original - Eps;
+                WriteScalar(param, idx, original - Eps);
                 var lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original;
+                WriteScalar(param, idx, original);
 
                 double numerical = (lossPlus - lossMinus) / (2.0 * Eps);
-                double analytical = analyticalGrad[idx];
+                double analytical = ReadScalar(analyticalGrad, idx);
                 double absDiff = Math.Abs(numerical - analytical);
                 double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
 

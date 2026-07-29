@@ -148,7 +148,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
         _numFeatures = 1;
@@ -170,7 +170,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _options = options;
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
         _numFeatures = numFeatures;
@@ -185,6 +185,22 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _numHeads = options.NumHeads;
         _numLayers = options.NumLayers;
         _dropout = options.DropoutRate;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        RWKVForecastingOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = options.AdamBeta1,
+                Beta2 = options.AdamBeta2,
+                Epsilon = options.AdamEpsilon,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false
+            });
     }
 
     #endregion
@@ -236,6 +252,9 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : ForecastOnnx(input);
@@ -256,6 +275,33 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         // tape.ComputeGradients + optimizer.Step) that every other
         // NeuralNetworkBase subclass uses.
         base.Train(input, target);
+    }
+
+    /// <summary>
+    /// One-shot guard for <see cref="ResolveLazyLayerShapes"/>, mirroring the Wav2Vec2 precedent.
+    /// </summary>
+    private bool _shapesProbed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The real <see cref="Forward"/> reshapes [batch, seqLen, numFeatures] to
+    /// [batch*seqLen, numFeatures] before the input embedding, so that embedding must resolve to
+    /// inputSize = numFeatures (1 for a univariate series). The base sequential walk instead feeds
+    /// the architecture's FLAT input shape ([contextLength]) straight in and resolves the embedding
+    /// to contextLength -> 131,328 parameters instead of 512. The first real forward then silently
+    /// REBUILDS the layer at the correct shape, so ParameterCount and GetParameters().Length CHANGE
+    /// across a training step (measured 5,985,632 -> 5,854,816), which in turn makes every
+    /// parameter-vector-sized consumer - optimizer moment state, Clone/serialization round-trips,
+    /// and the param-L2 invariants - disagree with the model depending on whether anything queried
+    /// parameters before the first forward. Probe the real forward once so every lazy layer resolves
+    /// to what Forward actually feeds it. This is virtual for exactly this case (non-sequential
+    /// forward topology) and is one-shot, so lazy initialization keeps its performance benefit.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_shapesProbed || !_useNativeMode || Layers.Count == 0) return;
+        _shapesProbed = true;
+        _ = Forward(new Tensor<T>(new[] { _contextLength, _numFeatures }));
     }
 
     /// <inheritdoc/>

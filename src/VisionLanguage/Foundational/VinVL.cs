@@ -214,27 +214,23 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         }
     }
 
-    private static Tensor<T> MeanPoolOverTokens(Tensor<T> input)
+    /// <summary>
+    /// Mean-pools token embeddings [tokens, dim] down to a single [dim] vector for the task head.
+    /// </summary>
+    /// <remarks>
+    /// This must be a RECORDED reduction. Accumulating the mean element by element produced a tensor
+    /// with no history on the autodiff tape, and because this sits between the encoder stack and the
+    /// task head it cut the backward pass in half: only the head received gradients while every
+    /// encoder layer stayed frozen. The head then optimized against features that could never adapt,
+    /// so training pushed the loss UP by an amount proportional to the learning rate (0.000946 at
+    /// 5e-5, 0.009497 at 5e-4) and no step size could fix it.
+    /// </remarks>
+    private Tensor<T> MeanPoolOverTokens(Tensor<T> input)
     {
-        int rank = input.Shape.Length;
-        if (rank != 2)
+        if (input.Shape.Length != 2)
             return input;
-        int n = input.Shape[0];
-        int d = input.Shape[1];
-        var output = new Tensor<T>([d]);
-        T invN = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(1.0 / n);
-        for (int i = 0; i < d; i++)
-        {
-            T sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
-            for (int j = 0; j < n; j++)
-                sum = AiDotNet
-                    .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                    .Add(sum, input[j, i]);
-            output[i] = AiDotNet
-                .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                .Multiply(sum, invN);
-        }
-        return output;
+
+        return Engine.ReduceMean(input, new[] { 0 }, keepDims: false);
     }
 
     private Tensor<T> RunStream(Tensor<T> input)

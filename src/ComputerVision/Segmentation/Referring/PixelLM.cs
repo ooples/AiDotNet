@@ -132,9 +132,10 @@ public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
                 EnableGradientClipping = false,
                 MaxGradientNorm = 0.0,
             });
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
+        ValidateArchitectureOptions(_options);
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
 
@@ -168,9 +169,10 @@ public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
+        ValidateArchitectureOptions(_options);
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load PixelLM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -217,6 +219,29 @@ public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     #endregion
 
     #region Private Methods
+    private static void ValidateArchitectureOptions(PixelLMOptions options)
+    {
+        if (options.ChannelDimensions is null)
+            throw new ArgumentNullException(nameof(options.ChannelDimensions));
+        if (options.StageDepths is null)
+            throw new ArgumentNullException(nameof(options.StageDepths));
+        if (options.ChannelDimensions.Length == 0 ||
+            options.ChannelDimensions.Length != options.StageDepths.Length)
+        {
+            throw new ArgumentException(
+                "ChannelDimensions and StageDepths must be non-empty arrays with matching lengths.",
+                nameof(options));
+        }
+        if (options.ChannelDimensions.Any(value => value <= 0) ||
+            options.StageDepths.Any(value => value <= 0) ||
+            options.DecoderDimension <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "All PixelLM channel dimensions, stage depths, and the decoder dimension must be positive.");
+        }
+    }
+
     private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);

@@ -47,6 +47,7 @@ public class PANNsOptions : ModelOptions
             throw new ArgumentNullException(nameof(other));
         }
 
+        Seed = other.Seed;
         SampleRate = other.SampleRate;
         FftSize = other.FftSize;
         HopLength = other.HopLength;

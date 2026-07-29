@@ -110,6 +110,12 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     private readonly ConvolutionalLayer<T> _textProjection;
     private readonly int _textHiddenDim;
 
+    /// <summary>
+    /// Width of the vision and text trunks. CLIP ViT-B/32's 768 stays the default; it was a hardcoded
+    /// local before, which left the model at ~171M parameters no matter how small a clip it was given.
+    /// </summary>
+    private readonly int _hiddenDim;
+
     // Shared components
     private readonly ConvolutionalLayer<T> _logitScale;
 
@@ -198,6 +204,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int textMaxLength = 77,
         int vocabSize = 49408,
         double temperature = 0.07,
+        int hiddenDim = 768,
         string? vocabPath = null,
         string? mergesPath = null,
         VideoCLIPVideoOptions? options = null,
@@ -238,14 +245,15 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         _textTransformerFFN1 = [];
         _textTransformerFFN2 = [];
 
-        Guard.Positive(_options.HiddenDimension, nameof(_options.HiddenDimension));
         Guard.Positive(_options.NumSpatialBlocks, nameof(_options.NumSpatialBlocks));
         Guard.Positive(_options.NumTemporalBlocks, nameof(_options.NumTemporalBlocks));
         Guard.Positive(_options.NumTextBlocks, nameof(_options.NumTextBlocks));
         Guard.Positive(_options.LearningRate, nameof(_options.LearningRate));
 
-        int hiddenDim = _options.HiddenDimension;
-        _textHiddenDim = hiddenDim;
+        int effectiveHiddenDim = options is null ? hiddenDim : _options.HiddenDimension;
+        Guard.Positive(effectiveHiddenDim, nameof(hiddenDim));
+        _hiddenDim = effectiveHiddenDim;
+        _textHiddenDim = effectiveHiddenDim;
         int numSpatialBlocks = _options.NumSpatialBlocks;
         int numTemporalBlocks = _options.NumTemporalBlocks;
         int numTextBlocks = _options.NumTextBlocks;
@@ -259,7 +267,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         {
             var layers = LayerHelper<T>.CreateVideoCLIPLayers(
                 channels: _channels, height: _height, width: _width,
-                hiddenDim: hiddenDim, embeddingDim: _embeddingDim,
+                hiddenDim: effectiveHiddenDim, embeddingDim: _embeddingDim,
                 numSpatialBlocks: numSpatialBlocks, numTemporalBlocks: numTemporalBlocks,
                 numTextBlocks: numTextBlocks, numFrames: _numFrames, textMaxLength: _textMaxLength).ToList();
             Layers.AddRange(layers);
@@ -633,6 +641,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int channels = videoFrames.Shape[2];
         int height = videoFrames.Shape[3];
         int width = videoFrames.Shape[4];
+
 
         // Process each frame
         var allFrameFeatures = new List<Tensor<T>>();

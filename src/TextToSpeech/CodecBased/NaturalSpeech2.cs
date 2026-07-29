@@ -225,7 +225,9 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Honor the optimizer selected by the native constructor. The two-argument
+            // overload creates a generic fallback and silently ignores _optimizer.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -311,9 +313,10 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new NaturalSpeech2Options(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new NaturalSpeech2<T>(Architecture, mp, _options);
-        return new NaturalSpeech2<T>(Architecture, _options, _optimizer);
+            return new NaturalSpeech2<T>(Architecture, mp, options);
+        return new NaturalSpeech2<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

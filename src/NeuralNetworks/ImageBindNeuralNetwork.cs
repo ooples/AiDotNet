@@ -312,7 +312,6 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     private void InitializeNativeLayers(int channels)
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
-        int imuLayerCount = Math.Min(6, _numEncoderLayers);
 
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
@@ -325,6 +324,49 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
                 _numEncoderLayers, _numHeads, _vocabularySize, _maxSequenceLength,
                 _audioSampleRate, _audioMaxDuration, _imuTimesteps, _numVideoFrames));
         }
+
+        BindNativeLayers();
+
+        // Initialize positional embeddings
+        int audioPatchSize = 16;
+        int audioSeqLen = (_audioSampleRate * _audioMaxDuration) / 160;
+        audioSeqLen = (audioSeqLen / audioPatchSize) * audioPatchSize;
+        if (audioSeqLen < audioPatchSize) audioSeqLen = audioPatchSize;
+
+        _imageClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
+        _imagePositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
+        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _hiddenDim, NumOps.Zero);
+        _audioPositionalEmbeddings = Matrix<T>.CreateDefault(audioSeqLen / audioPatchSize + 1, _hiddenDim, NumOps.Zero);
+        _thermalClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
+        _thermalPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
+        _depthClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
+        _depthPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
+        _imuPositionalEmbeddings = Matrix<T>.CreateDefault(_imuTimesteps, _hiddenDim, NumOps.Zero);
+        _videoTemporalPositionalEmbeddings = Matrix<T>.CreateDefault(_numVideoFrames, _hiddenDim, NumOps.Zero);
+
+        InitializeWeights();
+    }
+
+    /// <summary>
+    /// Rebinds the modality-specific views to the authoritative base layer graph.
+    /// </summary>
+    /// <remarks>
+    /// The base deserializer replaces <see cref="NeuralNetworkBase{T}.Layers"/> with restored
+    /// layer instances. Keeping the constructor-created references here would make prediction
+    /// and training continue through fresh random layers while parameter enumeration and COW
+    /// cloning operate on the restored graph.
+    /// </remarks>
+    private void BindNativeLayers()
+    {
+        _imageEncoderLayers.Clear();
+        _textEncoderLayers.Clear();
+        _audioEncoderLayers.Clear();
+        _thermalEncoderLayers.Clear();
+        _depthEncoderLayers.Clear();
+        _imuEncoderLayers.Clear();
+        _videoTemporalLayers.Clear();
+
+        int imuLayerCount = Math.Min(6, _numEncoderLayers);
 
         // Distribute layers to internal sub-lists
         int idx = 0;
@@ -369,25 +411,6 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         for (int i = 0; i < 4; i++)
             _videoTemporalLayers.Add(Layers[idx++]);
         _videoProjection = Layers[idx++];
-
-        // Initialize positional embeddings
-        int audioPatchSize = 16;
-        int audioSeqLen = (_audioSampleRate * _audioMaxDuration) / 160;
-        audioSeqLen = (audioSeqLen / audioPatchSize) * audioPatchSize;
-        if (audioSeqLen < audioPatchSize) audioSeqLen = audioPatchSize;
-
-        _imageClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
-        _imagePositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
-        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _hiddenDim, NumOps.Zero);
-        _audioPositionalEmbeddings = Matrix<T>.CreateDefault(audioSeqLen / audioPatchSize + 1, _hiddenDim, NumOps.Zero);
-        _thermalClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
-        _thermalPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
-        _depthClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
-        _depthPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
-        _imuPositionalEmbeddings = Matrix<T>.CreateDefault(_imuTimesteps, _hiddenDim, NumOps.Zero);
-        _videoTemporalPositionalEmbeddings = Matrix<T>.CreateDefault(_numVideoFrames, _hiddenDim, NumOps.Zero);
-
-        InitializeWeights();
     }
 
     private void InitializeWeights()
@@ -728,23 +751,104 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
 
     private Vector<T> EncodeImageNative(Tensor<T> image)
     {
+        var encoded = EncodeImageNativeTensor(image);
+        int embeddingDim = encoded.Shape[^1];
+        var result = new Vector<T>(embeddingDim);
+        for (int i = 0; i < embeddingDim; i++)
+        {
+            result[i] = encoded[i];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Runs the native image branch entirely through tape-aware engine operations.
+    /// ImageBind's <see cref="Layers"/> collection contains the image, text, audio,
+    /// thermal, depth, IMU, and video towers consecutively, so the base class's
+    /// sequential training forward is not a legal ImageBind graph.
+    /// </summary>
+    private Tensor<T> EncodeImageNativeTensor(
+        Tensor<T> image,
+        Dictionary<string, Tensor<T>>? activations = null)
+    {
         if (_imagePatchEmbedding is null || _imageClsToken is null ||
             _imagePositionalEmbeddings is null || _imageProjection is null)
             throw new InvalidOperationException("Native image encoder not initialized.");
 
         var patches = _imagePatchEmbedding.Forward(image);
-        var withCls = PrependClsToken(patches, _imageClsToken);
-        var positioned = AddPositionalEmbeddings(withCls, _imagePositionalEmbeddings);
+        if (activations is not null) activations["Image/PatchEmbedding"] = patches.Clone();
+        if (patches.Rank is not (2 or 3))
+            throw new InvalidOperationException($"Image patch encoder returned unsupported rank {patches.Rank}; expected [N,D] or [B,N,D].");
 
-        var current = positioned;
-        foreach (var layer in _imageEncoderLayers)
+        int batch = patches.Rank == 3 ? patches.Shape[0] : 1;
+        int tokens = patches.Rank == 3 ? patches.Shape[1] : patches.Shape[0];
+        int hiddenDim = patches.Shape[^1];
+        int sequenceLength = tokens + 1;
+        if (_imageClsToken.Columns < hiddenDim ||
+            _imagePositionalEmbeddings.Rows < sequenceLength ||
+            _imagePositionalEmbeddings.Columns < hiddenDim)
         {
-            current = layer.Forward(current);
+            throw new InvalidOperationException("ImageBind positional or CLS embedding dimensions do not match the image encoder output.");
         }
 
-        var clsFeature = ExtractClsToken(current);
-        var projected = ProjectFeatures(clsFeature, _imageProjection);
-        return Normalize(projected);
+        int[] clsShape = patches.Rank == 3 ? [batch, 1, hiddenDim] : [1, hiddenDim];
+        var cls = Tensor<T>.CreateDefault(clsShape, NumOps.Zero);
+        for (int b = 0; b < batch; b++)
+        {
+            for (int d = 0; d < hiddenDim; d++)
+            {
+                int offset = patches.Rank == 3 ? b * hiddenDim + d : d;
+                cls[offset] = _imageClsToken[0, d];
+            }
+        }
+
+        var withCls = Engine.TensorConcatenate([cls, patches], axis: patches.Rank == 3 ? 1 : 0);
+        var positional = Tensor<T>.CreateDefault(withCls.Shape.ToArray(), NumOps.Zero);
+        for (int b = 0; b < batch; b++)
+        {
+            for (int token = 0; token < sequenceLength; token++)
+            {
+                for (int d = 0; d < hiddenDim; d++)
+                {
+                    int offset = patches.Rank == 3
+                        ? (b * sequenceLength + token) * hiddenDim + d
+                        : token * hiddenDim + d;
+                    positional[offset] = _imagePositionalEmbeddings[token, d];
+                }
+            }
+        }
+        var positioned = Engine.TensorAdd(withCls, positional);
+        if (activations is not null) activations["Image/PositionedTokens"] = positioned.Clone();
+
+        var current = positioned;
+        for (int i = 0; i < _imageEncoderLayers.Count; i++)
+        {
+            current = _imageEncoderLayers[i].Forward(current);
+            if (activations is not null) activations[$"Image/Encoder_{i}"] = current.Clone();
+        }
+
+        Tensor<T> clsFeature;
+        if (current.Rank == 3)
+        {
+            var clsSlice = Engine.TensorSlice(current, [0, 0, 0], [batch, 1, hiddenDim]);
+            clsFeature = Engine.Reshape(clsSlice, [batch, hiddenDim]);
+        }
+        else
+        {
+            clsFeature = Engine.TensorSlice(current, [0, 0], [1, hiddenDim]);
+        }
+
+        var projected = _imageProjection.Forward(clsFeature);
+        if (activations is not null) activations["Image/Projection"] = projected.Clone();
+        var sumSquared = Engine.ReduceSum(
+            Engine.TensorMultiply(projected, projected),
+            [projected.Rank - 1],
+            keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-12)));
+        var normalized = Engine.TensorBroadcastDivide(projected, norm);
+        if (activations is not null) activations["Image/NormalizedEmbedding"] = normalized.Clone();
+        return normalized;
     }
 
     private Vector<T> EncodeTextNative(string text)
@@ -1512,14 +1616,13 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         SetTrainingMode(false);
+        if (_useNativeMode)
+            return Accelerate(input, () => EncodeImageNativeTensor(input));
+
         return Accelerate(input, () =>
         {
-            var embedding = GetImageEmbedding(input);
+            var embedding = EncodeImageOnnx(input);
             var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
             for (int i = 0; i < embedding.Length; i++)
             {
@@ -1527,6 +1630,34 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
             }
             return result;
         });
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Training is not supported for ONNX ImageBind models.");
+
+        return EncodeImageNativeTensor(input);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        SetTrainingMode(false);
+
+        if (_useNativeMode)
+        {
+            EncodeImageNativeTensor(input, activations);
+        }
+        else
+        {
+            activations["Image/OnnxEmbedding"] = Predict(input).Clone();
+        }
+
+        return activations;
     }
 
     /// <inheritdoc/>
@@ -1751,6 +1882,13 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         _ = reader.ReadInt32(); // imuTimesteps
         _ = reader.ReadInt32(); // numVideoFrames
         _ = reader.ReadBoolean(); // useNativeMode
+
+        // NeuralNetworkBase replaces Layers during deserialization. Rebind the modality
+        // views so inference/training and parameter enumeration use that restored graph.
+        if (_useNativeMode)
+        {
+            BindNativeLayers();
+        }
     }
 
     /// <inheritdoc/>

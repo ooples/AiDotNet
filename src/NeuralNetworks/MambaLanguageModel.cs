@@ -78,7 +78,15 @@ public partial class MambaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         MambaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // Mamba's LM head emits RAW LOGITS (DenseLayer with no activation, see
+            // LayerHelper.CreateMambaLayers), so the loss must be cross-entropy-with-logits (fused
+            // log-softmax + NLL, == PyTorch nn.CrossEntropyLoss) — the same pairing
+            // RWKV4LanguageModel already uses, and the pairing the Mamba paper's LM objective assumes.
+            // The TextGeneration DEFAULT is CategoricalCrossEntropy, which expects softmax
+            // PROBABILITIES and takes log(predicted): feeding it un-normalized logits makes the
+            // objective degenerate, because every non-positive logit is clamped to the 1e-7 floor where
+            // TensorClamp has ZERO gradient, so those classes get no training signal at all.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         if (vocabSize <= 0) throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
         if (modelDimension <= 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));

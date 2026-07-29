@@ -91,7 +91,12 @@ public class IART<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new IARTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
@@ -153,6 +158,10 @@ public class IART<T> : VideoSuperResolutionBase<T>
             SetTrainingMode(false);
         }
     }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     public override void UpdateParameters(Vector<T> parameters)
     {
@@ -222,7 +231,12 @@ public class IART<T> : VideoSuperResolutionBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new IART<T>(Architecture, _options);
+    {
+        var optionsCopy = new IARTOptions(_options);
+        if (!_useNativeMode && optionsCopy.ModelPath is { } path && !string.IsNullOrEmpty(path))
+            return new IART<T>(Architecture, path, optionsCopy);
+        return new IART<T>(Architecture, optionsCopy);
+    }
 
     #endregion
 

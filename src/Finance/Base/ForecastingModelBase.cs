@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.LossFunctions;
@@ -249,4 +249,38 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
 
         return result;
     }
+    /// <summary>
+    /// Walks the layer stack the way this family's forward passes do: instance-normalize the input and
+    /// promote a bare rank-1 series to [1, N] before it reaches the first layer.
+    /// </summary>
+    /// <remarks>
+    /// The generic implementation feeds the raw input straight into Layers[0]. Every forecasting model
+    /// here normalizes first and lifts a rank-1 series to a batched one, so the leading ReshapeLayer
+    /// received a rank-1 tensor and threw "ReshapeLayer per-sample input element count (1) does not
+    /// match output element count". MOMENT, YingLong and TinyTimeMixers each carried a private copy of
+    /// this override for exactly that reason and TOTO then hit it too, so it belongs here once rather
+    /// than being re-added per model as each shard run surfaces the next one. Models whose forward
+    /// differs still override it themselves.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!UseNativeMode || Layers.Count == 0)
+            return activations;
+
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
 }
