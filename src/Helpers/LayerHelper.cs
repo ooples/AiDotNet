@@ -654,7 +654,23 @@ public static class LayerHelper<T>
                     return running;
                 }
             }
-            running = layer.GetOutputShape();
+            // GetOutputShape() is PER-SAMPLE — layers store their shapes without the batch axis —
+            // but ResolveFromShape documents its argument as the shape the layer would receive on
+            // its first forward, and builds a dummy tensor of exactly that to initialize from. So
+            // the running shape has to regain a batch axis before it is handed to the next layer.
+            //
+            // Most layers never notice the difference, because they size themselves from the last
+            // axis. ReshapeLayer does notice: it treats the leading axis as batch and counts
+            // per-sample elements from axis 1 onward. Given a per-sample [512, 8, 32] it counted
+            // 8*32 = 256 against its 131072-element target and rejected the shape — even though
+            // 512*8*32 is exactly 131072. Chain resolution stopped there, which left every layer
+            // after the first reshape lazy: a freshly built ABINet reported 1,718,624 parameters
+            // where one that had run a forward reported 4,281,376, and restoring a trained
+            // parameter vector into a fresh clone misaligned every slice past that point.
+            var perSample = layer.GetOutputShape();
+            running = new int[perSample.Length + 1];
+            running[0] = 1;
+            Array.Copy(perSample, 0, running, 1, perSample.Length);
         }
 
         return running;
