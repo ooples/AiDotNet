@@ -483,12 +483,12 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     #region Forward Pass
 
     /// <summary>
-    /// Adds the singleton channel axis a <see cref="ConvolutionalLayer{T}"/> requires, turning a
-    /// rank-2 mel spectrogram <c>[numMels, numFrames]</c> into <c>[1, numMels, numFrames]</c>.
+    /// Shapes a mel spectrogram into the rank-4 <c>[B, C, H, W]</c> form the conv stack needs,
+    /// turning a rank-2 <c>[numFrames, numMels]</c> spectrogram into <c>[1, 1, numFrames, numMels]</c>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <see cref="PreprocessAudio"/> returns the mel spectrogram as a rank-2 tensor, but the conv
+    /// <see cref="PreprocessAudio"/> returns the mel spectrogram as a RANK-2 tensor, but the conv
     /// stack built by <c>CreateSpeechEmotionRecognizerLayers</c> accepts only rank-3 <c>[C,H,W]</c>
     /// or rank-4 <c>[B,C,H,W]</c>. Every native-mode inference path — <see cref="Forward"/> via
     /// <see cref="GetEmotionProbabilities"/>, and <see cref="ExtractEmotionFeatures"/> — therefore
@@ -496,18 +496,31 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// before reaching the first layer, so the model could not run in native mode at all.
     /// </para>
     /// <para>
+    /// The batch axis is what matters, and rank-3 is NOT sufficient. With a rank-3 <c>[C,H,W]</c>
+    /// tensor the trailing <see cref="FlattenLayer{T}"/> reads dim 0 as a BATCH dimension, so a
+    /// measured <c>[16,4,32]</c> feature map flattened to <c>[16,128]</c> and the dense head emitted
+    /// <c>[16,4]</c> — 16 rows of 4 logits. <c>ApplySoftmax</c> then reported "Expected 4 logits but
+    /// got 64" (64 = 16 channels x 4 classes). Prepending an explicit singleton batch axis makes the
+    /// flatten collapse C*H*W into one row, so the head emits exactly <c>[1, numEmotions]</c>.
+    /// </para>
+    /// <para>
     /// Reshaping goes through <c>Engine</c> so the operation is recorded on the autodiff tape:
     /// a bare <c>tensor.Reshape</c> here would sever gradient flow for every training invariant.
-    /// Rank-3 and rank-4 inputs (an already-batched or already-channelled spectrogram, as the
-    /// training path supplies) pass through untouched.
+    /// Rank-4 input (already batched) passes through untouched; a rank-3 <c>[C,H,W]</c> input gets
+    /// the batch axis it is missing.
     /// </para>
     /// </remarks>
     private Tensor<T> AddChannelAxisIfNeeded(Tensor<T> input)
     {
-        if (input.Shape.Length != 2)
-            return input;
+        int rank = input.Shape.Length;
 
-        return Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] });
+        if (rank == 2)
+            return Engine.Reshape(input, new[] { 1, 1, input.Shape[0], input.Shape[1] });
+
+        if (rank == 3)
+            return Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+
+        return input;
     }
 
     /// <inheritdoc/>
@@ -850,13 +863,18 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     {
         var probabilities = GetEmotionProbabilities(input);
 
+        // Write DIRECTLY into the result tensor. Tensor<T>.ToVector() materializes a COPY, not a
+        // view over the tensor's storage, so the previous `result.ToVector()[i] = prob` populated a
+        // throwaway vector and returned the freshly-allocated (all-zero) tensor: Predict emitted
+        // [0, 0, 0, 0] for EVERY input. That made all input-sensitivity invariants compare zeros to
+        // zeros — DifferentInputs saw L2 = 0 and read it as a collapsed network, while the network
+        // itself was healthy (measured L2 = 8.9e-1 between two probes at the output layer).
         var result = new Tensor<T>([_emotionLabels.Length]);
-        var resultVector = result.ToVector();
         for (int i = 0; i < _emotionLabels.Length; i++)
         {
             if (probabilities.TryGetValue(_emotionLabels[i], out var prob))
             {
-                resultVector[i] = prob;
+                result[i] = prob;
             }
         }
 
