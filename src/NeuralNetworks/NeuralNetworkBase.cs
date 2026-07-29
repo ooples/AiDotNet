@@ -6136,8 +6136,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual T GetLastLoss()
     {
-        // If we haven't calculated a loss yet, return a default value
-        if (LastLoss == null || NumOps.IsNaN(LastLoss))
+        // A missing loss means training has not produced one yet. Preserve NaN/Infinity:
+        // replacing a non-finite training result with zero makes divergence look like
+        // successful convergence and prevents callers from diagnosing the real failure.
+        if (LastLoss == null)
         {
             return NumOps.Zero;
         }
