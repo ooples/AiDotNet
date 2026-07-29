@@ -285,8 +285,14 @@
          gradients for rProj / kappa / kTilde / vProj / decayLogit / iclRate were silently zero
          whenever a tape was live), and the generic-path kappa normalisation now guards the divisor
          instead of relying on a 1e-12 seed that flushes to zero in Half/BFloat16 and produced
-         0 * Inf = NaN. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.120.1" />
+         0 * Inf = NaN.
+
+         Bumped 0.120.1 -> 0.120.2: brings AiDotNet.Tensors #899 — compiled training now
+         privatizes every registered COW-shared parameter before specialized actions and fused
+         optimizers capture writable backing arrays. This preserves O(1) inference cloning while
+         preventing clone-training writes from leaking through shared storage, without disabling
+         fused compiled training. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.120.2" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.119.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.119.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.119.0" />
