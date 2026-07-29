@@ -50,6 +50,23 @@ public static class DeserializationHelper
 
         foreach (var type in layerTypes)
         {
+            // Key by the full, namespace-qualified name so layers that share a
+            // short name across namespaces each get a distinct, resolvable
+            // identity — e.g. AiDotNet.PointCloud.Layers.MaxPoolingLayer`1 vs
+            // AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer`1. Keyed only by
+            // type.Name, the second registration silently overwrote the first, so
+            // one of the two was unreachable and any model using it failed to
+            // clone/deserialize ("MaxPooling requires 3D [C,H,W]" when the point
+            // cloud layer was rebuilt as the image one).
+            if (type.FullName is { } fullName)
+            {
+                LayerTypes[fullName] = type;
+            }
+
+            // The short name is still registered for backward compatibility with
+            // models serialized before full names were written. For a colliding
+            // short name this entry stays ambiguous (last registration wins, as
+            // before) — full names are what resolve it going forward.
             LayerTypes[type.Name] = type;
         }
     }
@@ -1711,6 +1728,30 @@ public static class DeserializationHelper
                 throw new MissingLayerCtorException("Cannot find UpsamplingLayer constructor.");
             }
             instance = ctor.Invoke(new object[] { scaleFactor });
+        }
+        else if (genericDef == typeof(AiDotNet.PointCloud.Layers.MaxPoolingLayer<>))
+        {
+            // Point-cloud global max-pool over [N, C] -> [1, C], no learnable
+            // parameters. Distinct from the image MaxPoolingLayer below; now that
+            // layers serialize their full type name the two no longer collide.
+            // It needs its channel count, which is the last dim of the input (or
+            // output) shape it was serialized with.
+            int pcFeatures = inputShape is { Length: > 0 } ? inputShape[^1] : 0;
+            if (pcFeatures <= 0 && outputShape is { Length: > 0 })
+            {
+                pcFeatures = outputShape[^1];
+            }
+            if (pcFeatures <= 0)
+            {
+                throw new InvalidOperationException(
+                    "PointCloud MaxPoolingLayer deserialize: cannot determine channel count from shape.");
+            }
+            var pcCtor = type.GetConstructor(new[] { typeof(int) });
+            if (pcCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find PointCloud MaxPoolingLayer(int) constructor.");
+            }
+            instance = pcCtor.Invoke(new object?[] { pcFeatures });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.MaxPoolingLayer`1")))

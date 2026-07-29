@@ -1318,6 +1318,40 @@ public class SetAbstractionLayer<T> : LayerBase<T>
         Parameters = parameters;
     }
 
+    /// <summary>
+    /// Restores the flat parameter vector into the per-branch MLP sub-layers,
+    /// which is where this layer's weights actually live. The base SetParameters
+    /// would set only the inert Parameters field, so a deserialized clone kept its
+    /// freshly-initialised sub-layer weights and predicted differently from the
+    /// trained original (#1789 clone-parity failure — "SetParameters skipped
+    /// silently on an unresolved layer"). This mirrors GetParameters: it slices
+    /// the vector back across the same sub-layers, in the same order, so a
+    /// round-trip through GetParameters/SetParameters is exact.
+    /// </summary>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
+        }
+
+        int offset = 0;
+        foreach (var branch in _branches)
+        {
+            foreach (var layer in branch.MlpLayers)
+            {
+                int layerParameterCount = checked((int)layer.ParameterCount);
+                if (layerParameterCount > 0)
+                {
+                    layer.SetParameters(parameters.SubVector(offset, layerParameterCount));
+                    offset += layerParameterCount;
+                }
+            }
+        }
+
+        Parameters = parameters;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;

@@ -9886,8 +9886,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Write each layer's type and shape
         foreach (var layer in Layers)
         {
-            // Write layer type
-            writer.Write(layer.GetType().Name);
+            // Write layer type. Use the generic type DEFINITION's full,
+            // namespace-qualified name. GetType().Name is only the arity-suffixed
+            // short name ("MaxPoolingLayer`1"), which collides across namespaces
+            // and left one of two same-named layers unrecoverable on deserialize.
+            // The closed generic's own FullName is unusable here — it bakes in the
+            // T argument ("...MaxPoolingLayer`1[[System.Double, ...]]") — so take
+            // the definition's FullName, which is exactly the key
+            // DeserializationHelper registers. Deserialize still accepts the old
+            // short name via the retained short-name registry entries.
+            var layerRuntimeType = layer.GetType();
+            var layerDefinitionType = layerRuntimeType.IsGenericType
+                ? layerRuntimeType.GetGenericTypeDefinition()
+                : layerRuntimeType;
+            writer.Write(layerDefinitionType.FullName ?? layerDefinitionType.Name);
 
             // Write input shape
             var inputShape = layer.GetInputShape();
