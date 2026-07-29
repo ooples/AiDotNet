@@ -966,6 +966,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // after this is measured.
         "SALMONN", "SambaLanguageModel", "RecurrentGemmaLanguageModel", "SECBERT", "SpERTNER",
         "SeACo", "RepViTSAM",
+        // SAL-SAM shard, rung 1 of the same ladder. SAM2 was at rung 0 — in NO ladder list — yet three
+        // of its tests are per-test TIMEOUTS, not assertion failures: LossStrictlyDecreases hit the
+        // 180 s limit and Training_ShouldReduceLoss / MoreData_ShouldNotDegrade hit 120 s each
+        // (xUnit reports a "[1 ms]" duration when its timeout aborts a test, which is what disguised
+        // these as instant failures). Measured in isolation the class does not finish inside 10
+        // minutes, and its slowest passing tests are already TrainingError_ShouldNotExceedTestError
+        // 1 m 2 s, DifferentInputs_AfterTraining 34 s and Training_ShouldChangeParameters 33 s.
+        // Float first, per the mandated order; caps/shrinks stay available as rungs 2-3 if the
+        // remeasured class is still over budget.
+        "SAM2",
+        // Sil-Sy shard, rung 1. SpeakerLM was likewise at rung 0 with a per-test TIMEOUT:
+        // MoreData_ShouldNotDegrade hit its 120 s limit (again reported as "[1 ms]" because that is
+        // what xUnit records when its timeout aborts a test). Float first; cap/shrink remain as
+        // rungs 2-3. Its second failure (SameInput_SameEmbedding, "Values differ" at 540 ms) is a
+        // determinism defect, not a budget problem, and is tracked separately.
+        "SpeakerLM",
         // Generated N-P: PointNet++ is a training-bound hierarchical point-cloud model. Its
         // paper-default set-abstraction stack exceeded the 120-second MoreData budget at fp64.
         // Apply the required precision-first mitigation; the architecture and its defaults stay intact.
@@ -1012,6 +1028,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> HeavyTrainingTimeoutClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
+        // SAL-SAM shard, rung 2 of the ladder for SAM2 (float -> CAP -> shrink -> HeavyTimeout).
+        // Rung 1 (float, added to Fp32TestClassNames above) was applied and MEASURED: the class still
+        // takes 16 m 02 s in isolation and still has FOUR per-test timeouts — memorization (180 s),
+        // MoreData, DifferentInputs_AfterTraining and Training_ShouldChangeParameters (120 s each),
+        // all reported as "[1 ms]" because that is the duration xUnit records when its timeout aborts
+        // a test. Float alone is therefore insufficient, so cap the iteration counts. SAM2 is a VIDEO
+        // segmenter whose fixture feeds [4, 3, 32, 32] (4 frames), i.e. every training step runs the
+        // image encoder four times plus memory attention across frames. Its emitted fixture carries
+        // ONLY InputShape/OutputShape and no iteration overrides from any family branch (verified),
+        // so this block cannot double-emit (CS0102). Shrink stays available as rung 3.
+        "SAM2",
         // Shard M MedS-Meta: both are already <float> via the A-Z shard rule and carry NO iteration
         // overrides from any family branch (verified against the emitted fixtures), so the cap is the
         // genuine next rung rather than a duplicate — a family that already emits these members turns
