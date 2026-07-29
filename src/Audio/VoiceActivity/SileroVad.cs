@@ -692,12 +692,15 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         int resultSize = shape[0] * lastDim;
 
         // Extract last timestep values
+        // Write DIRECTLY into the tensor's storage. Tensor<T>.ToVector() materializes a COPY, not a
+        // view, so the previous `result.ToVector()[i] = ...` filled a throwaway vector and returned
+        // the freshly-allocated (all-zero) tensor — the extracted last timestep was always zeros.
         var result = new Tensor<T>([shape[0], lastDim]);
-        var resultVector = result.ToVector();
+        var resultSpan = result.Data.Span;
         int offset = data.Length - resultSize;
         for (int i = 0; i < resultSize && offset + i < data.Length; i++)
         {
-            resultVector[i] = data[offset + i];
+            resultSpan[i] = data[offset + i];
         }
 
         return result;
