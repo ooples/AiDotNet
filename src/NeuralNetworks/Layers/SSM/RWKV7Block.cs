@@ -12,18 +12,18 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// <remarks>
 /// <para>
 /// RWKV-7 is the seventh generation of the RWKV architecture, introducing expressive dynamic state
-/// evolution that replaces the fixed exponential decay of previous versions with learnable, data-dependent
-/// transition matrices. This allows the model to dynamically control how information is stored, retained,
-/// and forgotten in the recurrent state.
+/// evolution based on a generalized delta rule with data-dependent decay and vector-valued in-context
+/// learning rates. This allows the model to dynamically control how information is stored, replaced,
+/// retained, and forgotten in the recurrent state.
 /// </para>
 /// <para>
 /// Each block contains two sub-layers with residual connections:
 /// <code>
 ///   Time Mixing (WKV-7 kernel):
 ///     1. Token shift: lerp between current and previous token
-///     2. Compute r, k, v, a, b from shifted inputs via linear projections
-///     3. WKV-7 state update: state_t = diag(a_t) * state_{t-1} + b_t^T * (k_t * v_t^T)
-///     4. Output: sigmoid(r_t) * GroupNorm(state_t * k_t)
+///     2. Compute receptance, key, value, decay, and in-context learning-rate streams
+///     3. WKV-7 generalized delta-rule update (diagonal decay minus rank-1 removal plus value injection)
+///     4. Output: GroupNorm(state_t * receptance_t)
 ///     5. Linear output projection
 ///
 ///   Channel Mixing (SiLU gating):
@@ -35,8 +35,8 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// <para>
 /// Key innovations over RWKV-6 "Finch":
 /// <list type="bullet">
-///   <item>Learnable transition vectors a_t (diagonal state decay) and b_t (additive state injection)</item>
-///   <item>State evolution: S_t = diag(a_t) * S_{t-1} + b_t * (k_t * v_t), replacing fixed exp decay</item>
+///   <item>Vector-valued in-context learning rates that control rank-1 state replacement</item>
+///   <item>Generalized delta-rule state evolution with a stable data-dependent transition matrix</item>
 ///   <item>Group normalization on WKV output for stability</item>
 ///   <item>SiLU activation in channel mixing instead of squared ReLU</item>
 /// </list>
@@ -73,8 +73,8 @@ public partial class RWKV7Block<T> : LayerBase<T>
     private Tensor<T> _timeMixR;
     private Tensor<T> _timeMixK;
     private Tensor<T> _timeMixV;
-    private Tensor<T> _timeMixA;  // v7: shift coefficient for 'a' (state decay)
-    private Tensor<T> _timeMixB;  // v7: shift coefficient for 'b' (state injection)
+    private Tensor<T> _timeMixA;  // v7: shift coefficient for the decay logit
+    private Tensor<T> _timeMixB;  // v7: shift coefficient for the in-context learning rate
 
     // Linear projections: [modelDim, modelDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -93,13 +93,13 @@ public partial class RWKV7Block<T> : LayerBase<T>
     // v7: Dynamic state evolution projections
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
-    private Tensor<T> _aWeights;  // [modelDim, modelDim] projects to per-head diagonal decay
+    private Tensor<T> _aWeights;  // [modelDim, modelDim] projects to the per-channel decay logit
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
 
     private Tensor<T> _aBias;     // [modelDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
-    private Tensor<T> _bWeights;  // [modelDim, modelDim] projects to per-head additive injection
+    private Tensor<T> _bWeights;  // [modelDim, modelDim] projects to the in-context learning rate
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
 
     private Tensor<T> _bBias;     // [modelDim]
@@ -351,7 +351,8 @@ public partial class RWKV7Block<T> : LayerBase<T>
 
         // v7: State evolution projections - initialized for stable decay
         InitializeProjection(_aWeights);
-        _aBias.Fill(NumOps.FromDouble(-1.0));  // Initial log-decay: sigmoid(-1) ~ 0.27 retention per step
+        // The fused kernel maps this logit to w = exp(-exp(-1/2) * sigmoid(d)).
+        _aBias.Fill(NumOps.FromDouble(-1.0));
 
         InitializeProjection(_bWeights);
         _bBias.Fill(NumOps.FromDouble(0.0));
@@ -562,15 +563,16 @@ public partial class RWKV7Block<T> : LayerBase<T>
         var Aall = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(aIn, new[] { bsl, _modelDimension }), _aWeights), new[] { batchSize, seqLen, _modelDimension }), aBias3);
         var Ball = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(bIn, new[] { bsl, _modelDimension }), _bWeights), new[] { batchSize, seqLen, _modelDimension }), bBias3);
 
-        // ---- #1464: the entire WKV state recurrence (diagonal decay + rank-1 injection + gated
-        // readout) runs in ONE fused, differentiable engine op instead of ~10 tape micro-ops per
-        // timestep. The kernel applies the r/a/b sigmoids internally and records a single tape node
-        // whose backward is the BPTT adjoint of the recurrence, so the projection-weight gradients
-        // are identical to the per-step formulation (clone-parity preserved) — it just removes the
-        // per-timestep tape-dispatch overhead that made the memorization test exceed the 180s budget.
-        //   S_t[di,vi] = sigmoid(a)[di]*S_{t-1}[di,vi] + (sigmoid(b)[di]*k[di])*v[vi]
-        //   wkv_t[di]  = sigmoid(r)[di] * sum_vi S_t[di,vi]*k[vi]
-        var wkvAll = Engine.Rwkv7SequenceForward(Rall, Kall, Vall, Aall, Ball, _numHeads);
+        // RWKV-7's generalized delta rule uses a vector-valued in-context learning rate and two
+        // related key streams. This compact block keeps the reference k_k and k_a scales fixed at
+        // one, so kappa = k and kTilde = k * (1 + (a - 1)) = k * a. The fused kernel performs the
+        // per-head kappa normalization, paper decay transform, rank-1 removal, value injection, and
+        // raw-receptance readout in one differentiable op. Its custom BPTT keeps the recurrence
+        // graph-safe without recording per-timestep tape micro-ops.
+        var iclRateAll = Engine.Sigmoid(Ball);
+        var kTildeAll = Engine.TensorMultiply(Kall, iclRateAll);
+        var wkvAll = Engine.Rwkv7SequenceForward(
+            Rall, Kall, kTildeAll, Vall, Aall, iclRateAll, _numHeads);
 
         // Group-normalize (per head, per position) and project to the output — both batched over all
         // positions as [batch*seqLen, modelDim], so NO per-timestep ops remain in time-mixing.
@@ -591,8 +593,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // keeping the #1464 per-step-overhead win. In INFERENCE the autoregressive streaming contract
         // requires the final WKV state S_T so the next call can continue the sequence; the fused
         // Rwkv7SequenceForward returns only the gated outputs (not S_T), so compute S_T from the same
-        // documented recurrence (off-tape; inference only):
-        //   S_t[di,vi] = sigmoid(A_t)[di]*S_{t-1}[di,vi] + (sigmoid(B_t)[di]*K_t[di])*V_t[vi]
+        // documented generalized delta-rule recurrence (off-tape; inference only)
         // seeded from the prior state (`state`) so token-by-token streaming accumulates correctly.
         if (IsTrainingMode)
         {
@@ -607,7 +608,8 @@ public partial class RWKV7Block<T> : LayerBase<T>
         }
         else
         {
-            _recurrentState = ComputeFinalWkvState(state, Aall, Ball, Kall, Vall, batchSize, seqLen);
+            _recurrentState = ComputeFinalWkvState(
+                state, Kall, kTildeAll, Vall, Aall, iclRateAll, batchSize, seqLen);
             _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1) : xPrev;
         }
 
@@ -627,21 +629,28 @@ public partial class RWKV7Block<T> : LayerBase<T>
 
     /// <summary>
     /// Computes the final WKV recurrent state S_T after processing a sequence, for autoregressive streaming
-    /// inference. Mirrors the recurrence the fused <c>Rwkv7SequenceForward</c> kernel applies internally:
-    /// <c>S_t[h,di,vi] = sigmoid(A_t)[h,di]*S_{t-1}[h,di,vi] + sigmoid(B_t)[h,di]*K_t[h,di]*V_t[h,vi]</c>,
-    /// per head. Runs off the autodiff tape (scalar arithmetic over the projected A/B/K/V values) since the
-    /// streaming state carries no gradient — it only seeds the next inference call.
+    /// inference. Mirrors the generalized delta rule in the fused <c>Rwkv7SequenceForward</c> kernel.
+    /// State is stored in paper orientation as [value, key] within each head. This runs off the
+    /// autodiff tape because the streaming state carries no gradient; it only seeds the next call.
     /// </summary>
     /// <param name="seed">The prior state to continue from (zeros on the first call), [batch, heads, headDim, headDim].</param>
-    /// <param name="aAll">Decay projection A over the sequence, [batch, seqLen, modelDim].</param>
-    /// <param name="bAll">Injection-gate projection B over the sequence, [batch, seqLen, modelDim].</param>
-    /// <param name="kAll">Key projection over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="kappaAll">Pre-normalization removal key, [batch, seqLen, modelDim].</param>
+    /// <param name="kTildeAll">Relaxed replacement key, [batch, seqLen, modelDim].</param>
     /// <param name="vAll">Value projection over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="decayLogitAll">Decay logits over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="iclRateAll">Post-sigmoid in-context learning rates, [batch, seqLen, modelDim].</param>
     /// <param name="batchSize">The batch size.</param>
     /// <param name="seqLen">The sequence length.</param>
     /// <returns>The final state S_T, shape [batch, numHeads, headDim, headDim].</returns>
     private Tensor<T> ComputeFinalWkvState(
-        Tensor<T> seed, Tensor<T> aAll, Tensor<T> bAll, Tensor<T> kAll, Tensor<T> vAll, int batchSize, int seqLen)
+        Tensor<T> seed,
+        Tensor<T> kappaAll,
+        Tensor<T> kTildeAll,
+        Tensor<T> vAll,
+        Tensor<T> decayLogitAll,
+        Tensor<T> iclRateAll,
+        int batchSize,
+        int seqLen)
     {
         int hd = _headDimension;
         var s = new Tensor<T>(new[] { batchSize, _numHeads, hd, hd });
@@ -649,25 +658,54 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // Seed from the prior state so streaming (seqLen == 1 per call) accumulates across calls.
         for (int bi = 0; bi < batchSize; bi++)
             for (int h = 0; h < _numHeads; h++)
-                for (int di = 0; di < hd; di++)
-                    for (int vi = 0; vi < hd; vi++)
-                        s[new[] { bi, h, di, vi }] = seed[new[] { bi, h, di, vi }];
+                for (int vi = 0; vi < hd; vi++)
+                    for (int ki = 0; ki < hd; ki++)
+                        s[new[] { bi, h, vi, ki }] = seed[new[] { bi, h, vi, ki }];
 
         for (int t = 0; t < seqLen; t++)
             for (int bi = 0; bi < batchSize; bi++)
                 for (int h = 0; h < _numHeads; h++)
-                    for (int di = 0; di < hd; di++)
+                {
+                    var kappaHat = new double[hd];
+                    var decay = new double[hd];
+                    var iclRate = new double[hd];
+                    var kTilde = new double[hd];
+                    double normSquared = 0.0;
+                    int headOffset = h * hd;
+
+                    for (int ki = 0; ki < hd; ki++)
                     {
-                        int idx = (h * hd) + di;
-                        T a = Sigmoid(aAll[new[] { bi, t, idx }]);
-                        T bk = NumOps.Multiply(Sigmoid(bAll[new[] { bi, t, idx }]), kAll[new[] { bi, t, idx }]);
-                        for (int vi = 0; vi < hd; vi++)
+                        int idx = headOffset + ki;
+                        double kappa = NumOps.ToDouble(kappaAll[new[] { bi, t, idx }]);
+                        kappaHat[ki] = kappa;
+                        normSquared += kappa * kappa;
+                        double decayGate = NumOps.ToDouble(Sigmoid(decayLogitAll[new[] { bi, t, idx }]));
+                        decay[ki] = Math.Exp(-Math.Exp(-0.5) * decayGate);
+                        iclRate[ki] = NumOps.ToDouble(iclRateAll[new[] { bi, t, idx }]);
+                        kTilde[ki] = NumOps.ToDouble(kTildeAll[new[] { bi, t, idx }]);
+                    }
+
+                    double inverseNorm = normSquared > 0.0 ? 1.0 / Math.Sqrt(normSquared) : 0.0;
+                    for (int ki = 0; ki < hd; ki++)
+                        kappaHat[ki] *= inverseNorm;
+
+                    for (int vi = 0; vi < hd; vi++)
+                    {
+                        double removalProjection = 0.0;
+                        for (int kj = 0; kj < hd; kj++)
+                            removalProjection += NumOps.ToDouble(s[new[] { bi, h, vi, kj }]) * kappaHat[kj];
+
+                        double value = NumOps.ToDouble(vAll[new[] { bi, t, headOffset + vi }]);
+                        for (int ki = 0; ki < hd; ki++)
                         {
-                            T v = vAll[new[] { bi, t, (h * hd) + vi }];
-                            T prev = s[new[] { bi, h, di, vi }];
-                            s[new[] { bi, h, di, vi }] = NumOps.Add(NumOps.Multiply(a, prev), NumOps.Multiply(bk, v));
+                            double previous = NumOps.ToDouble(s[new[] { bi, h, vi, ki }]);
+                            double next = previous * decay[ki]
+                                - removalProjection * iclRate[ki] * kappaHat[ki]
+                                + value * kTilde[ki];
+                            s[new[] { bi, h, vi, ki }] = NumOps.FromDouble(next);
                         }
                     }
+                }
 
         return s;
     }

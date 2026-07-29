@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Reflection;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Training;
 
 namespace AiDotNet.Helpers;
 
@@ -90,6 +92,23 @@ internal static class CopyOnWriteCloneHelper
     /// </summary>
     internal static List<ITrainableLayer<T>> CollectTrainableLayers<T>(IFullModel<T, Tensor<T>, Tensor<T>> root)
     {
+        // NeuralNetworkBase owns an explicit module graph: top-level Layers plus
+        // each LayerBase's registered sub-layers. Walk that graph directly, just
+        // as training does. Reflection over only the concrete model type cannot
+        // see NeuralNetworkBase's private _layers field; that made ordinary
+        // sequential models appear empty and forced the lossy eager fallback.
+        // More importantly, a reflective object-graph walk also wandered through
+        // optimizers/options/caches, which are not modules and can differ between
+        // a trained source and a fresh destination. The registered layer graph is
+        // the stable, PyTorch-style ownership boundary for cloning.
+        if (root is NeuralNetworkBase<T> neuralNetwork)
+        {
+            return new List<ITrainableLayer<T>>(
+                TapeTrainingStep<T>.CollectTrainableLayers(
+                    neuralNetwork.GetCopyOnWriteLayerRoots(),
+                    structureVersion: -1));
+        }
+
         var layers = new List<ITrainableLayer<T>>();
         // CollectInto walks arbitrary instance fields, so it is necessarily typed `object?` internally;
         // the public entry point constrains the root to a model so callers can't pass an unrelated graph.

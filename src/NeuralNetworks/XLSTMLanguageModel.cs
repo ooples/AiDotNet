@@ -72,7 +72,11 @@ public class XLSTMLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         XLSTMOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // xLSTM is a next-token language model and its LM head emits raw logits.
+            // Keep the softmax inside the loss, where max-shifted log-sum-exp is
+            // numerically stable and tape/compiled-graph safe (the same contract as
+            // PyTorch CrossEntropyLoss). A caller-supplied loss still takes precedence.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new XLSTMOptions();
         Options = _options;

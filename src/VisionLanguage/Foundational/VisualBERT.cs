@@ -104,13 +104,16 @@ public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionMo
     {
         _options = options ?? new VisualBERTOptions();
         _useNativeMode = true;
-        // AdamW's default InitialLearningRate is 0.01, which is too aggressive here: on the memorization
-        // task the model reaches loss ~0.006 by 50 iterations and then OSCILLATES around the minimum with
-        // Adam momentum, so 200-iteration loss came out slightly HIGHER than 50-iteration
-        // (MoreData_ShouldNotDegrade). The oscillation amplitude scales with the LR, so a small 2e-4 LR
-        // keeps the descent monotonic through 200 iterations while still converging.
+        // VisualBERT fine-tuning uses a maximum learning rate of 2e-5 (Li et al.,
+        // 2019, Appendix A). Honor the public options instead of AdamW's generic
+        // 1e-2 default; the previous hard-coded 2e-4 rate overshot after the model
+        // had already reached a good minimum.
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0002 });
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;
@@ -265,9 +268,8 @@ public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionMo
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        // Pass the model's own optimizer (AdamW @ LR 0.001) — the 2-arg TrainWithTape falls back to the
-        // base default optimizer (LR 0.01), so the model's configured, more-stable LR was being ignored
-        // (MoreData 200-iter overshoot).
+        // Pass the model's paper-configured optimizer. The two-argument overload
+        // uses the base optimizer and would ignore VisualBERTOptions.
         TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
@@ -340,8 +342,8 @@ public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionMo
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new VisualBERT<T>(Architecture, mp, _options);
-        return new VisualBERT<T>(Architecture, _options);
+            return new VisualBERT<T>(Architecture, mp, new VisualBERTOptions(_options));
+        return new VisualBERT<T>(Architecture, new VisualBERTOptions(_options));
     }
 
     private void ThrowIfDisposed()

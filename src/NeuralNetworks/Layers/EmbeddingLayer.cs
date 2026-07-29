@@ -367,6 +367,22 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         {
             if (_embeddingInitialized) return;
 
+            // A deserializer, ParameterBuffer, or copy-on-write clone can install a
+            // fully materialized embedding tensor before this fresh layer has ever
+            // executed Forward. In that case the tensor is the authoritative trained
+            // state. Treat it exactly like PyTorch treats a materialized lazy module:
+            // synchronize the runtime latch/registration without allocating over it.
+            // Reinitializing here silently replaced the COW-shared trained table on a
+            // clone's first prediction (UniAudio Clone_AfterTraining).
+            if (WeightsAlreadyAllocated(_embeddingTensor, _vocabularySize, _embeddingDimension))
+            {
+                RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
+                if (_projectionWeights.Length > 0)
+                    RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
+                _embeddingInitialized = true;
+                return;
+            }
+
             // Streaming-aware allocation: PaLM-E-scale models have
             // vocab × embed embedding matrices in the multi-GB range
             // (e.g. 256K × 8192 fp32 = 8 GB). Routing through

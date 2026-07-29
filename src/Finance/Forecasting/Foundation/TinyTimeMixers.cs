@@ -574,6 +574,42 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
         return current;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The native forward path normalizes the series and adds a batch axis before
+    /// the helper-created patch reshape. The base activation walker skips that
+    /// preparation, so a raw rank-1 series is interpreted as 512 samples of one
+    /// element instead of one 512-element sample. Mirror <see cref="ForwardNative"/>
+    /// so introspection observes the actual TTM layer activations.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            var activations = new Dictionary<string, Tensor<T>>();
+            var current = ApplyInstanceNormalization(input);
+            if (current.Rank == 1)
+                current = current.Reshape(new[] { 1, current.Length });
+
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+
+            return activations;
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
     /// <summary>
     /// Runs inference using the ONNX model.
     /// </summary>

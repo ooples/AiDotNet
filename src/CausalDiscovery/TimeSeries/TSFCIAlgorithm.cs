@@ -76,7 +76,6 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
         if (effectiveN < MaxLag + 3 || d < 2) return new Matrix<T>(d, d);
 
         var cov = ComputeCovarianceMatrix(data);
-        T eps = NumOps.FromDouble(1e-10);
         T threshold = NumOps.FromDouble(_correlationThreshold);
 
         // Phase 1: Build lagged covariance structure
@@ -107,6 +106,18 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (i == j) continue;
                 if (!NumOps.GreaterThan(skeleton[i, j], threshold)) continue;
 
+                int bestLag = 1;
+                T bestLagCorrelation = NumOps.Zero;
+                for (int lag = 1; lag <= MaxLag; lag++)
+                {
+                    T correlation = NumOps.Abs(ComputeLaggedCorrelation(data, i, j, lag, n));
+                    if (NumOps.GreaterThan(correlation, bestLagCorrelation))
+                    {
+                        bestLagCorrelation = correlation;
+                        bestLag = lag;
+                    }
+                }
+
                 // Test if i→j survives conditioning on each other variable's lags.
                 // Each candidate conditioning variable k that produces a CONCLUSIVE
                 // partial correlation below the threshold counts as evidence
@@ -122,7 +133,7 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 for (int k = 0; k < d; k++)
                 {
                     if (k == i || k == j) continue;
-                    T partialCorr = ComputePartialLaggedCorrelation(data, i, j, k, n);
+                    T partialCorr = ComputePartialLaggedCorrelation(data, i, j, k, bestLag, n);
                     double pcVal = NumOps.ToDouble(partialCorr);
                     if (double.IsNaN(pcVal))
                         continue; // inconclusive — try next conditioning variable
@@ -138,11 +149,17 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     // Temporal orientation: determine direction using best lag
                     T bestItoJ = NumOps.Zero;
                     T bestJtoI = NumOps.Zero;
+                    T signedBestItoJ = NumOps.Zero;
                     for (int lag = 1; lag <= MaxLag; lag++)
                     {
-                        T corrIJ = NumOps.Abs(ComputeLaggedCorrelation(data, i, j, lag, n));
+                        T signedCorrIJ = ComputeLaggedCorrelation(data, i, j, lag, n);
+                        T corrIJ = NumOps.Abs(signedCorrIJ);
                         T corrJI = NumOps.Abs(ComputeLaggedCorrelation(data, j, i, lag, n));
-                        if (NumOps.GreaterThan(corrIJ, bestItoJ)) bestItoJ = corrIJ;
+                        if (NumOps.GreaterThan(corrIJ, bestItoJ))
+                        {
+                            bestItoJ = corrIJ;
+                            signedBestItoJ = signedCorrIJ;
+                        }
                         if (NumOps.GreaterThan(corrJI, bestJtoI)) bestJtoI = corrJI;
                     }
 
@@ -163,9 +180,12 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
                     if (iToJ)
                     {
-                        T varI = cov[i, i];
-                        if (NumOps.GreaterThan(varI, eps))
-                            result[i, j] = NumOps.Divide(cov[i, j], varI);
+                        // The summary graph's edge strength is the strongest
+                        // surviving lagged correlation. Using contemporaneous
+                        // cov(i,j)/var(i) here mixed a different statistic into
+                        // the lagged skeleton, was scale-dependent, and could
+                        // produce |weights| > 1 for indirect/common-cause pairs.
+                        result[i, j] = signedBestItoJ;
                     }
                 }
             }
@@ -217,12 +237,18 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
         return NumOps.FromDouble(NumOps.ToDouble(covST) / denom);
     }
 
-    private T ComputePartialLaggedCorrelation(Matrix<T> data, int i, int j, int condVar, int n)
+    private T ComputePartialLaggedCorrelation(
+        Matrix<T> data, int i, int j, int condVar, int lag, int n)
     {
-        // Partial correlation: corr(i,j | k) = (r_ij - r_ik * r_jk) / sqrt((1-r_ik^2)(1-r_jk^2))
-        T rij = ComputeLaggedCorrelation(data, i, j, 1, n);
-        T rik = ComputeLaggedCorrelation(data, i, condVar, 1, n);
-        T rjk = ComputeLaggedCorrelation(data, j, condVar, 1, n);
+        // Test X_i(t) -> X_j(t+lag) while conditioning on X_k(t).
+        // The old implementation correlated all three pairs at the same
+        // positive lag, which conditioned on X_k(t+lag) and compared
+        // X_j(t) with X_k(t+lag). Those are not the three aligned variables
+        // in the partial-correlation identity and allowed common-cause paths
+        // such as X1 <- X0 -> X3 to survive.
+        T rij = ComputeLaggedCorrelation(data, i, j, lag, n);
+        T rik = ComputeLaggedCorrelation(data, i, condVar, 0, n);
+        T rjk = ComputeLaggedCorrelation(data, condVar, j, lag, n);
 
         T numerator = NumOps.Subtract(rij, NumOps.Multiply(rik, rjk));
         double dRik = NumOps.ToDouble(rik);

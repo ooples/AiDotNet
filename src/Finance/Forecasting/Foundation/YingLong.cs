@@ -57,7 +57,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ResearchPaper("YingLong: A Foundation Model for Weather Forecasting", "https://arxiv.org/abs/2312.11575")]
+[ResearchPaper("Output Scaling: YingLong-Delayed Chain of Thought in a Large Pretrained Time Series Forecasting Model", "https://arxiv.org/abs/2506.11029")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class YingLong<T> : TimeSeriesFoundationModelBase<T>
 {
@@ -135,7 +135,7 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -159,11 +159,41 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
         InitializeLayers();
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(YingLongOptions<T> options)
+    {
+        // YingLong section 6.2: AdamW, lr=1e-4, weight decay=0.1,
+        // beta1=0.9 and beta2=0.95. Keep these configurable while making
+        // the paper recipe the native model's default.
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                WeightDecay = options.WeightDecay,
+                Beta1 = options.Beta1,
+                Beta2 = options.Beta2,
+                UseAMSGrad = false,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: options.LearningRate,
+                    warmupSteps: options.WarmupSteps,
+                    totalSteps: options.TotalTrainingSteps,
+                    // The first optimizer update is warmup step 1, not a
+                    // zero-rate no-op: lr / warmupSteps matches the paper's
+                    // linear ramp while preserving Train()'s update contract.
+                    warmupInitLr: options.WarmupSteps > 0
+                        ? options.LearningRate / options.WarmupSteps
+                        : options.LearningRate,
+                    decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Cosine,
+                    endLr: 0.0),
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch
+            });
     }
 
     private void CopyOptionsToFields(YingLongOptions<T> options)
@@ -220,6 +250,27 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+        {
+            return base.GetNamedLayerActivations(input);
+        }
+
+        // Named activation traversal must enter the same normalized, batched
+        // representation as ForwardNative. A rank-1 series otherwise reaches
+        // ReshapeLayer as 1024 separate one-value samples instead of one
+        // 1024-value sequence.
+        var normalized = ApplyInstanceNormalization(input);
+        if (normalized.Rank == 1)
+        {
+            normalized = Engine.Reshape(normalized, new[] { 1, normalized.Length });
+        }
+
+        return base.GetNamedLayerActivations(normalized);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)
@@ -267,7 +318,7 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new YingLong<T>(Architecture, new YingLongOptions<T>
+        var clonedOptions = new YingLongOptions<T>(_options)
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -278,7 +329,9 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
             IntermediateSize = _intermediateSize,
             DropoutRate = _dropout,
             ModelSize = _modelSize
-        });
+        };
+
+        return new YingLong<T>(Architecture, clonedOptions);
     }
 
     /// <inheritdoc/>

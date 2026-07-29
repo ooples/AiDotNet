@@ -5954,6 +5954,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         => System.Linq.Enumerable.Empty<LayerBase<T>?>();
 
     /// <summary>
+    /// Returns the registered module roots used by copy-on-write cloning.
+    /// </summary>
+    /// <remarks>
+    /// This deliberately mirrors the training graph: ordinary layers come
+    /// from <see cref="Layers"/>, while models with trainable modules outside
+    /// that list expose them through <see cref="GetExtraTrainableLayers"/>.
+    /// Registered child modules are traversed by <c>TapeTrainingStep</c>.
+    /// </remarks>
+    internal IReadOnlyList<ILayer<T>> GetCopyOnWriteLayerRoots()
+    {
+        var roots = new List<ILayer<T>>(_layers.Count);
+        roots.AddRange(_layers);
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is not null)
+                roots.Add(extra);
+        }
+        return roots;
+    }
+
+    /// <summary>
     /// Structural estimate of this model's trainable parameter count, computed
     /// from its architecture/options WITHOUT materializing any lazy weight
     /// tensors. Returns 0 by default (meaning "no estimate available — rely on
@@ -10379,12 +10400,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         !(e == "0" || string.Equals(e, "false", StringComparison.OrdinalIgnoreCase) ||
           string.Equals(e, "off", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Gets whether this model can use tensor-level copy-on-write cloning.
+    /// </summary>
+    /// <remarks>
+    /// Models whose forward path maintains aliases or derived state that must
+    /// be rebuilt by the normal layer deserializer can opt out. The eager path
+    /// remains fully faithful and is appropriate for bounded-size models.
+    /// </remarks>
+    protected virtual bool SupportsCopyOnWriteDeepCopy => true;
+
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
         // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.
         // Falls back to the eager paths below for any model it cannot share safely (layer-count or
         // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
-        if (UseCopyOnWriteDeepCopy && TryDeepCopyCopyOnWrite(out var cowCopy))
+        if (UseCopyOnWriteDeepCopy && SupportsCopyOnWriteDeepCopy
+            && TryDeepCopyCopyOnWrite(out var cowCopy))
             return cowCopy;
 
         // Internal in-memory clone: open a persistence-guard InternalOperation scope for the remainder
