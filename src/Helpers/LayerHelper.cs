@@ -32787,7 +32787,13 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new GatedLinearAttentionLayer<T>(maxSeqLength, modelDimension, numHeads);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // RAW LOGITS: GLALanguageModel's default loss is CrossEntropyWithLogitsLoss, which applies
+        // log-softmax internally. A SoftmaxActivation head here made the objective
+        // log_softmax(softmax(x)) — the same double-softmax defect diagnosed and fixed on
+        // CreateRecurrentGemmaLayers below, which pins the loss near ln(vocabSize) and squashes the
+        // gradient to near zero regardless of x. (XLSTM keeps its softmax head: it resolves to
+        // CategoricalCrossEntropyLoss, which genuinely expects probabilities.)
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -32805,7 +32811,13 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new GatedDeltaNetLayer<T>(maxSeqLength, modelDimension, numHeads);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // RAW LOGITS: GatedDeltaNetLanguageModel's default loss is CrossEntropyWithLogitsLoss, which
+        // applies log-softmax internally. A SoftmaxActivation head here made the objective
+        // log_softmax(softmax(x)) — the same double-softmax defect diagnosed and fixed on
+        // CreateRecurrentGemmaLayers below, which pins the loss near ln(vocabSize) and squashes the
+        // gradient to near zero regardless of x. (XLSTM keeps its softmax head: it resolves to
+        // CategoricalCrossEntropyLoss, which genuinely expects probabilities.)
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -32862,7 +32874,18 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // RAW LOGITS (no output activation), matching the Griffin/Hawk heads above and this model's
+        // CrossEntropyWithLogitsLoss (whose ctor comment states "The recurrent Gemma LM head emits raw
+        // logits"). The previous SoftmaxActivation head dated from when the model used
+        // CategoricalCrossEntropyLoss (from_logits=false); after the switch to the fused
+        // log-softmax/NLL objective it made the loss compute log_softmax(softmax(x)) — a DOUBLE
+        // softmax. Softmax over vocabSize=4096 lands every class near 1/4096, so the outer log_softmax
+        // returned ~ln(1/4096) = -8.318 almost independently of x: the memorization loss pinned at
+        // 0.5*4096*8.318 = 17035 (measured 17033.49) and moved just 0.0022% over 100 steps because the
+        // inner softmax squashed the gradient to near zero. It also forced a full 4096x4096 softmax
+        // Jacobian per position, so this model's memorization test took 143 s against ~1 s for its
+        // identically-structured Griffin/Hawk siblings.
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
