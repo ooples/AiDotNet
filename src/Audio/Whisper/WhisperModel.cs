@@ -756,7 +756,13 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        var preprocessed = PreprocessAudio(input);
+        // Whisper's layer stack consumes frame-major log-mel features [.., frames, NumMels], and
+        // Transcribe() feeds a RAW waveform and calls PreprocessAudio itself. Unconditionally
+        // re-featurizing here made Predict disagree with Train (which forwards `input` straight
+        // through Layers) and pushed an already-featurized tensor back through PadOrTruncate ->
+        // a 30 s zero-padded buffer -> the STFT. Detect features that are already mel-shaped.
+        bool alreadyMelFeatures = input.Rank >= 2 && input.Shape[input.Rank - 1] == _numMels;
+        var preprocessed = alreadyMelFeatures ? input : PreprocessAudio(input);
 
         if (!_useNativeMode)
         {

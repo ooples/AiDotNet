@@ -295,36 +295,34 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     /// equivalent under the smoke-test's random-init weights (no
     /// task-specific pretraining).
     /// </summary>
-    private static Tensor<T> MeanPoolOverTokens(Tensor<T> input)
+    /// <summary>
+    /// Mean-pools token embeddings for the task head: [tokens, dim] -> [dim], or
+    /// [batch, tokens, dim] -> [batch, dim].
+    /// </summary>
+    /// <remarks>
+    /// These must be RECORDED reductions. Accumulating the mean element by element produces a tensor
+    /// with no history on the autodiff tape, and because this sits between the encoder stack and the
+    /// task head it cuts the backward pass in half: only the head receives gradients while every
+    /// encoder layer stays frozen, and the head then optimizes against features that can never adapt.
+    /// The identical helper in VinVL made that model's training loss RISE in proportion to the
+    /// learning rate until it was switched to Engine.ReduceMean.
+    /// </remarks>
+    private Tensor<T> MeanPoolOverTokens(Tensor<T> input)
     {
         int rank = input.Shape.Length;
         if (rank < 2)
             return input;
         if (rank == 2)
         {
-            // [N, D] -> [D]
-            int n = input.Shape[0];
-            int d = input.Shape[1];
-            var output = new Tensor<T>([d]);
-            T scale = AiDotNet
-                .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                .FromDouble(1.0 / n);
-            for (int i = 0; i < d; i++)
-            {
-                T sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
-                for (int j = 0; j < n; j++)
-                {
-                    sum = AiDotNet
-                        .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                        .Add(sum, input[j, i]);
-                }
-                output[i] = AiDotNet
-                    .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                    .Multiply(sum, scale);
-            }
-            return output;
+            return Engine.ReduceMean(input, new[] { 0 }, keepDims: false);
         }
-        // rank >= 3: collapse the last non-D dim
+        if (rank == 3)
+        {
+            return Engine.ReduceMean(input, new[] { 1 }, keepDims: false);
+        }
+
+        // rank > 3 keeps the original element-wise collapse of axis 1 against the LAST axis, which
+        // is not what a plain ReduceMean over axis 1 would produce for those shapes.
         int batch = input.Shape[0];
         int nTokens = input.Shape[1];
         int dim = input.Shape[rank - 1];

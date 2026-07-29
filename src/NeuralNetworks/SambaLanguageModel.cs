@@ -75,7 +75,17 @@ public class SambaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         SambaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // Samba's LM head emits RAW LOGITS (DenseLayer with no activation, see
+            // LayerHelper.CreateSambaLayers), so the loss must be cross-entropy-with-logits (fused
+            // log-softmax + NLL, == PyTorch nn.CrossEntropyLoss) — the same pairing
+            // RWKV4LanguageModel already uses. The TextGeneration DEFAULT is CategoricalCrossEntropy,
+            // which expects softmax PROBABILITIES and takes log(predicted); fed un-normalized logits
+            // it drives training in a degenerate direction, because the only way to reduce
+            // -sum(target*log(clamp(logit,1e-7,1))) is to push every logit past the clamp CEILING.
+            // Measured on the Generated Q-S shard before this fix: the dense-target probe "descended"
+            // from 17677.87 to -0.0000 — i.e. it hit log(1)=0 by saturating the clamp rather than by
+            // learning a distribution. With this pairing the same probe descends legitimately.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SambaOptions();
         Options = _options;

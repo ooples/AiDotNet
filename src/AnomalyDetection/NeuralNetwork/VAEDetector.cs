@@ -282,9 +282,12 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private (Vector<T> hidden, Vector<T> mean, Vector<T> logVar, Vector<T> z, Vector<T> reconstruction) Forward(
-        Vector<T> x,
-        bool sampleLatent)
+    /// <param name="sampleLatent">
+    /// When true, draws z with the reparameterization trick z = mean + exp(0.5*logVar)*epsilon —
+    /// the stochastic estimator TRAINING needs for the gradient (Kingma and Welling 2013, eq. 10).
+    /// When false, uses z = mean, which is the deterministic latent code inference should use.
+    /// </param>
+    private (Vector<T> hidden, Vector<T> mean, Vector<T> logVar, Vector<T> z, Vector<T> reconstruction) Forward(Vector<T> x, bool sampleLatent)
     {
         var encoderW1 = _encoderW1;
         var encoderB1 = _encoderB1;
@@ -320,15 +323,20 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
             Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encoderWLogVar)),
             Tensor<T>.FromVector(encoderBLogVar).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
 
-        // The VAE paper uses reparameterized Monte Carlo samples while optimizing the ELBO.
-        // Inference instead decodes the posterior mean so anomaly scores are deterministic.
+        // Reparameterization: z = mean + exp(0.5 * logVar) * epsilon
+        // Sampling belongs to TRAINING only. Scoring drew a fresh epsilon on every call, so the
+        // reconstruction — and therefore the anomaly score — changed between identical Predict
+        // calls and Predict_ShouldBeDeterministic failed. Per Kingma and Welling 2013 the
+        // reparameterization trick exists to make the training objective differentiable; at
+        // inference the latent code is the distribution's mean, which is also what VAE-based
+        // anomaly detection scores against.
         var z = new Vector<T>(_latentDim);
         T half = NumOps.FromDouble(0.5);
         for (int j = 0; j < _latentDim; j++)
         {
             if (sampleLatent)
             {
-                T epsilon = NumOps.FromDouble(GaussianRandom()); // Random boundary
+                T epsilon = NumOps.FromDouble(GaussianRandom());
                 T std = NumOps.Exp(NumOps.Multiply(half, logVar[j]));
                 z[j] = NumOps.Add(mean[j], NumOps.Multiply(std, epsilon));
             }

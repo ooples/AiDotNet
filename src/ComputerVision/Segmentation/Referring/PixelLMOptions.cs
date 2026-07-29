@@ -29,6 +29,9 @@ public class PixelLMOptions : NeuralNetworkOptions
         OptimizerBeta1 = other.OptimizerBeta1;
         OptimizerBeta2 = other.OptimizerBeta2;
         OptimizerEpsilon = other.OptimizerEpsilon;
+        ChannelDimensions = (int[])other.ChannelDimensions.Clone();
+        StageDepths = (int[])other.StageDepths.Clone();
+        DecoderDimension = other.DecoderDimension;
     }
 
     /// <summary>Gets or sets the AdamW learning rate. The paper default is 3e-4.</summary>
@@ -48,5 +51,20 @@ public class PixelLMOptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets AdamW's numerical-stability epsilon.</summary>
     public double OptimizerEpsilon { get; set; } = 1e-8;
+
+    /// <summary>
+    /// Gets or sets the four hierarchical encoder widths. The defaults match the
+    /// PixelLM paper's SegFormer-B5 visual encoder.
+    /// </summary>
+    public int[] ChannelDimensions { get; set; } = [64, 128, 320, 768];
+
+    /// <summary>
+    /// Gets or sets the number of blocks in each encoder stage. The defaults match
+    /// the paper configuration.
+    /// </summary>
+    public int[] StageDepths { get; set; } = [2, 2, 4, 12];
+
+    /// <summary>Gets or sets the lightweight pixel-decoder width.</summary>
+    public int DecoderDimension { get; set; } = 256;
 
 }

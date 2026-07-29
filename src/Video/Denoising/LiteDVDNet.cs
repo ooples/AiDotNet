@@ -245,7 +245,11 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the configured optimizer through. The two-argument overload left _optimizer
+            // assigned but never read, so training silently used the framework default: the loss
+            // EXPLODED from 0.292 to 299.3 on the J-L shard's Training_ShouldReduceLoss, a
+            // thousandfold divergence, while LiteDVDNet's own LearningRate option sat unused.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

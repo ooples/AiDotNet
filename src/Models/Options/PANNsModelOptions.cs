@@ -43,6 +43,9 @@ public class PANNsModelOptions : AudioNeuralNetworkOptions
         NumBlocks = other.NumBlocks;
         DropoutRate = other.DropoutRate;
         HeadDropoutRate = other.HeadDropoutRate;
+        LearningRate = other.LearningRate;
+        EnableGradientClipping = other.EnableGradientClipping;
+        MaxGradientNorm = other.MaxGradientNorm;
         MinFrequency = other.MinFrequency;
         MaxFrequency = other.MaxFrequency;
     }
@@ -119,4 +122,15 @@ public class PANNsModelOptions : AudioNeuralNetworkOptions
     /// <summary>Dropout rate used around the fully connected embedding head.</summary>
     /// <value>Default 0.5, matching the released CNN14 implementation.</value>
     public double HeadDropoutRate { get; init; } = 0.5;
+
+    /// <summary>Adam learning rate used for native training.</summary>
+    /// <value>Default 1e-3, matching the published CNN14 training recipe.</value>
+    public double LearningRate { get; init; } = 1e-3;
+
+    /// <summary>Whether the native Adam optimizer clips the global gradient norm.</summary>
+    /// <value>Disabled by default to preserve the paper training recipe.</value>
+    public bool EnableGradientClipping { get; init; }
+
+    /// <summary>Maximum global gradient norm when clipping is enabled.</summary>
+    public double MaxGradientNorm { get; init; } = 1.0;
 }

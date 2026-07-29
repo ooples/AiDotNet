@@ -537,7 +537,19 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         // Initialize training components
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper training configuration (Shen et al. 2018, sec. 3): "Adam optimizer with beta1 = 0.9,
+        // beta2 = 0.999, eps = 10^-6 and a learning rate of 10^-3 exponentially decaying to 10^-5".
+        // The optimizer was previously built bare, so none of those values applied and the decoder ran
+        // on framework defaults. Callers can still supply their own optimizer.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-3,
+                MinLearningRate = 1e-5,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-6,
+            });
 
         InitializeNativeLayers();
     }
@@ -560,6 +572,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     private void InitializeNativeLayers()
     {
         List<ILayer<T>> layers;
+        bool builtDefaultLayers = false;
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             layers = Architecture.Layers.ToList();
@@ -573,6 +586,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
         else
         {
+            builtDefaultLayers = true;
             _embedding = new EmbeddingLayer<T>(_vocabSize, _embeddingDim);
             Layers.Add(_embedding);
 
@@ -593,6 +607,8 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         Layers.AddRange(layers);
 
         BindNativeLayersFromPublishedList();
+        if (builtDefaultLayers)
+            ResolveDefaultLayerShapes();
     }
 
     /// <summary>
@@ -635,6 +651,85 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             _stopTokenLayer = Layers[idx++];
         while (idx < Layers.Count)
             _postNetLayers.Add(Layers[idx++]);
+    }
+
+    /// <summary>
+    /// Resolves every default layer's input width up front instead of letting it be inferred from
+    /// whatever tensor happens to arrive first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>DenseLayer</c> is always lazy: it carries a -1 input placeholder and resolves the real width
+    /// on its first forward. That is fine while a model stays in memory, but a deserialized model has
+    /// not run a forward pass yet, so its layers are still unresolved, report a parameter count of 0,
+    /// and <c>SetParameters</c> skips them without complaint — the trained weights are dropped on the
+    /// floor and a clone predicts differently from the model it was copied from. This is the #1221
+    /// lazy-layer class of failure.
+    /// </para>
+    /// <para>
+    /// Every width here is already fixed by the constructor arguments, so none of it needs to be
+    /// discovered at runtime. The pairs that are not simply "previous layer's output" come from the
+    /// two concatenations in the decoder loop: the decoder LSTM consumes pre-net output joined to the
+    /// attention context, and both the mel projection and the stop-token head consume the decoder
+    /// state joined to that same context.
+    /// </para>
+    /// <para>
+    /// Only the layers this class builds are resolved. A caller supplying its own
+    /// <c>Architecture.Layers</c> may use entirely different widths, so those are left to resolve
+    /// themselves as before.
+    /// </para>
+    /// </remarks>
+    private void ResolveDefaultLayerShapes()
+    {
+        int encoderOut = _encoderDim * 2;
+        int decoderIn = _prenetDim + encoderOut;
+        int contextIn = _decoderDim + encoderOut;
+
+        foreach (var conv in _encoderConvLayers)
+        {
+            ResolveLayerInput(conv, _embeddingDim);
+        }
+
+        ResolveLayerInput(_encoderLstm, _embeddingDim);
+
+        if (_attentionLayers.Count >= 4)
+        {
+            ResolveLayerInput(_attentionLayers[0], _decoderDim);       // query projection
+            ResolveLayerInput(_attentionLayers[1], encoderOut);        // key projection
+            ResolveLayerInput(_attentionLayers[2], _attentionFilters); // location projection
+            ResolveLayerInput(_attentionLayers[3], _attentionDim);     // energy projection
+        }
+
+        if (_decoderLstmLayers.Count >= 5)
+        {
+            ResolveLayerInput(_decoderLstmLayers[0], NumMels * _numMelsPerFrame);
+            ResolveLayerInput(_decoderLstmLayers[1], _prenetDim);
+            ResolveLayerInput(_decoderLstmLayers[2], decoderIn);
+            ResolveLayerInput(_decoderLstmLayers[3], _decoderDim);
+            ResolveLayerInput(_decoderLstmLayers[4], contextIn); // mel projection
+        }
+
+        ResolveLayerInput(_stopTokenLayer, contextIn);
+
+        for (int i = 0; i < _postNetLayers.Count; i++)
+        {
+            // The post-net refines the mel spectrogram, so it starts at NumMels and stays at the
+            // post-net width until the last layer projects back down.
+            ResolveLayerInput(_postNetLayers[i], i == 0 ? NumMels : _postnetEmbeddingDim);
+        }
+    }
+
+    /// <summary>
+    /// Pins one layer's input width. ResolveShapesOnly is declared on <see cref="LayerBase{T}"/>
+    /// rather than on ILayer, and it deliberately resolves shapes WITHOUT allocating weights, so the
+    /// first real forward still initializes them from the same RNG draw as before.
+    /// </summary>
+    private static void ResolveLayerInput(ILayer<T>? layer, int inputWidth)
+    {
+        if (layer is LayerBase<T> resolvable && inputWidth > 0)
+        {
+            resolvable.ResolveShapesOnly(new[] { inputWidth });
+        }
     }
 
     private static IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
@@ -802,31 +897,36 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     }
 
     /// <summary>
-    /// Updates model parameters using the configured optimizer.
+    /// Mean squared difference between two mel tensors, as a recorded scalar the tape can follow.
     /// </summary>
-    public override void UpdateParameters(Vector<T> gradients)
+    private Tensor<T> MeanSquaredDifference(Tensor<T> predicted, Tensor<T> target)
+    {
+        var diff = Engine.TensorSubtract(predicted, target);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
+        return Engine.ReduceMean(squared, allAxes, keepDims: false);
+    }
+
+    /// <summary>
+    /// Installs an explicit parameter vector, as the base contract requires: the argument is the new
+    /// weights, not a gradient.
+    /// </summary>
+    /// <remarks>
+    /// This override previously treated its argument as a GRADIENT and ran an optimizer step on it,
+    /// which inverted the base contract (<c>WithParameters</c> and the clone path both call this to
+    /// INSTALL weights). Restoring a trained parameter vector therefore applied an Adam update on top
+    /// of it, so a round-tripped clone predicted differently from the model it was copied from.
+    /// Training does not go through here — it runs the optimizer via TrainWithTape — so nothing else
+    /// depended on the old behaviour.
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
         }
 
-        // Use the configured optimizer for parameter updates
-        var currentParams = GetParameters();
-
-        // Cast to gradient-based optimizer to access UpdateParameters
-        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
-        {
-            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
-            SetParameters(updatedParams);
-        }
-        else
-        {
-            // Fallback: manual SGD if optimizer doesn't support gradient-based updates
-            T learningRate = NumOps.FromDouble(0.001);
-            currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-            SetParameters(currentParams);
-        }
+        SetParameters(parameters);
     }
 
     /// <summary>
@@ -834,6 +934,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     // Stored target for teacher forcing during ForwardForTraining
     private Tensor<T>? _teacherForcingTarget;
+
+    /// <summary>
+    /// The decoder's mel output BEFORE the post-net residual, captured on the teacher-forced forward
+    /// so the loss can supervise it directly alongside the refined output.
+    /// </summary>
+    private Tensor<T>? _lastPrePostnetMel;
 
     /// <summary>
     /// Overrides ForwardForTraining to use teacher forcing when target is available.
@@ -868,7 +974,24 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         try
         {
             SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput);
+            // Pass the configured optimizer through. The two-argument overload left the optimizer
+            // built in the constructor assigned but never read, so training silently fell back to the
+            // framework default and the memorization loss came back byte-identical between step 1 and
+            // step 100 (0.371638 both times) — the model was not learning at all.
+            // Paper objective (Shen et al. 2018, sec. 3): "summed mean squared error (MSE) from
+            // before and after the post-net". Only the refined output was supervised before, so the
+            // decoder got a gradient solely THROUGH the post-net and never directly — which is the
+            // convergence role the paper gives the pre-post-net term.
+            TrainWithCustomLoss(
+                input,
+                refined =>
+                {
+                    var afterPostnet = MeanSquaredDifference(refined, expectedOutput);
+                    if (_lastPrePostnetMel is null) return afterPostnet;
+                    return Engine.TensorAdd(
+                        afterPostnet, MeanSquaredDifference(_lastPrePostnetMel, expectedOutput));
+                },
+                _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         }
         finally
         {
@@ -1153,7 +1276,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             melFrames.Add(melOutput);
         }
 
-        var melSpectrogram = CombineMelFrames(melFrames);
+        var melSpectrogram = CombineMelFramesTapeSafe(melFrames);
 
         var residual = melSpectrogram;
         foreach (var postConv in _postNetLayers)
@@ -1161,7 +1284,43 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             residual = postConv.Forward(residual);
         }
 
+        // Recorded add, matching the inference path. Writing the sum element by element produced a
+        // tensor with no history on the autodiff tape, which detached the ENTIRE forward pass: no
+        // gradient reached the post-net, decoder, attention or encoder, so no parameter ever moved and
+        // the memorization loss came back byte-identical at step 1 and step 100 (0.325832 both times).
+        // Keep the pre-post-net mel: the paper minimizes the SUMMED MSE from before AND after
+        // the post-net, so both have to reach the loss (see Train).
+        _lastPrePostnetMel = melSpectrogram;
         return Engine.TensorAdd(melSpectrogram, residual);
+    }
+
+    /// <summary>
+    /// Assembles the decoder's per-step mel outputs into [1, steps * numMelsPerFrame, numMels] using
+    /// recorded reshape/concatenate ops, so gradients flow back through every decoder step.
+    /// <see cref="CombineMelFrames"/> builds the same tensor by assigning elements one at a time,
+    /// which produces a value the tape cannot differentiate through.
+    /// </summary>
+    private Tensor<T> CombineMelFramesTapeSafe(List<Tensor<T>> frames)
+    {
+        int perFrame = _numMelsPerFrame * NumMels;
+        foreach (var frame in frames)
+        {
+            // Reshape needs an exact element count. If a decoder ever emits a different width, fall
+            // back to the element-wise builder rather than throwing — inference still works there,
+            // and the assembly stays correct.
+            if (frame.Length != perFrame)
+            {
+                return CombineMelFrames(frames);
+            }
+        }
+
+        var reshaped = new Tensor<T>[frames.Count];
+        for (int i = 0; i < frames.Count; i++)
+        {
+            reshaped[i] = Engine.Reshape(frames[i], new[] { 1, _numMelsPerFrame, NumMels });
+        }
+
+        return reshaped.Length == 1 ? reshaped[0] : Engine.TensorConcatenate(reshaped, axis: 1);
     }
 
     private Tensor<T> ForwardOnnx(Tensor<T> phonemes)

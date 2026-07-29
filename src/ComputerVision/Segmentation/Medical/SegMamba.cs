@@ -138,11 +138,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        // Paper-faithful encoder widths/depths (Xing et al. 2024, §4): feature dims
-        // [48, 96, 192, 384] with two TSMamba blocks per stage.
-        _channelDims = [48, 96, 192, 384];
-        _depths = [2, 2, 2, 2];
-        _stateDim = 16;
+        (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         // SegMamba trains with AdamW at a small LR (paper §4.2 uses 1e-4 with
         // warmup/poly decay); the framework default 1e-3 is too aggressive for the
         // hybrid conv-Mamba encoder.
@@ -165,14 +161,29 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
         _numClasses = numClasses; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [48, 96, 192, 384];
-        _depths = [2, 2, 2, 2];
-        _stateDim = 16;
+        (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load SegMamba ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
+
+    private static (int[] ChannelDimensions, int[] StageDepths, int StateDimension)
+        ValidateAndCopyArchitectureOptions(SegMambaOptions options)
+    {
+        if (options.ChannelDimensions is null || options.ChannelDimensions.Length == 0)
+            throw new ArgumentException("At least one channel dimension is required.", nameof(options));
+        if (options.StageDepths is null || options.StageDepths.Length != options.ChannelDimensions.Length)
+            throw new ArgumentException("StageDepths must contain one entry per channel dimension.", nameof(options));
+        if (options.ChannelDimensions.Any(dimension => dimension <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "Channel dimensions must be positive.");
+        if (options.StageDepths.Any(depth => depth <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "Stage depths must be positive.");
+        if (options.StateDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "StateDimension must be positive.");
+
+        return (options.ChannelDimensions.ToArray(), options.StageDepths.ToArray(), options.StateDimension);
+    }
 
     #region Public Methods
     /// <summary>Runs a forward pass to produce segmentation logits.</summary>

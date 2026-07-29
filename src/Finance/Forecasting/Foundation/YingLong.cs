@@ -161,6 +161,11 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
 
         _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        // Wire it into the base slot. Without this _optimizer was assigned and never read: as a
+        // Finance model, Train routes through FinancialModelBase -> TrainWithTape(.., TrainingOptimizer),
+        // TrainingOptimizer defaults to null, and the framework default optimizer won instead.
+        // Identical dead-dependency shape to LLMTime; MOIRAI wires it exactly this way.
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
         InitializeLayers();
@@ -487,6 +492,40 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     #endregion
 
     #region Forward/Backward Pass
+
+    /// <summary>
+    /// Captures per-layer activations of the native forward pass. Mirrors
+    /// <see cref="ForwardNative"/>'s instance-normalization + rank-1 -> [1, N] promotion so the
+    /// first ReshapeLayer (which expects <c>contextLength</c> elements per sample) receives a
+    /// batched tensor, rather than the base walk feeding the raw rank-1 input straight in.
+    /// </summary>
+    /// <remarks>
+    /// Without this override NamedLayerActivations_ShouldBeNonEmpty threw
+    /// "ReshapeLayer per-sample input element count (1) does not match output element count (1024)":
+    /// the base implementation walks Layers directly, skipping the normalization and shape promotion
+    /// that ForwardNative performs, so the very first layer saw a rank-1 tensor it cannot consume.
+    /// MOMENT carries the identical override in this same folder for the identical reason.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode || Layers.Count == 0)
+            return activations;
+
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {

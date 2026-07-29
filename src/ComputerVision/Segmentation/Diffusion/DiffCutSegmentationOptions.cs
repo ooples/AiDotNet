@@ -23,6 +23,23 @@ public class DiffCutSegmentationOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        ChannelDimensions = other.ChannelDimensions.ToArray();
+        StageDepths = other.StageDepths.ToArray();
+        DecoderDimension = other.DecoderDimension;
     }
 
+    /// <summary>
+    /// Gets or sets the Stable-Diffusion U-Net encoder widths used by the native approximation.
+    /// </summary>
+    public int[] ChannelDimensions { get; set; } = [320, 640, 1280, 1280];
+
+    /// <summary>
+    /// Gets or sets the number of residual blocks in each native encoder stage.
+    /// </summary>
+    public int[] StageDepths { get; set; } = [2, 2, 2, 2];
+
+    /// <summary>
+    /// Gets or sets the feature width of the native segmentation decoder.
+    /// </summary>
+    public int DecoderDimension { get; set; } = 256;
 }

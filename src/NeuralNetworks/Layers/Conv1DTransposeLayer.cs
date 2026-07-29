@@ -177,7 +177,7 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
 
-        int minTime = 1;
+        int minTime = MinValidInputLength();
         int outTime = ComputeOutputLength(minTime);
         ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, outTime });
     }
@@ -185,6 +185,27 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
     /// <summary>PyTorch <c>nn.ConvTranspose1d</c> output-length formula.</summary>
     private int ComputeOutputLength(int tIn)
         => (tIn - 1) * _stride - 2 * _padding + _dilation * (_kernelSize - 1) + _outputPadding + 1;
+
+    /// <summary>
+    /// Smallest input length whose transposed-convolution output is still at least one frame.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Placeholder shapes must not be built from a hard-coded <c>tIn = 1</c>. Transposed convolution
+    /// SUBTRACTS <c>2·padding</c>, so whenever the padding exceeds the kernel's reach the length
+    /// formula goes non-positive: with this layer's own test configuration (kernelSize 2, stride 4,
+    /// padding 2) <c>ComputeOutputLength(1)</c> is -2, which resolved an invalid output shape and
+    /// surfaced as "Resolved output shape still contains a -1 placeholder". Solve
+    /// <c>(tIn-1)·stride ≥ 2·padding - dilation·(K-1) - outputPadding</c> for the smallest valid
+    /// <c>tIn</c> instead.
+    /// </para>
+    /// </remarks>
+    private int MinValidInputLength()
+    {
+        int deficit = 2 * _padding - _dilation * (_kernelSize - 1) - _outputPadding;
+        if (deficit <= 0) return 1;
+        return 1 + (deficit + _stride - 1) / _stride;
+    }
 
     /// <inheritdoc/>
     protected override void OnFirstForward(Tensor<T> input)
@@ -277,7 +298,13 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
                     $"(outputChannels={_outputChannels}, kernelSize={_kernelSize}).");
             }
             _inputChannels = candidateInputChannels;
-            ResolveFromShape(new[] { candidateInputChannels, 1 });
+            // The placeholder MUST be rank-3 [B, C, T]: ResolveFromShape runs the normal
+            // first-forward resolution and OnFirstForward rejects anything that is not rank-3.
+            // Passing the rank-2 [C, T] shape (the batch axis was omitted) made every Clone /
+            // Deserialize path that reaches SetParameters before the first forward throw
+            // "Conv1DTransposeLayer requires rank-3 [B, C, T] input; got rank 2" — which is what
+            // broke Serialize_Deserialize_ShouldPreserveBehavior.
+            ResolveFromShape(new[] { 1, candidateInputChannels, MinValidInputLength() });
             _kernels = AllocateLazyWeight([candidateInputChannels, _outputChannels, 1, _kernelSize]);
             _biases = AllocateLazyWeight([_outputChannels]);
             RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);

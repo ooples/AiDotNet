@@ -222,7 +222,16 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private void InitializeCodebooks()
     {
         _codebooks = new Tensor<T>(new[] { _numCodebooks, _codebookSize, _codebookDimension });
-        var rand = RandomHelper.CreateSecureRandom();
+        // Honour the deterministic init scope the layers use. The codebook is a raw tensor rather than
+        // a layer, so it bypassed that scope entirely and always drew from CreateSecureRandom: the
+        // codebook differed on every construction even when the caller had pinned an init seed. Most
+        // draws train fine — TOTEM passes on its own — but some send the parameter L2 to NaN on the
+        // very first step, which made it fail only when it shared a worker with other classes.
+        // Falls back to the secure generator in production, where no scope is active.
+        int? initSeed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextSeedOrNull();
+        var rand = initSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(initSeed.Value)
+            : RandomHelper.CreateSecureRandom();
         T scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(Math.Sqrt(_codebookDimension)));
         for (int c = 0; c < _numCodebooks; c++)
             for (int k = 0; k < _codebookSize; k++)

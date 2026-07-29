@@ -32,6 +32,7 @@ public class EfficientConformerOptions : ModelOptions
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
+        UseLayerNormalization = other.UseLayerNormalization;
         Language = other.Language;
         Vocabulary = other.Vocabulary;
     }
@@ -48,6 +49,11 @@ public class EfficientConformerOptions : ModelOptions
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
+    /// <summary>
+    /// Gets or sets whether the native encoder replaces its BatchNorm stages with
+    /// LayerNorm. The research-default BatchNorm topology remains the default.
+    /// </summary>
+    public bool UseLayerNormalization { get; set; }
     public string Language { get; set; } = "en";
     public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
     private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };

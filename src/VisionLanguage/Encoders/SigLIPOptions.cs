@@ -23,36 +23,8 @@ public class SigLIPOptions : ContrastiveEncoderOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public SigLIPOptions(SigLIPOptions other)
+        : base(other)
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
-        Seed = other.Seed;
-        ImageSize = other.ImageSize;
-        VisionEmbeddingDim = other.VisionEmbeddingDim;
-        VisionEncoderVariant = other.VisionEncoderVariant;
-        PatchSize = other.PatchSize;
-        NumVisionLayers = other.NumVisionLayers;
-        NumVisionHeads = other.NumVisionHeads;
-        VisionFfnMultiplier = other.VisionFfnMultiplier;
-        TextEmbeddingDim = other.TextEmbeddingDim;
-        TextEncoderVariant = other.TextEncoderVariant;
-        MaxSequenceLength = other.MaxSequenceLength;
-        VocabSize = other.VocabSize;
-        NumTextLayers = other.NumTextLayers;
-        NumTextHeads = other.NumTextHeads;
-        ProjectionDim = other.ProjectionDim;
-        Temperature = other.Temperature;
-        DropoutRate = other.DropoutRate;
-        ImageMean = other.ImageMean;
-        ImageStd = other.ImageStd;
-        ImageEncoderModelPath = other.ImageEncoderModelPath;
-        TextEncoderModelPath = other.TextEncoderModelPath;
-        OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        WeightDecay = other.WeightDecay;
-        WarmUpSteps = other.WarmUpSteps;
-        LabelSmoothing = other.LabelSmoothing;
         LossType = other.LossType;
         SigmoidBias = other.SigmoidBias;
         UseSigLIP2 = other.UseSigLIP2;
@@ -104,12 +76,25 @@ public class SigLIPOptions : ContrastiveEncoderOptions
     /// </summary>
     public SigLIPOptions()
     {
-        // SigLIP defaults differ from CLIP
+        // Zhai et al. use matching Base-size B/16 vision and text towers,
+        // 224px images, a 32k SentencePiece vocabulary, and 16 text tokens.
+        // Their default LR/WD recipe is 0.001/0.0001. AdamW is the paper's
+        // measured-equivalent alternative to ScalingViT-Adafactor and users
+        // can still inject any optimizer through the model constructor.
         VisionEncoderVariant = ViTVariant.ViTB16;
         ImageSize = 224;
         VisionEmbeddingDim = 768;
+        TextEmbeddingDim = 768;
         ProjectionDim = 768;
         PatchSize = 16;
+        NumVisionLayers = 12;
+        NumTextLayers = 12;
+        NumVisionHeads = 12;
+        NumTextHeads = 12;
+        VocabSize = 32000;
+        MaxSequenceLength = 16;
+        LearningRate = 0.001;
+        WeightDecay = 0.0001;
         Temperature = 1.0; // SigLIP uses higher temperature with sigmoid loss
     }
 }

@@ -103,18 +103,17 @@ public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
     {
         _options = options ?? new GLaMMOptions();
         _useNativeMode = true;
-        // Paper-faithful LR: Rasheed et al. 2024 MBZUAI ("GLaMM") fine-tunes
-        // the grounding LLM + mask decoder at LR=5e-5. Framework AdamW
-        // default (LR=1e-3) is two orders of magnitude too aggressive
-        // for this BERT-class VLM and the gradient flow diverges before
-        // 30 training iterations finish.
+        // Honor the public options. Their defaults mirror the reference GLaMM
+        // AdamW training recipe, while callers and bounded smoke fixtures can
+        // supply independent learning-rate and weight-decay values.
         _optimizer =
             optimizer
             ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
                 this,
                 new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 {
-                    InitialLearningRate = 5e-5,
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
                 }
             );
         base.ImageSize = _options.ImageSize;
@@ -375,12 +374,12 @@ public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             Layers.AddRange(
                 LayerHelper<T>.CreateDefaultGroundingDetectionLayers(
                     _options.VisionDim,
-                    768,
-                    _options.VisionDim,
-                    256,
+                    _options.TextEmbeddingDim,
+                    _options.FusionDim,
+                    _options.MaskDim,
                     _options.NumVisionLayers,
-                    6,
-                    6,
+                    _options.NumFusionLayers,
+                    _options.NumDetectionLayers,
                     _options.NumHeads,
                     _options.DropoutRate
                 )
@@ -508,9 +507,16 @@ public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var optionsCopy = new GLaMMOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GLaMM<T>(Architecture, mp, _options);
-        return new GLaMM<T>(Architecture, _options);
+            return new GLaMM<T>(Architecture, mp, optionsCopy);
+
+        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
+            : null;
+        return new GLaMM<T>(Architecture, optionsCopy, cloneOptimizer);
     }
 
     private void ThrowIfDisposed()
@@ -523,6 +529,8 @@ public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
     {
         if (_disposed)
             return;
+        if (disposing && _optimizer is IDisposable disposableOptimizer)
+            disposableOptimizer.Dispose();
         _disposed = true;
         base.Dispose(disposing);
     }

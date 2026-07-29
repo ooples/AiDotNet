@@ -645,7 +645,17 @@ public partial class Mamba2Block<T> : LayerBase<T>
                 Engine.Reshape(cumAbh, new[] { batchSize * numHeads, ln, 1 }),
                 Engine.Reshape(cumAbh, new[] { batchSize * numHeads, 1, ln }));          // [B*H, ln, ln]
             var trilMask = BuildBatchedLowerTriOnes(batchSize * numHeads, ln);          // [B*H, ln, ln] (0/1)
-            var lDecay = Engine.TensorMultiply(Engine.TensorExp(decayDiff), trilMask);   // [B*H, ln, ln]
+            // Mask in LOG space BEFORE the exp, as the reference Mamba-2 segsum does
+            // (masked_fill(~causal, -inf) then exp). cumA decreases monotonically, so on the causal
+            // half decayDiff = cumA_t - cumA_j <= 0 and exp is bounded by 1 — but the discarded upper
+            // half holds the same magnitudes with the opposite sign (up to ~+350 at seqLen 512 /
+            // chunk 64). exp overflows at ~88 in float32 (~709 in float64), so exponentiating first
+            // produced +Infinity there, and Infinity * 0 from the mask is NaN, which then propagated
+            // through the matmul below and made the whole forward non-finite at <float>.
+            // Zeroing decayDiff first leaves the causal half untouched and turns the upper half into
+            // exp(0) = 1, which the same mask then zeroes — identical result, no overflow.
+            var decayDiffMasked = Engine.TensorMultiply(decayDiff, trilMask);            // [B*H, ln, ln]
+            var lDecay = Engine.TensorMultiply(Engine.TensorExp(decayDiffMasked), trilMask); // [B*H, ln, ln]
 
             // G[b, t, j] = C_t . B_j (dot over sd), shared across heads; tile it to [B*H, ln, ln].
             var g = Engine.BatchMatMul(cc, Engine.TensorPermute(bc, new[] { 0, 2, 1 }));  // [B, ln, ln]

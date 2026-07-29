@@ -72,6 +72,55 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
 
     private static bool IsFiniteValue(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
 
+    /// <summary>
+    /// Instance-normalizes the look-back window, following the TiDE paper's use of reversible instance
+    /// normalization so the network sees a scale-free input and distribution shift between windows
+    /// cannot move the input magnitude. It was missing here, and without it the manual SGD below took
+    /// steps proportional to the raw series scale and diverged outright — <c>Prediction[0]</c> came
+    /// back Infinity.
+    /// <para>
+    /// Only the INPUT is normalized: the target stays in its own units and the forecast is emitted
+    /// directly, so the model learns the output offset in its own bias terms. Rescaling the output by
+    /// each window's own spread instead would make a constant shift in the targets come back as a
+    /// shift that varies from row to row, which breaks the translation- and scaling-equivariance the
+    /// regression contract requires. Bounding the input is what stops the divergence; rescaling the
+    /// output is not needed for it.
+    /// </para>
+    /// Returns the normalized window plus the mean and scale that produced it.
+    /// </summary>
+    private static (double[] Normalized, double Mean, double Scale) NormalizeWindow(double[] x)
+    {
+        double mean = 0.0;
+        for (int j = 0; j < x.Length; j++) { mean += x[j]; }
+        mean /= x.Length;
+
+        double variance = 0.0;
+        for (int j = 0; j < x.Length; j++) { double d = x[j] - mean; variance += d * d; }
+        variance /= x.Length;
+
+        double scale = Math.Sqrt(variance);
+        // A constant window has zero spread; dividing by it would manufacture the very non-finite
+        // values this normalization exists to prevent, so fall back to an identity scale.
+        if (!IsFiniteValue(scale) || scale < 1e-8) { scale = 1.0; }
+
+        var normalized = new double[x.Length];
+        for (int j = 0; j < x.Length; j++) { normalized[j] = (x[j] - mean) / scale; }
+        return (normalized, mean, scale);
+    }
+
+    /// <summary>
+    /// Converts a forecast to <typeparamref name="T"/> and verifies finiteness AFTER the conversion.
+    /// Checking only the double is not enough: every double from about 3.4e38 up is finite yet
+    /// overflows to Infinity once narrowed to float, so a pre-conversion guard passes the value
+    /// through and the float caller still receives Infinity.
+    /// </summary>
+    private T ToFiniteT(double value)
+    {
+        if (!IsFiniteValue(value)) { return NumOps.Zero; }
+        T converted = NumOps.FromDouble(value);
+        return IsFiniteValue(NumOps.ToDouble(converted)) ? converted : NumOps.Zero;
+    }
+
     private static double[] Window(int l, Func<int, double> get, int count)
     {
         var x = new double[l];

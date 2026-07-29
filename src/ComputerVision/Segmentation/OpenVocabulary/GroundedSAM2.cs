@@ -224,6 +224,10 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
             SetTrainingMode(false);
         }
     }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
     #endregion
 
     #region Private Methods
@@ -291,10 +295,18 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+        => Engine.Reshape(tensor, [1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    {
+        if (tensor.Rank < 2 || tensor.Shape[0] != 1)
+            throw new ArgumentException("A removable batch dimension must have size 1.", nameof(tensor));
+
+        int[] shape = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < shape.Length; i++)
+            shape[i] = tensor.Shape[i + 1];
+        return Engine.Reshape(tensor, shape);
+    }
     #endregion
 
     #region Abstract Implementation
@@ -376,6 +388,56 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         return Forward(input);
     }
 
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+        if (input.Rank != 3 && input.Rank != 4)
+            throw new ArgumentException(
+                "GroundedSAM2 expects an image tensor [C, H, W] or [B, C, H, W].",
+                nameof(input));
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var x = input.Rank == 3 ? AddBatchDimension(input) : input;
+        if (_customLayers)
+        {
+            var current = x;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+            return activations;
+        }
+
+        var feat = Layers[0].Forward(x);
+        activations[$"Layer_0_{Layers[0].GetType().Name}"] = feat.Clone();
+
+        int batch = feat.Shape[0];
+        int dimension = feat.Shape[1];
+        int gridHeight = feat.Shape[2];
+        int gridWidth = feat.Shape[3];
+        var tokens = Engine.Reshape(
+            Engine.TensorPermute(feat, [0, 2, 3, 1]),
+            [batch, gridHeight * gridWidth, dimension]);
+
+        for (int i = 1; i < _maskConvIndex; i++)
+        {
+            tokens = Layers[i].Forward(tokens);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = tokens.Clone();
+        }
+
+        var spatial = Engine.TensorPermute(
+            Engine.Reshape(tokens, [batch, gridHeight, gridWidth, dimension]),
+            [0, 3, 1, 2]);
+        var maskLogits = Layers[_maskConvIndex].Forward(spatial);
+        activations[$"Layer_{_maskConvIndex}_{Layers[_maskConvIndex].GetType().Name}"] = maskLogits.Clone();
+        maskLogits = Layers[_upsampleIndex].Forward(maskLogits);
+        activations[$"Layer_{_upsampleIndex}_{Layers[_upsampleIndex].GetType().Name}"] = maskLogits.Clone();
+        return activations;
+    }
+
     /// <summary>
     /// Updates all trainable parameters from a flat parameter vector.
     /// </summary>
@@ -386,7 +448,20 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
+    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.
@@ -437,8 +512,14 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new GroundedSAM2<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new GroundedSAM2<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+        ? new GroundedSAM2<T>(
+            architecture: Architecture,
+            optimizer: null,
+            lossFunction: LossFunction,
+            numClasses: _numClasses,
+            dropRate: _dropRate,
+            options: new GroundedSAM2Options(_options))
+        : new GroundedSAM2<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, new GroundedSAM2Options(_options));
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

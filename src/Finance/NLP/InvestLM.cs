@@ -167,7 +167,7 @@ public class InvestLM<T> : FinancialNLPModelBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultInvestLMLayers(
                 Architecture, MaxSequenceLength, VocabularySize, 
-                HiddenDimension, 12, 12, _dropout));
+                HiddenDimension, _options.NumAttentionHeads, _options.NumLayers, _dropout));
 
             ExtractLayerReferences();
         }

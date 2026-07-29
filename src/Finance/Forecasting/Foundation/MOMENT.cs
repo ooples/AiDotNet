@@ -129,6 +129,13 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    // RevIN (reversible instance normalization, Kim et al. 2022) statistics, captured by
+    // ApplyInstanceNormalization so ForwardNative can restore each instance's level on the
+    // way out. Without the reverse step the forecast head emits in normalized space, so the
+    // series' own scale is discarded — a constant-valued input normalizes to all-zeros and
+    // every such series yields a bit-identical forecast.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
     private int _contextLength;
     private int _forecastHorizon;
     private int _patchLength;
@@ -569,19 +576,15 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    // RevIN per-instance statistics saved during the forward normalization so the forecast can be restored to
-    // the original data scale in ApplyInverseInstanceNormalization (Kim et al. 2022, "Reversible Instance
-    // Normalization"; used by MOMENT / Goswami et al. 2024 §3.1). No production defaults are changed.
-    private T[] _revinMean = System.Array.Empty<T>();
-    private T[] _revinStd = System.Array.Empty<T>();
-
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         // MOMENT uses RevIN (Reversible Instance Normalization)
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input._shape);
-        if (_revinMean.Length < batchSize) { _revinMean = new T[batchSize]; _revinStd = new T[batchSize]; }
+        // Retain the per-instance statistics for the RevIN reverse step in ForwardNative.
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -606,7 +609,8 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             }
             variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
             T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-            _revinMean[b] = mean; _revinStd[b] = std;  // save for the RevIN reverse step
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
 
             for (int t = 0; t < seqLen; t++)
             {
@@ -621,43 +625,38 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         return result;
     }
 
-    // RevIN reverse: restore each instance's saved mean/std so the forecast is returned on the original data
-    // scale. Without this, the encoder's scale-free output collapses to identical values for different constant
-    // inputs (the DifferentInputs_AfterTraining failure: L2 distance ~8e-10). The affine y*std + mean is
-    // differentiable in y (gradient = std), so training gradients still flow. Reverse is applied to the forecast
-    // output whose batch axis matches the normalized input's. (#1789)
-    private Tensor<T> ApplyInverseInstanceNormalization(Tensor<T> output)
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the forecast
+    /// so it lands on the input series' original scale.
+    /// </summary>
+    /// <remarks>
+    /// MOMENT normalizes every input instance to zero mean / unit variance before the patch
+    /// embedding, which is what lets one pretrained encoder serve series of wildly different
+    /// magnitudes. That transform is only valid if it is undone on the way out — RevIN is
+    /// *reversible* by construction. Without this step the forecast head's output stays in
+    /// normalized space, so a series with level 1000 forecasts near 0, and any constant-valued
+    /// series (variance 0, so every element maps to exactly 0) becomes indistinguishable from
+    /// every other constant series.
+    /// </remarks>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
     {
-        if (_revinMean.Length == 0) return output;
-        int batchSize = output.Rank > 1 ? output.Shape[0] : 1;
-        int outLen = output.Rank > 1 ? output.Shape[1] : output.Length;
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
 
-        // Build per-instance scale/shift tensors matching `output`'s shape, then apply the affine y*std + mean
-        // through the tape-aware elementwise TENSOR ops Engine.TensorMultiply / Engine.TensorAdd — the same ops
-        // the layers use in their differentiable Forward, so this reverse is recorded on the tape. (Engine.Multiply
-        // is the generic Vector<T> op, which is why passing a Tensor<T> to it mis-inferred Vector<Tensor<T>>.)
-        // std/mean are per-instance CONSTANTS (leaf tensors, no gradient of their own); recording the multiply
-        // means d(loss)/d(output) = std still flows back into the encoder. A manual NumOps write here (writing
-        // result.Data.Span directly) severs the tape and zeroes the parameter gradients — which is why the earlier
-        // hand-rolled reverse broke GradientFlow / LossStrictlyDecreases / Training_ShouldChangeParameters.
-        var stdTensor = new Tensor<T>(output._shape);
-        var meanTensor = new Tensor<T>(output._shape);
-        for (int b = 0; b < batchSize; b++)
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
         {
-            T mean = b < _revinMean.Length ? _revinMean[b] : NumOps.Zero;
-            T std = b < _revinStd.Length ? _revinStd[b] : NumOps.One;
-            for (int t = 0; t < outLen; t++)
-            {
-                int idx = b * outLen + t;
-                if (idx < stdTensor.Length)
-                {
-                    stdTensor.Data.Span[idx] = std;
-                    meanTensor.Data.Span[idx] = mean;
-                }
-            }
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
         }
 
-        return Engine.TensorAdd(Engine.TensorMultiply(output, stdTensor), meanTensor);
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
@@ -841,10 +840,9 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         foreach (var layer in Layers)
             current = layer.Forward(current);
 
-        // RevIN reverse (tape-differentiable via Engine ops): restore each instance's saved mean/std so distinct
-        // inputs yield distinct forecasts — fixes the DifferentInputs_AfterTraining collapse (encoder output is
-        // scale-free) while gradients still flow to the encoder. (Kim et al. 2022; MOMENT §3.1) (#1789)
-        current = ApplyInverseInstanceNormalization(current);
+        // RevIN reverse step, applied while `current` is still [batch, forecastHorizon] so the
+        // per-instance statistics broadcast down the horizon.
+        current = DenormalizeForecast(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = Engine.Reshape(current, new[] { current.Shape[1] });
