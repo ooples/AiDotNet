@@ -104,9 +104,24 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <param name="queryDim">Dimension of query features (spatial channels).</param>
     /// <param name="contextDim">Dimension of context features (text embedding).</param>
     /// <param name="headCount">Number of attention heads.</param>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Cross-attention emits one vector per QUERY position, so its output length is its input
+    /// length; only the feature width is fixed, at queryDim.
+    ///
+    /// The declared shape used to be [sequenceLength, queryDim], where sequenceLength is the
+    /// constructor's "maximum sequence length for queries" and defaults to 64. That is a
+    /// CAPACITY, not what the layer produces: a forward over 4 query positions still emits 4.
+    /// Every consumer reading the declaration believed the sequence was 64 long, and because
+    /// chain resolution seeds each layer from the previous layer's declaration, the wrong length
+    /// propagated into the attention and decoder layers downstream -- which then reported
+    /// [64, 32] and [4, 32] while producing [4, 32] and [2, 32].
+    /// </remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <param name="sequenceLength">Maximum sequence length for queries.</param>
     public CrossAttentionLayer(int queryDim, int contextDim, int headCount, int sequenceLength = 64)
-        : base(new[] { sequenceLength, queryDim }, new[] { sequenceLength, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
+        : base(new[] { -1, queryDim }, new[] { -1, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
         _queryDim = queryDim;
         _contextDim = contextDim;
