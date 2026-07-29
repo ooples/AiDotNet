@@ -205,10 +205,50 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // cache write and bubble out of the catch block. The sentinel
             // is reference-compared on read so a legitimately empty shape
             // (rank-0 / scalar) wouldn't be confused with a failure.
+            // Keep WHY it failed. A warm-up that throws is the single most direct evidence that
+            // InputShape does not describe an input this model accepts -- and unlike OutputShape,
+            // which this warm-up transparently corrects, InputShape has no such protection: the
+            // model cannot tell the fixture what it wants, so a wrong declaration is only ever
+            // discovered by something downstream failing confusingly.
+            //
+            // Discarding the exception here is what made that expensive. APNet declared a
+            // 64-channel MelChannels against an 80-channel input and BiomedCLIP bound itself to
+            // 32x32 while being fed 128x128; in both cases the warm-up hit the real error first,
+            // swallowed it, fell back to a declared OutputShape, and left every later test to fail
+            // for reasons that named neither the input shape nor the model's configuration.
+            s_warmUpFailures[key] = ex;
             s_inferredOutputShapeCache[key] = s_warmUpFailedSentinel;
             return null;
         }
     }
+
+    /// <summary>
+    /// Throws with the warm-up's original exception when this fixture's <see cref="InputShape"/>
+    /// is one the model rejects.
+    /// </summary>
+    /// <remarks>
+    /// Called by the invariants that depend on the fixture and the model agreeing about shape.
+    /// Reports the declared input shape alongside the model's own error, so the fixture is
+    /// implicated directly rather than leaving a downstream symptom to be traced back by hand.
+    /// </remarks>
+    protected void ThrowIfWarmUpRejectedInputShape()
+    {
+        // Populate the cache if this is the first access.
+        _ = EffectiveOutputShape;
+
+        if (!s_warmUpFailures.TryGetValue(GetType(), out var failure)) return;
+
+        throw new InvalidOperationException(
+            $"{GetType().Name}: the model rejected the fixture's declared InputShape " +
+            $"[{string.Join(", ", InputShape)}]. The warm-up Predict failed with: " +
+            $"{failure.GetType().Name}: {failure.Message} " +
+            "InputShape is declared by the fixture and cannot be inferred from the model, so a " +
+            "mismatch between it and the model's configured geometry has to be reported here or " +
+            "it surfaces later as an unrelated-looking failure.",
+            failure);
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Exception> s_warmUpFailures = new();
 
     // Cache the inferred Shape; failures store a static sentinel rather
     // than null because ConcurrentDictionary doesn't allow null values.

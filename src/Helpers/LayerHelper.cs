@@ -674,38 +674,26 @@ public static class LayerHelper<T>
             // after the first reshape lazy: a freshly built ABINet reported 1,718,624 parameters
             // where one that had run a forward reported 4,281,376, and restoring a trained
             // parameter vector into a fresh clone misaligned every slice past that point.
-            var declared = layer.GetOutputShape();
-
-            // A layer may commit to some axes and leave others dynamic -- MultiHeadAttentionLayer
-            // declares [-1, -1, dim], concrete on the feature axis and dynamic on batch and
-            // sequence. Chain resolution needs concrete dims, so the dynamic axes are filled from
-            // the shape flowing IN, which is the only information available and is correct for
-            // every layer that leaves an axis dynamic precisely because it passes it through.
+            // Stop at a layer that leaves an axis dynamic, rather than guessing what it will be.
             //
-            // Where that inference is wrong -- a layer that changes an axis while declaring it
-            // dynamic -- VerifyReportedOutputShape catches it on the first real forward and names
-            // the layer and both shapes, rather than letting a wrong shape reach parameter-vector
-            // slicing or ONNX export silently.
-            var previous = running;
-            var perSample = new int[declared.Length];
-            for (int a = 0; a < declared.Length; a++)
-            {
-                if (declared[a] > 0)
-                {
-                    perSample[a] = declared[a];
-                    continue;
-                }
+            // An earlier version filled dynamic axes from the shape flowing in. That is correct
+            // for a pass-through but wrong for attention: MultiHeadAttentionLayer,
+            // CrossAttentionLayer and TransformerDecoderLayer all declare [-1, dim] because their
+            // sequence length is genuinely not derivable from the previous layer's DECLARATION,
+            // and filling it produced declarations the forward then contradicted --
+            // "reports [64, 32] but produced per-sample [4, 32]" and similar across
+            // AudioEventDetector, GenreClassifier, UDOP, ViTCoMer and VideoChat2.
+            //
+            // VerifyReportedOutputShape caught every one of those, which is the whole reason the
+            // inference and the check were added together. Having been shown the inference is
+            // unsound, the inference goes rather than the check: a chain that stops early leaves
+            // layers lazy, which is a known and recoverable state, whereas a confidently wrong
+            // declaration is silently consumed by parameter slicing and ONNX export.
+            var declared = layer.GetOutputShape();
+            if (declared is null || declared.Length == 0) return running;
+            foreach (var d in declared) if (d <= 0) return running;
 
-                // Align from the right so a rank change does not shift the mapping. Both sides are
-                // per-sample here; mixing a per-sample declaration against a batched running shape
-                // silently reads the neighbouring axis.
-                int srcIndex = previous.Length - declared.Length + a;
-                perSample[a] = srcIndex >= 0 && srcIndex < previous.Length && previous[srcIndex] > 0
-                    ? previous[srcIndex]
-                    : -1;
-            }
-
-            running = perSample;
+            running = declared;
         }
 
         return running;

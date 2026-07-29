@@ -9834,6 +9834,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8 };");
                 }
+                else if (model.ClassName == "APNet2")
+                {
+                    // APNet2 does not upsample time. Its ConvNeXt v2 amplitude and phase branches
+                    // keep the frame axis and emit 3 * fftBins per frame -- log-amplitude plus the
+                    // pseudo-real/pseudo-imaginary pair -- so a [1, 80, T] input gives
+                    // [1, 80, 3 * 513] = [1, 80, 1539], measured directly against the bound
+                    // fixture config.
+                    //
+                    // The generic spectral-vocoder formula below models the HiFi-GAN family, which
+                    // upsamples T by the hop and emits [1, 513, T * 256]. Applying it here declared
+                    // [1, 513, 512] = 262,656 elements against the model's actual 123,120, so the
+                    // objective compared a prediction with a target of a different shape entirely.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 2 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 80, 1539 };");
+                }
                 else
                 {
                     int specChannels = SpectralConv1DVocoderOutputChannels(model.ClassName);
