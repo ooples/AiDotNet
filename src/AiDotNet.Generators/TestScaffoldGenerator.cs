@@ -3711,7 +3711,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxSequenceLength = 12, VocabularySize = 64, HiddenDimension = 12, NumAttentionHeads = 1, " +
                     "IntermediateDimension = 24, NumLayers = 1, NumClasses = 3, DropoutRate = 0.0, TaskType = \"classification\" })";
             }
-            else if (model.ClassName == "FishSpeech" && model.TypeParameterCount == 1)
+            // TWO distinct FishSpeech<T> types exist -- AiDotNet.Audio.Generation.FishSpeech
+            // (AudioNeuralNetworkBase) and AiDotNet.TextToSpeech.CodecBased.FishSpeech (TtsModelBase)
+            // -- each with its OWN FishSpeechOptions. Matching on ClassName alone handed the codec-TTS
+            // one an AiDotNet.Audio.Generation.FishSpeechOptions, which bound against its
+            // (architecture, string modelPath, ...) overload and failed to compile:
+            // "Argument 2: cannot convert from 'AiDotNet.Audio.Generation.FishSpeechOptions' to
+            // 'string'". Scope this branch by NAMESPACE, as the DocOwl branch already does.
+            else if (model.ClassName == "FishSpeech" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
             {
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
@@ -3719,6 +3727,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "SemanticDim = 16, NumSemanticLayers = 1, NumSemanticHeads = 1, VocoderDim = 8, " +
                     "NumVocoderLayers = 1, CodebookSize = 16, NumGroups = 1, TextVocabSize = 32, NumMels = 8, " +
                     "DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "FishSpeech" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // The OTHER FishSpeech<T> (TtsModelBase, codec TTS) with its OWN FishSpeechOptions.
+                // Without this it fell through to the architecture-only path and was constructed at
+                // PAPER scale -- CodecTtsOptions defaults are LLMDim 1024, NumLLMLayers 12,
+                // TextEncoderDim 512, CodebookSize 1024, MaxCodecFrames 3000. Exercise the identical
+                // codec-LM topology at CI-smoke width/depth; production defaults stay paper-faithful
+                // and every dimension remains configurable through the options object.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
+                    "inputSize: 16, outputSize: 8), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.FishSpeechOptions { " +
+                    "NumCodebooks = 2, CodebookSize = 16, LLMDim = 32, NumLLMLayers = 1, " +
+                    "TextEncoderDim = 32, SpeakerEmbeddingDim = 16, MaxCodecFrames = 16, NumGroups = 1 })";
             }
             else if (model.ClassName == "FastSAM" && model.TypeParameterCount == 1)
             {
