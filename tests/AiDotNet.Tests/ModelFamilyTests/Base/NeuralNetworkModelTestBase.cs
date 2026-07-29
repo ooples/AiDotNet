@@ -1632,7 +1632,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        // Well-pose the target for softmax-CE heads, exactly as Training_ShouldReduceLoss and
+        // MoreData_ShouldNotDegrade already do. Without this, a CE model memorizes against a DENSE
+        // UNIFORM-RANDOM target whose loss is pinned at 0.5*V*ln(V) with essentially no reachable
+        // descent, so this invariant reported "loss did not strictly decrease" for a model that was
+        // simply being given an unfittable objective.
+        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
 
         // First step establishes the baseline loss.
         network.Train(input, target);
@@ -1840,28 +1845,49 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
     {
-        // Scoped to softmax-CE SEGMENTATION heads (dense per-pixel class logits). Other
-        // CrossEntropyWithLogitsLoss families (LMs/classifiers) already receive appropriate
-        // targets via their own paths, and narrowing the guard keeps this from perturbing
-        // currently-green models.
+        // Applies to EVERY softmax-CE head, not just segmentation. The original guard was scoped to
+        // ISegmentationModel on the assumption that "other CrossEntropyWithLogitsLoss families
+        // (LMs/classifiers) already receive appropriate targets via their own paths" — measurement
+        // disproved that. Token-head models were being handed a DENSE UNIFORM-RANDOM target, which
+        // pins the loss at 0.5*V*ln(V) instead of ~ln(V): SeACo measured 37,935 against a predicted
+        // 0.5*8404*ln(8404) = 37,970, and RecurrentGemma 17,033 against 0.5*4096*ln(4096) = 17,035.
+        // At that scale, with gradient clipping at global norm 1.0, a 25M-parameter model can move
+        // only ~1e-3 per step (0.003% of L2 377), so it cannot learn measurably and the residual
+        // drift reads as "more training made the loss worse" (SeACo 0.99 -> 44.38). The optimizer was
+        // ruled out by measurement: AdamW-default, AdamW wd=0 and the paper's Adam+warmup produce
+        // identical trajectories. The papers for these models (Paraformer/SeACo arXiv 2206.08317 /
+        // 2308.03266, and the LM families) all train cross-entropy over TOKEN targets, never a dense
+        // random tensor, so a per-position one-hot is both well-posed and paper-faithful.
         if (target.Length > 0
-            && network is AiDotNet.Interfaces.ISegmentationModel<T> seg
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
         {
             var shape = target.Shape;
-            int numClasses = seg.NumClasses;
-
-            // Identify the class axis: dense segmentation logits are NCHW/CHW, so the class axis is
-            // dim 1 (batched) or dim 0 (unbatched); fall back to the first axis whose size matches
-            // NumClasses. If none matches we cannot form a per-pixel distribution, so drop back to a
-            // single whole-tensor one-hot (still a valid, descendable target).
+            int numClasses;
             int classAxis = -1;
-            if (numClasses > 1)
+
+            if (network is AiDotNet.Interfaces.ISegmentationModel<T> seg)
             {
-                if (shape.Length >= 2 && shape[1] == numClasses) classAxis = 1;
-                else if (shape.Length >= 1 && shape[0] == numClasses) classAxis = 0;
-                else for (int i = 0; i < shape.Length; i++) if (shape[i] == numClasses) { classAxis = i; break; }
+                // Dense segmentation logits are NCHW/CHW, so the class axis is dim 1 (batched) or
+                // dim 0 (unbatched); fall back to the first axis whose size matches NumClasses. If
+                // none matches we cannot form a per-pixel distribution, so drop back to a single
+                // whole-tensor one-hot (still a valid, descendable target).
+                numClasses = seg.NumClasses;
+                if (numClasses > 1)
+                {
+                    if (shape.Length >= 2 && shape[1] == numClasses) classAxis = 1;
+                    else if (shape.Length >= 1 && shape[0] == numClasses) classAxis = 0;
+                    else for (int i = 0; i < shape.Length; i++) if (shape[i] == numClasses) { classAxis = i; break; }
+                }
+            }
+            else
+            {
+                // Token / classifier heads emit the class (vocabulary) dimension LAST — [B, S, V],
+                // [S, V] or [V] — and the loss takes an independent softmax at each position along
+                // that axis, so each position needs its own one-hot row.
+                classAxis = shape.Length - 1;
+                numClasses = shape[classAxis];
+                if (numClasses <= 1) classAxis = -1;
             }
 
             var oneHot = new Tensor<T>(shape.ToArray());
