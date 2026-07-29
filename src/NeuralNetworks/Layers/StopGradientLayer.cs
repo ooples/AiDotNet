@@ -40,6 +40,10 @@ public class StopGradientLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input) => Engine.StopGradient(input);
 
     /// <inheritdoc/>
+    /// <remarks>The barrier passes its input through untouched, so its output shape is its input shape.</remarks>
+    protected override bool IsShapePreserving => true;
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameters() => new(0);
 
     /// <inheritdoc/>
