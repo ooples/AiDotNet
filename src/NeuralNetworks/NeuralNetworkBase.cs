@@ -12054,28 +12054,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // buffers that mixed-precision teardown wants to recycle.
             DisableMemoryManagement();
             DisableMixedPrecision();
-
-            // Cascade to child layers. Guard against null because Layers may not be
-            // populated on a partially-constructed network (e.g., if a ctor threw
-            // before InitializeLayers ran).
-            if (Layers is not null)
-            {
-                foreach (var layer in Layers)
-                {
-                    if (layer is IDisposable disposable)
-                    {
-                        try
-                        {
-                            disposable.Dispose();
-                        }
-                        catch (ObjectDisposedException)
-                        {
-                            // A layer shared between networks may have been disposed
-                            // already — not a bug, don't let it abort the cascade.
-                        }
-                    }
-                }
-            }
         }
     }
 
