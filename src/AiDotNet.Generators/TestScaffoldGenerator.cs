@@ -5769,6 +5769,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MelChannels = 80, HopSize = 64, FftSize = 128, " +
                     "UpsampleInitialChannels = 32, NumDiffusionSteps = 2 })";
             }
+            else if (model.ClassName == "APNet2" && model.TypeParameterCount == 1)
+            {
+                // 181 s of training probes — the most expensive class in the A shard — and the
+                // only heavy model here that had no constructor bound at all, so it ran at the
+                // paper's full scale: two ConvNeXt v2 branches of 8 blocks at 512 channels with
+                // a 1536-wide point-wise expansion, 19-30 s per test.
+                //
+                // Bound the backbone only. FftSize stays at the paper's 1024 because the
+                // fixture's shape math derives the 513 spectral bins from a constant
+                // (SpectralConv1DVocoderOutputChannels), so shrinking it here would silently
+                // desynchronise InputShape/OutputShape from the model's actual output width.
+                // The backbone is the cost lever regardless: 512 -> 32 channels and 8 -> 2
+                // blocks across both the amplitude and phase branches.
+                //
+                // Measured at this scale with FftSize 1024 at float, over 10 training steps:
+                // forward finite, |max| 2.1, loss decreasing, no NaN. Production defaults and
+                // every public customization point are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 640, outputSize: 1539), " +
+                    "new AiDotNet.TextToSpeech.Vocoders.APNet2Options { " +
+                    "ConvNeXtChannels = 32, ConvNeXtIntermediateChannels = 96, " +
+                    "NumConvNeXtBlocks = 2 })";
+            }
             else if (model.ClassName == "AudioPaLM" && model.TypeParameterCount == 1)
             {
                 // 177 s of training probes, again with repetition already floored. Note this is

@@ -615,13 +615,17 @@ public static class LayerHelper<T>
     /// for the first layer). Layers already resolved are skipped via
     /// <see cref="LayerBase{T}.IsShapeResolved"/>.
     /// </summary>
-    private static void ChainResolveLazyLayers(IList<ILayer<T>> layers, int[] rootInputShape)
+    /// <returns>
+    /// The shape flowing out of the last layer, or <paramref name="rootInputShape"/> when
+    /// resolution could not run. Branched models chain on this to resolve a fork's other side.
+    /// </returns>
+    private static int[] ChainResolveLazyLayers(IList<ILayer<T>> layers, int[] rootInputShape)
     {
-        if (rootInputShape == null || rootInputShape.Length == 0) return;
+        if (rootInputShape == null || rootInputShape.Length == 0) return rootInputShape ?? [];
         // Skip if any axis is non-positive — chain resolution requires
         // concrete dims, and a -1 sentinel anywhere means the caller
         // intends fully-deferred resolution at first Forward.
-        foreach (var d in rootInputShape) if (d <= 0) return;
+        foreach (var d in rootInputShape) if (d <= 0) return rootInputShape;
 
         int[] running = rootInputShape;
         foreach (var layer in layers)
@@ -647,12 +651,42 @@ public static class LayerHelper<T>
                         $"LayerHelper.ChainResolveLazyShapes: stopped at " +
                         $"{layer.GetType().Name} (running shape " +
                         $"[{string.Join(", ", running)}]): {ex.Message}");
-                    return;
+                    return running;
                 }
             }
             running = layer.GetOutputShape();
         }
+
+        return running;
     }
+
+    /// <summary>
+    /// Resolves a branch's lazy layers from <paramref name="rootInputShape"/> and returns the
+    /// shape flowing out of it, so a caller can resolve the other side of a fork.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Sequential builders get chain resolution for free through <c>ResolveAndYield</c>, but a
+    /// branched model forks: ABINet's vision trunk feeds both its own character head and the
+    /// language model, and each of those feeds further layers. Resolution has to cross those
+    /// forks, which means the caller needs the shape at the branch point.
+    /// </para>
+    /// <para>
+    /// Use this rather than calling <c>ResolveFromShape</c> with a hand-written shape. The chain
+    /// derives every layer's input from the previous layer's actual <c>GetOutputShape()</c>, so
+    /// it cannot disagree with what the forward pass will produce. A guessed shape can: sizing
+    /// ABINet's character heads from a hand-written <c>[1, 1, visionDim]</c> produced weights the
+    /// forward never matched.
+    /// </para>
+    /// <para>
+    /// Layers already resolved are skipped, so this is a no-op once the branch has run.
+    /// </para>
+    /// </remarks>
+    /// <param name="layers">The branch's layers, in execution order.</param>
+    /// <param name="rootInputShape">The shape entering the branch.</param>
+    /// <returns>The shape leaving the branch.</returns>
+    internal static int[] ResolveChain(IList<ILayer<T>> layers, int[] rootInputShape)
+        => ChainResolveLazyLayers(layers, rootInputShape);
 
     /// <summary>
     /// Creates a Convolutional Neural Network (CNN) with configurable layers.
@@ -11546,19 +11580,25 @@ public static class LayerHelper<T>
     /// <param name="numIterations">Number of refinement iterations (default: 3).</param>
     /// <param name="charsetSize">Character set size (default: 95).</param>
     /// <returns>A collection of layers forming an ABINet model.</returns>
-    public static IEnumerable<ILayer<T>> CreateDefaultABINetLayers(
+    /// <remarks>
+    /// Emitted as its own branch because ABINet (Fang et al., CVPR 2021, arXiv:2103.06495) is a
+    /// three-headed model, not a single chain: the VM, the language model and the fusion each
+    /// produce character probabilities and each carries its own loss term
+    /// (paper Eq. 5, L = lambda_v * L_v + lambda_l * L_l + L_f). Keeping the branches separate is
+    /// what lets the VM stay trainable while gradient flow from the LM into it stays blocked.
+    /// </remarks>
+    /// <param name="imageWidth">Input image width (default: 128).</param>
+    /// <param name="imageHeight">Input image height (default: 32).</param>
+    /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <returns>The layers forming ABINet's vision model trunk.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultABINetVisionLayers(
         int imageWidth = 128,
         int imageHeight = 32,
-        int visionDim = 512,
-        int languageDim = 512,
-        int numIterations = 3,
-        int charsetSize = 95)
+        int visionDim = 512)
     {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int sequenceLength = (imageHeight / 4) * (imageWidth / 4);
 
-        // Vision encoder (ResNet-style)
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>(2, 2);
@@ -11573,9 +11613,22 @@ public static class LayerHelper<T>
         // rank-4-only contract.
         yield return new ReshapeLayer<T>(new[] { sequenceLength, visionDim });
 
-        // Transformer for vision
         yield return new MultiHeadAttentionLayer<T>(8, (visionDim) / (8), identityActivation);
         yield return new LayerNormalizationLayer<T>();
+    }
+
+    /// <summary>
+    /// Creates ABINet's language model (LM): the gradient barrier followed by the Bidirectional
+    /// Cloze Network.
+    /// </summary>
+    /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <param name="languageDim">Language model dimension (default: 512).</param>
+    /// <returns>The layers forming ABINet's language model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultABINetLanguageLayers(
+        int visionDim = 512,
+        int languageDim = 512)
+    {
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         // ABINet's AUTONOMOUS principle (Fang et al., CVPR 2021, arXiv:2103.06495): gradient
         // flow is BLOCKED between the vision model and the language model, so the two train as
@@ -11583,9 +11636,11 @@ public static class LayerHelper<T>
         // instead of becoming an extension of the visual features. The paper's ablation measures
         // roughly 0.9% worse accuracy when that gradient is allowed through.
         //
-        // The stack above is the VM and everything below is the LM, so the barrier goes exactly
-        // here. Without it the model implemented only one of the three principles it is named
-        // for — Autonomous, Bidirectional, Iterative.
+        // The barrier heads the LM branch. It is only sound because the VM carries its own loss
+        // term: in the paper the VM is supervised by L_v, so blocking the LM's gradient removes
+        // one path into the VM rather than every path. Placed in a single-loss sequential chain
+        // this same layer left the entire vision encoder with no gradient source at all, and the
+        // memorization loss sat flat at 0.2746 across 20 steps.
         yield return new StopGradientLayer<T>();
 
         // Language refinement consumes the visual token embeddings produced
@@ -11609,8 +11664,23 @@ public static class LayerHelper<T>
         // which is the very thing the paper's BCN exists to avoid.
         yield return new ClozeAttentionLayer<T>(languageDim);
         yield return new LayerNormalizationLayer<T>();
+    }
 
-        // Fusion with iterative refinement
+    /// <summary>
+    /// Creates ABINet's fusion branch: the ITERATIVE refinement stack and the final character head.
+    /// </summary>
+    /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <param name="numIterations">Number of refinement iterations (default: 3).</param>
+    /// <param name="charsetSize">Character set size (default: 95).</param>
+    /// <returns>The layers forming ABINet's fusion branch.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultABINetFusionLayers(
+        int visionDim = 512,
+        int numIterations = 3,
+        int charsetSize = 95)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
         for (int i = 0; i < numIterations; i++)
         {
             yield return new DenseLayer<T>(visionDim, reluActivation);
@@ -11619,6 +11689,51 @@ public static class LayerHelper<T>
 
         yield return new DenseLayer<T>(charsetSize, identityActivation);
     }
+
+    /// <summary>
+    /// Creates a character-probability head for one of ABINet's branches.
+    /// </summary>
+    /// <remarks>
+    /// The VM and LM each need their own head so their loss terms (L_v and L_l) can be computed
+    /// against the same character targets as the fusion output. Size it with
+    /// <see cref="ResolveChain"/> from the branch's real output shape rather than a hand-written
+    /// one.
+    /// </remarks>
+    /// <param name="charsetSize">Character set size (default: 95).</param>
+    /// <returns>A single character-classification layer.</returns>
+    public static DenseLayer<T> CreateDefaultABINetBranchHead(int charsetSize = 95)
+        => new DenseLayer<T>(charsetSize, (IActivationFunction<T>)new IdentityActivation<T>());
+
+    /// <summary>
+    /// Creates default ABINet (Autonomous, Bidirectional, Iterative) layers as one flat chain.
+    /// </summary>
+    /// <remarks>
+    /// Retained for callers that supply the whole stack as <c>Architecture.Layers</c>. The model's
+    /// native path builds the three branches separately so each can carry its paper loss term.
+    /// </remarks>
+    /// <param name="imageWidth">Input image width (default: 128).</param>
+    /// <param name="imageHeight">Input image height (default: 32).</param>
+    /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <param name="languageDim">Language model dimension (default: 512).</param>
+    /// <param name="numIterations">Number of refinement iterations (default: 3).</param>
+    /// <param name="charsetSize">Character set size (default: 95).</param>
+    /// <returns>A collection of layers forming an ABINet model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultABINetLayers(
+        int imageWidth = 128,
+        int imageHeight = 32,
+        int visionDim = 512,
+        int languageDim = 512,
+        int numIterations = 3,
+        int charsetSize = 95)
+    {
+        foreach (var l in CreateDefaultABINetVisionLayers(imageWidth, imageHeight, visionDim))
+            yield return l;
+        foreach (var l in CreateDefaultABINetLanguageLayers(visionDim, languageDim))
+            yield return l;
+        foreach (var l in CreateDefaultABINetFusionLayers(visionDim, numIterations, charsetSize))
+            yield return l;
+    }
+
 
     /// <summary>
     /// Creates default EAST (Efficient and Accurate Scene Text Detector) layers.

@@ -87,7 +87,18 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
     {
         _options = options ?? new APNet2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // AdamW at the paper's 2e-4 (Du et al., 2023). Constructing it with no options left it
+        // at AdamW's own 1e-3 default, five times the paper's rate.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                // Du et al. 2023 §4: AdamW, beta1 = 0.8, beta2 = 0.99, weight decay 0.01,
+                // initial learning rate 2e-4 decayed by 0.999 each epoch.
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.8,
+                Beta2 = 0.99,
+                WeightDecay = 0.01
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -207,6 +218,23 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
             kernelSize: _options.DepthwiseKernelSize,
             fftSize: _options.FftSize));
 
+        // Resolve each branch's lazy layers from the model's input shape. Both branches are fed
+        // the SAME mel input, so both chains are rooted at it.
+        //
+        // Without this the ConvNeXt v2 blocks stay unresolved until their first forward, and a
+        // freshly constructed instance understates its ParameterCount. That breaks the
+        // serialization round-trip: NeuralNetworkBase slices the flat parameter vector using
+        // each layer's ParameterCount, so the offsets are computed from the understated sizes
+        // and every layer after the first lazy one receives the wrong slice -- before the
+        // layer's own SetParameters (which does resolve) ever runs. It surfaced as a clone
+        // predicting differently from the model it was cloned from, even untrained.
+        var rootShape = Architecture.GetInputShape();
+        if (rootShape is { Length: > 0 })
+        {
+            LayerHelper<T>.ResolveChain(_amplitudeLayers, rootShape);
+            LayerHelper<T>.ResolveChain(_phaseLayers, rootShape);
+        }
+
         // Both branches go into Layers so parameter enumeration, serialization and device
         // transfer see every weight. They are executed as parallel branches in MelToWaveform,
         // not as one sequential stack.
@@ -247,8 +275,67 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
             phase = l.Forward(phase);
 
         return Engine.TensorConcatenate(
-            new[] { amplitude, phase },
+            new[] { amplitude, NormalizePhasePair(phase) },
             axis: amplitude.Shape.Length - 1);
+    }
+
+    /// <summary>
+    /// Rescales the PSP's pseudo-real/pseudo-imaginary pair to unit length per frequency bin.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Per Du et al. 2023 (arXiv:2311.11545), R and I are INTERMEDIATE representations: the
+    /// paper's phase losses are applied to the phase derived from them,
+    /// Phi(R, I) = arctan(I/R) - (pi/2) * Sgn*(I) * [Sgn*(R) - 1], and never to R and I
+    /// directly. Nothing in the paper's objective constrains the pair's magnitude.
+    /// </para>
+    /// <para>
+    /// That matters because Phi is scale-invariant — atan2(kI, kR) = atan2(I, R) for every
+    /// k &gt; 0 — so the radius of (R, I) is a completely free direction. Emitting the raw pair
+    /// let the training objective regress it directly, which is ill-posed along that direction:
+    /// nothing bounded the magnitude and one optimizer step drove the parameters to NaN
+    /// (OptimizerStep_ParamL2_DoesNotExplode measured an L2 of 372.5 collapsing to NaN in a
+    /// single step).
+    /// </para>
+    /// <para>
+    /// Normalising to (cos Phi, sin Phi) removes exactly that free direction while preserving
+    /// all the phase information, since the unit vector is bijective with Phi. It is also better
+    /// behaved than emitting Phi itself would be: a plain squared-error loss on an angle is
+    /// discontinuous at the +/-pi wrap, which is the very problem the paper's anti-wrapping
+    /// function f_AW(x) = |x - 2*pi*round(x / (2*pi))| exists to solve. The unit vector has no
+    /// wrap.
+    /// </para>
+    /// <para>
+    /// Inference is unaffected: <see cref="MelToWaveform"/> recovers the phase with
+    /// Math.Atan2, which is invariant to this rescaling.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> NormalizePhasePair(Tensor<T> phase)
+    {
+        int lastAxis = phase.Shape.Length - 1;
+        int fftBins = (_options.FftSize / 2) + 1;
+
+        if (phase.Shape[lastAxis] != 2 * fftBins)
+            throw new InvalidOperationException(
+                $"APNet2 phase branch produced {phase.Shape[lastAxis]} values per frame, expected {2 * fftBins} (a pseudo-real and pseudo-imaginary value for each of {fftBins} bins).");
+
+        var real = Engine.TensorNarrow(phase, dim: lastAxis, start: 0, length: fftBins);
+        var imaginary = Engine.TensorNarrow(phase, dim: lastAxis, start: fftBins, length: fftBins);
+
+        var sumSquares = Engine.TensorAdd(
+            Engine.TensorMultiply(real, real),
+            Engine.TensorMultiply(imaginary, imaginary));
+
+        // Offset inside the root: d/du sqrt(u) is infinite at u = 0, and a bin whose predicted
+        // real and imaginary parts are both zero gives exactly that.
+        var epsilon = new Tensor<T>(sumSquares.Shape.ToArray());
+        for (int i = 0; i < epsilon.Length; i++) epsilon[i] = NumOps.FromDouble(1e-12);
+
+        var magnitude = Engine.TensorSqrt(Engine.TensorAdd(sumSquares, epsilon));
+
+        return Engine.TensorConcatenate(
+            new[] { Engine.TensorDivide(real, magnitude), Engine.TensorDivide(imaginary, magnitude) },
+            axis: lastAxis);
     }
 
     /// <summary>
@@ -315,6 +402,14 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         writer.Write(_options.HopSize);
         writer.Write(_options.FftSize);
         writer.Write(_options.DropoutRate);
+        // The ConvNeXt v2 backbone geometry decides the parameter count, so it has to survive
+        // the round-trip: restoring into a model rebuilt at different widths silently
+        // misaligns every slice of the flat parameter vector.
+        writer.Write(_options.ConvNeXtChannels);
+        writer.Write(_options.ConvNeXtIntermediateChannels);
+        writer.Write(_options.NumConvNeXtBlocks);
+        writer.Write(_options.DepthwiseKernelSize);
+        writer.Write(_options.WindowLength);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -328,6 +423,11 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         _options.HopSize = reader.ReadInt32();
         _options.FftSize = reader.ReadInt32();
         _options.DropoutRate = reader.ReadDouble();
+        _options.ConvNeXtChannels = reader.ReadInt32();
+        _options.ConvNeXtIntermediateChannels = reader.ReadInt32();
+        _options.NumConvNeXtBlocks = reader.ReadInt32();
+        _options.DepthwiseKernelSize = reader.ReadInt32();
+        _options.WindowLength = reader.ReadInt32();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
