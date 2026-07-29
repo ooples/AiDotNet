@@ -157,7 +157,20 @@ public class ConvNeXtV2Block<T> : LayerBase<T>
         for (int i = 0; i < onesRow.Length; i++) onesRow[i] = NumOps.One;
 
         var sumSq = Engine.TensorBatchMatMul<T>(onesRow, squared);       // [B, 1, I]
-        var g = Engine.TensorSqrt(sumSq);                                // [B, 1, I]
+
+        // Offset before the square root, not after. d/du sqrt(u) = 1/(2*sqrt(u)) is INFINITE at
+        // u = 0, and a channel whose activations are all zero across the sequence gives exactly
+        // u = 0 — so the backward pass produces a non-finite gradient that poisons every
+        // downstream parameter on the first step. The existing epsilon below guards the DIVISION
+        // by the mean response, which is a different degeneracy and does not help here.
+        //
+        // This only became reachable once the GRN gain and bias were registered as trainable:
+        // before that the branch carried no gradient at all, so the infinite derivative was
+        // never requested. APNet2 trains an 8-block ConvNeXt v2 stack and went NaN on its first
+        // optimizer step.
+        var sqrtEpsilon = new Tensor<T>(sumSq.Shape.ToArray());
+        for (int i = 0; i < sqrtEpsilon.Length; i++) sqrtEpsilon[i] = NumOps.FromDouble(1e-12);
+        var g = Engine.TensorSqrt(Engine.TensorAdd(sumSq, sqrtEpsilon));  // [B, 1, I]
 
         // Mean response across channels: [B, 1, 1], broadcast back over I.
         var onesChannels = new Tensor<T>(new[] { B, I, 1 });

@@ -12,6 +12,15 @@ public class APNet2Options : VocoderOptions
         MelChannels = 80;
         HopSize = 256;
         FftSize = 1024;
+
+        // APNet2 (Du et al., 2023, arXiv:2311.11545) trains with AdamW at 2e-4, following
+        // HiFi-GAN's schedule. Set here rather than relying on the TtsModelOptions default so
+        // the paper value is the one a caller gets. APNet2 previously built its optimizer with
+        // no options at all, so it silently ran at AdamW's own 1e-3 default -- five times the
+        // paper rate. That went unnoticed because its training forward threw before any
+        // gradient was taken; once the forward was fixed the model trained for the first time
+        // and promptly diverged to NaN.
+        LearningRate = 2e-4;
     }
 
     /// <summary>
@@ -43,4 +52,6 @@ public class APNet2Options : VocoderOptions
     /// </summary>
     /// <value>Defaults to 1024, matching the paper's FFT size.</value>
     public int WindowLength { get; set; } = 1024;
+
+
 }
