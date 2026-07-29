@@ -4672,6 +4672,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "FeedForwardExpansionFactor = 2, ConvKernelSize = 3, NumMels = 32, " +
                     "VocabSize = 32, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "SpeechEmotionRecognizer" && model.TypeParameterCount == 1)
+            {
+                // SpeechEmotionRecognizer builds its conv stack purely from AUDIO parameters
+                // (numMels x numFrames, where numFrames = (durationSeconds*sampleRate - nFft)/hopLength + 1)
+                // and never reads Architecture.InputHeight/InputWidth. With production defaults that is
+                // [1, 80, 184] (80 mels, 3 s @ 16 kHz), so the generic [1, 64, 32] mel fixture disagreed on
+                // BOTH axes and every test in the class threw before asserting anything — "Expected input
+                // depth 1, but got 80" from the Predict path and "ConvolutionalLayer expects rank-3
+                // [C,H,W]" from the flattened-feature path (22 failures, one cause).
+                // Construct at the fixture's exact geometry instead: numMels 64 gives H = 64, and
+                // inputDurationSeconds 0.56 gives numFrames = (int)((0.56*16000 - 1024)/256) + 1 = 32 = W.
+                // Four explicit labels with includeArousalValence: false match outputSize 4, and
+                // dropoutRate 0.0 keeps Predict_ShouldBeDeterministic deterministic. Production defaults
+                // stay paper-faithful (80 mels / 3 s / 4 conv blocks) and remain fully configurable.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "sampleRate: 16000, numMels: 64, nFft: 1024, hopLength: 256, " +
+                    "inputDurationSeconds: 0.56, numConvBlocks: 2, baseFilters: 8, hiddenDim: 32, " +
+                    "dropoutRate: 0.0, " +
+                    "emotionLabels: new[] { \"neutral\", \"happy\", \"sad\", \"angry\" }, " +
+                    "includeArousalValence: false)";
+            }
             else if (model.ClassName == "ConformerFP" && model.TypeParameterCount == 1)
             {
                 // ConformerFP's production fingerprinter is a 256-mel / 256-wide / 6-block Conformer

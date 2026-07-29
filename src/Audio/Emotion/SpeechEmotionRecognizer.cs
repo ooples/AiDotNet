@@ -482,6 +482,34 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
 
     #region Forward Pass
 
+    /// <summary>
+    /// Adds the singleton channel axis a <see cref="ConvolutionalLayer{T}"/> requires, turning a
+    /// rank-2 mel spectrogram <c>[numMels, numFrames]</c> into <c>[1, numMels, numFrames]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="PreprocessAudio"/> returns the mel spectrogram as a rank-2 tensor, but the conv
+    /// stack built by <c>CreateSpeechEmotionRecognizerLayers</c> accepts only rank-3 <c>[C,H,W]</c>
+    /// or rank-4 <c>[B,C,H,W]</c>. Every native-mode inference path — <see cref="Forward"/> via
+    /// <see cref="GetEmotionProbabilities"/>, and <see cref="ExtractEmotionFeatures"/> — therefore
+    /// threw "ConvolutionalLayer expects rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank 2"
+    /// before reaching the first layer, so the model could not run in native mode at all.
+    /// </para>
+    /// <para>
+    /// Reshaping goes through <c>Engine</c> so the operation is recorded on the autodiff tape:
+    /// a bare <c>tensor.Reshape</c> here would sever gradient flow for every training invariant.
+    /// Rank-3 and rank-4 inputs (an already-batched or already-channelled spectrogram, as the
+    /// training path supplies) pass through untouched.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> AddChannelAxisIfNeeded(Tensor<T> input)
+    {
+        if (input.Shape.Length != 2)
+            return input;
+
+        return Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] });
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
@@ -490,7 +518,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
             throw new InvalidOperationException("Forward pass only available in native mode.");
         }
 
-        var output = input;
+        var output = AddChannelAxisIfNeeded(input);
 
         // Convolutional layers
         foreach (var layer in _convLayers)
@@ -709,7 +737,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         }
 
         // For native mode, get embeddings before final classification layer
-        Tensor<T> features = preprocessed;
+        Tensor<T> features = AddChannelAxisIfNeeded(preprocessed);
 
         foreach (var layer in _convLayers)
         {
