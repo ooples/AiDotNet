@@ -274,7 +274,23 @@ public class CifAlignmentLayer<T> : LayerBase<T>
             // target length is unknown and the raw alphas decide the output length.
             if (AlphaScalingEnabled && IsTrainingMode)
             {
-                var ratio = Engine.TensorDivide(target, alphaSum);                 // [B, 1, 1]
+                // Guard the denominator. Sigma-alpha is a sum of non-negative firing weights, so
+                // it approaches zero whenever the weight predictor's outputs collapse — which is
+                // easy early in training, before the quantity loss has pulled the integrated
+                // count toward the target. Dividing by it then produces an enormous ratio that
+                // scales every weight, and d(1/u)/du = -1/u^2 makes the backward pass worse than
+                // the forward.
+                //
+                // This is a latent hazard rather than an observed failure: the enclosing branch
+                // only runs when TargetTokenCount is set, which the generated fixtures never do,
+                // so it is not the cause of CIFEncoder's NaN.
+                var denominatorFloor = new Tensor<T>(alphaSum.Shape.ToArray());
+                for (int i = 0; i < denominatorFloor.Length; i++)
+                    denominatorFloor[i] = NumOps.FromDouble(1e-6);
+
+                var ratio = Engine.TensorDivide(
+                    target,
+                    Engine.TensorAdd(alphaSum, denominatorFloor));                 // [B, 1, 1]
                 var ratioBroadcast = Engine.TensorBatchMatMul(onesColumn, ratio);  // [B, S, 1]
                 alphaTensor = Engine.TensorMultiply(alphaTensor, ratioBroadcast);
             }
@@ -301,9 +317,9 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         // SupportsTraining true rather than an advertised-but-frozen head.
         //
         // A and C are constants w.r.t. the tape; only αB carries alpha's gradient.
-        var coeff = new Tensor<T>(new[] { B, S, S });      // A — multiplies α_t
-        var prefixCoeff = new Tensor<T>(new[] { B, S, S }); // Bp — multiplies P_t = Σ_{s<t} α_s
-        var constant = new Tensor<T>(new[] { B, S, S });    // C — the fixed part
+        var coeff = Zeroed(new[] { B, S, S });             // A — multiplies α_t
+        var prefixCoeff = Zeroed(new[] { B, S, S });        // Bp — multiplies P_t = Σ_{s<t} α_s
+        var constant = Zeroed(new[] { B, S, S });           // C — the fixed part
 
         // Per Gao 2022 Algorithm 1, executed per-batch independently:
         //   acc_α ← 0,  acc_h ← 0
@@ -406,33 +422,40 @@ public class CifAlignmentLayer<T> : LayerBase<T>
             // contraction below emits zeros there. Nothing more to do.
         }
 
-        // Broadcast α along the token axis WITHOUT leaving the tape: reshaping [B, S, 1] to
-        // [B, 1, S] gives α as a row, and multiplying a constant [B, S, 1] column of ones by it
-        // produces alphaB[b, j, t] = α_t for every j. Both operands stay tape-visible, so this
-        // is the link through which the alpha predictor actually learns.
-        var alphaRow = Engine.Reshape(alphaTensor, [B, 1, S]);
-        var alphaB = Engine.TensorBatchMatMul(onesColumn, alphaRow);    // [B, S, S]
+        // Inclusive-minus-self prefix sum P_t = Σ_{s<t} α_s. A cumulative sum along the sequence
+        // axis is O(S); the strictly-lower-triangular matmul this replaces built a [B, S, S]
+        // operand and contracted it just to add up earlier alphas.
+        var inclusivePrefix = Engine.TensorCumSum(alphaTensor, axis: 1);      // [B, S, 1]
+        var prefix = Engine.TensorSubtract(inclusivePrefix, alphaTensor);     // exclusive
 
-        // Exclusive prefix sum P_t = Σ_{s<t} α_s, as a strictly-lower-triangular matmul so the
-        // tape records each P_t's dependence on every earlier alpha. This is the term that makes
-        // the split's dependence on the whole preceding sequence differentiable.
-        var lowerTriangular = new Tensor<T>(new[] { B, S, S });
-        for (int b = 0; b < B; b++)
-            for (int t = 0; t < S; t++)
-                for (int s = 0; s < t; s++)
-                    lowerTriangular[b, t, s] = NumOps.One;
+        // The contraction, algebraically rearranged to keep the tape off the S-by-S plane.
+        //
+        // Each output row is out_i = Σ_t W[i,t] · h_t with
+        //     W[i,t] = A[i,t]·α_t + Bp[i,t]·P_t + C[i,t].
+        // Because α_t and P_t do not depend on the OUTPUT index i, the broadcast copies of them
+        // are redundant: (A ⊙ αB) · h = A · (α ⊙ h), and likewise for the prefix term. So
+        //     out = A·(α ⊙ h) + Bp·(P ⊙ h) + C·h
+        // which is identical arithmetic with the elementwise products moved from [B, S, S] down
+        // to [B, S, D].
+        //
+        // That matters beyond memory. A, Bp and C are constants with respect to the tape -- the
+        // firing structure is decided in the non-differentiable pass above -- so in this form
+        // they are plain matmul operands and the only tape intermediates are [B, S, D]. The
+        // previous form multiplied them INTO tape tensors, so the tape had to carry three
+        // S-by-S intermediates per forward. Under an active TensorArena that was enough to make
+        // the alpha predictor's gradient come back non-finite after a single training step,
+        // while the forward stayed finite and the same model trained cleanly with no arena.
+        var alphaBroadcast = Engine.TensorBroadcastTo(alphaTensor, [B, S, D]);
+        var prefixBroadcast = Engine.TensorBroadcastTo(prefix, [B, S, D]);
 
-        var prefix = Engine.TensorBatchMatMul(lowerTriangular, alphaTensor);  // [B, S, 1]
-        var prefixRow = Engine.Reshape(prefix, [B, 1, S]);
-        var prefixB = Engine.TensorBatchMatMul(onesColumn, prefixRow);        // [B, S, S]
+        var alphaWeighted = Engine.TensorMultiply(alphaBroadcast, input);     // [B, S, D]
+        var prefixWeighted = Engine.TensorMultiply(prefixBroadcast, input);   // [B, S, D]
 
-        // W = A ⊙ αB + Bp ⊙ PB + C, then out = W · h.
-        var weights = Engine.TensorAdd(
+        var output = Engine.TensorAdd(
             Engine.TensorAdd(
-                Engine.TensorMultiply(coeff, alphaB),
-                Engine.TensorMultiply(prefixCoeff, prefixB)),
-            constant);
-        var output = Engine.TensorBatchMatMul(weights, input);          // [B, S, D]
+                Engine.TensorBatchMatMul(coeff, alphaWeighted),
+                Engine.TensorBatchMatMul(prefixCoeff, prefixWeighted)),
+            Engine.TensorBatchMatMul(constant, input));                       // [B, S, D]
 
         return output;
     }
@@ -447,9 +470,33 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     /// <c>h_u</c> rather than from <c>h_u</c> alone, so the predictor can see the frame-to-frame
     /// change that marks a token boundary.
     /// </remarks>
+    /// <summary>
+    /// Zeroes a freshly allocated scratch tensor.
+    /// </summary>
+    /// <remarks>
+    /// Several buffers in this layer are written SPARSELY and rely on every untouched element
+    /// being zero: the firing coefficients are set only at positions that actually fire, the
+    /// prefix-sum operand only below its diagonal, and the context window only where a neighbour
+    /// exists. Relying on the allocator to hand back zeroed memory is not safe when a
+    /// TensorArena is active, because pooled buffers carry whatever the previous tenant left in
+    /// them. The stale values then flow straight into the matmuls that build the output weights.
+    ///
+    /// Measured: with an arena active, CIFEncoder's alpha predictor went non-finite after a
+    /// single training step; with no arena the same model trained cleanly for twelve. That also
+    /// explains the run-to-run variation -- the same binary failed 6, 5 or 4 of its 26 tests
+    /// depending on what happened to be in the pool.
+    /// </remarks>
+    private static Tensor<T> Zeroed(int[] shape)
+    {
+        var tensor = new Tensor<T>(shape);
+        var zero = MathHelper.GetNumericOperations<T>().Zero;
+        for (int i = 0; i < tensor.Length; i++) tensor[i] = zero;
+        return tensor;
+    }
+
     private static Tensor<T> BuildAlphaWindow(Tensor<T> input, int B, int S, int D)
     {
-        var windowed = new Tensor<T>(new[] { B, S, 3 * D });
+        var windowed = Zeroed(new[] { B, S, 3 * D });
 
         for (int b = 0; b < B; b++)
         {
