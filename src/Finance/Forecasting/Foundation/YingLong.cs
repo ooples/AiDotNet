@@ -255,27 +255,6 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
-    {
-        if (!_useNativeMode)
-        {
-            return base.GetNamedLayerActivations(input);
-        }
-
-        // Named activation traversal must enter the same normalized, batched
-        // representation as ForwardNative. A rank-1 series otherwise reaches
-        // ReshapeLayer as 1024 separate one-value samples instead of one
-        // 1024-value sequence.
-        var normalized = ApplyInstanceNormalization(input);
-        if (normalized.Rank == 1)
-        {
-            normalized = Engine.Reshape(normalized, new[] { 1, normalized.Length });
-        }
-
-        return base.GetNamedLayerActivations(normalized);
-    }
-
-    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)

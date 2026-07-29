@@ -343,18 +343,6 @@ public class XMem<T> : NeuralNetworkBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input) => SegmentFrame(input);
 
-    /// <summary>
-    /// Trains through the SAME segmentation path inference uses.
-    /// </summary>
-    /// <remarks>
-    /// Without this the base walked the flat Layers list instead, which is not a valid path through
-    /// this model at all — the encoder, memory-query and decoder stages are wired by SegmentWithMemory,
-    /// not by list order, so the walk failed outright with "Expected input depth 448, but got 128".
-    /// It also meant training optimized a different function from the one Predict evaluates, and the
-    /// two disagreed on output shape, so the loss compared mismatched tensors.
-    /// </remarks>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => SegmentFrame(input);
-
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
