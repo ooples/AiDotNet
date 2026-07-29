@@ -10113,6 +10113,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MoreDataLongIterations => 1;");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             }
+            else if (model.ClassName == "CIFEncoder")
+            {
+                // CIFEncoder emits per-frame vocabulary logits: the CIF stage keeps the encoder's
+                // frame count and the head projects to VocabSize, so a [1, 64, 32] input produces
+                // [1, 64, 64] at the bound fixture's VocabSize = 64.
+                //
+                // The generic audio fallthrough declared OutputShape [4], so the invariant
+                // compared a 4096-element prediction against a 4-element target. Whatever the
+                // target alignment then did with that, the resulting objective was meaningless
+                // and its gradient drove the alpha predictor non-finite on the first step --
+                // which is what CIFEncoder's NaN actually was. The layer itself is fine: on its
+                // own, under an arena, its gradients are finite.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 64 };");
+            }
             else if (model.ClassName == "CMGAN")
             {
                 // CMGAN's decoder is DECOUPLED per Cao et al., INTERSPEECH 2022
