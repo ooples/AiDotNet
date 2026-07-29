@@ -929,16 +929,29 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> ComputeFrequencyRepresentation(Tensor<T> input)
     {
-        int n = input.Rank > 1 ? input.Shape[^1] : input.Length;
-        if (n != _contextLength)
+        // TF-C computes the DFT magnitude spectrum over the CONTEXT (time) axis.
+        // The model is univariate (NumFeatures == 1), so every sample contributes
+        // exactly _contextLength contiguous time values however it is shaped:
+        // [context], [batch, context], or the framework's canonical time-series
+        // layout [batch, context, 1]. Reading the transform length from the last
+        // axis broke that canonical layout — it saw the trailing feature axis (1)
+        // as the context and rejected the input with "expects a N-step context but
+        // received 1 steps on the last axis". Derive the length from the configured
+        // context instead and treat the flattened input as numSamples x context.
+        int n = _contextLength;
+        if (input.Length % n != 0)
         {
             throw new ArgumentException(
-                $"TFC expects a {_contextLength}-step context but received {n} steps on the last axis.",
+                $"TFC is univariate (NumFeatures = {NumFeatures}), so each sample must contain " +
+                $"exactly {_contextLength} time steps, but the input holds {input.Length} elements, " +
+                $"which is not a whole number of {_contextLength}-step samples.",
                 nameof(input));
         }
 
         int numSamples = input.Length / n;
-        bool reshaped = input.Rank != 2;
+        // Only skip the reshape when the input is already exactly [numSamples, n];
+        // any other rank or shape (including [batch, context, 1]) is normalized.
+        bool reshaped = !(input.Rank == 2 && input.Shape[0] == numSamples && input.Shape[1] == n);
         var flat = reshaped ? Engine.Reshape(input, new[] { numSamples, n }) : input;
 
         EnsureDftBases(n);
