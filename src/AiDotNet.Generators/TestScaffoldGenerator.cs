@@ -959,6 +959,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // continuous mel targets — a family-wide objective change to evaluate separately, not here.)
         "BioBERTNER", "BiaffineNER", "BSRoFormer", "AnomalyTransformerDetector",
         "AVID", "ABINet", "APNet", "APNet2", "AzureSpeechSTT", "AWSTranscribe",
+        // ConvTasNet (Luo & Mesgarani 2019) separates at waveform resolution, so its
+        // MoreData probe exhausted the 120 s gate outright. Start at the bottom of the
+        // ladder: FP32 also enrols it in the audio family's smoke-iteration caps, which is
+        // float and cap together. Production defaults are untouched.
+        "ConvTasNet",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -9276,6 +9281,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // and gradient-flow invariants all pass. Compare a real warm-up window (10 steps)
             // with the measured convergence window (50 steps); this keeps the more-training
             // invariant meaningful without testing optimizer drift after the smoke model is fit.
+        }
+        else if (model.ClassName == "BiomedCLIP")
+        {
+            // Feed the image size this model is actually bound to. Its constructor bound already
+            // shrinks it to ImageSize = 32 with PatchSize = 2, but the fixture kept handing it the
+            // generic vision default of [3, 128, 128] -- so the ViT tokenized (128/2)^2 = 4096
+            // patches instead of (32/2)^2 = 256, and self-attention over 4096 tokens is why
+            // TrainingError_ShouldNotExceedTestError hit the 120 s gate.
+            //
+            // This is the shrink rung of the ladder applied properly: the model was shrunk but the
+            // input it is given was not, which is the same half-applied bound that made APNet
+            // build a 64-channel kernel for an 80-channel input.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
         }
         else if (model.ClassName == "OpenVocabSAM")
         {

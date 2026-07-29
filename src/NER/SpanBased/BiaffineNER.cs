@@ -166,17 +166,36 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
     {
         var tokenLabels = PreprocessLabels(labels, seqLen);
 
-        var spanTargets = new Tensor<T>([seqLen * seqLen]);
-        for (int start = 0; start < seqLen; start++)
+        // The scorer emits [batch, l*l, c] for a batched input and [l*l, c] unbatched, so the
+        // target has to carry the same batch axis. Building a flat [l*l] regardless meant a
+        // two-example batch produced a [26] target against a [2, 64, 9] prediction, which cannot
+        // broadcast -- the failure DifferentInputs_AfterTraining reported, since that test is the
+        // one that feeds two distinct inputs at once.
+        int batch = tokenLabels.Rank >= 2 ? tokenLabels.Shape[0] : 1;
+
+        var spanTargets = batch > 1
+            ? new Tensor<T>([batch, seqLen * seqLen])
+            : new Tensor<T>([seqLen * seqLen]);
+
+        for (int b = 0; b < batch; b++)
         {
-            // A single-token entity occupies the diagonal; every other pair is a non-entity
-            // span and keeps the zero the tensor is already filled with.
-            var category = tokenLabels.Rank == 1 ? tokenLabels[start] : tokenLabels[0, start];
-            spanTargets[(start * seqLen) + start] = category;
+            for (int start = 0; start < seqLen; start++)
+            {
+                // A single-token entity occupies the diagonal; every other pair is a non-entity
+                // span and keeps the zero the tensor is already filled with.
+                var category = tokenLabels.Rank == 1 ? tokenLabels[start] : tokenLabels[b, start];
+
+                if (batch > 1)
+                {
+                    spanTargets[b, (start * seqLen) + start] = category;
+                }
+                else
+                {
+                    spanTargets[(start * seqLen) + start] = category;
+                }
+            }
         }
 
-        // The target is a leaf, so the sampled rows are copied directly rather than gathered
-        // through the engine — no gradient flows through it and TensorIndexSelect is 2D-only.
         return spanTargets;
     }
 
