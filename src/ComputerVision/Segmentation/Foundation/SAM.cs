@@ -117,7 +117,7 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: <see cref="BinaryCrossEntropyWithLogitsLoss{T}"/> when <paramref name="numClasses"/> == 1; otherwise <see cref="CrossEntropyWithLogitsLoss{T}"/>; the paper uses focal + dice + IoU loss).</param>
+    /// <param name="lossFunction">Loss function. Default for <paramref name="numClasses"/> == 1 is the paper's objective: a <see cref="CompositeLoss{T}"/> of <see cref="FocalLoss{T}"/> (gamma 2, alpha 0.25) and <see cref="DiceLoss{T}"/> in a 20:1 ratio (Kirillov et al. 2023, §3). Multi-class uses <see cref="CrossEntropyWithLogitsLoss{T}"/>.</param>
     /// <param name="numClasses">Number of output mask classes (default: 1 for binary segmentation).</param>
     /// <param name="modelSize">ViT backbone size (default: ViTHuge — the original SAM default).</param>
     /// <param name="dropRate">Dropout rate (default: 0.1).</param>
@@ -137,8 +137,17 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SAMModelSize modelSize = SAMModelSize.ViTHuge,
         double dropRate = 0.1,
         SAMOptions? options = null)
+        // Kirillov et al. 2023 ("Segment Anything", §3 Segment Anything Model / Training) supervises
+        // mask prediction with "a linear combination of focal loss and dice loss in a 20:1 ratio",
+        // focal being the RetinaNet form (gamma=2, alpha=0.25) the paper cites. The previous plain
+        // BinaryCrossEntropyWithLogitsLoss was NOT that objective: it weights every pixel equally,
+        // where focal deliberately down-weights easy background and dice corrects the foreground/
+        // background imbalance a promptable segmenter depends on. Use the paper's composite for the
+        // single-mask case; multi-class keeps softmax CE, which is the correct generalisation.
         : base(architecture, lossFunction ?? (numClasses == 1
-            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
+            ? (ILossFunction<T>)new CompositeLoss<T>(
+                (new FocalLoss<T>(gamma: 2.0, alpha: 0.25), 20.0),
+                (new DiceLoss<T>(), 1.0))
             : new CrossEntropyWithLogitsLoss<T>()))
     {
         _options = options ?? new SAMOptions();
@@ -221,8 +230,12 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         int numClasses = 1,
         SAMModelSize modelSize = SAMModelSize.ViTHuge,
         SAMOptions? options = null)
+        // Same paper objective as the native constructor above (focal + dice, 20:1), kept in sync so
+        // the two entry points do not disagree about what SAM optimises.
         : base(architecture, numClasses == 1
-            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
+            ? (ILossFunction<T>)new CompositeLoss<T>(
+                (new FocalLoss<T>(gamma: 2.0, alpha: 0.25), 20.0),
+                (new DiceLoss<T>(), 1.0))
             : new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SAMOptions();
