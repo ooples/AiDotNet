@@ -617,6 +617,50 @@ public static class DeserializationHelper
                 instance = spCtor.Invoke(new object?[] { spOut, spLen, spAct });
             }
         }
+        else if (genericDef == typeof(AiDotNet.PointCloud.Models.SetAbstractionLayer<>))
+        {
+            // SetAbstractionLayer is a multi-branch composite whose parameter
+            // count is fixed by its per-branch MLP widths, radii, neighbour counts
+            // and centroid count — none of which the generic type-name + shape +
+            // flat-vector serialization carries. Its GetMetadata emits them here.
+            // Rebuild every scale uniformly through the multi-scale constructor (a
+            // single-scale layer is just one branch), so the reconstructed layer
+            // has exactly the parameters the saved vector expects. Without this the
+            // reflection fallback built a default-shaped shell and SetParameters
+            // threw "Expected 4 parameters, but got 248" on Clone/DeepCopy (#1789).
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            int saNumPoints = TryGetInt(additionalParams, "SA_NumPoints")
+                ?? throw new InvalidOperationException(
+                    "SetAbstractionLayer deserialize: missing SA_NumPoints metadata — re-save the model on a "
+                    + "build that emits it via GetMetadata.");
+            int saInputChannels = TryGetInt(additionalParams, "SA_InputChannels")
+                ?? throw new InvalidOperationException(
+                    "SetAbstractionLayer deserialize: missing SA_InputChannels metadata.");
+
+            double[] saRadii = (TryGetString(additionalParams, "SA_Radii") ?? "")
+                .Split('|', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => double.Parse(s, inv)).ToArray();
+            int[] saNeighbors = (TryGetString(additionalParams, "SA_NeighborSamples") ?? "")
+                .Split('|', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => int.Parse(s, inv)).ToArray();
+            int[][] saMlp = (TryGetString(additionalParams, "SA_Mlp") ?? "")
+                .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(branch => branch.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.Parse(s, inv)).ToArray())
+                .ToArray();
+
+            if (saRadii.Length == 0 || saRadii.Length != saNeighbors.Length || saRadii.Length != saMlp.Length)
+                throw new InvalidOperationException(
+                    "SetAbstractionLayer deserialize: branch metadata (SA_Radii/SA_NeighborSamples/SA_Mlp) is "
+                    + "missing or inconsistent.");
+
+            var saCtor = type.GetConstructor(
+                new[] { typeof(int), typeof(double[]), typeof(int), typeof(int[][]), typeof(int[]) });
+            if (saCtor is null)
+                throw new MissingLayerCtorException(
+                    "Cannot find SetAbstractionLayer(int, double[], int, int[][], int[]) constructor.");
+            instance = saCtor.Invoke(new object?[] { saNumPoints, saRadii, saInputChannels, saMlp, saNeighbors });
+        }
         else if (genericDef == typeof(PositionalEncodingLayer<>))
         {
             // PositionalEncodingLayer(int maxSequenceLength, int embeddingSize)

@@ -1084,6 +1084,13 @@ public class SetAbstractionLayer<T> : LayerBase<T>
         public double Radius { get; }
         public int NeighborSamples { get; }
         public List<ILayer<T>> MlpLayers { get; }
+
+        // Exposed so the layer's serialization metadata can record the exact MLP
+        // widths that built this branch's PointConvolution stack, which is what a
+        // clone/deserialize needs to rebuild the branch with the same parameter
+        // count instead of a default-shaped shell.
+        public int[] MlpDimensions => _mlpDimensions;
+
         public int OutputChannels => _mlpDimensions[^1];
         public int[]? NeighborCounts { get; set; }
         public int[,]? NeighborIndices { get; set; }
@@ -1166,6 +1173,32 @@ public class SetAbstractionLayer<T> : LayerBase<T>
 
         _outputChannels = _branches.Sum(branch => branch.OutputChannels);
         Parameters = GetParameters();
+    }
+
+    /// <summary>
+    /// Records the structural configuration a clone/deserialize needs to rebuild
+    /// this layer with the same parameter count. The generic layer serialization
+    /// only carries a type name, input/output shapes and a flat parameter vector;
+    /// none of those encode the per-branch MLP widths, radii, neighbour counts or
+    /// centroid count that determine how many parameters a set-abstraction layer
+    /// has. Without this, DeserializationHelper rebuilt a default-shaped shell and
+    /// SetParameters rejected the saved vector ("Expected 4 parameters, but got
+    /// 248") on every Clone/DeepCopy. Every scale is stored uniformly as one
+    /// branch, so a single-scale layer round-trips as a one-branch multi-scale
+    /// layer, which produces the identical branch set.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["SA_NumPoints"] = _numPoints.ToString(ci);
+        metadata["SA_InputChannels"] = _inputChannels.ToString(ci);
+        metadata["SA_Radii"] = string.Join("|", _branches.Select(b => b.Radius.ToString(ci)));
+        metadata["SA_NeighborSamples"] = string.Join("|", _branches.Select(b => b.NeighborSamples.ToString(ci)));
+        // Branches separated by ';', the widths within a branch by ','.
+        metadata["SA_Mlp"] = string.Join(";",
+            _branches.Select(b => string.Join(",", b.MlpDimensions.Select(d => d.ToString(ci)))));
+        return metadata;
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
