@@ -5761,17 +5761,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // 113 s of training probes with repetition already at the audio branch's floor,
                 // so this is per-step scale.
                 //
-                // APNet reads only SampleRate, MelChannels, HopSize, FftSize and DropoutRate from
-                // its options — verified against the implementation rather than assumed from the
-                // options surface. UpsampleInitialChannels and NumDiffusionSteps are inherited
-                // from VocoderOptions but never consumed here, so setting them would bound
-                // nothing; the spectral geometry is the whole lever.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 64, outputSize: 64), " +
                     "new AiDotNet.TextToSpeech.Vocoders.APNetOptions { SampleRate = 22050, " +
-                    "MelChannels = 64, HopSize = 64, FftSize = 128, DropoutRate = 0.0 })";
+                    "MelChannels = 80, HopSize = 64, FftSize = 128, " +
+                    "UpsampleInitialChannels = 32, NumDiffusionSteps = 2 })";
             }
             else if (model.ClassName == "AudioPaLM" && model.TypeParameterCount == 1)
             {
