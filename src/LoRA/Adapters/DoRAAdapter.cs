@@ -146,7 +146,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         : base(baseLayer, rank, alpha, freezeBaseLayer)
     {
         // Initialize magnitude from base layer weights
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         _magnitude = new Vector<T>(outputSize);
 
         // Decompose initial weights to get magnitude
@@ -186,7 +186,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // For each output neuron, compute the magnitude of its weight vector
@@ -348,7 +348,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         // Get base layer parameters and extract weights
         Vector<T> baseParams = _baseLayer.GetParameters();
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Extract weight matrix from base layer (assuming weights come first)
@@ -587,7 +587,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Get base layer weights
         Vector<T> baseParams = _baseLayer.GetParameters();

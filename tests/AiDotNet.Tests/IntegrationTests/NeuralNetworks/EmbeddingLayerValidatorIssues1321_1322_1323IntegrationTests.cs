@@ -616,6 +616,10 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
 
         public int[] GetInputShape() => [1];
         public int[] GetOutputShape() => [_vocabSize];
+
+        /// <inheritdoc/>
+        public AiDotNet.NeuralNetworks.Layers.LayerShape GetOutputLayerShape()
+            => new AiDotNet.NeuralNetworks.Layers.LayerShape(GetOutputShape());
         public bool IsShapeResolved => true;
         public Tensor<float>? GetWeights() => null;
         public Tensor<float>? GetBiases() => null;

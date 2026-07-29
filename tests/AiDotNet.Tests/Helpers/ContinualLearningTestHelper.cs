@@ -456,6 +456,10 @@ public class MockLayer<T> : ILayer<T>
 
     public int[] GetOutputShape() => [10];
 
+    /// <inheritdoc/>
+    public AiDotNet.NeuralNetworks.Layers.LayerShape GetOutputLayerShape()
+        => new AiDotNet.NeuralNetworks.Layers.LayerShape(GetOutputShape());
+
     public bool IsShapeResolved => true;
 
     public Tensor<T>? GetWeights() => null;

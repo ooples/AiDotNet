@@ -154,7 +154,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = baseLayer.GetInputShape()[0];
-        int outputSize = baseLayer.GetOutputShape()[0];
+        int outputSize = baseLayer.GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Factor the dimensions to create Kronecker factors
         // We want m*p = outputSize and n*q = inputSize, with balanced factors
@@ -540,7 +540,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

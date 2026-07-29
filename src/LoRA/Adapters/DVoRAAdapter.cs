@@ -175,7 +175,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
             // Guard against pre-initialization state when base class constructor calls this property.
             int baseCount = _freezeBaseLayer ? (int)(0) : (int)_baseLayer.ParameterCount;
             int inputSize = GetInputShape()[0];
-            int outputSize = GetOutputShape()[0];
+            int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
             // We must include the LoRA slice size for base class compatibility, even though DVoRA doesn't train it.
             // The base constructor allocates parameter vectors based on this count, and packing/unpacking
@@ -227,7 +227,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Ensure shared matrices are initialized
         if (_sharedMatrixA == null || _sharedMatrixB == null)
@@ -375,7 +375,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     {
         Vector<T> baseParams = _baseLayer.GetParameters();
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // For each output neuron, compute the magnitude of its weight vector
@@ -473,7 +473,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     {
         // DVoRA doesn't use a standard LoRA layer, but we need to satisfy the base class
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
 
@@ -521,7 +521,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         // Get base layer parameters and extract weights
         Vector<T> baseParams = _baseLayer.GetParameters();
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Extract weight matrix from base layer
@@ -913,7 +913,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int rank = _scalingVectorB.Length;
 
         // Get base layer weights

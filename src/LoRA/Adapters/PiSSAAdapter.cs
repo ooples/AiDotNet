@@ -193,7 +193,7 @@ public class PiSSAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         if (pretrainedWeights.Rows != outputSize || pretrainedWeights.Columns != inputSize)
         {

@@ -11380,7 +11380,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Get the weights from the first layer
         Vector<T> weights = firstLayer.GetParameters();
         int featureCount = firstLayer.GetInputShape()[0];
-        int outputSize = firstLayer.GetOutputShape()[0];
+        int outputSize = firstLayer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0];
 
         // Calculate feature importance by summing absolute weights per input feature
         var featureScores = new Dictionary<int, T>();
@@ -11512,7 +11512,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public virtual void AddLayer(LayerType layerType, int units, ActivationFunction activation)
     {
         // Get input size from previous layer or use units as default
-        int inputSize = Layers.Count > 0 ? Layers[Layers.Count - 1].GetOutputShape()[0] : units;
+        int inputSize = Layers.Count > 0 ? Layers[Layers.Count - 1].GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0] : units;
 
         // Create activation function from enum
         var activationFunc = ActivationFunctionFactory<T>.CreateActivationFunction(activation);

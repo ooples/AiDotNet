@@ -167,7 +167,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Initialize dropout mask (will be regenerated on each forward pass during training)
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         _dropoutMask = new bool[outputSize];
     }
 
@@ -378,7 +378,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
 
         // Both DenseLayer and FullyConnectedLayer store parameters as [weights..., biases...]
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights
