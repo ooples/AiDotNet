@@ -1338,6 +1338,15 @@ jobs:
           df -h /
           exit $exitCode
 
+      # Surface the COMPLETE per-shard failure list on the run's Summary page.
+      # Runs only when the shard is red, parses the TRX the run already wrote,
+      # and groups failures by error so a single root cause behind many tests
+      # reads as one line. Pure reporter (exits 0) — never changes the outcome.
+      - name: Report failed tests
+        if: failure()
+        shell: pwsh
+        run: .github/scripts/report-failed-tests.ps1
+
       - name: Report slow tests
         if: always()
         shell: pwsh
