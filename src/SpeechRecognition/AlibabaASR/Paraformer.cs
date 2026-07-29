@@ -129,7 +129,7 @@ public class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected, _optimizer);
+            TrainWithCifSupervision(input, expected, _optimizer);
         }
         finally
         {
