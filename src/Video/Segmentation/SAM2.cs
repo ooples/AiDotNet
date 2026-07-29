@@ -165,7 +165,15 @@ public class SAM2<T> : NeuralNetworkBase<T>
         SAM2ModelSize modelSize = SAM2ModelSize.Base,
         int memoryBankSize = 7,
         SAM2Options? options = null)
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>())
+        // SAM 2 (Ravi et al. 2024, §D) inherits SAM's mask supervision: "a linear combination of focal
+        // and dice loss" in a 20:1 ratio, focal at the RetinaNet gamma=2 / alpha=0.25 the original SAM
+        // paper cites. Plain BinaryCrossEntropyLoss weights every pixel equally and left the
+        // memorization loss sitting exactly at ln(2) = 0.693147, unchanged across 15 steps, because
+        // DecodeMask emits sigmoid-activated masks and BCE at p=0.5 is stationary. Both DecodeMask's
+        // sigmoid and these losses expect probabilities, so the composite is applied directly.
+        : base(architecture, lossFunction ?? new CompositeLoss<T>(
+            (new FocalLoss<T>(gamma: 2.0, alpha: 0.25), 20.0),
+            (new DiceLoss<T>(), 1.0)))
     {
         _options = options ?? new SAM2Options();
         Options = _options;
@@ -572,6 +580,81 @@ public class SAM2<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// SAM2's four modules are PARALLEL BRANCHES, not one sequence: the prompt encoder consumes
+    /// prompts, the memory attention consumes the memory bank, and the mask decoder consumes the
+    /// fused features. The base implementation walks <c>Layers</c> in order, which feeds the
+    /// memory/mask convolutions the wrong spatial extent and throws "Input spatial dims after
+    /// padding (1, 256) must be >= kernelSize (4)". Run the model's REAL topology instead -- the
+    /// same path <see cref="PredictCore"/> takes -- while keeping the base class's seed wiring so
+    /// stochastic layers stay reproducible across runs.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode)
+        {
+            return activations;
+        }
+
+        // Same reason as ForwardForTraining below: the base implementation walks the flat Layers list
+        // sequentially, which is invalid for SAM2's parallel branches and throws "Input spatial dims
+        // after padding (1, 256) must be >= kernelSize (4)". Capture along the REAL path instead,
+        // mirroring the overrides SpeechEmotionRecognizer and RWKVForecaster use.
+        bool hasBatch = input.Rank == 4;
+        var batched = hasBatch ? input : AddBatchDimension(input);
+
+        var imageFeatures = EncodeImage(batched);
+        activations["ImageEncoder"] = imageFeatures.Clone();
+
+        if (_memoryBank.Count > 0)
+        {
+            imageFeatures = ApplyMemoryAttention(imageFeatures);
+            activations["MemoryAttention"] = imageFeatures.Clone();
+        }
+
+        var decoded = DecodeMask(imageFeatures, null, null, null);
+        activations["MaskDecoder"] = decoded.Masks.Clone();
+        activations["IouScores"] = decoded.IouScores.Clone();
+
+        var selected = SelectBestMask(decoded.Masks, decoded.IouScores);
+        activations["SelectedMask"] = selected.Clone();
+        activations["UpsampledMask"] = UpsampleMask(selected, _height, _width).Clone();
+
+        return activations;
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureLayerRandomSeedsWired();
+
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch)
+        {
+            input = AddBatchDimension(input);
+        }
+
+        var imageFeatures = EncodeImage(input);
+
+        if (_memoryBank.Count > 0)
+        {
+            imageFeatures = ApplyMemoryAttention(imageFeatures);
+        }
+
+        var masks = DecodeMask(imageFeatures, null, null, null);
+        var bestMask = SelectBestMask(masks.Masks, masks.IouScores);
+        var outputMask = UpsampleMask(bestMask, _height, _width);
+
+        if (!hasBatch)
+        {
+            outputMask = RemoveBatchDimension(outputMask);
+        }
+
+        return outputMask;
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -860,21 +943,32 @@ public class SAM2<T> : NeuralNetworkBase<T>
         return AddTensors(imageFeatures, broadcastedPrompt);
     }
 
+    /// <summary>
+    /// Selects, per batch item, the mask with the highest predicted IoU.
+    /// </summary>
+    /// <remarks>
+    /// Built entirely from <c>Engine</c> ops so the selection stays ON THE AUTODIFF TAPE. The
+    /// previous implementation copied the winning mask element-by-element through the raw indexer,
+    /// which severed the tape: after training, parameters were bit-identical and the memorization
+    /// loss did not move at all (measured step 1 = step 15 = 8.059346), because no gradient could
+    /// reach the encoder or decoder through this point.
+    ///
+    /// The argmax over IoU is computed off-tape on purpose -- an index is not a differentiable
+    /// quantity -- while the SLICE it selects is taken with <c>Engine.TensorNarrow</c>, so gradients
+    /// flow into exactly the chosen mask. That matches SAM/SAM2's training rule of backpropagating
+    /// through the single selected mask rather than blending all candidates.
+    /// </remarks>
     private Tensor<T> SelectBestMask(Tensor<T> masks, Tensor<T> iouScores)
     {
         int batchSize = masks.Shape[0];
         int numMasks = masks.Shape[1];
-        int height = masks.Shape[2];
-        int width = masks.Shape[3];
 
-        var bestMask = new Tensor<T>([batchSize, 1, height, width]);
-
+        var perBatch = new Tensor<T>[batchSize];
         for (int b = 0; b < batchSize; b++)
         {
-            // Find mask with highest IoU score
+            // Index selection only -- read off-tape, never differentiated.
             int bestIdx = 0;
             double bestScore = double.MinValue;
-
             for (int m = 0; m < numMasks; m++)
             {
                 double score = Convert.ToDouble(iouScores[b, m, 0, 0]);
@@ -885,68 +979,36 @@ public class SAM2<T> : NeuralNetworkBase<T>
                 }
             }
 
-            // Copy best mask
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    bestMask[b, 0, h, w] = masks[b, bestIdx, h, w];
-                }
-            }
+            // Both narrows are recorded ops, so the chosen slice keeps its gradient path.
+            var batchSlice = Engine.TensorNarrow(masks, dim: 0, start: b, length: 1);
+            perBatch[b] = Engine.TensorNarrow(batchSlice, dim: 1, start: bestIdx, length: 1);
         }
 
-        return bestMask;
+        return batchSize == 1 ? perBatch[0] : Engine.TensorConcatenate(perBatch, axis: 0);
     }
 
+    /// <summary>
+    /// Bilinearly resizes a mask to the target spatial size.
+    /// </summary>
+    /// <remarks>
+    /// <c>Engine.Interpolate</c> with <see cref="InterpolateMode.Bilinear"/> is the tape-tracked
+    /// equivalent of the hand-rolled bilinear loop this replaces. That loop read every corner via
+    /// <c>Convert.ToDouble(mask[...])</c> and wrote scalars back through the raw indexer, so it
+    /// severed the autodiff tape at the very last step of the forward pass -- no gradient could
+    /// reach any layer, leaving parameters unchanged after training.
+    /// </remarks>
     private Tensor<T> UpsampleMask(Tensor<T> mask, int targetH, int targetW)
     {
-        int batchSize = mask.Shape[0];
-        int channels = mask.Shape[1];
-        int srcH = mask.Shape[2];
-        int srcW = mask.Shape[3];
-
-        var upsampled = new Tensor<T>([batchSize, channels, targetH, targetW]);
-
-        double scaleH = (double)srcH / targetH;
-        double scaleW = (double)srcW / targetW;
-
-        for (int b = 0; b < batchSize; b++)
+        if (mask.Shape[2] == targetH && mask.Shape[3] == targetW)
         {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetH; h++)
-                {
-                    for (int w = 0; w < targetW; w++)
-                    {
-                        // Bilinear interpolation
-                        double srcY = h * scaleH;
-                        double srcX = w * scaleW;
-
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, srcH - 1);
-                        int x1 = Math.Min(x0 + 1, srcW - 1);
-
-                        double dy = srcY - y0;
-                        double dx = srcX - x0;
-
-                        double v00 = Convert.ToDouble(mask[b, c, y0, x0]);
-                        double v01 = Convert.ToDouble(mask[b, c, y0, x1]);
-                        double v10 = Convert.ToDouble(mask[b, c, y1, x0]);
-                        double v11 = Convert.ToDouble(mask[b, c, y1, x1]);
-
-                        double value = v00 * (1 - dx) * (1 - dy) +
-                                       v01 * dx * (1 - dy) +
-                                       v10 * (1 - dx) * dy +
-                                       v11 * dx * dy;
-
-                        upsampled[b, c, h, w] = NumOps.FromDouble(value);
-                    }
-                }
-            }
+            return mask;
         }
 
-        return upsampled;
+        return Engine.Interpolate(
+            mask,
+            new[] { targetH, targetW },
+            InterpolateMode.Bilinear,
+            alignCorners: false);
     }
 
     private void UpdateMemoryBank(Tensor<T> features, Tensor<T> mask, int frameIndex)
@@ -1014,17 +1076,35 @@ public class SAM2<T> : NeuralNetworkBase<T>
         return Engine.Sigmoid(input);
     }
 
+    /// <summary>
+    /// Prepends a singleton batch axis, turning <c>[C,H,W]</c> into <c>[1,C,H,W]</c>.
+    /// </summary>
+    /// <remarks>
+    /// Adding a batch axis is a pure RESHAPE, so it goes through <c>Engine.Reshape</c> and stays on
+    /// the autodiff tape. The previous implementation allocated a fresh tensor and did a raw
+    /// <c>Data.Span.CopyTo</c>, which severed the tape: any unbatched input entering
+    /// <see cref="ForwardForTraining"/> or <see cref="PredictCore"/> lost its gradient path at the
+    /// very first step, so no layer could ever be trained on that route. Latent for the 4-D fixture
+    /// (which is already batched) but a real defect for the rank-3 single-image path this model
+    /// documents.
+    /// </remarks>
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         int c = tensor.Shape[0];
         int h = tensor.Shape[1];
         int w = tensor.Shape[2];
 
-        var result = new Tensor<T>([1, c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, new[] { 1, c, h, w });
     }
 
+    /// <summary>
+    /// Drops the leading singleton batch axis.
+    /// </summary>
+    /// <remarks>
+    /// Same reasoning as <see cref="AddBatchDimension"/>: a reshape through <c>Engine</c> keeps the
+    /// gradient path, where the previous raw <c>Data.Span.CopyTo</c> cut it — and this one sits on the
+    /// OUTPUT of the forward pass, so it severed the tape for every unbatched call.
+    /// </remarks>
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         int[] newShape = new int[tensor.Shape.Length - 1];
@@ -1033,9 +1113,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
             newShape[i] = tensor.Shape[i + 1];
         }
 
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, newShape);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -1064,14 +1142,51 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // SAM2 uses a multi-branch architecture. The Layers list contains the image encoder.
-            // Prompt encoders, memory layers, and mask decoder are created separately in their
-            // respective processing methods (ProcessPrompt, ProcessMemory, DecodeMask).
+            // SAM2 (Ravi et al. 2024) is a FOUR-module architecture: image encoder, prompt encoder,
+            // memory attention, and mask decoder. All four must be present in Layers, for two
+            // reasons: Layers is what supplies GetParameters / UpdateParameters / serialization (so
+            // anything absent is simply never trained), and ProcessPrompt / ApplyMemoryAttention /
+            // DecodeMask address their layers by FIXED INDEX -- Layers[14..16] prompt,
+            // Layers[21..23] memory, Layers[24..26] mask + IoU -- each behind an
+            // `if (Layers.Count > N)` guard.
+            //
+            // Previously only the 13-layer image encoder was added, so every one of those nine guards
+            // was ALWAYS FALSE and each silently fell back to a hardcoded constant: Predict returned a
+            // uniform 0.5 (sigmoid of an all-zero mask) for ANY input, which is why the three
+            // input-sensitivity invariants failed and why finiteness-only assertions passed vacuously.
+            //
+            // The factories already existed and their counts line up exactly with those indices:
+            //   image encoder  13 -> 0..12
+            //   prompt encoder  6 -> 13..18   (code reads 14, 15, 16)
+            //   memory          5 -> 19..23   (code reads 21, 22, 23)
+            //   mask decoder    8 -> 24..31   (code reads 24, 25, 26)
+            //
+            // IMPORTANT: these are PARALLEL BRANCHES, not a sequential continuation of the encoder.
+            // Any base-class path that walks Layers in order must therefore be overridden in this
+            // class to follow the real branch topology (see GetNamedLayerActivations below), exactly
+            // as SpeechEmotionRecognizer and RWKVForecaster do for their non-sequential forwards.
+            // Walking all 32 blindly feeds the memory/mask convolutions the wrong spatial extent and
+            // throws "Input spatial dims after padding (1, 256) must be >= kernelSize (4)".
+            const int encoderStride = 16;
+            int featureHeight = System.Math.Max(1, _height / encoderStride);
+            int featureWidth = System.Math.Max(1, _width / encoderStride);
             Layers.AddRange(LayerHelper<T>.CreateSAM2ImageEncoderLayers(
                 _channels,
                 _height,
                 _width,
                 _numFeatures));
+            Layers.AddRange(LayerHelper<T>.CreateSAM2PromptEncoderLayers(
+                _numFeatures,
+                _height,
+                _width));
+            Layers.AddRange(LayerHelper<T>.CreateSAM2MemoryLayers(
+                _numFeatures,
+                featureHeight,
+                featureWidth));
+            Layers.AddRange(LayerHelper<T>.CreateSAM2MaskDecoderLayers(
+                _numFeatures,
+                featureHeight,
+                featureWidth));
         }
     }
 
