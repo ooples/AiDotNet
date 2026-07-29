@@ -660,14 +660,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </para>
     /// </remarks>
     /// <param name="output">The tensor <see cref="Forward"/> returned.</param>
-    protected void VerifyReportedOutputShape(Tensor<T> output)
+    internal void VerifyReportedOutputShape(Tensor<T> output)
     {
         if (_reportedOutputShapeVerified) return;
         _reportedOutputShapeVerified = true;
 
         var reported = GetOutputShape();
         if (reported is null || reported.Length == 0) return;
-        if (ShapeContainsSentinel(reported)) return;   // still deferred; nothing to check yet
 
         var actual = output.Shape.ToArray();
         // Reported shapes exclude the batch axis; compare against the actual per-sample shape.
@@ -675,6 +674,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         for (int i = 0; i < reported.Length; i++)
         {
+            // A -1 axis is a genuine "any size here" declaration, so only the axes the layer
+            // commits to are checked. Checking the concrete axes of a PARTIAL shape is the point:
+            // those are exactly the layers a shape inference has to reason about, and skipping
+            // any shape containing a sentinel would exempt all of them.
+            if (reported[i] < 0) continue;
             if (reported[i] == actual[i + 1]) continue;
 
             throw new InvalidOperationException(

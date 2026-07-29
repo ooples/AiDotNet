@@ -627,12 +627,19 @@ public static class LayerHelper<T>
         // intends fully-deferred resolution at first Forward.
         foreach (var d in rootInputShape) if (d <= 0) return rootInputShape;
 
+        // The walk is carried in PER-SAMPLE terms, because that is what GetOutputShape() returns.
+        // ResolveFromShape wants the full shape a layer would receive on its first forward, so the
+        // batch axis is added only at that call.
         int[] running = rootInputShape;
         foreach (var layer in layers)
         {
             if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
             {
-                try { lb.ResolveFromShape(running); }
+                var batched = new int[running.Length + 1];
+                batched[0] = 1;
+                Array.Copy(running, 0, batched, 1, running.Length);
+
+                try { lb.ResolveFromShape(batched); }
                 catch (Exception ex)
                 {
                     // ResolveFromShape can throw if the shape doesn't
@@ -667,10 +674,38 @@ public static class LayerHelper<T>
             // after the first reshape lazy: a freshly built ABINet reported 1,718,624 parameters
             // where one that had run a forward reported 4,281,376, and restoring a trained
             // parameter vector into a fresh clone misaligned every slice past that point.
-            var perSample = layer.GetOutputShape();
-            running = new int[perSample.Length + 1];
-            running[0] = 1;
-            Array.Copy(perSample, 0, running, 1, perSample.Length);
+            var declared = layer.GetOutputShape();
+
+            // A layer may commit to some axes and leave others dynamic -- MultiHeadAttentionLayer
+            // declares [-1, -1, dim], concrete on the feature axis and dynamic on batch and
+            // sequence. Chain resolution needs concrete dims, so the dynamic axes are filled from
+            // the shape flowing IN, which is the only information available and is correct for
+            // every layer that leaves an axis dynamic precisely because it passes it through.
+            //
+            // Where that inference is wrong -- a layer that changes an axis while declaring it
+            // dynamic -- VerifyReportedOutputShape catches it on the first real forward and names
+            // the layer and both shapes, rather than letting a wrong shape reach parameter-vector
+            // slicing or ONNX export silently.
+            var previous = running;
+            var perSample = new int[declared.Length];
+            for (int a = 0; a < declared.Length; a++)
+            {
+                if (declared[a] > 0)
+                {
+                    perSample[a] = declared[a];
+                    continue;
+                }
+
+                // Align from the right so a rank change does not shift the mapping. Both sides are
+                // per-sample here; mixing a per-sample declaration against a batched running shape
+                // silently reads the neighbouring axis.
+                int srcIndex = previous.Length - declared.Length + a;
+                perSample[a] = srcIndex >= 0 && srcIndex < previous.Length && previous[srcIndex] > 0
+                    ? previous[srcIndex]
+                    : -1;
+            }
+
+            running = perSample;
         }
 
         return running;

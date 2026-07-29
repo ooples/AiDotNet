@@ -4125,6 +4125,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             foreach (var layer in Layers)
             {
                 current = layer.Forward(current);
+
+                // Reconcile what the layer SAYS it outputs with what it just produced. A layer
+                // whose declared shape disagrees with its real output silently corrupts every
+                // consumer that sizes itself from the declaration -- parameter-vector slicing,
+                // chain resolution and ONNX export all read it, and the damage surfaces far from
+                // the cause. Runs once per layer per instance.
+                if (layer is Layers.LayerBase<T> verifiable)
+                {
+                    verifiable.VerifyReportedOutputShape(current);
+                }
             }
             result = current;
         }
