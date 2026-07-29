@@ -154,69 +154,15 @@ public class CIFEncoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            // Supply the target length so CIF's alignment supervision actually engages.
-            //
-            // Dong & Xu 2020 (arXiv:1905.11235) train the weight predictor through two mechanisms
-            // that both need the label length S~: the scaling strategy, which multiplies every
-            // weight by S~ / sum(alpha) so the integrated count is teacher-forced to the target,
-            // and the quantity loss |sum(alpha) - S~|. CifAlignmentLayer implements both and
-            // enables them by default, but they are gated on TargetTokenCount -- and NO model in
-            // the library ever set it, so across every CIF-based model the predictor trained with
-            // no supervision on how many tokens it should emit at all.
-            //
-            // With nothing constraining sum(alpha), the firing pattern is free to change
-            // discontinuously from step to step, and the piecewise-constant coefficients the
-            // alignment is built from change with it.
-            SetCifTargetTokenCount(expected);
-
-            TrainWithTape(input, expected, _optimizer);
+            // CIF supervision is applied for the duration of the step by the shared helper.
+            TrainWithCifSupervision(input, expected, _optimizer);
         }
         finally
         {
             SetTrainingMode(false);
-            ClearCifTargetTokenCount();
         }
     }
 
-    /// <summary>
-    /// Points every CIF stage at the current batch's target token count.
-    /// </summary>
-    /// <remarks>
-    /// The label tensor is [batch, tokens, vocab] (or [tokens, vocab] unbatched), so the token
-    /// axis is the one before the vocabulary axis. Cleared again after the step because the count
-    /// is per-batch and inference must not scale.
-    /// </remarks>
-    private void SetCifTargetTokenCount(Tensor<T> expected)
-    {
-        int tokenCount = expected.Rank >= 2
-            ? expected.Shape[expected.Rank - 2]
-            : expected.Shape[0];
-
-        if (tokenCount <= 0)
-        {
-            return;
-        }
-
-        foreach (var layer in Layers)
-        {
-            if (layer is CifAlignmentLayer<T> cif)
-            {
-                cif.TargetTokenCount = tokenCount;
-            }
-        }
-    }
-
-    /// <summary>Clears the per-batch target so inference runs on the raw alphas, as the paper specifies.</summary>
-    private void ClearCifTargetTokenCount()
-    {
-        foreach (var layer in Layers)
-        {
-            if (layer is CifAlignmentLayer<T> cif)
-            {
-                cif.TargetTokenCount = null;
-            }
-        }
-    }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
