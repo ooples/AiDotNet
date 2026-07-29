@@ -171,7 +171,11 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _numIterations = numIterations;
         _imageHeight = imageHeight;
         _charset = charset ?? GetDefaultCharset();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         ImageSize = imageWidth;
         base.MaxSequenceLength = maxSequenceLength;

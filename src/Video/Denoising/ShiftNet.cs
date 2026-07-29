@@ -89,7 +89,11 @@ public class ShiftNet<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new ShiftNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         TemporalRadius = _options.ShiftRadius;
         InitializeLayers();
     }

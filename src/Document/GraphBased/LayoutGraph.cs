@@ -145,7 +145,11 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         _graphLayers = graphLayers;
         _numClasses = numClasses;
         _maxNodes = maxNodes;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -176,7 +180,11 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         _graphLayers = graphLayers;
         _numClasses = numClasses;
         _maxNodes = maxNodes;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         // Route base tape training through the configured optimizer. Previously _optimizer was stored but
         // never used — TrainWithTape resolved the default base optimizer, so a caller-supplied optimizer
