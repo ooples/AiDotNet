@@ -23,51 +23,20 @@ public sealed class PromptNEROptions : TransformerNEROptions
         IntermediateDimension = 4096;
         MaxSequenceLength = 512;
         LearningRate = 2e-5;
+        WarmupSteps = 10;
+        TotalTrainingSteps = 100;
     }
 
     /// <summary>Creates an independent copy of another PromptNER configuration.</summary>
     public PromptNEROptions(PromptNEROptions other)
         : base(other)
     {
-        WarmupSteps = other.WarmupSteps;
-        TotalTrainingSteps = other.TotalTrainingSteps;
-        WarmupInitialLearningRate = other.WarmupInitialLearningRate;
-        EndLearningRate = other.EndLearningRate;
         AdamBeta1 = other.AdamBeta1;
         AdamBeta2 = other.AdamBeta2;
         AdamEpsilon = other.AdamEpsilon;
         EnableGradientClipping = other.EnableGradientClipping;
         MaxGradientNorm = other.MaxGradientNorm;
     }
-
-    /// <summary>
-    /// Gets or sets the linear-warmup length in optimizer steps.
-    /// </summary>
-    /// <remarks>
-    /// The paper specifies linear warmup but not a dataset-independent step count.
-    /// Ten steps is the 10% warmup for the default 100-step/epoch schedule.
-    /// </remarks>
-    public int WarmupSteps { get; set; } = 10;
-
-    /// <summary>
-    /// Gets or sets the total warmup-plus-decay schedule length.
-    /// </summary>
-    /// <remarks>The default selects the upper end of the paper's 50-100 epoch range.</remarks>
-    public int TotalTrainingSteps { get; set; } = 100;
-
-    /// <summary>
-    /// Gets or sets the first positive warmup learning rate, or <see langword="null"/>
-    /// to derive <c>LearningRate / WarmupSteps</c>.
-    /// </summary>
-    /// <remarks>
-    /// Optimizer steps are one-based in the training recipe. Starting the first real
-    /// update at exactly zero would silently turn a caller's first <c>Train</c> call
-    /// into a no-op rather than a warmup update.
-    /// </remarks>
-    public double? WarmupInitialLearningRate { get; set; }
-
-    /// <summary>Gets or sets the learning rate reached at the end of linear decay.</summary>
-    public double EndLearningRate { get; set; } = 0.0;
 
     /// <summary>Gets or sets Adam's first-moment coefficient.</summary>
     public double AdamBeta1 { get; set; } = 0.9;

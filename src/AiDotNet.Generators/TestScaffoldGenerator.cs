@@ -1184,16 +1184,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // a 512-wide projection. <float> was applied FIRST (it is in Fp32TestClassNames) and measured
         // insufficient on the J-M shard — LossStrictlyDecreasesOnMemorizationTask still hit the 180 s
         // gate and MoreData_ShouldNotDegrade the 120 s one, while its single-forward invariants pass.
-        // It is a VisionLanguage model, NOT audio, so the audio branch's auto-emitted Fp32 smoke caps
-        // do not reach it and the iteration cap has to come from this list — the same reason GraFPrint
-        // is handled here rather than by the audio branch. No double-emit results.
-        "MedCLIP",
+        // Its iteration overrides are emitted by the dedicated paper-scale vision-language branch,
+        // so it is intentionally excluded from this general set.
         // MaskAdapter (open-vocabulary segmentation): mask-proposal adapter over a CLIP backbone.
         // On the J-M shard every invariant passes — including Gradients_MatchFiniteDifference and
         // LossStrictlyDecreasesOnMemorizationTask — and only MoreData_ShouldNotDegrade hit the
-        // 120 s gate. Vision/Language family, so like MedCLIP above the cap has to come from this
-        // list rather than the audio branch's auto-emitted Fp32 caps.
-        "MaskAdapter",
+        // 120 s gate. Its dedicated family branch emits the cap, so it is intentionally excluded here.
         // MoG (diffusion frame interpolation). The CI-smoke constructorExpr already cut it from 5
         // failures to 1 by shrinking the fixture, but even at 2 frames of 8x8 with 2 denoising
         // steps the 50+200-iteration MoreData probe still overran the 120 s gate — a diffusion
@@ -1421,21 +1417,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "DeCLIP", "DEVA", "DocGCN", "FlowLens", "LLM2CLIP", "Mamba2LanguageModel",
         "GLALanguageModel", "GatedDeltaNetLanguageModel",
         "ZambaLanguageModel", "Zamba2LanguageModel",
-        // xLSTM (Beck et al. 2024) is a peer of the recurrent language models above and was simply
-        // missing here: with no bound at all its MoreData probe ran the full 50/200-iteration pair
-        // and blew the 120s per-test timeout.
-        "XLSTMLanguageModel",
-        // VinVL carries ~86M parameters over 36x2048 region features and had no bound either, so its
-        // MoreData probe timed out at 120s once training actually ran.
-        "VinVL",
-        // VideoCLIP runs its spatial encoder per frame at 768 hidden channels and had no bound, so
-        // Training_ShouldReduceLoss hit the 120s timeout even at the fixture's small 4x3x32x32 clip.
-        "VideoCLIP",
-        // Upscale4KAgent had no bound either and ran its MoreData probe past 120s and its
-        // memorization probe past 180s.
-        "Upscale4KAgent",
-        // VideoLISA had no bound and ran its training probes out of memory outright.
-        "VideoLISA",
         // RemoteCLIP is a CLIP dual-encoder at the same scaffold scale as its already-listed
         // siblings DeCLIP / LLM2CLIP (VisionLanguageTestBase<float>, InputShape [3, 128, 128])
         // and had no repetition bound, so it inherited the base 50+200-step MoreData probe and
