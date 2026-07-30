@@ -120,8 +120,8 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// <param name="outputFeatures">Number of output features (octonion-valued).</param>
     /// <param name="activationFunction">Optional activation function.</param>
     public OctonionLinearLayer(
-        int inputFeatures,
-        int outputFeatures,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
         IActivationFunction<T>? activationFunction = null)
         : base(
             [inputFeatures * 8], // Input shape: inputFeatures octonions = inputFeatures * 8 reals

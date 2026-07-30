@@ -48,6 +48,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8")]
 public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _outputSize;
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
     /// </summary>
@@ -407,10 +410,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// starting values that help with training.
     /// </para>
     /// </remarks>
-    public DenseLayer(int outputSize, IActivationFunction<T>? activationFunction = null,
+    public DenseLayer(
+        [LayerState] int outputSize,
+        IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
+        _outputSize = outputSize;
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
@@ -478,6 +484,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1 }, new[] { outputSize }, vectorActivation)
     {
+        _outputSize = outputSize;
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");

@@ -53,7 +53,10 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
     /// <param name="channels">Residual channel width (input and output, <c>C</c>).</param>
     /// <param name="kernelSize">Dilated-conv kernel width (WaveNet uses 3). Defaults to 3.</param>
     /// <param name="dilation">Dilation factor for this block (WaveNet cycles <c>2^i</c>). Defaults to 1.</param>
-    public WaveNetResidualBlockLayer(int channels, int kernelSize = 3, int dilation = 1)
+    public WaveNetResidualBlockLayer(
+        [LayerState] int channels,
+        [LayerState] int kernelSize = 3,
+        [LayerState] int dilation = 1)
         : base(new[] { channels, -1 }, new[] { channels, -1 }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
         if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels));

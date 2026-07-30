@@ -52,10 +52,10 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
     /// <param name="activation">Optional scalar activation. Defaults to identity (activation is usually applied after the pointwise stage + BN).</param>
     /// <param name="initializationStrategy">Optional weight initialization (defaults to He).</param>
     public DepthwiseConv1DLayer(
-        int channels,
-        int kernelSize,
-        int multiplier = 1,
-        int stride = 1,
+        [LayerState] int channels,
+        [LayerState] int kernelSize,
+        [LayerState] int multiplier = 1,
+        [LayerState] int stride = 1,
         int? padding = null,
         IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)

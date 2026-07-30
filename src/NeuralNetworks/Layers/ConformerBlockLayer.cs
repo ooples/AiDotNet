@@ -63,8 +63,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, Cost = ComputeCost.High,
     TestInputShape = "4, 16", TestConstructorArgs = "16, 2, 2, 3")]
-public class ConformerBlockLayer<T> : LayerBase<T>
+public partial class ConformerBlockLayer<T> : LayerBase<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _maxSequenceLength;
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly double _ropeTheta;
     private readonly int _modelDim;
     private readonly int _numHeads;
     private readonly int _ffnExpansionFactor;
@@ -110,14 +116,16 @@ public class ConformerBlockLayer<T> : LayerBase<T>
     /// <param name="ropeTheta">Rotary base frequency for the relative positional encoding.</param>
     /// <param name="maxSequenceLength">Maximum sequence length the positional encoding supports.</param>
     public ConformerBlockLayer(
-        int modelDim,
-        int numHeads,
-        int ffnExpansionFactor = 4,
-        int convKernelSize = 5,
-        double ropeTheta = 10000.0,
-        int maxSequenceLength = 2048)
+        [LayerState] int modelDim,
+        [LayerState] int numHeads,
+        [LayerState] int ffnExpansionFactor = 4,
+        [LayerState] int convKernelSize = 5,
+        [LayerState] double ropeTheta = 10000.0,
+        [LayerState] int maxSequenceLength = 2048)
         : base(new[] { -1, modelDim }, new[] { -1, modelDim })
     {
+        _maxSequenceLength = maxSequenceLength;
+        _ropeTheta = ropeTheta;
         if (modelDim <= 0) throw new ArgumentOutOfRangeException(nameof(modelDim), "modelDim must be positive.");
         if (numHeads <= 0) throw new ArgumentOutOfRangeException(nameof(numHeads), "numHeads must be positive.");
         if (modelDim % numHeads != 0)

@@ -20,3 +20,8 @@ AIDN052 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenera
 AIDN060 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double field in generic <T> class
 AIDN061 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[] field in generic <T> class
 AIDN062 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[,]/double[][] field in generic <T> class
+ADN0050 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0051 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0052 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0053 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0054 | AiDotNet.Serialization | Warning | LayerStateGenerator

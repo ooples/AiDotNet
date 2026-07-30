@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
-public class ClozeAttentionLayer<T> : LayerBase<T>
+public partial class ClozeAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _modelDim;
 
@@ -49,7 +49,8 @@ public class ClozeAttentionLayer<T> : LayerBase<T>
 
     /// <summary>Initializes a new bidirectional cloze attention block.</summary>
     /// <param name="modelDim">Model width; input and output are both this wide.</param>
-    public ClozeAttentionLayer(int modelDim)
+    public ClozeAttentionLayer(
+        [LayerState] int modelDim)
         : base(new[] { -1, -1, modelDim }, new[] { -1, -1, modelDim })
     {
         if (modelDim <= 0) throw new ArgumentOutOfRangeException(nameof(modelDim));

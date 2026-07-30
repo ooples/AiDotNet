@@ -477,11 +477,12 @@ public partial class GRULayer<T> : LayerBase<T>
     /// <param name="returnSequences">If <c>true</c>, returns all hidden states.</param>
     /// <param name="activation">Candidate-hidden-state activation (default tanh).</param>
     /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
-    public GRULayer(int hiddenSize,
-                    bool returnSequences = false,
-                    IActivationFunction<T>? activation = null,
-                    IActivationFunction<T>? recurrentActivation = null,
-                    bool stateful = false)
+    public GRULayer(
+        int hiddenSize,
+        bool returnSequences = false,
+        IActivationFunction<T>? activation = null,
+        IActivationFunction<T>? recurrentActivation = null,
+        bool stateful = false)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
     {
         if (hiddenSize <= 0)

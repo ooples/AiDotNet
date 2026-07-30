@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using AiDotNet.Tensors.Engines;
 
+using AiDotNet.Attributes;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -25,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class NodeEnsembleLayer<T> : LayerBase<T>
+public partial class NodeEnsembleLayer<T> : LayerBase<T>
 {
     private readonly int _numTrees;
     private readonly int _treeDepth;
@@ -42,8 +44,12 @@ public class NodeEnsembleLayer<T> : LayerBase<T>
     /// <param name="treeDepth">Depth of each oblivious tree.</param>
     /// <param name="treeOutputDim">Output dimension per tree.</param>
     /// <param name="initScale">Parameter initialization scale for the trees.</param>
-    public NodeEnsembleLayer(int numFeatures, int numTrees = 20, int treeDepth = 6,
-        int treeOutputDim = 3, double initScale = 0.01)
+    public NodeEnsembleLayer(
+        [LayerState] int numFeatures,
+        [LayerState] int numTrees = 20,
+        [LayerState] int treeDepth = 6,
+        [LayerState] int treeOutputDim = 3,
+        [LayerState] double initScale = 0.01)
         : base(new[] { numFeatures }, new[] { numTrees * treeOutputDim })
     {
         if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));

@@ -125,9 +125,9 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <param name="curvature">Curvature of hyperbolic space (default -1).</param>
     /// <param name="activationFunction">Optional activation function.</param>
     public HyperbolicLinearLayer(
-        int inputFeatures,
-        int outputFeatures,
-        double curvature = -1.0,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
+        [LayerState] double curvature = -1.0,
         IActivationFunction<T>? activationFunction = null)
         : base(
             [inputFeatures],

@@ -397,7 +397,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="numFeatures"/> is not positive.</exception>
-    public BatchNormalizationLayer(int numFeatures, double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
+    public BatchNormalizationLayer(
+        int numFeatures,
+        double epsilon = NumericalStabilityHelper.LargeEpsilon,
+        double momentum = 0.9)
         : base(new[] { numFeatures }, new[] { numFeatures })
     {
         if (numFeatures <= 0)

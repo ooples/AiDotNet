@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
-public class CifAlignmentLayer<T> : LayerBase<T>
+public partial class CifAlignmentLayer<T> : LayerBase<T>
 {
     private readonly int _encoderDim;
     private readonly T _threshold;
@@ -145,11 +145,11 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     /// <c>1.0</c>, which is the default. Set to <c>0</c> to disable the term.
     /// </param>
     public CifAlignmentLayer(
-        int encoderDim,
-        double threshold = 1.0,
-        double tailThreshold = 0.5,
-        bool alphaScalingEnabled = true,
-        double quantityLossWeight = 1.0)
+        [LayerState] int encoderDim,
+        [LayerState] double threshold = 1.0,
+        [LayerState] double tailThreshold = 0.5,
+        [LayerState] bool alphaScalingEnabled = true,
+        [LayerState] double quantityLossWeight = 1.0)
         : base(new[] { -1, -1, encoderDim }, new[] { -1, -1, encoderDim })
     {
         AlphaScalingEnabled = alphaScalingEnabled;

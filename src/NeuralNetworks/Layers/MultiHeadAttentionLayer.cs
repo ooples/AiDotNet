@@ -365,8 +365,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     public MultiHeadAttentionLayer(
-        int headCount,
-        int headDimension,
+        [LayerState] int headCount,
+        [LayerState] int headDimension,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1, headCount * headDimension }, new[] { -1, headCount * headDimension },
@@ -455,8 +455,15 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 $"(headCount={_headCount} * headDimension={_headDimension}), but input.Shape[^1]={actualEmbed}.",
                 nameof(input));
 
+        // Self-attention preserves the sequence axis rather than fixing it, and the shape reaching
+        // this layer during chain resolution can carry a guessed length (seq=1). Adopting that as a
+        // concrete commitment made the layer report [1, 128] and then produce [4, 128] per sample.
+        // Only the embedding width is fixed at construction.
         var shape = input.Shape.ToArray();
-        ResolveShapes(shape, shape);
+        var declaredOutput = new int[shape.Length];
+        for (int i = 0; i < shape.Length; i++) declaredOutput[i] = LayerShape.Dynamic;
+        declaredOutput[shape.Length - 1] = _embeddingDimension;
+        ResolveShapes(shape, declaredOutput);
 
         // ResolveShapesOnly (used by InferenceOptimizer.ResolveLazyLayers
         // and similar shape-walker callers) sets IsResolvingShapesOnly so

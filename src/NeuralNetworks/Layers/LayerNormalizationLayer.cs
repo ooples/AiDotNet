@@ -260,7 +260,9 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
-    public LayerNormalizationLayer(int featureSize, double epsilon = NumericalStabilityHelper.LargeEpsilon)
+    public LayerNormalizationLayer(
+        int featureSize,
+        double epsilon = NumericalStabilityHelper.LargeEpsilon)
         : base(new[] { featureSize }, new[] { featureSize })
     {
         if (featureSize <= 0)

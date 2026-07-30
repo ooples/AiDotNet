@@ -107,6 +107,20 @@ public static class DeserializationHelper
 
         bool isShapeAgnosticLayer = genericDefForValidation == typeof(AiDotNet.NeuralNetworks.Layers.DropoutLayer<>);
 
+        // Rebuild from saved constructor state when the layer declares it via [LayerState]. This
+        // calls the layer's real constructor with the values it was originally given, so nothing is
+        // inferred from inputShape -- which is what let a dynamic (-1) axis reach a constructor and
+        // fail with "Shape dimension 0 must be non-negative".
+        if (AiDotNet.Serialization.GeneratedLayerFactories<T>.TryCreate(
+                genericDefForValidation,
+                new AiDotNet.Serialization.LayerStateBag(additionalParams, layerType),
+                TryRestoreActivation<T>(additionalParams),
+                TryRestoreVectorActivation<T>(additionalParams),
+                out var generatedLayer))
+        {
+            return (ILayer<T>)generatedLayer;
+        }
+
         // Validate input/output shapes (skip for shape-agnostic layers)
         if (!isShapeAgnosticLayer)
         {
@@ -710,14 +724,19 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(PositionalEncodingLayer<>))
         {
-            // PositionalEncodingLayer(int maxSequenceLength, int embeddingSize)
-            if (inputShape.Length < 2)
-            {
-                throw new InvalidOperationException("PositionalEncodingLayer requires input shape [maxSequenceLength, embeddingSize].");
-            }
+            // Handled by the generated factory above; this branch remains only for payloads
+            // written before [LayerState] existed, which carry no metadata at all.
+            int maxSeqLen = TryGetInt(additionalParams, "maxSequenceLength")
+                ?? (inputShape.Length > 0 && inputShape[0] > 0 ? inputShape[0] : 0);
+            int embDim = TryGetInt(additionalParams, "embeddingSize")
+                ?? (inputShape.Length > 1 && inputShape[1] > 0 ? inputShape[1] : 0);
 
-            int maxSeqLen = inputShape[0];
-            int embDim = inputShape[1];
+            if (maxSeqLen <= 0 || embDim <= 0)
+            {
+                throw new InvalidOperationException(
+                    "PositionalEncodingLayer needs maxSequenceLength and embeddingSize from metadata; " +
+                    $"resolved maxSequenceLength={maxSeqLen}, embeddingSize={embDim}.");
+            }
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
@@ -3635,6 +3654,22 @@ public static class DeserializationHelper
             typeName = atVal as string;
 
         if (string.IsNullOrEmpty(typeName)) return null;
+
+        var activationType = Type.GetType(typeName);
+        if (activationType == null) return null;
+
+        if (activationType.IsGenericTypeDefinition)
+            activationType = activationType.MakeGenericType(typeof(T));
+
+        return Activator.CreateInstance(activationType);
+    }
+
+    private static object? TryRestoreVectorActivation<T>(Dictionary<string, object>? additionalParams)
+    {
+        if (additionalParams == null) return null;
+
+        if (!additionalParams.TryGetValue("VectorActivationType", out var atVal)) return null;
+        if (atVal as string is not { Length: > 0 } typeName) return null;
 
         var activationType = Type.GetType(typeName);
         if (activationType == null) return null;

@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4, 3")]
-public class BiaffineSpanScorerLayer<T> : LayerBase<T>
+public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _spanDim;
@@ -75,9 +75,9 @@ public class BiaffineSpanScorerLayer<T> : LayerBase<T>
     /// Activation for the two boundary FFNNs. Defaults to ReLU.
     /// </param>
     public BiaffineSpanScorerLayer(
-        int inputDim,
-        int spanDim,
-        int numCategories,
+        [LayerState] int inputDim,
+        [LayerState] int spanDim,
+        [LayerState] int numCategories,
         IActivationFunction<T>? activation = null)
         : base(new[] { -1, -1, inputDim }, new[] { -1, -1, numCategories })
     {

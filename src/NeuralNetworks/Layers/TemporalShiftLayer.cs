@@ -28,7 +28,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, ChangesShape = false, ExpectedInputRank = 4, Cost = ComputeCost.Low, TestInputShape = "2, 8, 4, 4", TestConstructorArgs = "8")]
-public class TemporalShiftLayer<T> : LayerBase<T>
+public partial class TemporalShiftLayer<T> : LayerBase<T>
 {
     private readonly int _shiftedChannelRatio;
 
@@ -42,7 +42,8 @@ public class TemporalShiftLayer<T> : LayerBase<T>
     /// <param name="shiftedChannelRatio">
     /// The paper's <c>r</c>: <c>floor(C / r)</c> channels shift per direction. Defaults to 8.
     /// </param>
-    public TemporalShiftLayer(int shiftedChannelRatio = 8)
+    public TemporalShiftLayer(
+        [LayerState] int shiftedChannelRatio = 8)
         : base(new[] { -1 }, new[] { -1 })
     {
         if (shiftedChannelRatio <= 0)

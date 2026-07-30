@@ -226,9 +226,9 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// from the first forward (the historical behaviour).
     /// </param>
     public PatchEmbeddingLayer(
-        int patchSize,
-        int embeddingDim,
-        int expectedInputChannels,
+        [LayerState] int patchSize,
+        [LayerState] int embeddingDim,
+        [LayerState] int expectedInputChannels,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(

@@ -211,7 +211,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="hiddenSize">Hidden state size (number of recurrent units).</param>
     /// <param name="activationFunction">Hidden-state activation (default tanh).</param>
-    public RecurrentLayer(int hiddenSize, IActivationFunction<T>? activationFunction = null)
+    public RecurrentLayer(
+        [LayerState] int hiddenSize,
+        IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activationFunction ?? new TanhActivation<T>())
     {
         if (hiddenSize <= 0)

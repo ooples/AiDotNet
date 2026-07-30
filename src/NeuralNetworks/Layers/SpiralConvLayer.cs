@@ -461,9 +461,9 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// <param name="spiralLength">Length of the spiral sequence (number of neighbors). Must be positive.</param>
     /// <param name="activationFunction">Activation applied after the spiral convolution. Defaults to ReLU.</param>
     public SpiralConvLayer(
-        int inputChannels,
-        int outputChannels,
-        int spiralLength,
+        [LayerState] int inputChannels,
+        [LayerState] int outputChannels,
+        [LayerState] int spiralLength,
         IActivationFunction<T>? activationFunction = null)
         : base(
             new[] { -1, inputChannels },

@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 16", TestConstructorArgs = "16, 4, 64, 31")]
-public class BranchformerBlock<T> : LayerBase<T>
+public partial class BranchformerBlock<T> : LayerBase<T>
 {
     private readonly int _modelDim;
     private readonly int _numHeads;
@@ -71,7 +71,11 @@ public class BranchformerBlock<T> : LayerBase<T>
     /// against a 256-512 model width.
     /// </param>
     /// <param name="kernelSize">Depth-wise convolution kernel in the CSGU. The paper uses 31.</param>
-    public BranchformerBlock(int modelDim, int numHeads, int cgmlpHiddenDim, int kernelSize = 31)
+    public BranchformerBlock(
+        [LayerState] int modelDim,
+        [LayerState] int numHeads,
+        [LayerState] int cgmlpHiddenDim,
+        [LayerState] int kernelSize = 31)
         : base(new[] { -1, -1, modelDim }, new[] { -1, -1, modelDim })
     {
         if (modelDim <= 0) throw new ArgumentOutOfRangeException(nameof(modelDim));

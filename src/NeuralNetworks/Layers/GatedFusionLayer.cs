@@ -1,6 +1,8 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
+using AiDotNet.Attributes;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -29,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// or always trusting one, this learns a per-value dial: where the dial is near 1 it takes the
 /// first component's answer, near 0 the second's, and in between it blends them.</para>
 /// </remarks>
-public class GatedFusionLayer<T> : LayerBase<T>
+public partial class GatedFusionLayer<T> : LayerBase<T>
 {
     /// <summary>Width of each input stream (half the concatenated input width).</summary>
     private readonly int _width;
@@ -50,7 +52,8 @@ public class GatedFusionLayer<T> : LayerBase<T>
     /// Width of each stream. The layer consumes <c>2 * width</c> channels and emits
     /// <c>width</c>.
     /// </param>
-    public GatedFusionLayer(int width)
+    public GatedFusionLayer(
+        [LayerState] int width)
         : base(new[] { -1, -1, 2 * width }, new[] { -1, -1, width })
     {
         if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));

@@ -180,11 +180,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// Initializes a new instance of the <see cref="GraphAttentionLayer{T}"/> class.
     /// </summary>
     public GraphAttentionLayer(
-        int inputFeatures,
-        int outputFeatures,
-        int numHeads = 1,
-        double alpha = 0.2,
-        double dropoutRate = 0.0,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
+        [LayerState] int numHeads = 1,
+        [LayerState] double alpha = 0.2,
+        [LayerState] double dropoutRate = 0.0,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())

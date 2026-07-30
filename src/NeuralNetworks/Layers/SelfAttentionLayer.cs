@@ -429,9 +429,9 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// </para>
     /// </remarks>
     public SelfAttentionLayer(
-        int sequenceLength,
-        int embeddingDimension,
-        int headCount = 8,
+        [LayerState] int sequenceLength,
+        [LayerState] int embeddingDimension,
+        [LayerState] int headCount = 8,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(

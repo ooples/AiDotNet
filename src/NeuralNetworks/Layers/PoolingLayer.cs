@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 2")]
-public class PoolingLayer<T> : LayerBase<T>
+public partial class PoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the size of the pooling window.
@@ -218,7 +218,10 @@ public class PoolingLayer<T> : LayerBase<T>
     /// call's input tensor (<see cref="OnFirstForward"/>); only the pool/stride/type
     /// hyperparameters are needed at construction.
     /// </summary>
-    public PoolingLayer(int poolSize, int stride, PoolingType type = PoolingType.Max)
+    public PoolingLayer(
+        [LayerState] int poolSize,
+        [LayerState] int stride,
+        PoolingType type = PoolingType.Max)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
         if (poolSize <= 0) throw new ArgumentOutOfRangeException(nameof(poolSize), "poolSize must be positive.");

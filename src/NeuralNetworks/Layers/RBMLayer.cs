@@ -299,7 +299,10 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// between 0 and 1, which is what the RBM needs for its stochastic behavior.
     /// </para>
     /// </remarks>
-    public RBMLayer(int visibleUnits, int hiddenUnits, IActivationFunction<T>? scalarActivation = null)
+    public RBMLayer(
+        [LayerState] int visibleUnits,
+        [LayerState] int hiddenUnits,
+        IActivationFunction<T>? scalarActivation = null)
         : base([visibleUnits], [hiddenUnits], scalarActivation ?? new SigmoidActivation<T>())
     {
         _visibleUnits = visibleUnits;

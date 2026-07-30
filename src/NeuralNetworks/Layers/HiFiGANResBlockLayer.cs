@@ -54,7 +54,10 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
     /// <param name="channels">Channel width (constant; input == output).</param>
     /// <param name="kernelSizes">Residual-block kernel sizes (official v1: [3,7,11]).</param>
     /// <param name="dilations">Dilations applied within each residual block (official v1: [1,3,5]).</param>
-    public HiFiGANResBlockLayer(int channels, int[]? kernelSizes = null, int[]? dilations = null)
+    public HiFiGANResBlockLayer(
+        [LayerState] int channels,
+        int[]? kernelSizes = null,
+        int[]? dilations = null)
         : base(new[] { channels, -1 }, new[] { channels, -1 }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
         if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels));

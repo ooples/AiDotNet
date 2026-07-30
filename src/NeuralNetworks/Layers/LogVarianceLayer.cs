@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "0")]
-public class LogVarianceLayer<T> : LayerBase<T>
+public partial class LogVarianceLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the axis along which the variance is calculated.
@@ -157,7 +157,8 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// will have one fewer dimension than the input.
     /// </para>
     /// </remarks>
-    public LogVarianceLayer(int axis)
+    public LogVarianceLayer(
+        [LayerState] int axis)
         : base(new[] { -1 }, new[] { -1 })
     {
         Axis = axis;

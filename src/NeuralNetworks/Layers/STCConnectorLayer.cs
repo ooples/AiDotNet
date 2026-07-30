@@ -27,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "4, 4, 8", TestConstructorArgs = "8, 2, 2")]
-public class STCConnectorLayer<T> : LayerBase<T>
+public partial class STCConnectorLayer<T> : LayerBase<T>
 {
     private readonly int _visionDim;
     private readonly int _decoderDim;
@@ -80,15 +80,15 @@ public class STCConnectorLayer<T> : LayerBase<T>
     /// <param name="stageDepth">Number of RegNet bottleneck blocks in each spatial stage. Paper default: 4.</param>
     /// <param name="mlpDepth">Number of linear layers in the readout MLP. Paper default: 2.</param>
     public STCConnectorLayer(
-        int visionDim,
-        int decoderDim,
-        int patchesHeight,
-        int patchesWidth,
-        int kernelSize = 2,
-        int stride = 2,
-        int padding = 1,
-        int stageDepth = 4,
-        int mlpDepth = 2)
+        [LayerState] int visionDim,
+        [LayerState] int decoderDim,
+        [LayerState] int patchesHeight,
+        [LayerState] int patchesWidth,
+        [LayerState] int kernelSize = 2,
+        [LayerState] int stride = 2,
+        [LayerState] int padding = 1,
+        [LayerState] int stageDepth = 4,
+        [LayerState] int mlpDepth = 2)
         : base(
             new[] { -1, patchesHeight * patchesWidth, visionDim },
             new[] { -1, decoderDim })

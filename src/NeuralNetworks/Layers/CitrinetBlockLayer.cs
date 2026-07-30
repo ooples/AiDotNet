@@ -50,6 +50,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 16", TestConstructorArgs = "8, 3, 2")]
 public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _seed;
     private readonly int _channels;
     private readonly int _kernelSize;
     private readonly int _numSubBlocks;
@@ -81,15 +84,16 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
     /// <param name="stride">Temporal stride for this block's subsampling (Citrinet uses 2 at group boundaries). Defaults to 1.</param>
     /// <param name="seed">Base seed for deterministic, order-independent weight init.</param>
     public CitrinetBlockLayer(
-        int channels,
-        int kernelSize,
-        int numSubBlocks = 5,
-        int seReductionRatio = 8,
-        double dropoutRate = 0.0,
-        int stride = 1,
-        int seed = 1009)
+        [LayerState] int channels,
+        [LayerState] int kernelSize,
+        [LayerState] int numSubBlocks = 5,
+        [LayerState] int seReductionRatio = 8,
+        [LayerState] double dropoutRate = 0.0,
+        [LayerState] int stride = 1,
+        [LayerState] int seed = 1009)
         : base(new[] { channels, -1 }, new[] { channels, -1 }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _seed = seed;
         if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels));
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
         if (numSubBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numSubBlocks));

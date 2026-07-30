@@ -131,11 +131,11 @@ public partial class Conv1DLayer<T> : LayerBase<T>
     /// breaks Clone-via-SetParameters round-trips.
     /// </summary>
     public Conv1DLayer(
-        int inputChannels,
-        int outputChannels,
-        int kernelSize,
-        int dilation = 1,
-        int stride = 1,
+        [LayerState] int inputChannels,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int dilation = 1,
+        [LayerState] int stride = 1,
         int? padding = null,
         IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)
@@ -165,13 +165,13 @@ public partial class Conv1DLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
 
-        // Resolve output shape against a placeholder T = required minimum
-        // for the dilated kernel to fit; the real T is bound on first
-        // Forward via EnsureInitializedFromInput and doesn't change the
-        // parameter count (Conv1D is translation-invariant in T).
+        // Resolve against a placeholder T = required minimum for the dilated kernel to fit; the
+        // real T is bound on first Forward via EnsureInitializedFromInput and doesn't change the
+        // parameter count (Conv1D is translation-invariant in T). The OUTPUT length must stay
+        // dynamic: publishing the placeholder's length made the layer advertise
+        // [outputChannels, 5] and then produce [outputChannels, 32].
         int minTime = _dilation * (_kernelSize - 1) + 1;
-        int outTime = (minTime + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
-        ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, outTime });
+        ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, LayerShape.Dynamic });
     }
 
     /// <inheritdoc/>
@@ -212,7 +212,10 @@ public partial class Conv1DLayer<T> : LayerBase<T>
             RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
         }
 
-        ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, tOut });
+        // Same reasoning as the lazy constructor: the output length follows the input length, so
+        // it is not part of this layer's contract and must not be frozen into the declaration.
+        _ = tOut;
+        ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, LayerShape.Dynamic });
     }
 
     /// <inheritdoc/>

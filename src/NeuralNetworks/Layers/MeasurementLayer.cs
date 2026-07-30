@@ -33,8 +33,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class MeasurementLayer<T> : LayerBase<T>
+public partial class MeasurementLayer<T> : LayerBase<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _size;
     /// <summary>
     /// The input tensor from the most recent forward pass.
     /// </summary>
@@ -107,8 +110,10 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// Both the input (quantum amplitudes) and output (classical probabilities) will have this same size.
     /// </para>
     /// </remarks>
-    public MeasurementLayer(int size) : base([size], [size])
+    public MeasurementLayer(
+        [LayerState] int size) : base([size], [size])
     {
+        _size = size;
     }
 
     /// <summary>
