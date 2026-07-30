@@ -44,10 +44,11 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("RPKNet: Regional Pooling Kernel Network for Optical Flow Estimation",
-    "https://arxiv.org/abs/2407.11506",
+// No arXiv preprint exists for RPKNet; AAAI proceedings is the canonical venue.
+[ResearchPaper("Recurrent Partial Kernel Network for Efficient Optical Flow Estimation",
+    "https://ojs.aaai.org/index.php/AAAI/article/view/28224",
     Year = 2024,
-    Authors = "Zhiqiang Yan, Jinqiu Sun, Yanning Zhang")]
+    Authors = "Henrique Morimitsu, Xiaobin Zhu, Xiangyang Ji, Xu-Cheng Yin")]
 public class RPKNet<T> : OpticalFlowBase<T>
 {
     private readonly RPKNetOptions _options;
