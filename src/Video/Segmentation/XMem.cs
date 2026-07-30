@@ -739,7 +739,7 @@ public class XMem<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void PinMemoryFusionInputDepth()
     {
-        const int MemoryFusionLayerIndex = 12;
+        const int MemoryFusionLayerIndex = 10;
         if (Layers.Count <= MemoryFusionLayerIndex) return;
         if (Layers[MemoryFusionLayerIndex] is not LayerBase<T> fusion) return;
 
