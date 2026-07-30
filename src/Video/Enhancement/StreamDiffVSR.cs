@@ -89,7 +89,28 @@ public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new StreamDiffVSROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Appendix C: "AdamW optimizer (beta1 = 0.9, beta2 = 0.999, weight decay 0.01)" at a CONSTANT
+        // learning rate of 5e-5, for every training stage. These now come from StreamDiffVSROptions,
+        // which carries the paper's values as its defaults.
+        //
+        // Two defects were fixed here. The optimizer was constructed as AdamWOptimizer(this) with
+        // DEFAULT options, discarding the paper's learning rate entirely and running 20x higher at
+        // AdamW's own 1e-3. Worse, the field was never published to the tape trainer at all — no
+        // SetBaseTrainOptimizer call and no GetOrCreateBaseOptimizer override — so training silently
+        // used the base class's lazily-created Adam and this field was dead. The measured symptom was
+        // the memorization probe rising monotonically (0.256 -> 0.471) instead of descending.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.AdamBeta1,
+                Beta2 = _options.AdamBeta2,
+                WeightDecay = _options.WeightDecay,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
+        SetBaseTrainOptimizer(_optimizer);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
