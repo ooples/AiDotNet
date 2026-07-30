@@ -405,14 +405,16 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 // so the churn happened on every step: two identical runs of BiaffineNER's
                 // LossStrictlyDecreases / OptimizerStep probes gave different results.
                 //
-                // When the count is unchanged there is nothing to re-register: the fields are
-                // already assigned above, and the base setter swaps the registry entries
-                // positionally without touching the engine. Only a changed count needs the full
+                // When the base registration count is unchanged there is nothing to re-register:
+                // the fields are already assigned above, and the base setter swaps the registry
+                // entries positionally without touching the engine. Do not use the generated
+                // GetTrainableParameters count here: lazy fields are visible through that override
+                // before the base registry is populated. Only a changed count needs the full
                 // rebuild, and AppendTrainableParameter is used there (not
                 // RegisterTrainableParameter) to avoid role-based dedup -- layers like
                 // MultiHeadAttentionLayer carry several parameters with the same role
                 // (e.g. 4 x Weights) that replace-by-role logic would collapse to one.
-                sb.AppendLine($"        if (GetTrainableParameters().Count == {paramFields.Count})");
+                sb.AppendLine($"        if (RegisteredTrainableParameterCount == {paramFields.Count})");
                 sb.AppendLine("        {");
                 sb.AppendLine("            base.SetTrainableParameters(parameters);");
                 sb.AppendLine("            return;");

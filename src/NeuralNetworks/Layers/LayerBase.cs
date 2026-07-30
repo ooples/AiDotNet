@@ -3833,6 +3833,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
 
     /// <summary>
+    /// Gets the number of tensors held by this layer's base registration list.
+    /// </summary>
+    /// <remarks>
+    /// Source-generated parameter setters use this value to distinguish an already
+    /// synchronized registry from lazy parameter fields that have not yet been
+    /// registered. It intentionally does not call <see cref="GetTrainableParameters"/>,
+    /// because generated overrides can expose field tensors before the base registry
+    /// has been populated.
+    /// </remarks>
+    protected int RegisteredTrainableParameterCount => _registeredTensors.Count;
+
+    /// <summary>
     /// Moves this layer's parameters and buffers (and, recursively, every registered sub-layer) to the given
     /// device — the layer-level equivalent of PyTorch's <c>module.to(device)</c>. Each persistent tensor is moved
     /// in place via <see cref="Tensor{T}.To(AiDotNet.Tensors.DeviceInfo)"/>, so subsequent ops on those tensors
