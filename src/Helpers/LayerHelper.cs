@@ -35963,7 +35963,12 @@ public static class LayerHelper<T>
         yield return new BiaffineSpanScorerLayer<T>(
             inputDim: biLstmHiddenSize,
             spanDim: spanEmbeddingDimension,
-            numCategories: numLabels);
+            numCategories: numLabels,
+            // Yu et al. Table 1 lists an FFNN dropout of 0.2, which is this parameter's default.
+            // Threading the configured value through keeps it user-controllable via
+            // SpanBasedNEROptions.DropoutRate like every other knob, instead of the layer silently
+            // applying its own default and ignoring a caller that asked for something else.
+            ffnnDropout: dropoutRate);
     }
 
     public static IEnumerable<ILayer<T>> CreateDefaultSpanBasedNERLayers(
