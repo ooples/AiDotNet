@@ -53,10 +53,10 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("MIA-VSR: Masked Inter and Intra-Frame Attention for Video Super-Resolution",
-    "https://arxiv.org/abs/2401.03402",
+[ResearchPaper("Video Super-Resolution Transformer with Masked Inter&Intra-Frame Attention",
+    "https://arxiv.org/abs/2401.06312",
     Year = 2024,
-    Authors = "Yinuo Zhou, Hongjun Du, Xin Li")]
+    Authors = "Xingyu Zhou, Leheng Zhang, Xiaorui Zhao, Keze Wang, Leida Li, Shuhang Gu")]
 public class MIAVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
