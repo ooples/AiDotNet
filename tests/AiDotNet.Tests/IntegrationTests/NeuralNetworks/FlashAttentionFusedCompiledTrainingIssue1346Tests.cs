@@ -238,7 +238,8 @@ public class FlashAttentionFusedCompiledTrainingIssue1346Tests
             }
         }
 
-        float clampedPrediction = Math.Clamp(selectedPrediction, 1e-7f, 1.0f);
+        // Math.Clamp(float,...) does not exist on net471; Max/Min is equivalent and multi-targets.
+        float clampedPrediction = Math.Max(1e-7f, Math.Min(1.0f, selectedPrediction));
         float expectedLoss = -MathF.Log(clampedPrediction);
         Assert.True(expectedLoss > 0.0f,
             $"Reference precondition failed: selected class {targetClass} had " +
@@ -261,7 +262,8 @@ public class FlashAttentionFusedCompiledTrainingIssue1346Tests
 
         // A live fused readout must match the independent forward reference;
         // a stale/copy-backed loss buffer would remain at zero and fail here.
-        Assert.True(float.IsFinite(lastLoss),
+        // float.IsFinite does not exist on net471; the explicit negation multi-targets.
+        Assert.True(!float.IsNaN(lastLoss) && !float.IsInfinity(lastLoss),
             $"Fused CCE loss must be finite; got {lastLoss}.");
         float tolerance = Math.Max(1e-5f, expectedLoss * 1e-4f);
         Assert.InRange(lastLoss, expectedLoss - tolerance, expectedLoss + tolerance);
