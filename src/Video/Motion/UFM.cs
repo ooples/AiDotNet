@@ -178,14 +178,12 @@ public class UFM<T> : OpticalFlowBase<T>
         }
         var rawFlow = _outputConv.Forward(feat);
 
-        // Extract 2-channel flow field
-        var flow = new Tensor<T>([2, height, width]);
-        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
-        {
-            flow.Data.Span[i] = rawFlow.Data.Span[i];
-        }
-
-        return flow;
+        // The output convolution already emits exactly 2 channels at the input resolution
+        // (ConvolutionalLayer(2, kernel 3, stride 1, padding 1)), so rawFlow IS the flow field. The
+        // element-by-element Data.Span copy this replaced was a numeric no-op that severed the
+        // autodiff tape at the end of the forward pass, discarding the gradient path for the whole
+        // network behind it. Returning the tensor directly is bit-identical.
+        return rawFlow;
     }
 
     /// <inheritdoc/>

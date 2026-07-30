@@ -17070,15 +17070,32 @@ public static class LayerHelper<T>
     /// <param name="architecture">The neural network architecture.</param>
     /// <param name="numFeatures">Number of input features.</param>
     /// <param name="hiddenDimension">Dimension of hidden layers.</param>
-    /// <param name="latentDimension">Dimension of latent space.</param>
-    /// <param name="numFactors">Number of factors to disentangle.</param>
+    /// <param name="latentDimension">Retained for API compatibility. The factor count is now the latent
+    /// width, since the paper's latent variables ARE the factors.</param>
+    /// <param name="numFactors">Number of latent factors.</param>
     /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <param name="numAssets">Number of assets whose cross-sectional returns the decoder predicts.</param>
     /// <returns>Enumerable of layers forming the FactorVAE architecture.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> FactorVAE uses a variational autoencoder to learn disentangled factors.
-    /// The encoder compresses data to a latent space, and the decoder reconstructs it.
-    /// The "disentanglement" means each latent dimension captures a different factor.
+    /// <b>For Beginners:</b> this builds four small networks. One turns raw market data into a compact
+    /// description of each stock. One guesses the hidden "factors" from that description alone (used
+    /// when predicting). One infers those factors with the benefit of knowing what actually happened
+    /// (used only while training). The last turns factors back into predicted returns.
+    /// </para>
+    /// <para>
+    /// <b>Corrected architecture.</b> This previously emitted a plain autoencoder that reconstructed the
+    /// INPUT FEATURES, plus a "factor discriminator for disentanglement" — the latter belonging to a
+    /// DIFFERENT paper also called FactorVAE (Kim &amp; Mnih, <i>Disentangling by Factorising</i>, which
+    /// uses a discriminator to penalize total correlation). The cited finance paper (Duan et al., AAAI
+    /// 2022) has no such discriminator; its contribution is PRIOR-POSTERIOR learning, and its decoder
+    /// predicts cross-sectional RETURNS rather than reconstructing inputs. Both of those are now what is
+    /// built here.
+    /// </para>
+    /// <para>
+    /// The spans are exposed as <see cref="FactorVAEFeatureExtractorLayerCount"/> and friends so the
+    /// model can run each sub-network independently instead of as one sequential stack — the prior and
+    /// posterior are alternative branches over the same features, which a flat stack cannot express.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFactorVAELayers(
@@ -17087,38 +17104,52 @@ public static class LayerHelper<T>
         int hiddenDimension = 128,
         int latentDimension = 32,
         int numFactors = 10,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int numAssets = 10)
     {
-        // Encoder
+        // --- Feature extractor: observable market data -> latent stock features e ---
+        // Span consumed by FactorVAE<T> as FeatureExtractorLayerCount.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new BatchNormalizationLayer<T>();
 
-        // Latent space (mean and log-variance). This head MUST be linear: the
-        // log-variance is a signed quantity (negative for sub-unit variance) and
-        // the mean is unbounded. DenseLayer(n, null) falls back to ReLU in its ctor,
-        // which would clip both mean and log-variance to >= 0 — corrupting the VAE
-        // latent distribution. Pass an explicit IdentityActivation.
-        yield return new DenseLayer<T>(latentDimension * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        // --- Factor PREDICTOR (the prior p(z | x)): features only, no future returns ---
+        // This is the head used at prediction time, when the future is unknown. Emits mean and
+        // log-variance over the factors, so it must be LINEAR: log-variance is signed (negative for
+        // sub-unit variance) and the mean is unbounded. DenseLayer(n, null) falls back to ReLU, which
+        // would clip both to >= 0 and corrupt the distribution — hence the explicit IdentityActivation.
+        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(numFactors * 2, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Factor discriminator for disentanglement
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new LeakyReLUActivation<T>());
-        yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>)new IdentityActivation<T>());
+        // --- Factor ENCODER (the posterior q(z | y, x)): features CONCATENATED with future returns ---
+        // Training-only: it is allowed to see the realized returns, which is what lets it identify the
+        // factors that actually explained them. The KL term then pulls the prior towards this.
+        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(numFactors * 2, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Decoder. The final layer reconstructs the input features, which are signed
-        // real values — the reconstruction head MUST be linear. DenseLayer(n, null)
-        // falls back to ReLU, which clips the reconstruction to >= 0 and dead-ReLUs
-        // (frozen-at-0 neurons with zero gradient), collapsing training output to a
-        // constant. Pass an explicit IdentityActivation to stay linear.
+        // --- Factor DECODER: sampled factors (+ features) -> predicted cross-sectional returns ---
+        // The paper's decoder predicts RETURNS, not a reconstruction of the input features. Returns are
+        // signed, so the output head is linear for the same reason as above; a ReLU head would clip
+        // every negative return to zero and dead-ReLU into a constant prediction.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new BatchNormalizationLayer<T>();
-
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numFeatures, (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new IdentityActivation<T>());
     }
+
+    /// <summary>Number of layers in the FactorVAE feature extractor span.</summary>
+    public const int FactorVAEFeatureExtractorLayerCount = 5;
+
+    /// <summary>Number of layers in the FactorVAE prior (factor predictor) span.</summary>
+    public const int FactorVAEPriorLayerCount = 2;
+
+    /// <summary>Number of layers in the FactorVAE posterior (factor encoder) span.</summary>
+    public const int FactorVAEPosteriorLayerCount = 2;
+
+    /// <summary>Number of layers in the FactorVAE decoder span.</summary>
+    public const int FactorVAEDecoderLayerCount = 4;
 
     /// <summary>
     /// Creates default layers for a FactorTransformer model.
@@ -23096,6 +23127,77 @@ public static class LayerHelper<T>
     /// Creates default layers for a Paraformer non-autoregressive ASR model.
     /// Architecture: Conv subsampling → Conformer encoder → CIF alignment → Transformer decoder → vocab.
     /// </summary>
+    /// <summary>
+    /// Creates SeACo-Paraformer's BIAS branch exactly as arXiv 2308.03266 §3.1 Eq 2-4 specify.
+    /// </summary>
+    /// <param name="vocabSize">ASR vocabulary size. The bias output layer emits <c>vocabSize + 1</c>
+    /// logits: §3.1 appends "an additional token (counted as #, means no-bias) ... to the ASR output
+    /// vocabulary to mark non-hotword position outputs".</param>
+    /// <param name="encoderDim">Model width d; <c>Z in R^(n x d)</c> in Eq 2.</param>
+    /// <param name="numAttentionHeads">Heads for the two Eq 3 attentions.</param>
+    /// <param name="dropoutRate">Dropout rate; 0 disables the dropout layer.</param>
+    /// <returns>The bias-branch layers in the order the forward consumes them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Reference:</b> Shi et al., "SeACo-Paraformer", arXiv 2308.03266, §3.1, Eq 2-4.
+    /// </para>
+    /// <para>
+    /// Eq 2 — bias ENCODER: <c>Z_1:n = LSTM(EMB(H_1:n))</c>. The paper is explicit that this is an
+    /// embedding layer "(parameter shared with ASR embedding)" followed by an LSTM, NOT a transformer
+    /// block. Sharing means the hotword characters are embedded in the same space the ASR decoder uses,
+    /// which is what lets the Eq 3 attentions compare them against decoder states directly.
+    /// </para>
+    /// <para>
+    /// Eq 3 — bias DECODER: TWO attentions, both keyed/valued by the encoded hotwords Z:
+    /// <c>D+ = MHA(D, Z, Z)</c> over the parallel decoder's hidden state and
+    /// <c>E+ = MHA(E, Z, Z)</c> over the CIF acoustic embedding. The paper stresses that "the CIF output
+    /// and parallel decoder output are sent to bias decoder separately" — a single attention over one
+    /// stream loses the acoustic half of the bias signal.
+    /// </para>
+    /// <para>
+    /// Eq 4 — <c>P_bi = BiasOutLayer(D+ + E+)</c>: the two attended streams are SUMMED, then projected.
+    /// </para>
+    /// <para>
+    /// Emitted order: [0] shared embedding, [1] LSTM, [2] MHA for D, [3] MHA for E, [4] LayerNorm,
+    /// [5] optional dropout, [6] bias out layer. <c>SeACo.ApplyHotwordBias</c> addresses them by that
+    /// contract rather than walking them sequentially, because this is a BRANCHING topology.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSeACoBiasLayers(
+        int vocabSize = 8404,
+        int encoderDim = 512,
+        int numAttentionHeads = 4,
+        double dropoutRate = 0.1)
+    {
+        if (vocabSize <= 0)
+            throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
+        if (encoderDim <= 0)
+            throw new ArgumentException($"Encoder dimension ({encoderDim}) must be positive.", nameof(encoderDim));
+        if (numAttentionHeads <= 0)
+            throw new ArgumentException($"Attention heads ({numAttentionHeads}) must be positive.", nameof(numAttentionHeads));
+        if (encoderDim % numAttentionHeads != 0)
+            throw new ArgumentException(
+                $"Encoder dimension ({encoderDim}) must be divisible by numAttentionHeads ({numAttentionHeads}).",
+                nameof(numAttentionHeads));
+
+        int headDim = encoderDim / numAttentionHeads;
+
+        // Eq 2: Z = LSTM(EMB(H)). Embedding shares the ASR vocabulary space; LSTM contextualises each
+        // hotword's character sequence into one representation per hotword.
+        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        yield return new LSTMLayer<T>(encoderDim);
+
+        // Eq 3: two attentions over Z — one for the decoder hidden state D, one for the CIF output E.
+        yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, headDim);
+        yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, headDim);
+
+        yield return new LayerNormalizationLayer<T>();
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Eq 4: BiasOutLayer over (D+ + E+). vocabSize + 1 for the appended '#' no-bias token.
+        yield return new DenseLayer<T>(vocabSize + 1, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultParaformerLayers(
         int encoderDim = 512,
         int decoderDim = 512,
@@ -33440,6 +33542,7 @@ public static class LayerHelper<T>
     /// <param name="numHeads">Number of RWKV heads (default: 8).</param>
     /// <param name="numLayers">Number of RWKV layers (default: 4).</param>
     /// <param name="dropout">Dropout rate (default: 0.1).</param>
+    /// <param name="globalIclrMultiplier">RWKV-7's Global ICLR Multiplier c in the state transition (default: 1.0, the value RWKV-7 language modeling uses).</param>
     /// <returns>An enumerable collection of layers for the RWKV forecasting model.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> RWKV combines Transformer-like parallel training with
@@ -33457,7 +33560,8 @@ public static class LayerHelper<T>
         int modelDim = 256,
         int numHeads = 8,
         int numLayers = 4,
-        double dropout = 0.1)
+        double dropout = 0.1,
+        double globalIclrMultiplier = 1.0)
     {
         // === Input Embedding ===
         yield return new DenseLayer<T>(
@@ -33474,7 +33578,8 @@ public static class LayerHelper<T>
             yield return new RWKV7Block<T>(
                 sequenceLength: contextLength,
                 modelDimension: modelDim,
-                numHeads: numHeads);
+                numHeads: numHeads,
+                globalIclrMultiplier: globalIclrMultiplier);
         }
 
         // === Output Projection ===

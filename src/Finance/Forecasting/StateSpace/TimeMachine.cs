@@ -115,6 +115,16 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     private int _convKernelSize;
     private bool _useMultiScaleAttention;
     private bool _useReversibleNormalization;
+
+    /// <summary>
+    /// Variance floor for TimeMachine's reversible instance normalization.
+    /// </summary>
+    /// <remarks>
+    /// Kept at the 1e-8 the original hand-rolled implementation used, so the floor's magnitude is
+    /// unchanged. It is now applied as sqrt(var + eps) rather than sqrt(var) + eps -- the standard
+    /// RevIN form (Kim et al. 2022), which is better conditioned on a constant series.
+    /// </remarks>
+    private const double TimeMachineRevInEpsilon = 1e-8;
     private string _decompositionMethod;
     private int _numFeatures;
 
@@ -721,41 +731,19 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         if (!_useReversibleNormalization)
             return input;
 
-        // Compute mean and std along time dimension
-        int length = input.Data.Length;
-        T sum = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            sum = NumOps.Add(sum, input.Data.Span[i]);
-        }
-        T mean = NumOps.Divide(sum, NumOps.FromDouble(length));
-
-        T variance = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            T diff = NumOps.Subtract(input.Data.Span[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(length));
-        T std = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)) + 1e-8);
-
-        // Store the instance mean/std so DenormalizeForecast can reverse the
-        // transform — the original code dropped these, so the forecast was never
-        // restored to the input scale and constant inputs of different levels
-        // collapsed to identical forecasts.
-        _revinMean = new Vector<T>(1) { [0] = mean };
-        _revinStd = new Vector<T>(1) { [0] = std };
-
-        // Normalize
-        var normalized = new Tensor<T>(input._shape);
-        for (int i = 0; i < length; i++)
-        {
-            normalized.Data.Span[i] = NumOps.Divide(
-                NumOps.Subtract(input.Data.Span[i], mean),
-                std);
-        }
-
-        return normalized;
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        // TimeMachine takes ONE set of statistics over the whole tensor, so the input is viewed
+        // as a single instance. The original computed sqrt(var) + 1e-8; the shared helper uses the
+        // standard RevIN form sqrt(var + eps), which is the paper's and is better conditioned on a
+        // constant series.
+        var oneRow = Engine.Reshape(input, new[] { 1, input.Length });
+        var normalized = NormalizeInstanceOnTape(
+            oneRow, TimeMachineRevInEpsilon, out _revinMean, out _revinStd);
+        return Engine.Reshape(normalized, (int[])input._shape.Clone());
     }
 
     /// <summary>

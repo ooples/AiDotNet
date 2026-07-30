@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "Eagle 2.5: Boosting Long-Context Post-Training for Frontier Vision-Language Models",
-    "https://arxiv.org/abs/2501.14818",
+    "https://arxiv.org/abs/2504.15271",
     Year = 2025,
     Authors = "Shi et al."
 )]

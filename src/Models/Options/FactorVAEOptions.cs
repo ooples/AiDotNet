@@ -110,6 +110,27 @@ public class FactorVAEOptions<T> : ModelOptions
     public double Gamma { get; set; } = 10.0;
 
     /// <summary>
+    /// Gets or sets the weight on the prior-posterior KL divergence.
+    /// </summary>
+    /// <value>Defaults to 1.0, keeping the reconstruction term dominant.</value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> during training the model may look at the realized returns to work out
+    /// what the hidden factors were. At prediction time it cannot. This weight controls how strongly it
+    /// is pushed to reach the same conclusion WITHOUT peeking, which is what makes the model usable for
+    /// prediction at all.
+    /// </para>
+    /// <para>
+    /// Deliberately separate from <see cref="Gamma"/>. Gamma is the disentanglement / total-correlation
+    /// coefficient belonging to the OTHER paper also called FactorVAE (Kim &amp; Mnih, <i>Disentangling
+    /// by Factorising</i>), where 10.0 is a normal value. Reusing it for this KL would apply a 10x
+    /// weight that swamps the reconstruction term and redefine a public property's meaning, so the
+    /// prior-posterior term gets its own knob.
+    /// </para>
+    /// </remarks>
+    public double KlWeight { get; set; } = 1.0;
+
+    /// <summary>
     /// Gets or sets the dropout rate used for regularization.
     /// </summary>
     /// <remarks>

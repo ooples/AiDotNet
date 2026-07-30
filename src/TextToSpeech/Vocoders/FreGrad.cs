@@ -36,7 +36,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder",
-    "https://arxiv.org/abs/2206.04063",
+    "https://arxiv.org/abs/2401.10032",
     Year = 2022,
     Authors = "Shin et al."
 )]

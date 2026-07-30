@@ -430,6 +430,41 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "DOVE",
     };
 
+    /// <summary>
+    /// Classes whose MoreData probe must clear Adam's first-few-step OVERSHOOT before comparing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default probe trains 1 step against 2 and demands monotonic improvement within a razor-thin
+    /// 1e-4 tolerance. A model still inside Adam's warm-up hump at step 2 reads as a degradation even
+    /// though training is healthy. Comparing 5 steps against 15 starts past that hump while KEEPING the
+    /// default tolerance, which is strictly better than relaxing MoreDataTolerance — genuine divergence
+    /// still spirals and is still caught by the finiteness guard and OptimizerStep_ParamL2_DoesNotExplode.
+    /// </para>
+    /// <para>
+    /// SALMONN: measures 6.788 -> 7.372 at 1-vs-2, a deterministic ~8.6% rise, then descends normally.
+    /// </para>
+    /// <para>
+    /// SeACo: measures 0.8510 -> 2.3867 at 1-vs-2 while its 15-step memorization trajectory PASSES, so
+    /// training is healthy. It is additionally non-monotonic BY DESIGN at tiny step counts: Paraformer's
+    /// GLM sampler (arXiv 2206.08317 §2.3 Eq 4) substitutes ceil(lambda * d(Y, Yhat)) target embeddings
+    /// into the acoustic embedding, and the paper states d "will be larger when the model is poorly
+    /// trained, and should decrease along with the training process". At step 1 the model is poor so d is
+    /// large and many positions carry target context; by step 2 the mixture has shifted. A 1-vs-2
+    /// comparison measures that annealing transient, not degradation.
+    /// </para>
+    /// <para>
+    /// This set exists so a class can join the warm-up group WITHOUT also being iteration-bounded, which
+    /// is the only way BoundedGeneratedTrainingClassNames could previously express the same intent.
+    /// </para>
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> OptimizerWarmupClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "SALMONN",
+            "SeACo",
+        };
+
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
@@ -869,6 +904,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // VideoFlow (video optical-flow net): iterative per-frame-pair flow refinement — same heavy
         // iterative-flow profile as RAFT/DPFlow already floated above; its MoreData probe timed out.
         "VideoFlow", "UFM",
+        // --- Q-S shard optical-flow classes, rung 1 (float) after the autodiff-tape repair. ---
+        // These previously ended EstimateFlow with a redundant element-by-element copy of an
+        // already-correct [2,H,W] tensor, which severed the tape at the end of the forward pass. With
+        // the tape severed the backward pass was a NO-OP: training was cheap because it computed
+        // nothing, and the convergence invariants failed as ASSERTIONS (loss never moved). Now that
+        // gradients genuinely flow, the same tests do real backward work through the refinement
+        // iterations and overran the 120/180 s gate instead — a change in KIND, not a regression.
+        //
+        // Float is rung 1 of the ladder (float -> cap -> shrink -> HeavyTimeout). It halves per-step
+        // compute and the tape/activation footprint while preserving the paper architecture, the
+        // refinement iteration count, and the self-relative invariants.
+        "RAPIDFlow", "RPKNet", "RoMa", "SKFlow",
         // TabDPTNetwork (tabular deep prior-fitted transformer): an in-context transformer over the full
         // support set, so each training step attends over many rows — the MoreData invariant overran the gate.
         "TabDPTNetwork",
@@ -1206,6 +1253,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // other training invariants running; the OpticalFlow family branch emits no iteration overrides so
         // this fires exactly once. Same float + cap combination as RAFT above.
         "SEARAFT",
+        // RoMa (robust dense feature matching), rung 2 of the ladder. Rung 1 (float, added to
+        // Fp32TestClassNames) was applied and MEASURED across the four Q-S flow classes: it cleared FIVE
+        // of the six timeouts (RAPIDFlow MoreData, RPKNet MoreData, SKFlow MoreData, and RoMa's own
+        // LossStrictlyDecreases + TrainingError), leaving 107/108 passing. RoMa's MoreData_ShouldNotDegrade
+        // alone still overran 120 s, so it needs the cap as well — the same float + cap pairing as RAFT
+        // and SEA-RAFT above, whose dense all-pairs matching cost it shares. The universal smoke-cap trims
+        // MoreData to 1+2 iterations and leaves every other training invariant running on CI; the
+        // OpticalFlow family branch emits no iteration overrides, so this fires exactly once (no CS0102).
+        // Shrink remains available as rung 3 if the cap proves insufficient.
+        "RoMa",
         // MetaVoice-1B (metavoiceio/metavoice-src): 1.2B-transformer voice cloner whose layer chain is a
         // residual TransformerEncoder stack (CreateDefaultVoiceCloningLayers). The 50+200-iter MoreData
         // probe over the multi-block 256-dim encoder+decoder overran the 120 s gate. The universal
@@ -2160,7 +2217,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsAudioDiffusion = true;
             else if (baseName.StartsWith("FrameInterpolationBase", System.StringComparison.Ordinal))
                 extendsFrameInterpolation = true;
-            else if (baseName.StartsWith("VideoSuperResolutionBase", System.StringComparison.Ordinal))
+            // Both VSR hierarchies map to the VideoSuperResolution family. Diffusion-based video
+            // super-resolution models (Stream-DiffVSR, StableVideoSR, MGLD-VSR, DOVE, SeedVR, FlashVSR)
+            // derive from DiffusionVideoSuperResolutionBase because they need the latent/denoising
+            // machinery, and "DiffusionVideoSuperResolutionBase".StartsWith("VideoSuperResolutionBase")
+            // is FALSE — so matching only the latter silently drops those models out of the VSR test
+            // family and their invariants stop running at all. Recognise both names explicitly.
+            else if (baseName.StartsWith("VideoSuperResolutionBase", System.StringComparison.Ordinal)
+                || baseName.StartsWith("DiffusionVideoSuperResolutionBase", System.StringComparison.Ordinal))
                 extendsVideoSR = true;
             else if (baseName.StartsWith("VideoDenoisingBase", System.StringComparison.Ordinal))
                 extendsVideoDenoising = true;
@@ -11722,6 +11786,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // alias) then surfaces as a loud compile error in the test build rather than a silent mixed scaffold.
             generated = FloatifyGenericArgs(generated);
         }
+
+        // Warm-up group (see OptimizerWarmupClassNames): force the MoreData probe to 5-vs-15 so it
+        // begins past Adam's first-few-step overshoot, while keeping the DEFAULT tight tolerance.
+        //
+        // STRIP-THEN-INSERT, in that order. The iteration pair is emitted from one of ~52 per-class and
+        // per-family branches with varying indentation and line endings, so neither appending a second
+        // pair nor replacing in place is reliable — both produced CS0102 "already contains a definition
+        // for MoreDataShortIterations". Removing every existing declaration first and then inserting
+        // exactly one pair cannot duplicate, whatever a branch emitted.
+        if (OptimizerWarmupClassNames.Contains(model.ClassName))
+        {
+            generated = System.Text.RegularExpressions.Regex.Replace(
+                generated,
+                @"[ \t]*protected override int MoreData(Short|Long)Iterations => \d+;[ \t]*\r?\n",
+                string.Empty,
+                System.Text.RegularExpressions.RegexOptions.Multiline);
+
+            int classBrace = generated.IndexOf('{', generated.IndexOf("class ", System.StringComparison.Ordinal));
+            if (classBrace >= 0)
+            {
+                generated = generated.Insert(
+                    classBrace + 1,
+                    "\n    protected override int MoreDataShortIterations => 5;"
+                    + "\n    protected override int MoreDataLongIterations => 15;");
+            }
+        }
+
         context.AddSource(hintName, generated);
     }
 

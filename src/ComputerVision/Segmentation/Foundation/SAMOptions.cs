@@ -52,4 +52,35 @@ public class SAMOptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets AdamW's numerical-stability epsilon.</summary>
     public double AdamEpsilon { get; set; } = 1e-8;
+
+    /// <summary>
+    /// Gets or sets the linear-warmup length in optimizer steps. The default, 250, is the Segment
+    /// Anything paper's value (Kirillov et al. 2023, §A Training algorithm): the learning rate above
+    /// is the PEAK reached only after warming up over the first 250 iterations.
+    /// </summary>
+    public int WarmupSteps { get; set; } = 250;
+
+    /// <summary>
+    /// Gets or sets the focal-loss weight in the mask objective. The default, 20, is the paper's
+    /// focal:dice ratio of 20:1 (Kirillov et al. 2023, §3).
+    /// </summary>
+    public double MaskFocalWeight { get; set; } = 20.0;
+
+    /// <summary>
+    /// Gets or sets the dice-loss weight in the mask objective. The default, 1, is the paper's
+    /// focal:dice ratio of 20:1.
+    /// </summary>
+    public double MaskDiceWeight { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets focal loss's focusing parameter gamma. The default, 2, is the RetinaNet value
+    /// the Segment Anything paper cites.
+    /// </summary>
+    public double FocalGamma { get; set; } = 2.0;
+
+    /// <summary>
+    /// Gets or sets focal loss's class-balance parameter alpha. The default, 0.25, is the RetinaNet
+    /// value the Segment Anything paper cites.
+    /// </summary>
+    public double FocalAlpha { get; set; } = 0.25;
 }

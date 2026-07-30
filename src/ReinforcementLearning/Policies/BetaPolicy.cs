@@ -35,8 +35,11 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    // Citation URL corrected. arXiv 1707.04544 is "Flavor-singlet charm pentaquark" — an unrelated
+    // particle-physics paper. This work appeared at ICML 2017 (PMLR v70, pp. 834-843) and is not on
+    // arXiv, so the canonical proceedings URL replaces the invented preprint id.
     [ResearchPaper("Improving Stochastic Policy Gradients in Continuous Control with Deep Reinforcement Learning using the Beta Distribution",
-        "https://arxiv.org/abs/1707.04544",
+        "https://proceedings.mlr.press/v70/chou17a.html",
         Year = 2017,
         Authors = "Chou, P.-W., Maturana, D., & Scherer, S.")]
     public class BetaPolicy<T> : PolicyBase<T>

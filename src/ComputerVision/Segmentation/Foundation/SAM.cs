@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -82,11 +82,30 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     private string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     /// <summary>
-    /// Linear-warmup length in optimizer steps, from Kirillov et al. 2023 ("Segment Anything",
-    /// §A Training algorithm): the 8e-4 learning rate is reached only after warming up over the
-    /// first 250 iterations.
+    /// Builds the paper's mask objective from <paramref name="options"/>.
     /// </summary>
-    private const int SamWarmupSteps = 250;
+    /// <remarks>
+    /// Kirillov et al. 2023 (§3) supervises masks with "a linear combination of focal loss and dice
+    /// loss in a 20:1 ratio", focal being the RetinaNet form. Every coefficient comes from
+    /// <see cref="SAMOptions"/> — <see cref="SAMOptions.MaskFocalWeight"/>,
+    /// <see cref="SAMOptions.MaskDiceWeight"/>, <see cref="SAMOptions.FocalGamma"/> and
+    /// <see cref="SAMOptions.FocalAlpha"/> — whose defaults ARE the paper's values, so the objective
+    /// is paper-faithful out of the box and fully overridable. Static because it is invoked from the
+    /// base-constructor initializer, before instance fields are assigned.
+    /// </remarks>
+    private static ILossFunction<T> BuildMaskLoss(SAMOptions? options, int numClasses)
+    {
+        // Multi-class masks generalize to softmax CE rather than the binary focal+dice pair.
+        if (numClasses != 1)
+        {
+            return new CrossEntropyWithLogitsLoss<T>();
+        }
+
+        var o = options ?? new SAMOptions();
+        return new CompositeLoss<T>(
+            (new FocalLoss<T>(gamma: o.FocalGamma, alpha: o.FocalAlpha), o.MaskFocalWeight),
+            (new DiceLoss<T>(), o.MaskDiceWeight));
+    }
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _disposed;
@@ -144,11 +163,7 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         // where focal deliberately down-weights easy background and dice corrects the foreground/
         // background imbalance a promptable segmenter depends on. Use the paper's composite for the
         // single-mask case; multi-class keeps softmax CE, which is the correct generalisation.
-        : base(architecture, lossFunction ?? (numClasses == 1
-            ? (ILossFunction<T>)new CompositeLoss<T>(
-                (new FocalLoss<T>(gamma: 2.0, alpha: 0.25), 20.0),
-                (new DiceLoss<T>(), 1.0))
-            : new CrossEntropyWithLogitsLoss<T>()))
+        : base(architecture, lossFunction ?? BuildMaskLoss(options, numClasses))
     {
         _options = options ?? new SAMOptions();
         Options = _options;
@@ -189,7 +204,7 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
                 // investigation; the warmup here is correct on its own merits.
                 LearningRateScheduler = new LinearWarmupScheduler(
                     baseLearningRate: _options.LearningRate,
-                    warmupSteps: SamWarmupSteps,
+                    warmupSteps: _options.WarmupSteps,
                     totalSteps: 0,
                     // Start at ONE STEP's worth of the peak rather than exactly 0. A 0 start makes the
                     // first optimizer step a no-op, which left parameters bit-identical after a single
@@ -197,7 +212,7 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
                     // changed after training"). Ramping from base/warmupSteps is the standard linear
                     // warmup (equivalent to PyTorch LinearLR with start_factor = 1/warmup_steps) and
                     // still reaches the paper's peak exactly at step warmupSteps.
-                    warmupInitLr: _options.LearningRate / SamWarmupSteps,
+                    warmupInitLr: _options.LearningRate / System.Math.Max(1, _options.WarmupSteps),
                     decayMode: LinearWarmupScheduler.DecayMode.Constant),
                 // Warmup is defined per ITERATION, so the schedule must advance per optimizer step.
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
@@ -232,11 +247,7 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SAMOptions? options = null)
         // Same paper objective as the native constructor above (focal + dice, 20:1), kept in sync so
         // the two entry points do not disagree about what SAM optimises.
-        : base(architecture, numClasses == 1
-            ? (ILossFunction<T>)new CompositeLoss<T>(
-                (new FocalLoss<T>(gamma: 2.0, alpha: 0.25), 20.0),
-                (new DiceLoss<T>(), 1.0))
-            : new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, BuildMaskLoss(options, numClasses))
     {
         _options = options ?? new SAMOptions();
         Options = _options;

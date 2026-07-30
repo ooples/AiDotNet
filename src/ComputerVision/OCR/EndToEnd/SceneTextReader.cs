@@ -31,7 +31,20 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 [ModelTask(ModelTask.Detection)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
-[ResearchPaper("ABCNet: Real-time Scene Text Spotting", "https://arxiv.org/abs/1911.09941")]
+// Citation corrected. arXiv 1911.09941 is "Josephson linewidth in a resistively-shunted model with
+// non-sinusoidal current-phase relation" — an unrelated condensed-matter paper. ABCNet is arXiv
+// 2002.10200 (CVPR 2020 oral, pp. 9809-9818); the title was also truncated and the authors and year
+// were missing entirely.
+//
+// IMPLEMENTATION NOTE: this class composes a separate detector and recognizer and contains no Bezier
+// curve representation or BezierAlign layer — which ARE ABCNet's contributions (adaptively fitting
+// curved text with a parameterized Bezier curve, and BezierAlign for extracting features of
+// arbitrary-shaped instances). So it is a generic two-stage text spotter, not ABCNet. Closing that gap
+// is tracked separately; the reference is corrected here so it points at the paper it names.
+[ResearchPaper("ABCNet: Real-time Scene Text Spotting with Adaptive Bezier-Curve Network",
+    "https://arxiv.org/abs/2002.10200",
+    Year = 2020,
+    Authors = "Yuliang Liu, Hao Chen, Chunhua Shen, Tong He, Lianwen Jin, Liangwei Wang")]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {

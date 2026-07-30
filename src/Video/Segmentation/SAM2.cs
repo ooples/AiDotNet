@@ -158,6 +158,24 @@ public class SAM2<T> : NeuralNetworkBase<T>
     {
     }
 
+    /// <summary>
+    /// Builds the paper's mask objective from <paramref name="options"/>.
+    /// </summary>
+    /// <remarks>
+    /// Every coefficient comes from <see cref="SAM2Options"/> -- <see cref="SAM2Options.MaskFocalWeight"/>,
+    /// <see cref="SAM2Options.MaskDiceWeight"/>, <see cref="SAM2Options.FocalGamma"/> and
+    /// <see cref="SAM2Options.FocalAlpha"/> -- whose defaults ARE the paper's values, so the objective is
+    /// paper-faithful out of the box and fully overridable. Static because it is invoked from the
+    /// base-constructor initializer, before instance fields are assigned.
+    /// </remarks>
+    private static ILossFunction<T> BuildMaskLoss(SAM2Options? options)
+    {
+        var o = options ?? new SAM2Options();
+        return new CompositeLoss<T>(
+            (new FocalLoss<T>(gamma: o.FocalGamma, alpha: o.FocalAlpha), o.MaskFocalWeight),
+            (new DiceLoss<T>(), o.MaskDiceWeight));
+    }
+
     public SAM2(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
@@ -171,9 +189,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         // memorization loss sitting exactly at ln(2) = 0.693147, unchanged across 15 steps, because
         // DecodeMask emits sigmoid-activated masks and BCE at p=0.5 is stationary. Both DecodeMask's
         // sigmoid and these losses expect probabilities, so the composite is applied directly.
-        : base(architecture, lossFunction ?? new CompositeLoss<T>(
-            (new FocalLoss<T>(gamma: 2.0, alpha: 0.25), 20.0),
-            (new DiceLoss<T>(), 1.0)))
+        : base(architecture, lossFunction ?? BuildMaskLoss(options))
     {
         _options = options ?? new SAM2Options();
         Options = _options;
@@ -677,6 +693,168 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
     #region Private Methods
 
+    /// <summary>
+    /// Reshapes a head's [batch, channels] score output to the [batch, channels, 1, 1] rank the rest
+    /// of the decoder reads, leaving an already-rank-4 tensor untouched.
+    /// </summary>
+    /// <remarks>
+    /// Uses <c>Engine.Reshape</c>, never <c>tensor.Reshape</c>: the latter is not a recorded op, so it
+    /// would sever the gradient tape between the IoU / occlusion heads and the loss and those heads
+    /// would silently never train.
+    /// </remarks>
+    private Tensor<T> NormalizeScoreRank(Tensor<T> scores, int channels)
+    {
+        int batch = scores.Shape[0];
+        int emitted = scores.Length / batch;
+        if (emitted != channels)
+        {
+            throw new InvalidOperationException(
+                $"SAM2 score head emitted {emitted} values per batch item but {channels} were expected. " +
+                "Check the head factory in LayerHelper against RecordModuleSpans.");
+        }
+
+        // Canonicalise by ELEMENT COUNT, not by rank: a rank-4 tensor is not necessarily
+        // [batch, channels, 1, 1]. GlobalPoolingLayer + DenseLayer emits the channel values on a
+        // trailing axis, so shape[1] was 1 and SelectBestMask's iouScores[b, m, 0, 0] threw
+        // "Index 1 is out of range" for m >= 1. Reshaping unconditionally puts the candidate scores on
+        // axis 1 whatever layout the head used.
+        if (scores.Rank == 4 && scores.Shape[1] == channels)
+        {
+            return scores;
+        }
+
+        return Engine.Reshape(scores, new[] { batch, channels, 1, 1 });
+    }
+
+    /// <summary>Runs a half-open span of <see cref="NeuralNetworkBase{T}.Layers"/> in order.</summary>
+    private Tensor<T> RunSpan(Tensor<T> input, int start, int end)
+    {
+        var x = input;
+        for (int i = start; i < end; i++)
+        {
+            x = Layers[i].Forward(x);
+        }
+
+        return x;
+    }
+
+    /// <summary>Runs a half-open span of layers, applying GELU between them as the decoder does.</summary>
+    private Tensor<T> RunSpanWithGelu(Tensor<T> input, int start, int end)
+    {
+        var x = input;
+        for (int i = start; i < end; i++)
+        {
+            x = ApplyGELU(Layers[i].Forward(x));
+        }
+
+        return x;
+    }
+
+    #region Module spans
+
+    /// <summary>
+    /// Number of ambiguity-resolving mask candidates the decoder emits. SAM predicts 3 masks
+    /// (whole / part / subpart) plus one, i.e. 4 output tokens (Kirillov et al. 2023, section 3), and
+    /// SAM 2 keeps that head unchanged (Ravi et al. 2024, section 3).
+    /// </summary>
+    private const int MaskCandidateCount = 4;
+
+    // Half-open [start, end) spans into Layers, one per module. SAM2's forward is a BRANCHING
+    // topology, so each branch has to address its own layers -- but addressing them by literal
+    // index (the previous Layers[14] / Layers[21] / Layers[24] scheme) silently desynchronised from
+    // the factories: the fixed indices assumed 14 encoder / 3 prompt / 5 memory / 2 refine layers,
+    // while the factories emit 13 / 6 / 5 / 2. Consequences measured on this PR: EncodeImage ran the
+    // first PROMPT layer as if it were an encoder layer; DecodeMask ran the last two MEMORY
+    // convolutions as its "decoder"; and the masks came out of the first REFINEMENT conv -- a
+    // 256-channel ReLU -- which was then squashed by an extra sigmoid. A dead ReLU there produces
+    // exactly 0.0, so every mask pixel was exactly sigmoid(0) = 0.5 with a ReLU-blocked gradient,
+    // which is precisely why the memorization loss sat frozen at
+    // focal(0.0433) * 20 + dice(0.5) = 1.366417 for all 15 steps. The real mask / IoU / occlusion
+    // heads were never added to Layers at all, so they were neither run nor trained. Deriving the
+    // spans from the actual layer counts makes that class of drift impossible.
+    private int _imageEncoderStart, _imageEncoderEnd;
+    private int _pointEncoderStart, _boxEncoderStart, _maskPromptEncoderStart;
+    private int _memoryAttentionStart, _memoryProjectionIndex;
+    private int _maskRefineStart, _maskRefineEnd;
+    private int _maskHeadIndex;
+    private int _iouHeadStart, _iouHeadEnd;
+    private int _occlusionHeadStart, _occlusionHeadEnd;
+    private int _spansForLayerCount = -1;
+
+    /// <summary>
+    /// Whether Layers currently holds SAM2's own seven-module layout, so the branch forwards may
+    /// address it. Recomputed whenever the layer count changes, because Clone / Deserialize /
+    /// SetLayers repopulate Layers WITHOUT going back through InitializeLayers -- a one-shot flag set
+    /// only in InitializeLayers would leave a cloned model permanently on the constant-mask fallback.
+    /// </summary>
+    private bool ModulesWired
+    {
+        get
+        {
+            if (_spansForLayerCount != Layers.Count)
+            {
+                RecordModuleSpans();
+            }
+
+            return _spansForLayerCount == Layers.Count && _modulesWired;
+        }
+    }
+
+    private bool _modulesWired;
+
+    /// <summary>
+    /// Derives each module's span in <see cref="NeuralNetworkBase{T}.Layers"/> from the layer counts
+    /// the LayerHelper factories emit, so no branch forward ever addresses a literal index.
+    /// </summary>
+    private void RecordModuleSpans()
+    {
+        // Counts emitted by the factories used in InitializeLayers, in append order.
+        const int imageEncoderCount = 13;
+        const int promptEncoderCount = 6;   // point x2, box x2, mask-prompt x2
+        const int memoryCount = 5;          // 4 attention convs + 1 projection
+        const int maskRefineCount = 2;
+        const int maskHeadCount = 1;
+        const int iouHeadCount = 2;         // global-average pool + dense(sigmoid)
+        const int occlusionHeadCount = 2;   // global-average pool + dense(sigmoid)
+
+        int expected = imageEncoderCount + promptEncoderCount + memoryCount + maskRefineCount
+            + maskHeadCount + iouHeadCount + occlusionHeadCount;
+
+        // A caller-supplied Architecture.Layers list has an unknown layout; the branch forwards then
+        // fall back to their prompt-free / head-free paths rather than mis-indexing someone else's
+        // network.
+        _spansForLayerCount = Layers.Count;
+        _modulesWired = _useNativeMode && Layers.Count == expected;
+        if (!_modulesWired)
+        {
+            return;
+        }
+
+        _imageEncoderStart = 0;
+        _imageEncoderEnd = imageEncoderCount;
+
+        _pointEncoderStart = _imageEncoderEnd;
+        _boxEncoderStart = _pointEncoderStart + 2;
+        _maskPromptEncoderStart = _boxEncoderStart + 2;
+
+        _memoryAttentionStart = _imageEncoderEnd + promptEncoderCount;
+        _memoryProjectionIndex = _memoryAttentionStart + memoryCount - 1;
+
+        _maskRefineStart = _memoryAttentionStart + memoryCount;
+        _maskRefineEnd = _maskRefineStart + maskRefineCount;
+
+        _maskHeadIndex = _maskRefineEnd;
+
+        _iouHeadStart = _maskHeadIndex + maskHeadCount;
+        _iouHeadEnd = _iouHeadStart + iouHeadCount;
+
+        _occlusionHeadStart = _iouHeadEnd;
+        _occlusionHeadEnd = _occlusionHeadStart + occlusionHeadCount;
+    }
+
+    #endregion
+
+
     private Tensor<T> EncodeImage(Tensor<T> image)
     {
         if (!_useNativeMode)
@@ -686,9 +864,8 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
         var features = image;
 
-        // Process through encoder layers (first 14 layers are encoder in our LayerHelper setup)
-        int encoderLayerCount = Math.Min(14, Layers.Count);
-        for (int i = 0; i < encoderLayerCount; i++)
+        int encoderEnd = ModulesWired ? _imageEncoderEnd : Layers.Count;
+        for (int i = _imageEncoderStart; i < encoderEnd; i++)
         {
             features = Layers[i].Forward(features);
         }
@@ -757,11 +934,9 @@ public class SAM2<T> : NeuralNetworkBase<T>
             pointTensor[0, 1, 0, 0] = NumOps.Add(pointTensor[0, 1, 0, 0], NumOps.Multiply(y, weight));
         }
 
-        // Use the point encoder layer if available (layer 14 in LayerHelper setup)
-        if (_useNativeMode && Layers.Count > 14)
+        if (ModulesWired)
         {
-            var encoded = Layers[14].Forward(pointTensor);
-            return ApplyGELU(encoded);
+            return ApplyGELU(RunSpan(pointTensor, _pointEncoderStart, _pointEncoderStart + 2));
         }
 
         return ApplyGELU(pointTensor);
@@ -778,11 +953,9 @@ public class SAM2<T> : NeuralNetworkBase<T>
         boxTensor[0, 2, 0, 0] = NumOps.FromDouble(box[2] / _width);
         boxTensor[0, 3, 0, 0] = NumOps.FromDouble(box[3] / _height);
 
-        // Use the box encoder layer if available (layer 15 in LayerHelper setup)
-        if (_useNativeMode && Layers.Count > 15)
+        if (ModulesWired)
         {
-            var encoded = Layers[15].Forward(boxTensor);
-            return ApplyGELU(encoded);
+            return ApplyGELU(RunSpan(boxTensor, _boxEncoderStart, _boxEncoderStart + 2));
         }
 
         return ApplyGELU(boxTensor);
@@ -790,11 +963,9 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
     private Tensor<T> EncodeMaskPrompt(Tensor<T> maskPrompt)
     {
-        // Use the mask encoder layer if available (layer 16 in LayerHelper setup)
-        if (_useNativeMode && Layers.Count > 16)
+        if (ModulesWired)
         {
-            var encoded = Layers[16].Forward(maskPrompt);
-            return ApplyGELU(encoded);
+            return ApplyGELU(RunSpan(maskPrompt, _maskPromptEncoderStart, _maskPromptEncoderStart + 2));
         }
 
         return ApplyGELU(maskPrompt);
@@ -819,17 +990,16 @@ public class SAM2<T> : NeuralNetworkBase<T>
         // Concatenate current and memory features
         var combined = ConcatenateChannels(currentFeatures, memoryAggregate);
 
-        // Apply memory attention layers if available (layers 17-21 in LayerHelper setup)
-        if (_useNativeMode && Layers.Count > 21)
+        if (ModulesWired)
         {
             var attended = combined;
-            for (int i = 17; i <= 20; i++)
+            for (int i = _memoryAttentionStart; i < _memoryProjectionIndex; i++)
             {
                 attended = Layers[i].Forward(attended);
                 attended = ApplyGELU(attended);
             }
-            // Memory projection (layer 21)
-            attended = Layers[21].Forward(attended);
+
+            attended = Layers[_memoryProjectionIndex].Forward(attended);
             return AddTensors(currentFeatures, attended);
         }
 
@@ -858,57 +1028,50 @@ public class SAM2<T> : NeuralNetworkBase<T>
             features = AddTensors(features, maskFeatures);
         }
 
-        // Decoder layers (layers 22-23 in LayerHelper setup)
-        if (_useNativeMode && Layers.Count > 23)
-        {
-            features = Layers[22].Forward(features);
-            features = ApplyGELU(features);
-            features = Layers[23].Forward(features);
-            features = ApplyGELU(features);
-        }
-
-        // Generate mask candidates (layer 24)
+        // Shared refinement, then the three heads branch off it (Ravi et al. 2024, section 3: SAM 2
+        // keeps SAM's mask decoder and adds the occlusion / "is object present" head).
         Tensor<T> masks;
-        if (_useNativeMode && Layers.Count > 24)
+        Tensor<T> iouScores;
+        double occlusionScore = 0.0;
+
+        if (ModulesWired)
         {
-            masks = Layers[24].Forward(features);
+            features = RunSpanWithGelu(features, _maskRefineStart, _maskRefineEnd);
+
+            // The mask head is a 1x1 convolution whose activation IS a sigmoid, so it already emits
+            // probabilities. Applying ApplySigmoid on top of it would squash [0,1] into
+            // [0.5, 0.731] and flatten the gradient, so it deliberately is NOT applied here.
+            masks = Layers[_maskHeadIndex].Forward(features);
+
+            // The IoU and occlusion heads each begin with their own global-average pool and end in a
+            // sigmoid dense layer, so they take the FULL feature map and need no extra pooling or
+            // activation either.
+            // The head ends in a dense layer, so it emits [batch, candidates]; SelectBestMask and
+            // GetNamedLayerActivations read IoU as [batch, candidates, 1, 1]. Normalise the rank with
+            // Engine.Reshape rather than a raw tensor.Reshape so the tape survives.
+            iouScores = NormalizeScoreRank(
+                RunSpan(features, _iouHeadStart, _iouHeadEnd), MaskCandidateCount);
+
+            var occlusion = NormalizeScoreRank(
+                RunSpan(features, _occlusionHeadStart, _occlusionHeadEnd), 1);
+            occlusionScore = Convert.ToDouble(occlusion[0, 0, 0, 0]);
         }
         else
         {
             int batchSize = features.Shape[0];
             int h = features.Shape[2];
             int w = features.Shape[3];
-            masks = new Tensor<T>([batchSize, 4, h, w]);
-        }
-        masks = ApplySigmoid(masks);
+            masks = ApplySigmoid(new Tensor<T>([batchSize, MaskCandidateCount, h, w]));
 
-        // Predict IoU scores (layer 25)
-        var pooled = GlobalAveragePool(features);
-        Tensor<T> iouScores;
-        if (_useNativeMode && Layers.Count > 25)
-        {
-            iouScores = Layers[25].Forward(pooled);
-        }
-        else
-        {
-            iouScores = new Tensor<T>([pooled.Shape[0], 4, 1, 1]);
+            var pooled = GlobalAveragePool(features);
+            iouScores = new Tensor<T>([pooled.Shape[0], MaskCandidateCount, 1, 1]);
             for (int b = 0; b < iouScores.Shape[0]; b++)
             {
-                for (int m = 0; m < 4; m++)
+                for (int m = 0; m < MaskCandidateCount; m++)
                 {
                     iouScores[b, m, 0, 0] = NumOps.FromDouble(0.5);
                 }
             }
-        }
-        iouScores = ApplySigmoid(iouScores);
-
-        // Predict occlusion (layer 26)
-        double occlusionScore = 0.0;
-        if (_useNativeMode && Layers.Count > 26)
-        {
-            var occlusionLogit = Layers[26].Forward(pooled);
-            var occlusionSigmoid = ApplySigmoid(occlusionLogit);
-            occlusionScore = Convert.ToDouble(occlusionSigmoid[0, 0, 0, 0]);
         }
 
         return (masks, iouScores, occlusionScore);
@@ -1142,30 +1305,36 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // SAM2 (Ravi et al. 2024) is a FOUR-module architecture: image encoder, prompt encoder,
-            // memory attention, and mask decoder. All four must be present in Layers, for two
-            // reasons: Layers is what supplies GetParameters / UpdateParameters / serialization (so
-            // anything absent is simply never trained), and ProcessPrompt / ApplyMemoryAttention /
-            // DecodeMask address their layers by FIXED INDEX -- Layers[14..16] prompt,
-            // Layers[21..23] memory, Layers[24..26] mask + IoU -- each behind an
-            // `if (Layers.Count > N)` guard.
+            // SAM2 (Ravi et al. 2024) is an image encoder + prompt encoder + memory attention +
+            // mask decoder, where the decoder branches into three heads: masks, IoU quality, and the
+            // occlusion / "is object present" score SAM 2 adds over SAM. EVERY module must be present
+            // in Layers, because Layers is what supplies GetParameters / UpdateParameters /
+            // serialization -- anything absent is simply never trained.
             //
-            // Previously only the 13-layer image encoder was added, so every one of those nine guards
-            // was ALWAYS FALSE and each silently fell back to a hardcoded constant: Predict returned a
-            // uniform 0.5 (sigmoid of an all-zero mask) for ANY input, which is why the three
-            // input-sensitivity invariants failed and why finiteness-only assertions passed vacuously.
+            // Previously only the 13-layer image encoder was added, so Predict returned a uniform 0.5
+            // for ANY input and the input-sensitivity invariants failed. Adding the encoder, prompt,
+            // memory and refinement factories fixed those, but the three HEAD factories were still
+            // missing and the forward paths still addressed layers by literal index, so the mask came
+            // out of a 256-channel ReLU refinement conv instead of the mask head -- see the
+            // RecordModuleSpans commentary for how that froze the memorization loss at 1.366417.
             //
-            // The factories already existed and their counts line up exactly with those indices:
-            //   image encoder  13 -> 0..12
-            //   prompt encoder  6 -> 13..18   (code reads 14, 15, 16)
-            //   memory          5 -> 19..23   (code reads 21, 22, 23)
-            //   mask decoder    8 -> 24..31   (code reads 24, 25, 26)
+            // Emitted counts, all seven modules:
+            //   image encoder    13 -> [0, 13)
+            //   prompt encoder    6 -> [13, 19)   point x2, box x2, mask-prompt x2
+            //   memory            5 -> [19, 24)   4 attention convs + projection
+            //   mask refinement   2 -> [24, 26)
+            //   mask head         1 -> [26, 27)   1x1 conv, sigmoid activation
+            //   IoU head          2 -> [27, 29)   global-avg pool + dense(sigmoid)
+            //   occlusion head    2 -> [29, 31)   global-avg pool + dense(sigmoid)
+            // RecordModuleSpans below derives those spans from the counts rather than hardcoding the
+            // indices, so a factory gaining or losing a layer can no longer silently mis-route a
+            // branch.
             //
             // IMPORTANT: these are PARALLEL BRANCHES, not a sequential continuation of the encoder.
             // Any base-class path that walks Layers in order must therefore be overridden in this
             // class to follow the real branch topology (see GetNamedLayerActivations below), exactly
             // as SpeechEmotionRecognizer and RWKVForecaster do for their non-sequential forwards.
-            // Walking all 32 blindly feeds the memory/mask convolutions the wrong spatial extent and
+            // Walking all 31 blindly feeds the memory/mask convolutions the wrong spatial extent and
             // throws "Input spatial dims after padding (1, 256) must be >= kernelSize (4)".
             const int encoderStride = 16;
             int featureHeight = System.Math.Max(1, _height / encoderStride);
@@ -1187,7 +1356,23 @@ public class SAM2<T> : NeuralNetworkBase<T>
                 _numFeatures,
                 featureHeight,
                 featureWidth));
+            Layers.AddRange(LayerHelper<T>.CreateSAM2MaskHead(
+                _numFeatures,
+                featureHeight,
+                featureWidth,
+                MaskCandidateCount));
+            Layers.AddRange(LayerHelper<T>.CreateSAM2IoUHead(
+                _numFeatures,
+                featureHeight,
+                featureWidth,
+                MaskCandidateCount));
+            Layers.AddRange(LayerHelper<T>.CreateSAM2OcclusionHead(
+                _numFeatures,
+                featureHeight,
+                featureWidth));
         }
+
+        RecordModuleSpans();
     }
 
     /// <inheritdoc/>

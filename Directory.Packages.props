@@ -1,4 +1,4 @@
-﻿<Project>
+<Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
@@ -291,7 +291,16 @@
          privatizes every registered COW-shared parameter before specialized actions and fused
          optimizers capture writable backing arrays. This preserves O(1) inference cloning while
          preventing clone-training writes from leaking through shared storage, without disabling
-         fused compiled training. -->
+         fused compiled training.
+
+         0.120.2 ALSO carries AiDotNet.Tensors #898 — the rank-0 loss backward fix (AlignGradRank in
+         BackwardFunctions). A full reduction with keepDims:false yields a rank-0 scalar loss while the
+         tape seeds its gradient as [1], so the elementwise backwards threw "Tensor shapes must match.
+         Got [1] and []" from inside ComputeGradients. Callers saw that as "no parameters changed after
+         training" rather than as an exception, which is what made DiceLoss (and any composite built on
+         it) look like it had severed the tape. Applied to DivideBackward / MultiplyBackward /
+         LogBackward / ExpBackward / ComplexMagnitudeSquaredBackward. REQUIRED for CompositeLoss
+         (SAM / SAM2 focal+dice at the paper's 20:1 ratio) to produce gradients at all. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.120.2" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.119.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.119.0" />

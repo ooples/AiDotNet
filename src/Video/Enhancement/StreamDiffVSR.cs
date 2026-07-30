@@ -46,10 +46,14 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Stream-DiffVSR: Low-Latency Streamable Diffusion-based Video Super-Resolution",
-    "https://arxiv.org/abs/2501.14727",
+// Citation corrected: the title, arXiv id and author list were all wrong. arXiv 2501.14727 is
+// "Estimation-theoretic analysis of lensless imaging" (Kabuli, Singh & Waller) — an unrelated
+// computational-imaging paper — so anyone following this reference found nothing about video
+// super-resolution, and the recorded authors belonged to a different work entirely.
+[ResearchPaper("Stream-DiffVSR: Low-Latency Streamable Video Super-Resolution via Auto-Regressive Diffusion",
+    "https://arxiv.org/abs/2512.23709",
     Year = 2025,
-    Authors = "Guanlin Li, Jianyi Wang, Shangchen Zhou, Chen Change Loy")]
+    Authors = "Hau-Shiang Shiu, Chin-Yang Lin, Zhixiang Wang, Chi-Wei Hsiao, Po-Fan Yu, Yu-Chih Chen, Yu-Lun Liu")]
 public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

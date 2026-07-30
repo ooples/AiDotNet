@@ -62,7 +62,18 @@ namespace AiDotNet.Finance.Trading.Factors;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("FactorVAE: A Probabilistic Dynamic Factor Model Based on Variational Autoencoder for Predicting Cross-Sectional Stock Returns", "https://arxiv.org/abs/2005.02634", Year = 2020, Authors = "Yitong Duan, Lei Wang, Qizhong Zhang, Jian Li")]
+// Citation corrected. arXiv 2005.02634 is "Dependency Aware Filter Pruning", unrelated. FactorVAE is
+// AAAI 2022 (vol. 36 no. 4, pp. 4468-4476) and is not on arXiv, so the canonical DOI is used; the year
+// was also wrong (2020 -> 2022).
+//
+// IMPLEMENTATION NOTE: the VAE and dynamic-factor machinery are present, but the paper's named
+// contribution — a PRIOR-POSTERIOR learning method, where a prior factor distribution conditioned on
+// observable features is aligned against a posterior informed by future returns — has no counterpart
+// here (no prior/posterior split at all). Verifying and closing that gap is tracked separately.
+[ResearchPaper("FactorVAE: A Probabilistic Dynamic Factor Model Based on Variational Autoencoder for Predicting Cross-Sectional Stock Returns",
+    "https://doi.org/10.1609/aaai.v36i4.20369",
+    Year = 2022,
+    Authors = "Yitong Duan, Lei Wang, Qizhong Zhang, Jian Li")]
 public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode
@@ -234,6 +245,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
+        InstallFactorVAEObjective();
     }
 
     /// <summary>
@@ -282,6 +294,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
+        InstallFactorVAEObjective();
     }
 
     #endregion
@@ -319,7 +332,8 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
                 _hiddenDimension,
                 _latentDimension,
                 _numFactors,
-                _dropoutRate));
+                _dropoutRate,
+                _numAssets));
         }
     }
 
@@ -340,7 +354,228 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? PredictNative(input) : PredictOnnx(input);
+        if (!_useNativeMode) return PredictOnnx(input);
+        if (!HasFactorSpans) return PredictNative(input);
+
+        // Prediction uses the PRIOR branch: the future returns the posterior needs are, by definition,
+        // unavailable here. The prior's mean is used rather than a sample, so predictions are
+        // deterministic — sampling at inference would make the same input give different answers.
+        var features = RunSpan(input, FeatureSpanStart, FeatureSpanEnd);
+        var prior = RunSpan(features, PriorSpanStart, PriorSpanEnd);
+        var (priorMean, _) = SplitMeanAndLogVariance(prior);
+        return DecodeReturns(priorMean, features);
+    }
+
+    #endregion
+
+    #region Prior-Posterior Learning (Duan et al., AAAI 2022)
+
+    /// <summary>Layer-span boundaries into <c>Layers</c> for the four sub-networks.</summary>
+    private int FeatureSpanStart => 0;
+
+    private int FeatureSpanEnd => LayerHelper<T>.FactorVAEFeatureExtractorLayerCount;
+
+    private int PriorSpanStart => FeatureSpanEnd;
+
+    private int PriorSpanEnd => PriorSpanStart + LayerHelper<T>.FactorVAEPriorLayerCount;
+
+    private int PosteriorSpanStart => PriorSpanEnd;
+
+    private int PosteriorSpanEnd => PosteriorSpanStart + LayerHelper<T>.FactorVAEPosteriorLayerCount;
+
+    private int DecoderSpanStart => PosteriorSpanEnd;
+
+    private int DecoderSpanEnd => DecoderSpanStart + LayerHelper<T>.FactorVAEDecoderLayerCount;
+
+    /// <summary>
+    /// True when <c>Layers</c> matches the four-span layout this model drives explicitly. A caller that
+    /// supplied a custom architecture keeps the plain sequential path instead.
+    /// </summary>
+    private bool HasFactorSpans => Layers.Count == DecoderSpanEnd;
+
+    /// <summary>
+    /// The KL divergence between posterior and prior from the most recent training forward pass, kept
+    /// tape-connected so <see cref="FactorVAEObjective{T}"/> can add it to the reconstruction term and
+    /// have the gradient reach BOTH heads.
+    /// </summary>
+    private Tensor<T>? _lastKlDivergence;
+
+    /// <summary>
+    /// Gets the KL divergence recorded by the last training forward pass, or null if none ran.
+    /// </summary>
+    internal Tensor<T>? LastKlDivergence => _lastKlDivergence;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Training runs the POSTERIOR branch, which is allowed to see the realized returns
+    /// (<paramref name="input"/> carries features; the targets reach us through
+    /// <see cref="SetPosteriorReturns"/>). Factors are sampled from the posterior via the
+    /// reparameterization trick so the sampling stays differentiable, and the KL against the prior is
+    /// recorded for the objective. Without the KL the prior is never trained, and prediction — which can
+    /// only use the prior — would be untrained no matter how well training loss fell.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!HasFactorSpans) return base.ForwardForTraining(input);
+
+        var features = RunSpan(input, FeatureSpanStart, FeatureSpanEnd);
+
+        var prior = RunSpan(features, PriorSpanStart, PriorSpanEnd);
+        var (priorMean, priorLogVar) = SplitMeanAndLogVariance(prior);
+
+        // The posterior consumes features together with the realized returns. When no returns have been
+        // supplied (a caller invoking the training forward directly), fall back to the prior so the pass
+        // still produces a prediction rather than throwing.
+        var returns = _posteriorReturns;
+        if (returns is null)
+        {
+            _lastKlDivergence = null;
+            return DecodeReturns(priorMean, features);
+        }
+
+        var posteriorInput = Engine.Concat([features, AlignReturns(returns, features)], features.Shape.Length - 1);
+        var posterior = RunSpan(posteriorInput, PosteriorSpanStart, PosteriorSpanEnd);
+        var (postMean, postLogVar) = SplitMeanAndLogVariance(posterior);
+
+        var factors = ReparameterizedSample(postMean, postLogVar);
+        _lastKlDivergence = GaussianKlDivergence(postMean, postLogVar, priorMean, priorLogVar);
+
+        return DecodeReturns(factors, features);
+    }
+
+    /// <summary>
+    /// Replaces the plain reconstruction loss with the paper's objective, so the KL between posterior
+    /// and prior is actually optimized.
+    /// </summary>
+    /// <remarks>
+    /// Installed after construction rather than passed to <c>base(...)</c> because the KL weight comes
+    /// from the options, which are not yet assigned when the base constructor runs. Only installed when
+    /// the four-span layout is present — a caller-supplied custom architecture has no prior/posterior
+    /// heads for the KL to relate.
+    /// </remarks>
+    private void InstallFactorVAEObjective()
+    {
+        if (!_useNativeMode || !HasFactorSpans) return;
+
+        // The tape-based objective needs the concrete base type (ComputeTapeLoss is declared there, not
+        // on ILossFunction). A caller-supplied loss that is not tape-capable falls back to MSE on the
+        // returns, which is the paper's reconstruction term anyway.
+        var reconstruction = _lossFunction as LossFunctionBase<T> ?? new MeanSquaredErrorLoss<T>();
+
+        LossFunction = new FactorVAEObjective<T>(
+            reconstruction,
+            () => _lastKlDivergence,
+            _options.KlWeight);
+    }
+
+    /// <summary>Realized returns for the current training step, consumed by the posterior branch.</summary>
+    private Tensor<T>? _posteriorReturns;
+
+    /// <summary>
+    /// Supplies the realized returns the posterior branch conditions on. Cleared after each step so a
+    /// later pass cannot silently reuse a previous batch's future — which would leak information across
+    /// steps and inflate training performance.
+    /// </summary>
+    internal void SetPosteriorReturns(Tensor<T>? returns) => _posteriorReturns = returns;
+
+    /// <summary>Runs layers in <c>[start, end)</c> sequentially.</summary>
+    private Tensor<T> RunSpan(Tensor<T> x, int start, int end)
+    {
+        var current = x;
+        for (int i = start; i < end; i++)
+        {
+            current = Layers[i].Forward(current);
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Splits a <c>2 * numFactors</c>-wide head into its mean and log-variance halves along the last
+    /// axis, using a recorded narrow so both halves stay on the tape.
+    /// </summary>
+    private (Tensor<T> Mean, Tensor<T> LogVariance) SplitMeanAndLogVariance(Tensor<T> head)
+    {
+        int axis = head.Shape.Length - 1;
+        int width = head.Shape[axis] / 2;
+        var mean = Engine.TensorNarrow(head, axis, 0, width);
+        var logVar = Engine.TensorNarrow(head, axis, width, width);
+        return (mean, logVar);
+    }
+
+    /// <summary>
+    /// Samples <c>z = mean + exp(logVar / 2) * epsilon</c> — the reparameterization trick.
+    /// </summary>
+    /// <remarks>
+    /// The randomness is isolated in <c>epsilon</c>, which is a constant with respect to the parameters,
+    /// so the gradient flows through mean and log-variance. Sampling the Gaussian directly would put the
+    /// randomness inside the graph and leave both heads without a gradient.
+    /// </remarks>
+    private Tensor<T> ReparameterizedSample(Tensor<T> mean, Tensor<T> logVariance)
+    {
+        var epsilon = new Tensor<T>(mean.Shape.ToArray());
+        for (int i = 0; i < epsilon.Length; i++)
+        {
+            // Box-Muller from the seeded RNG keeps sampling reproducible for a given seed.
+            double u1 = 1.0 - _random.NextDouble();
+            double u2 = _random.NextDouble();
+            epsilon[i] = NumOps.FromDouble(
+                Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+        }
+
+        var stdDev = Engine.TensorExp(
+            Engine.TensorMultiplyScalar(logVariance, NumOps.FromDouble(0.5)));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(stdDev, epsilon));
+    }
+
+    /// <summary>
+    /// KL divergence between two diagonal Gaussians, summed over factors and averaged over the batch:
+    /// <c>sum[ (logVar_p - logVar_q) / 2 + (var_q + (m_q - m_p)^2) / (2 var_p) - 1/2 ]</c>.
+    /// </summary>
+    private Tensor<T> GaussianKlDivergence(
+        Tensor<T> postMean, Tensor<T> postLogVar, Tensor<T> priorMean, Tensor<T> priorLogVar)
+    {
+        var postVar = Engine.TensorExp(postLogVar);
+        var priorVar = Engine.TensorExp(priorLogVar);
+
+        var logRatio = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtract(priorLogVar, postLogVar), NumOps.FromDouble(0.5));
+
+        var meanDiff = Engine.TensorSubtract(postMean, priorMean);
+        var numerator = Engine.TensorAdd(postVar, Engine.TensorMultiply(meanDiff, meanDiff));
+        var ratio = Engine.TensorMultiplyScalar(
+            Engine.TensorDivide(numerator, priorVar), NumOps.FromDouble(0.5));
+
+        var perFactor = Engine.TensorAddScalar(
+            Engine.TensorAdd(logRatio, ratio), NumOps.FromDouble(-0.5));
+
+        var axes = Enumerable.Range(0, perFactor.Shape.Length).ToArray();
+        return Engine.ReduceMean(perFactor, axes, keepDims: false);
+    }
+
+    /// <summary>
+    /// Decodes factors into predicted cross-sectional returns, conditioned on the stock features.
+    /// </summary>
+    private Tensor<T> DecodeReturns(Tensor<T> factors, Tensor<T> features)
+    {
+        var joined = Engine.Concat([factors, features], factors.Shape.Length - 1);
+        return RunSpan(joined, DecoderSpanStart, DecoderSpanEnd);
+    }
+
+    /// <summary>
+    /// Reshapes realized returns so they can be concatenated onto the features along the last axis.
+    /// </summary>
+    private Tensor<T> AlignReturns(Tensor<T> returns, Tensor<T> features)
+    {
+        int rank = features.Shape.Length;
+        if (returns.Shape.Length == rank) return returns;
+
+        // Flatten everything after the leading (batch) axis onto the feature axis.
+        int lead = rank > 1 ? features.Shape[0] : 1;
+        int rest = returns.Length / Math.Max(1, lead);
+        return rank > 1
+            ? Engine.Reshape(returns, [lead, rest])
+            : Engine.Reshape(returns, [returns.Length]);
     }
 
     /// <summary>
@@ -367,7 +602,19 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
         // tape.ComputeGradients + optimizer.Step) that every other
         // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        //
+        // The realized returns are handed to the posterior branch for the duration of this step only.
+        // Clearing them afterwards matters: a later forward that reused the previous batch's returns
+        // would be conditioning on a future it should not see, which inflates apparent accuracy.
+        SetPosteriorReturns(target);
+        try
+        {
+            base.Train(input, target);
+        }
+        finally
+        {
+            SetPosteriorReturns(null);
+        }
     }
 
     /// <summary>

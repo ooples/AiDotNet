@@ -35,7 +35,8 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminator for High-Fidelity Waveform Generation",
+    // Title corrected to the published plural form ("Discriminators"); the arXiv id was already right.
+    "UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminators for High-Fidelity Waveform Generation",
     "https://arxiv.org/abs/2106.07889",
     Year = 2021,
     Authors = "Jang et al."

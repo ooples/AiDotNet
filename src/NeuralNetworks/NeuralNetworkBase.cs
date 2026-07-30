@@ -8024,10 +8024,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// — so the relative direction of the gradient field is preserved while
     /// its magnitude is bounded.
     /// </summary>
+    /// <summary>
+    /// Whether the most recent clipped training step observed a NON-FINITE total gradient norm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A non-finite gradient means the step corrupted (or would have corrupted) the parameters, and
+    /// previously it was swallowed silently: clipping simply declined to scale, the optimizer applied
+    /// the bad gradients, and the only visible symptom was NaN weights some layers later. Exposing it
+    /// makes "this step was poisoned" observable at the point it is detected rather than inferred
+    /// afterwards from wrecked parameters.
+    /// </para>
+    /// <para>
+    /// Reset at the start of every clipped step, so it always describes the latest one.
+    /// </para>
+    /// </remarks>
+    public bool LastStepHadNonFiniteGradients { get; private set; }
+
     private void ApplyGradientClipping(
         Dictionary<Tensor<T>, Tensor<T>> grads, double maxNorm,
         IReadOnlyList<Tensor<T>> iterationOrder)
     {
+        LastStepHadNonFiniteGradients = false;
         // Step 1: total L2 norm across all gradient tensors, iterating in
         // the caller-supplied deterministic order (NOT dict bucket order —
         // that's process-randomized for reference-keyed dicts).
@@ -8045,6 +8063,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
         if (totalNormSq == 0.0) return;
+
+        // A NON-FINITE total norm must not be scaled through. If any single gradient element is NaN
+        // or Inf, totalNormSq becomes NaN; `totalNormSq == 0.0` is false, Math.Sqrt(NaN) is NaN, and
+        // `totalNorm <= maxNorm` is FALSE for NaN (every NaN comparison is), so the scaling below
+        // would run with scale = maxNorm / (NaN + 1e-6) = NaN and multiply EVERY gradient by NaN.
+        // That converts one bad element into a fully corrupted parameter vector — measured on
+        // RWKVForecaster<float> at batch 1, where a single step took all 17,576 parameters to NaN —
+        // and it destroys the evidence of which layer actually produced the bad gradient. Leaving the
+        // gradients untouched keeps the damage localized so the real cause stays diagnosable, and lets
+        // any downstream non-finite guard see the true extent of the problem.
+        if (double.IsNaN(totalNormSq) || double.IsInfinity(totalNormSq))
+        {
+            LastStepHadNonFiniteGradients = true;
+            return;
+        }
+
         double totalNorm = Math.Sqrt(totalNormSq);
         if (totalNorm <= maxNorm) return;
 

@@ -161,17 +161,24 @@ public class UniMatch<T> : OpticalFlowBase<T>
         }
         var rawFlow = _outputConv.Forward(feat);
 
-        // Extract 2-channel flow field; warn if shapes differ which may indicate misconfiguration
-        var flow = new Tensor<T>([2, height, width]);
-        if (rawFlow.Length != flow.Length)
-            System.Diagnostics.Debug.WriteLine(
-                $"UniMatch: flow output length {rawFlow.Length} differs from expected {flow.Length} (2x{height}x{width}). Check layer configuration.");
-        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
+        // The output convolution already emits exactly 2 channels at the input resolution
+        // (ConvolutionalLayer(2, kernel 3, stride 1, padding 1)), so rawFlow IS the flow field. The
+        // element-by-element Data.Span copy this replaced was a numeric no-op that severed the
+        // autodiff tape at the end of the forward pass, discarding the gradient path for the whole
+        // network behind it. Returning the tensor directly is bit-identical.
+        //
+        // The misconfiguration check is promoted from a Debug.WriteLine to a real exception: a
+        // wrong-shaped flow field is a bug, and a debug-only trace is invisible in release builds,
+        // where the old code silently returned a partly-zero field instead.
+        int expectedLength = 2 * height * width;
+        if (rawFlow.Length != expectedLength)
         {
-            flow.Data.Span[i] = rawFlow.Data.Span[i];
+            throw new InvalidOperationException(
+                $"UniMatch flow output length {rawFlow.Length} differs from the expected " +
+                $"{expectedLength} (2x{height}x{width}). Check layer configuration.");
         }
 
-        return flow;
+        return rawFlow;
     }
 
     /// <inheritdoc/>

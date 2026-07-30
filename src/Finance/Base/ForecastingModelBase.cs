@@ -153,6 +153,138 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
     public abstract Tensor<T> ApplyInstanceNormalization(Tensor<T> input);
 
     /// <summary>
+    /// The variance floor RevIN adds before taking a square root, so a constant (zero-variance)
+    /// series cannot divide by zero. Kim et al. 2022 use 1e-5.
+    /// </summary>
+    /// <remarks>
+    /// Models that expose the floor through their own options should pass it explicitly to the
+    /// normalization helpers instead of relying on this fallback.
+    /// </remarks>
+    protected const double DefaultRevInEpsilon = 1e-5;
+
+    /// <summary>
+    /// RevIN forward over each INSTANCE: every non-batch element of a row is normalized together,
+    /// giving one mean/std per batch row.
+    /// </summary>
+    /// <param name="input">The input series, whose leading dimension is the batch.</param>
+    /// <param name="epsilon">Variance floor; see <see cref="DefaultRevInEpsilon"/>.</param>
+    /// <param name="mean">Receives the per-instance means, for the reverse step.</param>
+    /// <param name="std">Receives the per-instance standard deviations, for the reverse step.</param>
+    /// <returns>The normalized tensor, still connected to the autodiff tape.</returns>
+    /// <remarks>
+    /// <para>
+    /// Composed entirely from <c>Engine</c> ops so RevIN is DIFFERENTIABLE. The hand-rolled versions
+    /// this replaces accumulated the statistics with scalar <c>NumOps</c> arithmetic and wrote the
+    /// output through <c>result.Data.Span[...]</c>, which the tape cannot see -- the normalized tensor
+    /// came back as a LEAF, so nothing downstream could differentiate through the normalization.
+    /// RevIN is a layer in Kim et al. 2022, not a preprocessing step, and every model whose forward
+    /// begins with it was silently training against a detached input.
+    /// </para>
+    /// <para>
+    /// The statistics are returned as <see cref="Vector{T}"/> because that is what the reverse
+    /// (denormalize) step of each model already consumes; only the forward needed to become
+    /// differentiable for gradients to reach the model's parameters.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> NormalizeInstanceOnTape(
+        Tensor<T> input, double epsilon, out Vector<T> mean, out Vector<T> std)
+    {
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
+        if (instanceSize <= 0)
+        {
+            mean = new Vector<T>(0);
+            std = new Vector<T>(0);
+            return input;
+        }
+
+        var flat = Engine.Reshape(input, new[] { batchSize, instanceSize });
+        var normalized = NormalizeAlongLastAxis(flat, epsilon, out mean, out std);
+        return Engine.Reshape(normalized, (int[])input._shape.Clone());
+    }
+
+    /// <summary>
+    /// RevIN forward per FEATURE: the trailing dimension is treated as the feature axis and each
+    /// feature is normalized over the leading time axis, giving one mean/std per feature.
+    /// </summary>
+    /// <param name="input">The series, laid out row-major as [steps, features] (or flat).</param>
+    /// <param name="epsilon">Variance floor; see <see cref="DefaultRevInEpsilon"/>.</param>
+    /// <param name="mean">Receives the per-feature means, for the reverse step.</param>
+    /// <param name="std">Receives the per-feature standard deviations, for the reverse step.</param>
+    /// <returns>The normalized tensor, still connected to the autodiff tape.</returns>
+    /// <remarks>
+    /// Same tape rationale as <see cref="NormalizeInstanceOnTape"/>. This is the convention for
+    /// multivariate models where the LEADING dimension is time rather than a batch, so statistics
+    /// must be taken down the time axis for each channel independently.
+    /// </remarks>
+    protected Tensor<T> NormalizePerFeatureOnTape(
+        Tensor<T> input, double epsilon, out Vector<T> mean, out Vector<T> std)
+    {
+        int features = input.Rank > 1 ? input.Shape[input.Rank - 1] : 1;
+        int steps = features > 0 ? input.Length / features : input.Length;
+        if (features <= 0 || steps <= 0)
+        {
+            mean = new Vector<T>(0);
+            std = new Vector<T>(0);
+            return input;
+        }
+
+        // Reduce down the TIME axis (axis 0) rather than the feature axis, then broadcast the
+        // per-feature statistics back across time.
+        var flat = Engine.Reshape(input, new[] { steps, features });
+        var reduceAxis = new[] { 0 };
+
+        var meanT = Engine.ReduceMean(flat, reduceAxis, keepDims: true);          // [1, features]
+        var centered = Engine.TensorBroadcastSubtract(flat, meanT);
+        var varianceT = Engine.ReduceMean(
+            Engine.TensorMultiply(centered, centered), reduceAxis, keepDims: true);
+        var stdT = Engine.TensorSqrt(Engine.TensorAddScalar(varianceT, NumOps.FromDouble(epsilon)));
+
+        mean = ToVectorOffTape(meanT, features);
+        std = ToVectorOffTape(stdT, features);
+
+        var normalized = Engine.TensorBroadcastDivide(centered, stdT);
+        return Engine.Reshape(normalized, (int[])input._shape.Clone());
+    }
+
+    /// <summary>Normalizes each row of a [rows, cols] tensor over its columns, on the tape.</summary>
+    private Tensor<T> NormalizeAlongLastAxis(
+        Tensor<T> flat, double epsilon, out Vector<T> mean, out Vector<T> std)
+    {
+        int rows = flat.Shape[0];
+        var reduceAxis = new[] { 1 };
+
+        var meanT = Engine.ReduceMean(flat, reduceAxis, keepDims: true);          // [rows, 1]
+        var centered = Engine.TensorBroadcastSubtract(flat, meanT);
+        var varianceT = Engine.ReduceMean(
+            Engine.TensorMultiply(centered, centered), reduceAxis, keepDims: true);
+        var stdT = Engine.TensorSqrt(Engine.TensorAddScalar(varianceT, NumOps.FromDouble(epsilon)));
+
+        mean = ToVectorOffTape(meanT, rows);
+        std = ToVectorOffTape(stdT, rows);
+
+        return Engine.TensorBroadcastDivide(centered, stdT);
+    }
+
+    /// <summary>
+    /// Copies a statistics tensor's values into a <see cref="Vector{T}"/> for the reverse step.
+    /// </summary>
+    /// <remarks>
+    /// Reading the values out is deliberate and does NOT affect the forward's differentiability: the
+    /// tensor returned to the caller stays on the tape, and only these copies are detached.
+    /// </remarks>
+    private static Vector<T> ToVectorOffTape(Tensor<T> stats, int count)
+    {
+        var v = new Vector<T>(count);
+        for (int i = 0; i < count && i < stats.Length; i++)
+        {
+            v[i] = stats.Data.Span[i];
+        }
+
+        return v;
+    }
+
+    /// <summary>
     /// Shifts the input window forward by replacing the oldest steps with predictions.
     /// </summary>
     /// <param name="input">Original input tensor.</param>
