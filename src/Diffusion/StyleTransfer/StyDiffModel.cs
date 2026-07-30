@@ -42,7 +42,8 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("StyDiff: Diffusion-Based Style Transfer", "https://arxiv.org/abs/2308.07863")]
+// arXiv 2308.07863 is "StyleDiffusion"; "StyDiff" is this type's short name, not the paper's title.
+[ResearchPaper("StyleDiffusion: Controllable Disentangled Style Transfer via Diffusion Models", "https://arxiv.org/abs/2308.07863", Year = 2023, Authors = "Wang et al.")]
 public class StyDiffModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

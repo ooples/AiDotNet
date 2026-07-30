@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "MegaTTS 3: Sparse Diffusion Transformer is a Natural Zero-Shot TTS Engine",
+    "MegaTTS 3: Sparse Alignment Enhanced Latent Diffusion Transformer for Zero-Shot Speech Synthesis",
     "https://arxiv.org/abs/2502.18924",
     Year = 2025,
     Authors = "Jiang et al."
