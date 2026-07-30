@@ -62,7 +62,10 @@ namespace AiDotNet.Audio.Classification;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Audio Set: An Ontology and Human-Labeled Dataset for Audio Events", "https://arxiv.org/abs/1609.09430", Year = 2017, Authors = "Jort F. Gemmeke, Daniel P. W. Ellis, Dylan Freedman, Aren Jansen, Wade Lawrence, R. Channing Moore, Manoj Plakal, Marvin Ritter")]
+// arXiv 1609.09430 is Hershey et al.'s CNN-architectures study, which is what this CNN-based
+// detector implements. The previous entry paired that id with the title and author list of the
+// companion Audio Set dataset paper (Gemmeke et al., ICASSP 2017) — two different papers.
+[ResearchPaper("CNN Architectures for Large-Scale Audio Classification", "https://arxiv.org/abs/1609.09430", Year = 2017, Authors = "Shawn Hershey, Sourish Chaudhuri, Daniel P. W. Ellis, Jort F. Gemmeke, Aren Jansen, R. Channing Moore, Manoj Plakal, Devin Platt, Rif A. Saurous, Bryan Seybold, Malcolm Slaney, Ron J. Weiss, Kevin Wilson")]
 public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
