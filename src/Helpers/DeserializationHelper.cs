@@ -750,6 +750,18 @@ public static class DeserializationHelper
         {
             instance = CreateConformerBlockLayer<T>(inputShape, additionalParams);
         }
+        else if (genericDef == typeof(VocosGeneratorLayer<>))
+        {
+            instance = CreateVocosGeneratorLayer<T>(additionalParams);
+        }
+        else if (genericDef == typeof(ViTCoMerSegmentationLayer<>))
+        {
+            instance = CreateViTCoMerSegmentationLayer<T>(additionalParams);
+        }
+        else if (genericDef == typeof(VideoGigaGANGeneratorLayer<>))
+        {
+            instance = CreateVideoGigaGANGeneratorLayer<T>(additionalParams);
+        }
         else if (genericDef == typeof(HippoMemoryCellLayer<>))
         {
             instance = new HippoMemoryCellLayer<T>(
@@ -3233,6 +3245,72 @@ public static class DeserializationHelper
         int maxSeq = TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
 
         return new ConformerBlockLayer<T>(modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq);
+    }
+
+    /// <summary>Reconstructs a paper-faithful Vocos generator from serialized layer metadata.</summary>
+    private static object CreateVocosGeneratorLayer<T>(Dictionary<string, object>? additionalParams)
+    {
+        int numMels = TryGetInt(additionalParams, "NumMels") ?? 100;
+        int hiddenDim = TryGetInt(additionalParams, "HiddenDim") ?? 512;
+        int numBackboneBlocks = TryGetInt(additionalParams, "NumBackboneBlocks") ?? 8;
+        int intermediateDim = TryGetInt(additionalParams, "IntermediateDim") ?? 1536;
+        int nFft = TryGetInt(additionalParams, "NFft") ?? 1024;
+        int hopLength = TryGetInt(additionalParams, "HopLength") ?? 256;
+        return new VocosGeneratorLayer<T>(
+            numMels,
+            hiddenDim,
+            numBackboneBlocks,
+            intermediateDim,
+            nFft,
+            hopLength);
+    }
+
+    /// <summary>Reconstructs the complete native ViT-CoMer graph from serialized metadata.</summary>
+    private static object CreateViTCoMerSegmentationLayer<T>(Dictionary<string, object>? additionalParams)
+    {
+        static int[] ParseList(string? value, int[] fallback)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return fallback;
+            var parts = value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => part.Trim())
+                .ToArray();
+            var result = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!int.TryParse(parts[i], System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out result[i]))
+                {
+                    return fallback;
+                }
+            }
+            return result;
+        }
+
+        return new ViTCoMerSegmentationLayer<T>(
+            TryGetInt(additionalParams, "InputChannels") ?? 3,
+            TryGetInt(additionalParams, "InputHeight") ?? 512,
+            TryGetInt(additionalParams, "InputWidth") ?? 512,
+            TryGetInt(additionalParams, "EmbedDim") ?? 384,
+            ParseList(TryGetString(additionalParams, "CnnChannels"), [64, 128, 320, 512]),
+            ParseList(TryGetString(additionalParams, "Depths"), [2, 2, 6, 2]),
+            TryGetInt(additionalParams, "DecoderDim") ?? 256,
+            TryGetInt(additionalParams, "NumClasses") ?? 150,
+            TryGetDouble(additionalParams, "DropRate") ?? 0.1);
+    }
+
+    /// <summary>Reconstructs the complete native VideoGigaGAN generator from layer metadata.</summary>
+    private static object CreateVideoGigaGANGeneratorLayer<T>(Dictionary<string, object>? additionalParams)
+    {
+        return new VideoGigaGANGeneratorLayer<T>(
+            TryGetInt(additionalParams, "InputChannels") ?? 3,
+            TryGetInt(additionalParams, "InputHeight") ?? 64,
+            TryGetInt(additionalParams, "InputWidth") ?? 64,
+            TryGetInt(additionalParams, "NumFeatures") ?? 128,
+            TryGetInt(additionalParams, "NumResBlocks") ?? 23,
+            TryGetInt(additionalParams, "NumStyleLayers") ?? 14,
+            TryGetInt(additionalParams, "ScaleFactor") ?? 4,
+            TryGetInt(additionalParams, "FlowPyramidLevels") ?? 5,
+            TryGetDouble(additionalParams, "HFShuttleWeight") ?? 0.5);
     }
 
     /// <summary>
