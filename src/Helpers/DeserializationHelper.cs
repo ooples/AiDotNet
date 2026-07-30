@@ -860,6 +860,18 @@ public static class DeserializationHelper
         {
             instance = CreateConformerBlockLayer<T>(inputShape, additionalParams);
         }
+        else if (genericDef == typeof(VocosGeneratorLayer<>))
+        {
+            instance = CreateVocosGeneratorLayer<T>(additionalParams);
+        }
+        else if (genericDef == typeof(ViTCoMerSegmentationLayer<>))
+        {
+            instance = CreateViTCoMerSegmentationLayer<T>(additionalParams);
+        }
+        else if (genericDef == typeof(VideoGigaGANGeneratorLayer<>))
+        {
+            instance = CreateVideoGigaGANGeneratorLayer<T>(additionalParams);
+        }
         else if (genericDef == typeof(HippoMemoryCellLayer<>))
         {
             instance = new HippoMemoryCellLayer<T>(
@@ -1011,19 +1023,31 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputSize, attentionSize, activation });
         }
+        else if (genericDef == typeof(InternImageBlockLayer<>))
+        {
+            int channels = TryGetInt(additionalParams, "Channels") ?? inputShape[0];
+            int groups = TryGetInt(additionalParams, "Groups") ?? 1;
+            var ctor = type.GetConstructor(new[] { typeof(int), typeof(int) });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find InternImageBlockLayer constructor with (int, int).");
+            instance = ctor.Invoke(new object[] { channels, groups });
+        }
         else if (genericDef == typeof(GraphAttentionLayer<>))
         {
             // GraphAttentionLayer(int inputFeatures, int outputFeatures, int numHeads = 1, double alpha = 0.2, double dropoutRate = 0.0, IActivationFunction<T>? = null)
             int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
             int numHeads = TryGetInt(additionalParams, "NumHeads") ?? 1;
+            bool concatenateHeads = TryGetBool(additionalParams, "ConcatenateHeads") ?? false;
+            int outputFeatures = TryGetInt(additionalParams, "HeadOutputFeatures")
+                ?? (concatenateHeads ? outputShape[0] / Math.Max(numHeads, 1) : outputShape[0]);
             double alpha = TryGetDouble(additionalParams, "Alpha") ?? 0.2;
             double dropout = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
-            // Try 7-param constructor (with IInitializationStrategy) then 6-param fallback
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType, initStrategyType })
+            // Try the current 8-param constructor, then legacy signatures.
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType, initStrategyType, typeof(bool) })
+                    ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType, initStrategyType })
                     ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType });
             if (ctor is null)
             {
@@ -1042,9 +1066,12 @@ public static class DeserializationHelper
                 }
             }
 
-            instance = ctor.GetParameters().Length == 7
-                ? ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation, null })
-                : ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
+            instance = ctor.GetParameters().Length switch
+            {
+                8 => ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation, null, concatenateHeads }),
+                7 => ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation, null }),
+                _ => ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation })
+            };
         }
         else if (genericDef == typeof(GraphConvolutionalLayer<>))
         {
@@ -3343,6 +3370,74 @@ public static class DeserializationHelper
         int maxSeq = TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
 
         return new ConformerBlockLayer<T>(modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq);
+    }
+
+    /// <summary>Reconstructs a paper-faithful Vocos generator from serialized layer metadata.</summary>
+    private static object CreateVocosGeneratorLayer<T>(Dictionary<string, object>? additionalParams)
+    {
+        int numMels = TryGetInt(additionalParams, "NumMels") ?? 100;
+        int hiddenDim = TryGetInt(additionalParams, "HiddenDim") ?? 512;
+        int numBackboneBlocks = TryGetInt(additionalParams, "NumBackboneBlocks") ?? 8;
+        int intermediateDim = TryGetInt(additionalParams, "IntermediateDim") ?? 1536;
+        int nFft = TryGetInt(additionalParams, "NFft") ?? 1024;
+        int hopLength = TryGetInt(additionalParams, "HopLength") ?? 256;
+        return new VocosGeneratorLayer<T>(
+            numMels,
+            hiddenDim,
+            numBackboneBlocks,
+            intermediateDim,
+            nFft,
+            hopLength);
+    }
+
+    /// <summary>Reconstructs the complete native ViT-CoMer graph from serialized metadata.</summary>
+    private static object CreateViTCoMerSegmentationLayer<T>(Dictionary<string, object>? additionalParams)
+    {
+        static int[] ParseList(string? value, int[] fallback)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return fallback;
+            // net471's nullable-flow analysis does not learn the non-null state from
+            // string.IsNullOrWhiteSpace, even though the guard above has returned.
+            var parts = value!.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => part.Trim())
+                .ToArray();
+            var result = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!int.TryParse(parts[i], System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out result[i]))
+                {
+                    return fallback;
+                }
+            }
+            return result;
+        }
+
+        return new ViTCoMerSegmentationLayer<T>(
+            TryGetInt(additionalParams, "InputChannels") ?? 3,
+            TryGetInt(additionalParams, "InputHeight") ?? 512,
+            TryGetInt(additionalParams, "InputWidth") ?? 512,
+            TryGetInt(additionalParams, "EmbedDim") ?? 384,
+            ParseList(TryGetString(additionalParams, "CnnChannels"), [64, 128, 320, 512]),
+            ParseList(TryGetString(additionalParams, "Depths"), [2, 2, 6, 2]),
+            TryGetInt(additionalParams, "DecoderDim") ?? 256,
+            TryGetInt(additionalParams, "NumClasses") ?? 150,
+            TryGetDouble(additionalParams, "DropRate") ?? 0.1);
+    }
+
+    /// <summary>Reconstructs the complete native VideoGigaGAN generator from layer metadata.</summary>
+    private static object CreateVideoGigaGANGeneratorLayer<T>(Dictionary<string, object>? additionalParams)
+    {
+        return new VideoGigaGANGeneratorLayer<T>(
+            TryGetInt(additionalParams, "InputChannels") ?? 3,
+            TryGetInt(additionalParams, "InputHeight") ?? 64,
+            TryGetInt(additionalParams, "InputWidth") ?? 64,
+            TryGetInt(additionalParams, "NumFeatures") ?? 128,
+            TryGetInt(additionalParams, "NumResBlocks") ?? 23,
+            TryGetInt(additionalParams, "NumStyleLayers") ?? 14,
+            TryGetInt(additionalParams, "ScaleFactor") ?? 4,
+            TryGetInt(additionalParams, "FlowPyramidLevels") ?? 5,
+            TryGetDouble(additionalParams, "HFShuttleWeight") ?? 0.5);
     }
 
     /// <summary>

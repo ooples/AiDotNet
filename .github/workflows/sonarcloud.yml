@@ -126,10 +126,10 @@ jobs:
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
-    # The traced C# build alone consumed the old 20-minute job budget on PR #1789;
-    # cancellation began before the analyze step could run. Match the build/test ceiling
-    # so CodeQL has time to finish extraction and upload on generated-source-heavy changes.
-    timeout-minutes: 45
+    # The traced net10 build takes about 31 minutes on this generated-source-heavy PR and
+    # CodeQL analysis was still running when the 45-minute job ceiling cancelled it. Give
+    # extraction, SARIF generation, and upload a measured 15-minute margin.
+    timeout-minutes: 60
     if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read

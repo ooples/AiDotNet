@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Initialization;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
@@ -188,14 +189,13 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
                 new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 { InitialLearningRate = 0.0002, Beta1 = 0.5, UseAMSGrad = false }));
 
-        // Gradient penalty on the discriminator (Gulrajani et al. 2017; advocated for
-        // standard, non-Wasserstein GANs by Mescheder et al. 2018, "Which Training Methods
-        // for GANs do actually Converge?"). It enforces an approximately 1-Lipschitz
-        // discriminator, bounding its logits so it cannot run away and drive the
-        // generator's non-saturating loss −log σ(D(G(z))) to explode (the observed
-        // step1≈2 → step100≈700+ blow-up on the single-pair memorization task). Reuses the
-        // existing tape-tracked penalty path in GenerativeAdversarialNetwork.Train.
-        EnableGradientPenalty();
+        // Do not enable WGAN-GP here. DCGAN trains the discriminator with the binary
+        // adversarial objective from Radford et al.; the gradient-norm penalty belongs
+        // to Gulrajani et al.'s later Wasserstein formulation and requires second-order
+        // differentiation through the discriminator. Besides changing the published
+        // objective, inserting that extra optimizer step made the first DCGAN update
+        // non-finite on the tensor tape. Callers who intentionally want the later
+        // regularizer can still opt in explicitly through EnableGradientPenalty().
     }
 
     /// <summary>
@@ -273,11 +273,11 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         //   latent[B, latentSize]
         //     → DenseLayer  (latentSize → 8·featureMaps · 4 · 4) [linear]
         //     → ReshapeLayer to [8·featureMaps, 4, 4]
-        //     → log2(target/4) × { Deconv 4×4 stride 2 [ReLU] + BatchNorm }
+        //     → log2(target/4) × { Deconv 4×4 stride 2 + BatchNorm + ReLU }
         //     → final Deconv 4×4 stride 2 → [imageChannels, H, W] [Tanh]
         //
-        // BatchNorm sits AFTER the deconv (per paper Fig. 1) and ReLU is the
-        // deconv's built-in activation; the final layer uses Tanh and no BN
+        // BatchNorm and ReLU sit AFTER each intermediate deconvolution (paper
+        // Fig. 1 / canonical implementation); the final layer uses Tanh and no BN
         // so the [-1, 1] output range matches the pre-processed image distribution.
 
         int targetSize = Math.Min(imageHeight, imageWidth);
@@ -288,7 +288,10 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         var layers = new List<ILayer<T>>
         {
             // Project & reshape latent to initial feature map
-            new DenseLayer<T>(initialFeatureMapSize, (IActivationFunction<T>?)new IdentityActivation<T>()),
+            new DenseLayer<T>(
+                initialFeatureMapSize,
+                (IActivationFunction<T>?)new IdentityActivation<T>(),
+                new NormalInitializationStrategy<T>(mean: 0.0, standardDeviation: 0.02)),
             new ReshapeLayer<T>([initialChannels, initialSpatialSize, initialSpatialSize]),
         };
 
@@ -303,7 +306,7 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             int nextChannels = isFinal ? imageChannels : currentChannels / 2;
             IActivationFunction<T> activation = isFinal
                 ? new TanhActivation<T>()
-                : new ReLUActivation<T>();
+                : new IdentityActivation<T>();
 
             // Deconv 4×4 stride 2 padding 1 doubles spatial dim exactly:
             //   out = (in - 1) · stride − 2·padding + kernel = (in − 1)·2 − 2 + 4 = 2·in
@@ -312,13 +315,18 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
                 kernelSize: 4,
                 stride: 2,
                 padding: 1,
-                activationFunction: activation));
+                activationFunction: activation)
+            {
+                // Radford et al. initialize every learned DCGAN weight from N(0, 0.02).
+                InitializationStrategy = new NormalInitializationStrategy<T>(0.0, 0.02),
+            });
 
             // BatchNorm only on intermediate stages — final layer outputs raw
             // image so no normalization (paper Fig. 1 / Sec. 3 guideline).
             if (!isFinal)
             {
                 layers.Add(new BatchNormalizationLayer<T>());
+                layers.Add(new ActivationLayer<T>((IActivationFunction<T>)new ReLUActivation<T>()));
             }
 
             currentChannels = nextChannels;
@@ -465,7 +473,8 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             kernelSize: 4,
             stride: 2,
             padding: 1,
-            activationFunction: leakyReLU));
+            activationFunction: leakyReLU,
+            initializationStrategy: new NormalInitializationStrategy<T>(0.0, 0.02)));
         currentSize /= 2;
 
         // Repeat strided-conv blocks (Conv → BN → LeakyReLU) doubling
@@ -478,7 +487,8 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
                 kernelSize: 4,
                 stride: 2,
                 padding: 1,
-                activationFunction: new IdentityActivation<T>()));
+                activationFunction: new IdentityActivation<T>(),
+                initializationStrategy: new NormalInitializationStrategy<T>(0.0, 0.02)));
             // BatchNorm after Conv per paper Fig. 1 / §3 bullet 2.
             layers.Add(new BatchNormalizationLayer<T>());
             // LeakyReLU as a separate layer (Conv emits an identity-
@@ -499,7 +509,8 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             kernelSize: 4,
             stride: 1,
             padding: 0,
-            activationFunction: new IdentityActivation<T>()));
+            activationFunction: new IdentityActivation<T>(),
+            initializationStrategy: new NormalInitializationStrategy<T>(0.0, 0.02)));
 
         // Flatten the 1×1 spatial output to a rank-2 [batch, 1] tensor so
         // the consumer (BCEWithLogitsLoss) sees the same shape as the

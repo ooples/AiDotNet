@@ -297,7 +297,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         // Attentive-statistics-pooling projection, final BatchNorm, classifier head.
         _poolingLayer = (DenseLayer<T>)built[index++];
         _finalBatchNorm = (BatchNormalizationLayer<T>)built[index++];
-        _classifierLayer = (DenseLayer<T>)built[index++];
+        _classifierLayer = (DenseLayer<T>)built[index];
     }
 
     #endregion
