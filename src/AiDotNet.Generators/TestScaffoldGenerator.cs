@@ -500,7 +500,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // defaults (dims, depth, vocab) are unchanged and fully user-customizable; only the test numeric type
         // changes. Any that still OOM at fp32 (paper-scale generative LMs) will show in the live run and move
         // to the nightly HeavyTimeout lane.
-        "KeywordSpotting", "LLMTime", "LSTNet", "MARS5TTS", "MGTSD", "MQCNN", "MadmomBeatTracker", "Mamba",
+        "KeywordSpotting", "LiteDVDNet", "LLMTime", "LSTNet", "MARS5TTS", "MGTSD", "MQCNN", "MadmomBeatTracker", "Mamba",
         "MarbleNet", "MatchaTTS", "MedicalASR", "MegaTTS", "MeloTTS", "MelodyExtractor", "MusicGenModel",
         "MusicStructureAnalyzer",
         // --- #1624 training/perf-bound inventory (OOM / TIMEOUT in training/clone) ---
@@ -521,6 +521,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // preserving the self-relative training invariants. (ConformerTransducer / StreamingConformer
         // are already listed above.)
         "EmformerRNNT", "ParakeetRNNT", "ParakeetTDT", "FastEmit", "StreamingZipformer", "Zipformer", "TDTDecoder",
+        // EnCodec's paper topology remains the default and fully configurable. Its generated audio
+        // fixture was still running in FP64 with the generic 50/200-step MoreData loop, which hit
+        // the 120-second gate on the exact four-core runner profile. FP32 is the first mitigation;
+        // explicit audio-roster membership also activates the existing 1/2-step smoke cap while
+        // preserving the real encoder/decoder forward, tape, optimizer, and convergence paths.
+        "EnCodec",
         // InvestLM (LLaMA-based financial LLM, 12 transformer decoder blocks). <float> (2x faster,
         // architecture-preserving) fixes its LossStrictlyDecreasesOnMemorizationTask 180s timeout. Its
         // training-divergence/collapse fixes (real TrainWithTape instead of the gradient-discarding
@@ -4336,7 +4342,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 32, outputSize: 8), " +
                     "new AiDotNet.Models.Options.LLMTimeOptions<double> { ContextLength = 32, ForecastHorizon = 8, " +
-                    "HiddenDimension = 32, NumLayers = 2, NumHeads = 4 })";
+                    "HiddenDimension = 32, NumLayers = 2, NumHeads = 4, NumSamples = 2, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "MMS" && model.TypeParameterCount == 1)
             {
@@ -8749,34 +8755,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "LiteDVDNet" && model.TypeParameterCount == 1)
             {
-                // LiteDVDNet's gradients are correct — finite-difference, gradient-flow and
-                // param-L2 invariants all pass — but its own default LearningRate of 1e-3 (which
-                // happens to equal AdamW's stock rate, so wiring the optimizer through changed
-                // nothing) diverges the generated probe a THOUSANDFOLD: 0.292 -> 300.7 over the
-                // suite's short run at batch 1. The paper trains at that rate with large batches
-                // and long schedules, which the smoke probe cannot reproduce.
-                // Exercise the same temporal-window denoiser through the public options at a small
-                // legal CI scale with a step size the probe can actually converge at, mirroring the
-                // DualXVSR bound below (which reduces LearningRate for the same reason).
-                // Measured on the rate: 1e-3 (its own default, and AdamW's, which is why wiring the
-                // optimizer through changed nothing) diverged to 300.7; 2e-4 diverged to 14.68;
-                // Swept the rate against BOTH probes; no value satisfies both, so the fixture takes
-                // the STABLE one and the memorization threshold is relaxed alongside it (below):
-                //   1e-6  memorization 0.293626 -> 0.292219 (0.48%, under the ~1% bar) | MoreData STABLE
-                //   3e-6  memorization passes                                          | MoreData 0.265 -> 0.384
-                //   1e-5  memorization passes                                          | MoreData 0.32  -> 4.38
-                // The model genuinely destabilises over 200 iterations at any rate fast enough to
-                // memorise in 100, so picking 3e-6/1e-5 would buy a green memorization probe while
-                // the model actually diverges over longer training — the worse trade.
-                // Production defaults are untouched.
+                // Keep the paper's Adam 1e-3 training default and the full Conv -> BatchNorm -> ReLU
+                // topology, but exercise it at a bounded spatial/channel scale in FP32. Training now
+                // uses the same normalized pixel domain as inference, so a test-only micro-rate and
+                // relaxed convergence threshold are neither necessary nor representative.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 5, inputDepth: 3, inputHeight: 8, inputWidth: 8, " +
                     "outputSize: 4), " +
                     "new AiDotNet.Video.Options.LiteDVDNetOptions { " +
-                    "NumFeatures = 8, NumBlocks = 1, TemporalWindowSize = 5, ExpansionFactor = 1, " +
-                    "LearningRate = 1e-6, DropoutRate = 0.0 })";
+                    "NumFeatures = 8, InputBlockIntermediateChannels = 8, " +
+                    "TemporalWindowSize = 5, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "DualXVSR" && model.TypeParameterCount == 1)
             {
@@ -9578,20 +9568,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // match the temporal-video factory emitted above (inputframes=4,
             // inputdepth=3, inputheight=32, inputwidth=32) so the test's
             // inputshape and the model's architecture are consistent.
-            if (model.ClassName == "LiteDVDNet")
-            {
-                // Paired with the 1e-6 fixture rate above. At the rate where LiteDVDNet is actually
-                // STABLE its memorization loss still decreases monotonically, just slowly:
-                // 0.293626 -> 0.292219 over 100 steps, a 0.48% drop against the default 1% bar.
-                // Raising the rate to clear that bar makes the model diverge over the 200-iteration
-                // MoreData probe instead (measured 3e-6 -> 0.384, 1e-5 -> 4.38), so the threshold
-                // moves rather than the rate. The measured ratio is 0.292219/0.293626 = 0.995208,
-                // so 0.995 missed by a hair (it demanded < 0.292158); 0.998 clears it with margin.
-                // This still REQUIRES a monotonic decrease — a flat or rising loss, which is what
-                // this invariant exists to catch, fails exactly as before. It only stops demanding
-                // a RATE of descent the model can reach solely by being unstable.
-                sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.998;");
-            }
             if (model.ClassName == "VideoCLIP")
             {
                 // Two frames rather than four. VideoCLIP's hidden width is a constant inside the model
@@ -11917,22 +11893,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // [B, ForecastHorizon, NumQuantiles], not the default [1, 1]).
             bool usesReducedChronosBoltFixture = model.ClassName == "ChronosBolt";
             bool usesReducedSundialFixture = model.ClassName == "Sundial";
-            bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT";
-            // LLMTime's constructorExpr special-case builds it at ContextLength = 32 (HiddenDimension
-            // 32, ForecastHorizon 8) — NOT the 64 TimeGPT uses. It was previously grouped with the
-            // TimeGPT fixture, whose paperCtx is 64, so the fixture fed a 64-element series into a
-            // 32-context model and every LLMTime invariant threw "ReshapeLayer per-sample input
-            // element count (64) does not match output element count (32)". Its geometry is its own:
-            // input context 32 (matching GetForecastingPaperContextLength), forecast horizon 8.
+            // LLMTime and TimeGPT retain their paper defaults in production, but their generated
+            // smoke constructors deliberately use different bounded contexts. Keep each emitted
+            // fixture in lockstep with its constructor rather than grouping them by model family.
             bool usesReducedLlmTimeFixture = model.ClassName == "LLMTime";
+            bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT";
             bool usesReducedRwkvFixture = model.ClassName == "RWKVForecaster";
             bool usesReducedAutoformerFixture = model.ClassName == "Autoformer";
             int paperCtx = usesReducedChronosBoltFixture
                 ? 64
                 : usesReducedSundialFixture
                     ? 64
+                : usesReducedLlmTimeFixture
+                    ? 32
                 : usesReducedTimeGptFixture
-                ? 64
+                    ? 64
                 : usesReducedRwkvFixture
                     ? 32
                 : usesReducedAutoformerFixture
@@ -11942,7 +11917,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 ? "8, 3"
                 : usesReducedSundialFixture
                     ? "8"
-                : usesReducedTimeGptFixture || usesReducedRwkvFixture || usesReducedLlmTimeFixture
+                : usesReducedLlmTimeFixture || usesReducedTimeGptFixture || usesReducedRwkvFixture
                     ? "8"
                 : usesReducedAutoformerFixture
                     ? "1, 4, 4"
@@ -15371,6 +15346,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "EdgeThreshold = 0.05, SparsityPenalty = 0.01, HiddenUnits = 4, " +
                 "MaxIterations = 250, Seed = 42 }))";
+        }
+
+        // DYNOTEARS performs 200 inner gradient steps for every outer augmented-Lagrangian
+        // iteration. Its paper/default 100-iteration schedule therefore made the generated
+        // two-discovery MoreData invariant exceed 60 seconds under four-worker contention.
+        // Keep that production default intact; run the deterministic four-variable fixture in
+        // FP32 through the causal boundary adapter and cap only its public outer iteration count.
+        if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DYNOTEARSAlgorithmTests")
+        {
+            constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
+                $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+                "MaxIterations = 25, Seed = 42 }))";
         }
 
         // DECI's variational posterior needs a longer, higher-signal warm-up than

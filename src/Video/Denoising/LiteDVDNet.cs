@@ -243,11 +243,15 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-            // Pass the configured optimizer through. The two-argument overload left _optimizer
-            // assigned but never read, so training silently used the framework default: the loss
-            // EXPLODED from 0.292 to 299.3 on the J-L shard's Training_ShouldReduceLoss, a
-            // thousandfold divergence, while LiteDVDNet's own LearningRate option sat unused.
-            TrainWithTape(input, expected, _optimizer);
+            // Train in the same normalized domain used by Denoise/Predict. Previously inference
+            // divided frames by 255 and denormalized the result, while training fed raw pixel
+            // tensors directly into the stack. BatchNorm therefore accumulated statistics in a
+            // domain 255x larger than inference; as training continued, evaluation became worse
+            // even though the trainable weights remained stable. Targets must be normalized too,
+            // because ForwardForTraining returns the residual-corrected normalized frame.
+            var normalizedInput = PreprocessFrames(input);
+            var normalizedExpected = PreprocessFrames(expected);
+            TrainWithTape(normalizedInput, normalizedExpected, _optimizer);
         }
         finally
         {
