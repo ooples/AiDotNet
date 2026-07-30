@@ -54,10 +54,10 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "OmniGen2: Advancing Unified Image Generation with Dual-Path Architecture",
-    "https://arxiv.org/abs/2503.01324",
+    "OmniGen2: Towards Instruction-Aligned Multimodal Generation",
+    "https://arxiv.org/abs/2506.18871",
     Year = 2025,
-    Authors = "Xiao et al."
+    Authors = "Chenyuan Wu et al."
 )]
 public class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {

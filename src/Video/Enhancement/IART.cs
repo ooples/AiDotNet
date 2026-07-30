@@ -54,8 +54,8 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("IART: Implicit Resampling-based Alignment Transformer for Video Super-Resolution",
-    "https://arxiv.org/abs/2404.06573",
+[ResearchPaper("Enhancing Video Super-Resolution via Implicit Resampling-based Alignment",
+    "https://arxiv.org/abs/2305.00163",
     Year = 2024,
     Authors = "Kai Xu, Ziwei Yu, Xin Wang, Michael Bi Mi, Angela Yao")]
 public class IART<T> : VideoSuperResolutionBase<T>

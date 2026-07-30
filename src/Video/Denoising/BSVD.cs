@@ -47,10 +47,10 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Blind Spot Video Denoising: Bidirectional Streaming for Real-Time Video Denoising",
-    "https://arxiv.org/abs/2206.03428",
+[ResearchPaper("Real-time Streaming Video Denoising with Bidirectional Buffers",
+    "https://arxiv.org/abs/2207.06937",
     Year = 2022,
-    Authors = "Zhenyue Qi, Yiran Zhong, Dongwei Ren, Wangmeng Zuo")]
+    Authors = "Chenyang Qi, Junming Chen, Xin Yang, Qifeng Chen")]
 public class BSVD<T> : VideoDenoisingBase<T>
 {
     private readonly BSVDOptions _options;
