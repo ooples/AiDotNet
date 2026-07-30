@@ -43,6 +43,11 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
     private readonly DenseLayer<T> _startFfnn;
     private readonly DenseLayer<T> _endFfnn;
 
+    /// <summary>Dropout on the boundary FFNN outputs; Yu et al. Table 1 specifies 0.2.</summary>
+    private readonly double _ffnnDropout;
+    private readonly DropoutLayer<T>? _startDropout;
+    private readonly DropoutLayer<T>? _endDropout;
+
     /// <summary>Bilinear tensor U, stored as [C, d, d].</summary>
     private Tensor<T> _bilinear;
 
@@ -78,7 +83,8 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
         [LayerState] int inputDim,
         [LayerState] int spanDim,
         [LayerState] int numCategories,
-        IActivationFunction<T>? activation = null)
+        IActivationFunction<T>? activation = null,
+        [LayerState] double ffnnDropout = 0.2)
         : base(new[] { -1, -1, inputDim }, new[] { -1, -1, numCategories })
     {
         if (inputDim <= 0) throw new ArgumentOutOfRangeException(nameof(inputDim));
@@ -97,6 +103,18 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
         _endFfnn = new DenseLayer<T>(spanDim, act);
         RegisterSubLayer(_startFfnn);
         RegisterSubLayer(_endFfnn);
+
+        // Yu et al. Table 1 lists an FFNN dropout of 0.2. Without it the two boundary
+        // representations are free to co-adapt, which is exactly what the separate-FFNN design
+        // exists to prevent. Disabled automatically at inference like any dropout.
+        _ffnnDropout = ffnnDropout;
+        if (ffnnDropout > 0.0)
+        {
+            _startDropout = new DropoutLayer<T>(ffnnDropout);
+            _endDropout = new DropoutLayer<T>(ffnnDropout);
+            RegisterSubLayer(_startDropout);
+            RegisterSubLayer(_endDropout);
+        }
 
         _bilinear = new Tensor<T>(new[] { numCategories, spanDim, spanDim });
         _additive = new Tensor<T>(new[] { 2 * spanDim, numCategories });
@@ -164,6 +182,12 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
         // Separate start/end boundary representations: [B, S, d].
         var hs = _startFfnn.Forward(input);
         var he = _endFfnn.Forward(input);
+
+        if (_startDropout is not null && _endDropout is not null)
+        {
+            hs = _startDropout.Forward(hs);
+            he = _endDropout.Forward(he);
+        }
 
         int d = _spanDim;
         int C = _numCategories;
