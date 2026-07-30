@@ -193,8 +193,6 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
     /// (#1789)
     /// </para>
     /// </remarks>
-    private const double ResidualHeadInitScale = 0.01;
-
     private void ZeroInitializeResidualHead(int headInputChannels)
     {
         if (Layers.Count == 0) return;
@@ -209,7 +207,7 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
             if (current.Length > 0)
             {
                 var damped = new Vector<T>(current.Length);
-                var scale = NumOps.FromDouble(ResidualHeadInitScale);
+                var scale = NumOps.FromDouble(_options.ResidualHeadInitScale);
                 for (int i = 0; i < current.Length; i++)
                     damped[i] = NumOps.Multiply(current[i], scale);
                 head.SetParameters(damped);
