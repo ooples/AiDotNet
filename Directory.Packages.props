@@ -280,7 +280,7 @@
          parameter before graph specialization captures writable backing arrays, preserving clone
          isolation without disabling fused compiled training. Managed and native packages are
          coreleased in lockstep. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.120.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.120.3" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.120.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.120.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.120.2" />
