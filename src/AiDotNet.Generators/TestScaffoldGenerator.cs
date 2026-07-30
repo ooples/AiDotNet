@@ -647,6 +647,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "SEEM",               // segment-everything transformer — GradientFlow timeout
         "RVRT",               // recurrent video restoration transformer — LossStrictlyDecreases / ScaledInput timeout
         "Squeezeformer",      // Conformer-variant ASR — Training_ShouldReduceLoss 180 s timeout
+        // SileroVad already runs in FP32 through the generated S-range resource policy. In CI its
+        // ordinary training invariants passed (including the 50.69 s strict-loss probe), while only
+        // MoreData_ShouldNotDegrade exhausted its 120 s budget at the generic 50-vs-200 iterations.
+        // Explicit roster membership advances that already-float fixture to the audio family's
+        // existing 1-vs-2 smoke cap; the native/ONNX model and all production defaults stay intact.
+        "SileroVad",
         // RNN-T (Graves 2012) transducer ASR. It was already emitted as <float> — the A-I/N-Z
         // resource-bound-shard rule floats every supported family regardless of roster membership —
         // but the audio branch's smoke iteration caps are gated on EXPLICIT roster membership, so
@@ -742,6 +748,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // NOTE: the audio branch's Fp32-gated iteration override is audio-family-only, so these are
         // NOT double-emitted alongside their HeavyTrainingTimeoutClassNames smoke cap.
         "ViT", "InternViT", "DINOv2", "DINOv3", "PerceptionEncoder", "RADIOv25", "SigLIPSO", "SAM",
+        // ViTCoMer's V-range scaffold was already selected as FP32 by the resource-bound-shard rule.
+        // Keep that measured first-rung mitigation explicit if shard boundaries move; its only CI
+        // failure was the still-uncapped 50+200-step MoreData timeout.
+        "ViTCoMer",
         // Diffusion family (Flux / ControlNet / video / point-cloud)
         "CogVideoModel", "ControlNetFluxModel", "ControlNetPlusPlusFluxModel",
         "FlowEditModel", "Flux2Model", "Flux2SchnellModel", "FluxInpaintingModel",
@@ -1402,6 +1412,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // still hit the 180-second memorization watchdog. Preserve its ViT backbone and spatial-prior
         // adapter; cap only repeated generated training probes before considering fixture shrinkage.
         "ViTAdapter",
+        // ViTCoMer passed every other generated invariant, including finite gradients, parameter
+        // updates, loss reduction and the 54-second memorization probe. Only its generic 50+200-step
+        // MoreData comparison exhausted 120 seconds after FP32, so advance the generated fixture to
+        // the universal 1+2 repeated-training cap without changing its production configuration.
+        "ViTCoMer",
         // Document-OCR models sharing CreateDefaultDocumentOCRLayers (residual ViT/Swin encoder +
         // decoder). Even at CI-smoke reduced scale the 50+200-iteration MoreData probe grazes the
         // 120 s gate (GOTOCR2 timed out solo), so the universal smoke-cap trims it — the DocumentNN /

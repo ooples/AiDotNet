@@ -54,8 +54,8 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("MoG: Motion-Aware Generative Frame Interpolation",
-    "https://arxiv.org/abs/2501.03782",
+[ResearchPaper("Motion-Aware Generative Frame Interpolation",
+    "https://arxiv.org/abs/2501.03699",
     Year = 2025,
     Authors = "Jianhui Wang, Yongqiang Zhang, Ying Tai")]
 public class MoG<T> : FrameInterpolationBase<T>

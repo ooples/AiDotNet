@@ -57,8 +57,8 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "LLaVA-OneVision 1.5: Improved and Fully Open",
-    "https://arxiv.org/abs/2502.13886",
+    "LLaVA-OneVision-1.5: Fully Open Framework for Democratized Multimodal Training",
+    "https://arxiv.org/abs/2509.23661",
     Year = 2025,
     Authors = "Li et al."
 )]
