@@ -83,7 +83,22 @@ namespace AiDotNet.Audio.Emotion;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Speech Emotion Recognition Using Deep Learning Techniques: A Review", "https://arxiv.org/abs/2101.06572", Year = 2021, Authors = "Kexin Luo, Yun Cai")]
+// Citation replaced: it named the WRONG KIND of source, not merely a wrong URL. The recorded title
+// was a REVIEW ("Speech Emotion Recognition Using Deep Learning Techniques: A Review"), which defines
+// no architecture and so cannot be what a model implements, and its arXiv id 2101.06572 resolves to
+// "Tracial smooth functions of non-commuting variables and the free Wasserstein manifold" — unrelated
+// to speech, emotion or learning.
+//
+// Identified the paper this class actually implements by matching the architecture: Badshah et al.
+// build "three convolutional layers and three fully connected layers" over SPECTROGRAMS to predict
+// SEVEN emotions. That is exactly this model — CreateSpeechEmotionRecognizerLayers emits 3 conv blocks
+// (conv + BatchNorm + pool) then 3 dense layers (hiddenDim, hiddenDim/2, numEmotions), with
+// numEmotions defaulting to 7 and mel-spectrogram input. Published at PlatCon 2017 and not on arXiv,
+// so the canonical DOI is used.
+[ResearchPaper("Speech Emotion Recognition from Spectrograms with Deep Convolutional Neural Network",
+    "https://doi.org/10.1109/PlatCon.2017.7883728",
+    Year = 2017,
+    Authors = "Abdul Malik Badshah, Jamil Ahmad, Nasir Rahim, Sung Wook Baik")]
 public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Execution Mode
@@ -177,6 +192,17 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// <summary>
     /// Standard emotions supported by this model.
     /// </summary>
+    /// <summary>
+    /// Default learning rate for the tape trainer's optimizer.
+    /// </summary>
+    /// <remarks>
+    /// A library default, not a paper value: Badshah et al. is an IEEE PlatCon publication whose
+    /// optimizer settings are not available in an accessible source. Chosen an order of magnitude below
+    /// Adam's own 1e-3 default because that default, combined with the absence of gradient clipping,
+    /// measurably drove the memorization probe's loss UP over 100 steps. Overridable per instance.
+    /// </remarks>
+    private const double DefaultLearningRate = 1e-4;
+
     private static readonly string[] DefaultEmotions =
     [
         "neutral",
@@ -318,13 +344,16 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         int nFft = 1024,
         int hopLength = 256,
         double inputDurationSeconds = 3.0,
-        int numConvBlocks = 4,
+        // Badshah et al. specify THREE convolutional layers; this defaulted to 4.
+        int numConvBlocks = 3,
         int baseFilters = 32,
         int hiddenDim = 256,
         double dropoutRate = 0.3,
         string[]? emotionLabels = null,
         bool includeArousalValence = true,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        double learningRate = DefaultLearningRate)
         : base(architecture)
     {
         if (architecture is null)
@@ -360,6 +389,29 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         {
             LossFunction = new CrossEntropyWithLogitsLoss<T>();
         }
+
+        // Publish an optimizer to the tape trainer.
+        //
+        // This model previously configured NO optimizer at all, so training silently fell back to the
+        // base class's lazily-created Adam at its own 1e-3 default with no gradient clipping. The
+        // measured consequence was that the 100-step memorization probe ended HIGHER than it started
+        // (1.386729 -> 1.475667): a spectrogram CNN whose dense head sees a large flattened feature
+        // vector produces big early gradients, and without clipping the first steps overshoot into a
+        // region the run does not recover from. Every other invariant passed, which is why this looked
+        // like a converging model.
+        //
+        // Clipping is a stability measure rather than a claim about the paper: Badshah et al. is an
+        // IEEE PlatCon publication whose optimizer settings are not available in an accessible source,
+        // so the learning rate is a documented library default and both it and the optimizer itself are
+        // caller-overridable.
+        SetBaseTrainOptimizer(optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = learningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            }));
 
         // Create mel spectrogram extractor
         _melSpec = CreateMelSpectrogram(sampleRate, numMels, nFft, hopLength);
