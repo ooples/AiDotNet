@@ -182,7 +182,18 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         _numDecoderLayers = numDecoderLayers;
         _numHeads = numHeads;
         _vocabSize = vocabSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Tang et al. 2022 S4.1: learning rate 5e-5, beta1 0.9, beta2 0.98, weight decay 1e-2.
+        // Built with no options, this ran at Adam's 1e-3 default -- twenty times the paper rate.
+        // The paper pairs Adam with weight decay, which is AdamW's behaviour, so that is the
+        // faithful mapping here.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.98,
+                WeightDecay = 0.01
+            });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -245,7 +256,18 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         _numDecoderLayers = numDecoderLayers;
         _numHeads = numHeads;
         _vocabSize = vocabSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Tang et al. 2022 S4.1: learning rate 5e-5, beta1 0.9, beta2 0.98, weight decay 1e-2.
+        // Built with no options, this ran at Adam's 1e-3 default -- twenty times the paper rate.
+        // The paper pairs Adam with weight decay, which is AdamW's behaviour, so that is the
+        // faithful mapping here.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.98,
+                WeightDecay = 0.01
+            });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
