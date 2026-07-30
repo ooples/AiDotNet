@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -55,7 +56,7 @@ public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
         string modelPath,
         WaveGradOptions? options = null
     )
-        : base(architecture)
+        : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new WaveGradOptions();
         _useNativeMode = false;
@@ -76,11 +77,18 @@ public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
         WaveGradOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture)
+        : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new WaveGradOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -175,8 +183,14 @@ public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
