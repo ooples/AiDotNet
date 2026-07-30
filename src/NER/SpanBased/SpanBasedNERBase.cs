@@ -7,6 +7,7 @@ using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.NER.SpanBased;
@@ -110,7 +111,14 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                InitialLearningRate = _options.LearningRate,
+                // The reference decays the rate as training proceeds
+                // (juntaoy/biaffine-ner, experiments.conf: decay_rate = 0.999 applied every
+                // decay_frequency = 100 steps). The paper describes no schedule at all, so without
+                // this the rate stayed at its initial value for the whole run.
+                LearningRateScheduler = new StepLRScheduler(
+                    _options.LearningRate, _options.DecayFrequency, _options.DecayRate),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
             });
 
         InitializeLayers();

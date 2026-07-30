@@ -118,6 +118,32 @@ public class SpanBasedNEROptions
     /// the number of candidate spans that need to be evaluated. A value of 10 covers
     /// ~99% of entities in most NER datasets.
     /// </remarks>
+    /// <summary>
+    /// Number of layers in each boundary FFNN that produces the span start/end representations.
+    /// </summary>
+    /// <remarks>
+    /// Yu et al.'s released configuration (juntaoy/biaffine-ner, experiments.conf) sets
+    /// <c>ffnn_depth = 2</c> alongside <c>ffnn_size = 150</c>. A single layer halves the depth of
+    /// the transformation that separates a token's start role from its end role, which is the
+    /// distinction the two separate FFNNs exist to draw.
+    /// </remarks>
+    public int FfnnDepth { get; set; } = 2;
+
+    /// <summary>
+    /// Multiplicative learning-rate decay applied every <see cref="DecayFrequency"/> steps.
+    /// </summary>
+    /// <remarks>
+    /// Yu et al.'s released configuration (juntaoy/biaffine-ner, experiments.conf) sets
+    /// <c>decay_rate = 0.999</c>. The paper itself does not mention a schedule.
+    /// </remarks>
+    public double DecayRate { get; set; } = 0.999;
+
+    /// <summary>
+    /// How many optimizer steps between applications of <see cref="DecayRate"/>.
+    /// </summary>
+    /// <remarks>The reference configuration uses <c>decay_frequency = 100</c>.</remarks>
+    public int DecayFrequency { get; set; } = 100;
+
     public int MaxSpanLength
     {
         get => _maxSpanLength;

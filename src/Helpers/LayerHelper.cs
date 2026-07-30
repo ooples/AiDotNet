@@ -35922,6 +35922,7 @@ public static class LayerHelper<T>
         int spanEmbeddingDimension = 150,
         int numLabels = 9,
         double dropoutRate = 0.2,
+        int ffnnDepth = 2,
         int biLstmHiddenSize = 200,
         int biLstmLayers = 3,
         double biLstmDropout = 0.4,
@@ -35968,7 +35969,8 @@ public static class LayerHelper<T>
             // Threading the configured value through keeps it user-controllable via
             // SpanBasedNEROptions.DropoutRate like every other knob, instead of the layer silently
             // applying its own default and ignoring a caller that asked for something else.
-            ffnnDropout: dropoutRate);
+            ffnnDropout: dropoutRate,
+            ffnnDepth: ffnnDepth);
     }
 
     public static IEnumerable<ILayer<T>> CreateDefaultSpanBasedNERLayers(
