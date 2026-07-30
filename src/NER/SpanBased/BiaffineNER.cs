@@ -158,8 +158,21 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
     /// <para>
     /// Token labels annotate single-token entities, so span (i, j) takes token i's category when
     /// i == j and the non-entity class otherwise. Class 0 is the non-entity class, matching the
-    /// paper's "+1" slot. Spans with j &lt; i are not entities by the paper's s &lt;= e
-    /// constraint and are labelled non-entity too.
+    /// paper's "+1" slot.
+    /// </para>
+    /// <para>
+    /// Only spans the paper actually treats as candidates are supervised: those with
+    /// <c>s &lt;= e</c> and no longer than <c>MaxSpanLength</c>. Everything else is marked with the
+    /// -1 ignore sentinel, whose one-hot row is all zeros and therefore contributes no gradient
+    /// (the same convention as PyTorch's <c>ignore_index</c>).
+    /// </para>
+    /// <para>
+    /// Labelling those slots non-entity instead, as this first did, is not merely redundant — it
+    /// swamps the objective. For a 12-token sequence it supervises 144 spans of which 12 can ever
+    /// be an entity, so predicting "no entity" everywhere is close to optimal and the model
+    /// collapses to a constant function that ignores its input. Restricting supervision to the
+    /// paper's candidate set leaves 33 spans at MaxSpanLength 3, of which those same 12 carry
+    /// signal.
     /// </para>
     /// </remarks>
     protected override Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen)
@@ -177,21 +190,33 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
             ? new Tensor<T>([batch, seqLen * seqLen])
             : new Tensor<T>([seqLen * seqLen]);
 
+        var ignore = NumOps.FromDouble(-1.0);
+        int maxSpan = NEROptions.MaxSpanLength > 0 ? NEROptions.MaxSpanLength : seqLen;
+
         for (int b = 0; b < batch; b++)
         {
             for (int start = 0; start < seqLen; start++)
             {
-                // A single-token entity occupies the diagonal; every other pair is a non-entity
-                // span and keeps the zero the tensor is already filled with.
                 var category = tokenLabels.Rank == 1 ? tokenLabels[start] : tokenLabels[b, start];
 
-                if (batch > 1)
+                for (int end = 0; end < seqLen; end++)
                 {
-                    spanTargets[b, (start * seqLen) + start] = category;
-                }
-                else
-                {
-                    spanTargets[(start * seqLen) + start] = category;
+                    bool isCandidate = end >= start && (end - start + 1) <= maxSpan;
+
+                    // A single-token entity occupies the diagonal; other candidate spans are
+                    // non-entities; non-candidates are ignored rather than taught as negatives.
+                    var value = !isCandidate ? ignore
+                        : end == start ? category
+                        : NumOps.Zero;
+
+                    if (batch > 1)
+                    {
+                        spanTargets[b, (start * seqLen) + end] = value;
+                    }
+                    else
+                    {
+                        spanTargets[(start * seqLen) + end] = value;
+                    }
                 }
             }
         }
