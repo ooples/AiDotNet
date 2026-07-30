@@ -326,6 +326,58 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
     }
 
     /// <summary>
+    /// Trains on span-level supervision: a category per candidate span, which is the annotation
+    /// form these architectures are actually defined over.
+    /// </summary>
+    /// <param name="tokenEmbeddings">Token representations, <c>[seqLen, hidden]</c> or <c>[batch, seqLen, hidden]</c>.</param>
+    /// <param name="spanTargets">
+    /// Category indices per span, <c>[seqLen * seqLen]</c> or <c>[batch, seqLen * seqLen]</c>,
+    /// indexed as <c>start * seqLen + end</c>. Use <c>0</c> for the non-entity class and <c>-1</c>
+    /// for a position that is not a candidate at all (<c>end &lt; start</c>, or longer than the
+    /// configured maximum span), which is ignored by the loss rather than taught as a negative.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Train"/> takes per-TOKEN labels, which is the right interface for a
+    /// sequence-labelling corpus but cannot express what a span model predicts: a token label
+    /// only ever describes a single-token entity, so the derived supervision reaches the diagonal
+    /// of the l x l grid and every multi-token span is taught as a non-entity. The standard span
+    /// corpora (CoNLL-2003, ACE, GENIA) ship entity spans, and the reference implementations of
+    /// these architectures read them directly.
+    /// </para>
+    /// <para>
+    /// The signal is an explicit method rather than something inferred from the target's shape.
+    /// Inference is not safe here: a span grid's trailing axis is <c>seqLen * seqLen</c>, which is
+    /// exactly the shape of this model's own output, so a caller passing an output-shaped tensor
+    /// for any other reason would be silently reinterpreted as span annotations.
+    /// </para>
+    /// </remarks>
+    public void TrainWithSpanTargets(Tensor<T> tokenEmbeddings, Tensor<T> spanTargets)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+
+        SetTrainingMode(true);
+        try
+        {
+            var preprocessed = PreprocessTokens(tokenEmbeddings);
+            int seqLen = preprocessed.Rank == 3 ? preprocessed.Shape[1] : preprocessed.Shape[0];
+
+            int trailing = spanTargets.Rank >= 1 ? spanTargets.Shape[spanTargets.Rank - 1] : 0;
+            if (trailing != seqLen * seqLen)
+            {
+                throw new ArgumentException(
+                    $"Span targets must carry one category per span: expected a trailing axis of " +
+                    $"{seqLen * seqLen} ({seqLen} x {seqLen}) for a sequence of {seqLen} tokens, got {trailing}.",
+                    nameof(spanTargets));
+            }
+
+            TrainWithTape(preprocessed, spanTargets, _optimizer);
+        }
+        finally { SetTrainingMode(false); }
+    }
+
+    /// <summary>
     /// Shapes the supervision the model is trained against, given token-level labels.
     /// </summary>
     /// <remarks>
