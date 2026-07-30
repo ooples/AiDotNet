@@ -69,11 +69,18 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // Check if class extends LayerBase<T>
             if (!ExtendsLayerBase(classSymbol)) continue;
 
-            // A layer that hand-writes any of these manages its own parameter plumbing; generating
-            // partial copies would be a duplicate-member error. Such classes were invisible to this
-            // generator until they became 'partial' for an unrelated reason, so skipping them keeps
-            // their behaviour exactly as it was.
-            if (DeclaresAny(classSymbol, "GetTrainableParameters", "SetTrainableParameters", "EnsureInitialized"))
+            // A layer that hand-writes its parameter accessors manages its own plumbing; generating
+            // partial copies would be a duplicate-member error.
+            //
+            // Only those two members gate the whole class. Including EnsureInitialized here as well
+            // was too coarse and had a serious consequence: DenseLayer hand-writes EnsureInitialized
+            // but NOT the accessors, so it silently lost its generated SetTrainableParameters -- the
+            // one that assigns _weights/_biases -- and fell back to LayerBase's, which rebinds only
+            // the registered-tensor list. The layer's own fields kept their old tensors, so
+            // GetTrainableParameters reported the new values while Forward still used the old ones.
+            // Copy-on-write cloning relies on exactly this setter, so every COW clone of a model
+            // containing a DenseLayer came back computing with stale weights.
+            if (DeclaresAny(classSymbol, "GetTrainableParameters", "SetTrainableParameters"))
                 continue;
 
             // Skip if already processed (multiple partial files)
@@ -390,14 +397,30 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     EmitFieldAssign(paramFields[i], i.ToString(), i.ToString());
                 }
+                // Rebind in place when the registration already has the right shape. The
+                // clear-and-re-append path below unregisters every tensor from the engine and
+                // registers it again, and the engine's persistent pool is not order-stable across
+                // that cycle -- which changes gradient reduction order and makes training
+                // run-to-run nondeterministic. Training calls this setter (ParameterBuffer views),
+                // so the churn happened on every step: two identical runs of BiaffineNER's
+                // LossStrictlyDecreases / OptimizerStep probes gave different results.
+                //
+                // When the count is unchanged there is nothing to re-register: the fields are
+                // already assigned above, and the base setter swaps the registry entries
+                // positionally without touching the engine. Only a changed count needs the full
+                // rebuild, and AppendTrainableParameter is used there (not
+                // RegisterTrainableParameter) to avoid role-based dedup -- layers like
+                // MultiHeadAttentionLayer carry several parameters with the same role
+                // (e.g. 4 x Weights) that replace-by-role logic would collapse to one.
+                sb.AppendLine($"        if (GetTrainableParameters().Count == {paramFields.Count})");
+                sb.AppendLine("        {");
+                sb.AppendLine("            base.SetTrainableParameters(parameters);");
+                sb.AppendLine("            return;");
+                sb.AppendLine("        }");
+                sb.AppendLine();
                 sb.AppendLine("        ClearRegisteredParameters();");
                 for (int i = 0; i < paramFields.Count; i++)
                 {
-                    // Use AppendTrainableParameter (not RegisterTrainableParameter)
-                    // after ClearRegisteredParameters to avoid role-based dedup.
-                    // Layers like MultiHeadAttentionLayer have multiple parameters
-                    // with the same role (e.g., 4 × Weights) — RegisterTrainableParameter
-                    // would collapse them back to 1 via replace-by-role logic.
                     sb.AppendLine($"        AppendTrainableParameter({paramFields[i].Name}, {paramFields[i].Role});");
                 }
             }
@@ -507,15 +530,21 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             }
             sb.AppendLine("    }");
             sb.AppendLine();
-            sb.AppendLine("    /// <summary>");
-            sb.AppendLine("    /// Auto-generated EnsureInitialized: registers sub-layers (cheap), then");
-            sb.AppendLine("    /// delegates to base for weight allocation.");
-            sb.AppendLine("    /// </summary>");
-            sb.AppendLine("    protected override void EnsureInitialized()");
-            sb.AppendLine("    {");
-            sb.AppendLine("        EnsureSubLayersRegistered();");
-            sb.AppendLine("        base.EnsureInitialized();");
-            sb.AppendLine("    }");
+            // Emitted only when the layer does not write its own; a hand-written override is
+            // respected rather than duplicated (which is what the class-level skip used to do,
+            // at the cost of the accessors above).
+            if (!DeclaresAny(classSymbol, "EnsureInitialized"))
+            {
+                sb.AppendLine("    /// <summary>");
+                sb.AppendLine("    /// Auto-generated EnsureInitialized: registers sub-layers (cheap), then");
+                sb.AppendLine("    /// delegates to base for weight allocation.");
+                sb.AppendLine("    /// </summary>");
+                sb.AppendLine("    protected override void EnsureInitialized()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        EnsureSubLayersRegistered();");
+                sb.AppendLine("        base.EnsureInitialized();");
+                sb.AppendLine("    }");
+            }
         }
 
         sb.AppendLine("}");
