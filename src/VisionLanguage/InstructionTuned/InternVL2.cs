@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "InternVL2: Better than the Best - Expanding Performance Boundaries of Open-Source Multimodal Models",
+    "How Far Are We to GPT-4V? Closing the Gap to Commercial Multimodal Models with Open-Source Suites",
     "https://arxiv.org/abs/2404.16821",
     Year = 2024,
     Authors = "Chen et al."

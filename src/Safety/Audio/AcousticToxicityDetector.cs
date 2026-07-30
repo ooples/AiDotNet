@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Audio;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Taxonomy of Risks Posed by Language Models: Speech Generator Harms",
+[ResearchPaper("Not My Voice! A Taxonomy of Ethical and Safety Harms of Speech Generators",
     "https://arxiv.org/abs/2402.01708",
     Year = 2024,
     Authors = "Various")]
