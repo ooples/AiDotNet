@@ -744,21 +744,47 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         foreach (var layer in _visionHead)
             visionLogits = layer.Forward(visionLogits);
 
-        var languageFeatures = visionLogits;
-        foreach (var layer in _languageModelLayers)
-            languageFeatures = layer.Forward(languageFeatures);
+        // ITERATIVE correction, the third of the paper's three principles (Fang et al. 2021,
+        // sec. 3.3). The language model is executed M times: the first pass reads the VISION
+        // model's character probabilities, and every later pass reads the FUSION model's
+        // prediction from the previous iteration, so each round corrects the last round's
+        // spelling using bidirectional context. The paper measures M = 3 as the sweet spot and
+        // uses the final iteration's fused prediction as the output.
+        //
+        // Only one pass was run before this, which reduced the model to Autonomous +
+        // Bidirectional and silently dropped the principle the paper is named for. The iteration
+        // count was already threaded in as _numIterations and consumed only when constructing
+        // the language branch; nothing ever looped.
+        //
+        // Nothing carries across calls: every input restarts from its own vision prediction,
+        // matching the paper's "each new text instance starts fresh".
+        var languageInput = visionLogits;
+        Tensor<T> languageFeatures = visionLogits;
+        Tensor<T> languageLogits = visionLogits;
+        Tensor<T> fused = visionFeatures;
 
-        var languageLogits = languageFeatures;
-        foreach (var layer in _languageHead)
-            languageLogits = layer.Forward(languageLogits);
+        int iterations = _numIterations > 0 ? _numIterations : 1;
+        for (int iteration = 0; iteration < iterations; iteration++)
+        {
+            languageFeatures = languageInput;
+            foreach (var layer in _languageModelLayers)
+                languageFeatures = layer.Forward(languageFeatures);
 
-        // Gated fusion consumes BOTH streams: G = sigmoid([F_v, F_l] W_f),
-        // F_f = G * F_v + (1 - G) * F_l. The gate layer takes them concatenated.
-        var fused = Engine.TensorConcatenate(
-            new[] { visionFeatures, languageFeatures },
-            axis: visionFeatures.Shape.Length - 1);
-        foreach (var layer in _fusionLayers)
-            fused = layer.Forward(fused);
+            languageLogits = languageFeatures;
+            foreach (var layer in _languageHead)
+                languageLogits = layer.Forward(languageLogits);
+
+            // Gated fusion consumes BOTH streams: G = sigmoid([F_v, F_l] W_f),
+            // F_f = G * F_v + (1 - G) * F_l. The gate layer takes them concatenated.
+            fused = Engine.TensorConcatenate(
+                new[] { visionFeatures, languageFeatures },
+                axis: visionFeatures.Shape.Length - 1);
+            foreach (var layer in _fusionLayers)
+                fused = layer.Forward(fused);
+
+            // The next round corrects this round's fused prediction.
+            languageInput = fused;
+        }
 
         return (visionLogits, languageLogits, fused);
     }
