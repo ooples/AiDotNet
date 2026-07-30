@@ -35,7 +35,8 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "Embarrassingly Easy Text-to-Speech (E2 TTS)",
+    // Title corrected to the published form; the arXiv id was already right.
+    "E2 TTS: Embarrassingly Easy Fully Non-Autoregressive Zero-Shot TTS",
     "https://arxiv.org/abs/2406.18009",
     Year = 2024,
     Authors = "Eskimez et al."

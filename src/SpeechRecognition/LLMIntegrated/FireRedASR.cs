@@ -40,7 +40,13 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition", "https://arxiv.org/abs/2501.07755", Year = 2025, Authors = "FireRed Team")]
+// Citation URL corrected: the arXiv id is 2501.14350, not 2501.07755. Title completed to the published
+// form, which names the encoder-decoder-to-LLM progression that distinguishes the paper's two variants
+// (FireRedASR-LLM and FireRedASR-AED).
+[ResearchPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition Models from Encoder-Decoder to LLM Integration",
+    "https://arxiv.org/abs/2501.14350",
+    Year = 2025,
+    Authors = "Kai-Tuo Xu, Feng-Long Xie, Xu Tang, Yao Hu")]
 public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly FireRedASROptions _options;

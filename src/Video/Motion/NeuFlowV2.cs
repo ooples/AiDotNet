@@ -18,7 +18,7 @@ namespace AiDotNet.Video.Motion;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet">
-/// <item>Paper: "NeuFlow v2: High-Efficiency Optical Flow Estimation on Edge Devices" (Zhang et al., 2024)</item>
+/// <item>Paper: "NeuFlow v2: Push High-Efficiency Optical Flow To the Limit" (Zhang et al., 2024)</item>
 /// </list></para>
 /// <para><b>For Beginners:</b> NeuFlow V2 is a fast, lightweight optical flow estimator designed for real-time applications. It achieves good accuracy with significantly reduced computation compared to transformer-based methods.</para>
 /// <para>
@@ -44,7 +44,8 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("NeuFlow v2: High-Efficiency Optical Flow Estimation on Edge Devices",
+// Title corrected to the published form; the arXiv id was already right.
+[ResearchPaper("NeuFlow v2: Push High-Efficiency Optical Flow To the Limit",
     "https://arxiv.org/abs/2408.10161",
     Year = 2024,
     Authors = "Zhiyong Zhang, Anurag Ranjan, Huaizu Jiang")]
