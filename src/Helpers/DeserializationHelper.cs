@@ -913,19 +913,31 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputSize, attentionSize, activation });
         }
+        else if (genericDef == typeof(InternImageBlockLayer<>))
+        {
+            int channels = TryGetInt(additionalParams, "Channels") ?? inputShape[0];
+            int groups = TryGetInt(additionalParams, "Groups") ?? 1;
+            var ctor = type.GetConstructor(new[] { typeof(int), typeof(int) });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find InternImageBlockLayer constructor with (int, int).");
+            instance = ctor.Invoke(new object[] { channels, groups });
+        }
         else if (genericDef == typeof(GraphAttentionLayer<>))
         {
             // GraphAttentionLayer(int inputFeatures, int outputFeatures, int numHeads = 1, double alpha = 0.2, double dropoutRate = 0.0, IActivationFunction<T>? = null)
             int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
             int numHeads = TryGetInt(additionalParams, "NumHeads") ?? 1;
+            bool concatenateHeads = TryGetBool(additionalParams, "ConcatenateHeads") ?? false;
+            int outputFeatures = TryGetInt(additionalParams, "HeadOutputFeatures")
+                ?? (concatenateHeads ? outputShape[0] / Math.Max(numHeads, 1) : outputShape[0]);
             double alpha = TryGetDouble(additionalParams, "Alpha") ?? 0.2;
             double dropout = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
-            // Try 7-param constructor (with IInitializationStrategy) then 6-param fallback
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType, initStrategyType })
+            // Try the current 8-param constructor, then legacy signatures.
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType, initStrategyType, typeof(bool) })
+                    ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType, initStrategyType })
                     ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType });
             if (ctor is null)
             {
@@ -944,9 +956,12 @@ public static class DeserializationHelper
                 }
             }
 
-            instance = ctor.GetParameters().Length == 7
-                ? ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation, null })
-                : ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
+            instance = ctor.GetParameters().Length switch
+            {
+                8 => ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation, null, concatenateHeads }),
+                7 => ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation, null }),
+                _ => ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation })
+            };
         }
         else if (genericDef == typeof(GraphConvolutionalLayer<>))
         {
@@ -3271,7 +3286,9 @@ public static class DeserializationHelper
         static int[] ParseList(string? value, int[] fallback)
         {
             if (string.IsNullOrWhiteSpace(value)) return fallback;
-            var parts = value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+            // net471's nullable-flow analysis does not learn the non-null state from
+            // string.IsNullOrWhiteSpace, even though the guard above has returned.
+            var parts = value!.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(part => part.Trim())
                 .ToArray();
             var result = new int[parts.Length];
