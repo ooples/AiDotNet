@@ -380,11 +380,11 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Initializes a graph convolution with explicit bias and initialization settings.
     /// </summary>
     public GraphConvolutionalLayer(
-        int inputFeatures,
-        int outputFeatures,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
         IActivationFunction<T>? activationFunction,
-        bool implicitIdentityWhenUnset,
-        bool useBias,
+        [LayerState] bool implicitIdentityWhenUnset,
+        [LayerState] bool useBias,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {

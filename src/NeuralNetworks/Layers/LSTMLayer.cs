@@ -776,7 +776,8 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// <param name="hiddenSize">The size of the hidden state (number of LSTM units).</param>
     /// <param name="activation">Cell-state activation (default tanh).</param>
     /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
-    public LSTMLayer(int hiddenSize,
+    public LSTMLayer(
+        int hiddenSize,
         IActivationFunction<T>? activation = null,
         IActivationFunction<T>? recurrentActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())

@@ -3,6 +3,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Tabular;
 using AiDotNet.Tensors.Engines;
 
+using AiDotNet.Attributes;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -35,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class TabNetEncoderLayer<T> : LayerBase<T>
+public partial class TabNetEncoderLayer<T> : LayerBase<T>
 {
     private readonly int _decisionDim;
     private readonly int _attentionDim;
@@ -78,16 +80,16 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
     /// <param name="momentum">Batch-norm momentum.</param>
     /// <param name="epsilon">Batch-norm epsilon.</param>
     public TabNetEncoderLayer(
-        int numFeatures,
-        int decisionDim,
-        int attentionDim,
-        int numSteps,
-        int numSharedLayers = 2,
-        int numStepSpecificLayers = 2,
-        double relaxationFactor = 1.5,
-        int virtualBatchSize = 128,
-        double momentum = 0.02,
-        double epsilon = 1e-5)
+        [LayerState] int numFeatures,
+        [LayerState] int decisionDim,
+        [LayerState] int attentionDim,
+        [LayerState] int numSteps,
+        [LayerState] int numSharedLayers = 2,
+        [LayerState] int numStepSpecificLayers = 2,
+        [LayerState] double relaxationFactor = 1.5,
+        [LayerState] int virtualBatchSize = 128,
+        [LayerState] double momentum = 0.02,
+        [LayerState] double epsilon = 1e-5)
         : base(new[] { numFeatures }, new[] { decisionDim })
     {
         if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));

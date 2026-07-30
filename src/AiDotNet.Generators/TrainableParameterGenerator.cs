@@ -69,6 +69,13 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // Check if class extends LayerBase<T>
             if (!ExtendsLayerBase(classSymbol)) continue;
 
+            // A layer that hand-writes any of these manages its own parameter plumbing; generating
+            // partial copies would be a duplicate-member error. Such classes were invisible to this
+            // generator until they became 'partial' for an unrelated reason, so skipping them keeps
+            // their behaviour exactly as it was.
+            if (DeclaresAny(classSymbol, "GetTrainableParameters", "SetTrainableParameters", "EnsureInitialized"))
+                continue;
+
             // Skip if already processed (multiple partial files)
             var fullName = classSymbol.ToDisplayString();
             if (!processedClasses.Add(fullName)) continue;
@@ -525,6 +532,19 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     private static string GetTypeParamName(INamedTypeSymbol classSymbol)
     {
         return classSymbol.TypeParameters.Length > 0 ? classSymbol.TypeParameters[0].Name : "T";
+    }
+
+    /// <summary>True when the class itself declares any of the named members.</summary>
+    private static bool DeclaresAny(INamedTypeSymbol type, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            foreach (var member in type.GetMembers(name))
+            {
+                if (member is IMethodSymbol) return true;
+            }
+        }
+        return false;
     }
 
     private static bool ExtendsLayerBase(INamedTypeSymbol type)

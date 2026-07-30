@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "2, 16")]
-public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -449,7 +449,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Embedding dimension (must be divisible by <paramref name="numHeads"/>),
     /// or <c>-1</c> to defer resolution to first forward.
     /// </param>
-    public TransformerEncoderLayer(int numHeads, int feedForwardDim, int embeddingSize)
+    public TransformerEncoderLayer(
+        [LayerState] int numHeads,
+        [LayerState] int feedForwardDim,
+        [LayerState] int embeddingSize)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
         if (numHeads <= 0)
@@ -549,9 +552,16 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                     $"numHeads ({_numHeads}); got remainder {_embeddingSize % _numHeads}.");
         }
 
+        // The encoder preserves its input's sequence length instead of fixing one, so committing to
+        // whatever length happened to arrive first made it report [10, 16] and then produce
+        // [16, 16]. The model dimension is the only axis it actually fixes.
         var resolved = new int[input.Shape.Length];
         for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
-        ResolveShapes(resolved, resolved);
+
+        var declaredOutput = new int[resolved.Length];
+        for (int i = 0; i < resolved.Length; i++) declaredOutput[i] = LayerShape.Dynamic;
+        declaredOutput[resolved.Length - 1] = _embeddingSize;
+        ResolveShapes(resolved, declaredOutput);
     }
 
     /// <summary>

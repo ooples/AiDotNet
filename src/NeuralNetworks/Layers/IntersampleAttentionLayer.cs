@@ -68,7 +68,10 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
     /// <param name="embeddingDim">Embedding dimension.</param>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="dropoutRate">Dropout rate for attention.</param>
-    public IntersampleAttentionLayer(int embeddingDim, int numHeads = 8, double dropoutRate = 0.1)
+    public IntersampleAttentionLayer(
+        [LayerState] int embeddingDim,
+        [LayerState] int numHeads = 8,
+        [LayerState] double dropoutRate = 0.1)
         : base([embeddingDim], [embeddingDim])
     {
         _embeddingDim = embeddingDim;

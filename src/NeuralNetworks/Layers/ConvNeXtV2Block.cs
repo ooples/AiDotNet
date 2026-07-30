@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 16", TestConstructorArgs = "16, 48, 7")]
-public class ConvNeXtV2Block<T> : LayerBase<T>
+public partial class ConvNeXtV2Block<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _intermediateChannels;
@@ -61,7 +61,10 @@ public class ConvNeXtV2Block<T> : LayerBase<T>
     /// <param name="channels">Block width <c>C</c>, unchanged from input to output.</param>
     /// <param name="intermediateChannels">Width of the point-wise expansion.</param>
     /// <param name="kernelSize">Depth-wise convolution kernel size.</param>
-    public ConvNeXtV2Block(int channels, int intermediateChannels, int kernelSize = 7)
+    public ConvNeXtV2Block(
+        [LayerState] int channels,
+        [LayerState] int intermediateChannels,
+        [LayerState] int kernelSize = 7)
         : base(new[] { -1, -1, channels }, new[] { -1, -1, channels })
     {
         if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels));

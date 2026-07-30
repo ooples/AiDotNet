@@ -38,6 +38,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 2")]
 public partial class QuantumLayer<T> : LayerBase<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _outputSize;
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _inputSize;
     private readonly int _numQubits;
     private Tensor<Complex<T>> _quantumCircuit;
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -121,8 +127,13 @@ public partial class QuantumLayer<T> : LayerBase<T>
     /// which is what gives quantum computing its potential power.
     /// </para>
     /// </remarks>
-    public QuantumLayer(int inputSize, int outputSize, int numQubits) : base([inputSize], [outputSize])
+    public QuantumLayer(
+        [LayerState] int inputSize,
+        [LayerState] int outputSize,
+        [LayerState] int numQubits) : base([inputSize], [outputSize])
     {
+        _outputSize = outputSize;
+        _inputSize = inputSize;
         _numQubits = numQubits;
         _complexOps = MathHelper.GetNumericOperations<Complex<T>>();
 

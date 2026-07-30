@@ -331,7 +331,9 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// Larger dimensions can capture more information but require more computation and memory.
     /// </para>
     /// </remarks>
-    public EmbeddingLayer(int vocabularySize, int embeddingDimension)
+    public EmbeddingLayer(
+        [LayerState] int vocabularySize,
+        [LayerState] int embeddingDimension)
         : base([1], [embeddingDimension])
     {
         AuxiliaryLossWeight = NumOps.FromDouble(0.0001);

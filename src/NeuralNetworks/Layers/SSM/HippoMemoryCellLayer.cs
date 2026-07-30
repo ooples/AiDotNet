@@ -25,7 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 4, 2", TestConstructorArgs = "4, 2, 4")]
-public class HippoMemoryCellLayer<T> : LayerBase<T>
+public partial class HippoMemoryCellLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenSize;
     private readonly int _inputSize;
@@ -154,17 +154,17 @@ public class HippoMemoryCellLayer<T> : LayerBase<T>
     /// <param name="timescaleMax">Optional upper clamp for the effective step.</param>
     /// <param name="useGate">Whether to use the paper's standard sigmoid hidden-state gate.</param>
     public HippoMemoryCellLayer(
-        int hiddenSize = 256,
-        int inputSize = 1,
-        int memoryOrder = -1,
-        int memorySize = 1,
-        string measure = "legs",
-        string discretization = "bilinear",
-        int initialTime = 0,
-        double timeStep = 0.0,
-        double timescaleMin = 0.0,
-        double timescaleMax = double.PositiveInfinity,
-        bool useGate = true,
+        [LayerState] int hiddenSize = 256,
+        [LayerState] int inputSize = 1,
+        [LayerState] int memoryOrder = -1,
+        [LayerState] int memorySize = 1,
+        [LayerState] string measure = "legs",
+        [LayerState] string discretization = "bilinear",
+        [LayerState] int initialTime = 0,
+        [LayerState] double timeStep = 0.0,
+        [LayerState] double timescaleMin = 0.0,
+        [LayerState] double timescaleMax = double.PositiveInfinity,
+        [LayerState] bool useGate = true,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1, inputSize }, new[] { -1, hiddenSize })
     {

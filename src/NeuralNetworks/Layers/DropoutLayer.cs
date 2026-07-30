@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4")]
-public class DropoutLayer<T> : LayerBase<T>
+public partial class DropoutLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The probability of dropping out (deactivating) a neuron during training.
@@ -220,7 +220,8 @@ public class DropoutLayer<T> : LayerBase<T>
     /// will throw an exception.
     /// </para>
     /// </remarks>
-    public DropoutLayer(double dropoutRate = 0.5)
+    public DropoutLayer(
+        [LayerState] double dropoutRate = 0.5)
         : base(Array.Empty<int>(), []) // Dropout layer doesn't change the shape of the input
     {
         if (dropoutRate < 0 || dropoutRate >= 1)

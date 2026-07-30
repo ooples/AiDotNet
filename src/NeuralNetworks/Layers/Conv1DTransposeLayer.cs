@@ -136,13 +136,13 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
     /// <see cref="GetParameters"/> agree before the first Forward (Clone round-trip).
     /// </summary>
     public Conv1DTransposeLayer(
-        int inputChannels,
-        int outputChannels,
-        int kernelSize,
-        int stride = 1,
-        int? padding = null,
-        int outputPadding = 0,
-        int dilation = 1,
+        [LayerState] int inputChannels,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int stride = 1,
+        [LayerState] int? padding = null,
+        [LayerState] int outputPadding = 0,
+        [LayerState] int dilation = 1,
         IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { inputChannels, -1 }, new[] { outputChannels, -1 },
@@ -177,9 +177,13 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
 
+        // The time axis is a function of the input length, so it is not known here. Declaring
+        // ComputeOutputLength(MinValidInputLength()) -- the shortest input this configuration
+        // accepts -- published that placeholder as the layer's contract: the layer advertised
+        // [outputChannels, 8] and then produced [outputChannels, 128] for real audio. Only the
+        // channel count is fixed at construction; the length stays dynamic until a forward runs.
         int minTime = MinValidInputLength();
-        int outTime = ComputeOutputLength(minTime);
-        ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, outTime });
+        ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, LayerShape.Dynamic });
     }
 
     /// <summary>PyTorch <c>nn.ConvTranspose1d</c> output-length formula.</summary>
@@ -234,7 +238,11 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
             RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
         }
 
-        ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, tOut });
+        // tOut describes THIS input, not the layer. Publishing it means the value is saved and
+        // restored, and the restored layer then disagrees with the next input of a different
+        // length. The channel count is the only output axis this layer fixes.
+        _ = tOut;
+        ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, LayerShape.Dynamic });
     }
 
     /// <inheritdoc/>

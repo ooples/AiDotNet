@@ -158,11 +158,11 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// Initializes a new instance of the <see cref="GraphIsomorphismLayer{T}"/> class.
     /// </summary>
     public GraphIsomorphismLayer(
-        int inputFeatures,
-        int outputFeatures,
-        int mlpHiddenDim = -1,
-        bool learnEpsilon = true,
-        double epsilon = 0.0,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
+        [LayerState] int mlpHiddenDim = -1,
+        [LayerState] bool learnEpsilon = true,
+        [LayerState] double epsilon = 0.0,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())

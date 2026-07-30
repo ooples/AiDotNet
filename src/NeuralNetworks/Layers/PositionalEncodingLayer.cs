@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
-public class PositionalEncodingLayer<T> : LayerBase<T>
+public partial class PositionalEncodingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The maximum sequence length that this layer can handle.
@@ -122,7 +122,9 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// position that the model can learn to recognize.
     /// </para>
     /// </remarks>
-    public PositionalEncodingLayer(int maxSequenceLength, int embeddingSize)
+    public PositionalEncodingLayer(
+        [LayerState] int maxSequenceLength,
+        [LayerState] int embeddingSize)
         : base([-1, embeddingSize], [-1, embeddingSize])
     {
         this.maxSequenceLength = maxSequenceLength;

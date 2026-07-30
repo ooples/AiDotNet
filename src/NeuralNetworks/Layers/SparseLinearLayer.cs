@@ -136,9 +136,9 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// <param name="sparsity">Fraction of weights to be zero (0.0 to 1.0).</param>
     /// <param name="activationFunction">Optional activation function.</param>
     public SparseLinearLayer(
-        int inputFeatures,
-        int outputFeatures,
-        double sparsity = 0.9,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
+        [LayerState] double sparsity = 0.9,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(

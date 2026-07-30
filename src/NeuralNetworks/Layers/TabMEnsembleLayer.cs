@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 
+using AiDotNet.Attributes;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -24,7 +26,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class TabMEnsembleLayer<T> : LayerBase<T>
+public partial class TabMEnsembleLayer<T> : LayerBase<T>
 {
     private readonly int[] _hiddenDimensions;
     private readonly int _outputDim;
@@ -41,7 +43,11 @@ public class TabMEnsembleLayer<T> : LayerBase<T>
     /// <param name="hiddenDimensions">Hidden layer widths of the MLP.</param>
     /// <param name="outputDim">Output dimension (per-member prediction width, averaged at the end).</param>
     /// <param name="numMembers">Number of ensemble members (k).</param>
-    public TabMEnsembleLayer(int numFeatures, int[] hiddenDimensions, int outputDim, int numMembers = 8)
+    public TabMEnsembleLayer(
+        int numFeatures,
+        int[] hiddenDimensions,
+        int outputDim,
+        int numMembers = 8)
         : base(new[] { numFeatures }, new[] { outputDim })
     {
         if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));

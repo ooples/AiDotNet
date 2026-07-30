@@ -431,11 +431,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// that will be improved during training.
     /// </para>
     /// </remarks>
-    public ConvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0,
-                              IActivationFunction<T>? activationFunction = null,
-                              IInitializationStrategy<T>? initializationStrategy = null,
-                              IActivationFunction<T>? nonlinearityForInit = null,
-                              int groups = 1)
+    public ConvolutionalLayer(
+        [LayerState] int outputDepth,
+        [LayerState] int kernelSize,
+        [LayerState] int stride = 1,
+        [LayerState] int padding = 0,
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null,
+        IActivationFunction<T>? nonlinearityForInit = null,
+        [LayerState] int groups = 1)
         // Linear by default, matching PyTorch nn.Conv2d and Keras Conv2D, both of which apply no
         // activation unless one is requested. This previously defaulted to ReLU, which is the
         // same defect this PR fixed in DenseLayer: every caller that wanted a plain convolution —

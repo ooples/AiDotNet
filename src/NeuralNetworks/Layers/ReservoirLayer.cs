@@ -208,12 +208,12 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public ReservoirLayer(
-        int inputSize,
-        int reservoirSize,
-        double connectionProbability = 0.1,
-        double spectralRadius = 0.9,
-        double inputScaling = 1.0,
-        double leakingRate = 1.0,
+        [LayerState] int inputSize,
+        [LayerState] int reservoirSize,
+        [LayerState] double connectionProbability = 0.1,
+        [LayerState] double spectralRadius = 0.9,
+        [LayerState] double inputScaling = 1.0,
+        [LayerState] double leakingRate = 1.0,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [reservoirSize], new TanhActivation<T>() as IActivationFunction<T>)
     {

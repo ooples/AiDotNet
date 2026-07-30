@@ -252,10 +252,10 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public Conv3DLayer(
-        int outputChannels,
-        int kernelSize,
-        int stride = 1,
-        int padding = 0,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int stride = 1,
+        [LayerState] int padding = 0,
         IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1, -1, -1, -1 }, new[] { outputChannels, -1, -1, -1 },
             activationFunction ?? new ReLUActivation<T>())

@@ -37,8 +37,20 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ReconstructionLayer<T> : LayerBase<T>
+public partial class ReconstructionLayer<T> : LayerBase<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _outputDimension;
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _hidden2Dimension;
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _hidden1Dimension;
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _inputDimension;
     /// <summary>
     /// The first fully connected layer in the reconstruction sequence.
     /// </summary>
@@ -181,14 +193,18 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public ReconstructionLayer(
-        int inputDimension,
-        int hidden1Dimension,
-        int hidden2Dimension,
-        int outputDimension,
+        [LayerState] int inputDimension,
+        [LayerState] int hidden1Dimension,
+        [LayerState] int hidden2Dimension,
+        [LayerState] int outputDimension,
         IActivationFunction<T>? hiddenActivation = null,
         IActivationFunction<T>? outputActivation = null)
         : base([inputDimension], [outputDimension])
     {
+        _outputDimension = outputDimension;
+        _hidden2Dimension = hidden2Dimension;
+        _hidden1Dimension = hidden1Dimension;
+        _inputDimension = inputDimension;
         _useVectorActivation = false;
         _hidden1Dim = hidden1Dimension;
         _hidden2Dim = hidden2Dimension;
@@ -245,6 +261,10 @@ public class ReconstructionLayer<T> : LayerBase<T>
         IVectorActivationFunction<T>? outputVectorActivation = null)
         : base([inputDimension], [outputDimension])
     {
+        _outputDimension = outputDimension;
+        _hidden2Dimension = hidden2Dimension;
+        _hidden1Dimension = hidden1Dimension;
+        _inputDimension = inputDimension;
         _useVectorActivation = true;
         _hidden1Dim = hidden1Dimension;
         _hidden2Dim = hidden2Dimension;

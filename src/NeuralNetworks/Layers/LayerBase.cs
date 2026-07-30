@@ -522,9 +522,30 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// that point.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// A dynamic axis in the OUTPUT shape is a declaration, not an unfinished one: a convolution
+    /// over a variable-length signal, or an attention block that preserves its input's sequence
+    /// length, cannot name that axis and must not pretend to. Treating such a layer as permanently
+    /// unresolved is what the paragraph on <c>_firstForwardRan</c> below warns about, and it broke
+    /// two separate things: first-forward setup re-ran on every pass, and — because both the
+    /// generated parameter accessors and the deserialization path gate on this property —
+    /// <c>SetParameters</c> silently skipped such a layer, so a restored model came back with its
+    /// trained weights dropped.
+    /// </para>
+    /// <para>
+    /// The question this property answers is therefore whether the layer's PARAMETERS can be sized,
+    /// and those are derived from the input shape alone. A dynamic output axis never becomes
+    /// concrete no matter how long you wait, so including it here would make those layers
+    /// permanently second-class. Callers that genuinely need concrete output dimensions ask for
+    /// them explicitly through <see cref="LayerShape.TryGetConcrete"/> or
+    /// <see cref="LayerShape.RequireConcrete"/>, which fail loudly rather than reading a sentinel
+    /// as a size.
+    /// </para>
+    /// </remarks>
     public virtual bool IsShapeResolved =>
         InputShape is not null && !ShapeContainsSentinel(InputShape)
-        && OutputShape is not null && !ShapeContainsSentinel(OutputShape);
+        && OutputShape is not null;
 
     /// <summary>
     /// <c>true</c> once first-forward setup has run, whether or not every axis ended up concrete.
@@ -3502,7 +3523,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             metadata["VectorActivationType"] = VectorActivation.GetType().AssemblyQualifiedName ?? VectorActivation.GetType().FullName ?? string.Empty;
         }
 
+        WriteConstructionState(metadata);
+
         return metadata;
+    }
+
+    /// <summary>
+    /// Writes the constructor arguments marked <c>[LayerState]</c> so this layer can be rebuilt
+    /// exactly. Generated; do not implement by hand.
+    /// </summary>
+    /// <param name="metadata">The metadata being assembled.</param>
+    /// <remarks>
+    /// This is a separate hook rather than part of <see cref="GetMetadata"/> so that the roughly
+    /// four dozen layers which already override <c>GetMetadata</c> keep working untouched: their
+    /// <c>base.GetMetadata()</c> call routes through here, and their own keys are applied
+    /// afterwards. A layer that overrides <c>GetMetadata</c> without calling base opts itself out,
+    /// which the generator reports as ADN0054.
+    /// </remarks>
+    internal virtual void WriteConstructionState(Dictionary<string, string> metadata)
+    {
     }
 
     /// <summary>

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "4, 0.02")]
-public class SpatialPoolerLayer<T> : LayerBase<T>
+public partial class SpatialPoolerLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The size of the input vector.
@@ -237,7 +237,9 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// with random values that will be adjusted during learning.
     /// </para>
     /// </remarks>
-    public SpatialPoolerLayer(int columnCount, double sparsityThreshold)
+    public SpatialPoolerLayer(
+        [LayerState] int columnCount,
+        [LayerState] double sparsityThreshold)
         : base(new[] { -1 }, new[] { columnCount > 0 ? columnCount : throw new ArgumentOutOfRangeException(nameof(columnCount), "Must be positive.") })
     {
         if (sparsityThreshold < 0 || sparsityThreshold > 1)

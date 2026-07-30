@@ -33,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
 public partial class CrossAttentionLayer<T> : LayerBase<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _sequenceLength;
     private readonly int _queryDim;
     private readonly int _contextDim;
     private readonly int _headCount;
@@ -120,9 +123,14 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     protected override bool IsShapePreserving => true;
 
     /// <param name="sequenceLength">Maximum sequence length for queries.</param>
-    public CrossAttentionLayer(int queryDim, int contextDim, int headCount, int sequenceLength = 64)
+    public CrossAttentionLayer(
+        [LayerState] int queryDim,
+        [LayerState] int contextDim,
+        [LayerState] int headCount,
+        [LayerState] int sequenceLength = 64)
         : base(new[] { -1, queryDim }, new[] { -1, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         _queryDim = queryDim;
         _contextDim = contextDim;
         _headCount = headCount;

@@ -155,10 +155,10 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// Initializes a new instance of the <see cref="GraphSAGELayer{T}"/> class.
     /// </summary>
     public GraphSAGELayer(
-        int inputFeatures,
-        int outputFeatures,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
         SAGEAggregatorType aggregatorType = SAGEAggregatorType.Mean,
-        bool normalize = true,
+        [LayerState] bool normalize = true,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())

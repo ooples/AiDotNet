@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, ApiShape = LayerApiShape.DualTensor, TestInputShape = "4, 8", TestConstructorArgs = "2, 16, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -565,8 +565,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="feedForwardDim">Hidden dimension of the FFN (default 2048).</param>
     /// <param name="sequenceLength">Maximum sequence length (default 512).</param>
     /// <param name="ffnActivation">FFN activation (default GELU).</param>
-    public TransformerDecoderLayer(int numHeads, int feedForwardDim,
-        int sequenceLength = 512,
+    public TransformerDecoderLayer(
+        [LayerState] int numHeads,
+        [LayerState] int feedForwardDim,
+        [LayerState] int sequenceLength = 512,
         IActivationFunction<T>? ffnActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
