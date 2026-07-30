@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
@@ -111,6 +112,13 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     private DenseLayer<T>? _classifierLayer;
     private BatchNormalizationLayer<T>? _finalBatchNorm;
 
+    // The classifier head width. VoxLingua107's paper label set is 107 languages
+    // (the default), but the head honours a caller-configured Architecture.OutputSize
+    // so the identifier can target any label set. Hardcoding 107 overrode a smaller
+    // configured head and CrossEntropyWithLogitsLoss.ClassIndicesToOneHot then indexed
+    // past its one-hot buffer.
+    private readonly int _numLanguages;
+
     // Language mapping for 107 languages
     private readonly Dictionary<int, string> _languageIdToCode;
     private readonly Dictionary<string, int> _languageCodeToId;
@@ -131,9 +139,11 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     public IReadOnlyList<string> SupportedLanguages => VoxLingua107Languages.ToList();
 
     /// <summary>
-    /// Gets the number of supported languages (107).
+    /// Gets the number of languages the classifier head predicts. Defaults to the
+    /// paper's 107-language VoxLingua107 label set, or the configured
+    /// <see cref="NeuralNetworkArchitecture{T}.OutputSize"/> when one is given.
     /// </summary>
-    public int NumLanguages => 107;
+    public int NumLanguages => _numLanguages;
 
     /// <summary>
     /// Gets the embedding dimension.
@@ -165,6 +175,10 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         _options = options ?? new VoxLingua107Options();
         Options = _options;
         _options.ModelPath = modelPath;
+
+        // The ONNX graph's output width is the paper's 107 by default; honour a
+        // configured output size for a re-headed export.
+        _numLanguages = architecture.OutputSize > 0 ? architecture.OutputSize : 107;
 
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;
@@ -208,11 +222,21 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         _options = options ?? new VoxLingua107Options();
         Options = _options;
 
+        // Honour a configured output size; fall back to the paper's 107 languages.
+        _numLanguages = architecture.OutputSize > 0 ? architecture.OutputSize : 107;
+
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
 
         // Initialize MFCC extractor
         _mfccExtractor = new MfccExtractor<T>(new MfccOptions
@@ -228,7 +252,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         // Initialize all 107 language mappings
         (_languageIdToCode, _languageCodeToId, _languageCodeToName) = InitializeVoxLingua107Mappings();
 
-        InitializeNativeLayers();
+        InitializeLayers();
     }
 
     #endregion
@@ -237,48 +261,43 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
     private void InitializeNativeLayers()
     {
-        int inputDim = _options.NumMels * 3;
-        int channels = _options.TdnnChannels;
+        // Build the default ECAPA-TDNN stack from the shared factory rather than
+        // inline, so this model follows the same "custom layers or LayerHelper
+        // defaults" contract as the rest of the framework. The factory yields the
+        // layers in a fixed order; the role-aware forward keeps them in typed
+        // groups, so partition the flat list back into those roles here.
+        var built = LayerHelper<T>.CreateDefaultVoxLingua107Layers(
+            Architecture,
+            numMels: _options.NumMels,
+            tdnnChannels: _options.TdnnChannels,
+            embeddingDimension: _options.EmbeddingDimension,
+            dilations: _options.Dilations).ToList();
 
-        // Initial TDNN layer
-        _tdnnLayers.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _tdnnLayers.Add(new BatchNormalizationLayer<T>());
+        int index = 0;
 
-        // ECAPA-TDNN SE-Res2 blocks
-        foreach (int dilation in _options.Dilations)
+        // Initial TDNN: DenseLayer + BatchNormalizationLayer.
+        _tdnnLayers.Add(built[index++]);
+        _tdnnLayers.Add(built[index++]);
+
+        // One SE-Res2 block per dilation: the factory emits six residual-path
+        // layers followed by two squeeze-excitation layers. The forward keeps
+        // residual and SE layers in separate lists indexed 6-per-block and
+        // 2-per-block, so de-interleave them here.
+        foreach (int _ in _options.Dilations)
         {
-            AddSERes2Block(channels, dilation);
+            for (int i = 0; i < 6; i++)
+            {
+                _resBlocks.Add(built[index++]);
+            }
+
+            _seBlocks.Add(built[index++]);
+            _seBlocks.Add(built[index++]);
         }
 
-        // MFA output dimension
-        int mfaOutputDim = channels * _options.Dilations.Length;
-
-        // Attentive Statistics Pooling
-        _poolingLayer = new DenseLayer<T>(_options.EmbeddingDimension * 2);
-
-        // Final layers
-        _finalBatchNorm = new BatchNormalizationLayer<T>();
-        _classifierLayer = new DenseLayer<T>(107); // 107 languages
-    }
-
-    private void AddSERes2Block(int channels, int dilation)
-    {
-        // 1x1 reduction
-        _resBlocks.Add(new DenseLayer<T>(channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>());
-
-        // Dilated conv
-        _resBlocks.Add(new DenseLayer<T>(channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>());
-
-        // 1x1 expansion
-        _resBlocks.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>());
-
-        // SE block
-        int seReduction = 8;
-        _seBlocks.Add(new DenseLayer<T>(channels / seReduction, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _seBlocks.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new SigmoidActivation<T>()));
+        // Attentive-statistics-pooling projection, final BatchNorm, classifier head.
+        _poolingLayer = (DenseLayer<T>)built[index++];
+        _finalBatchNorm = (BatchNormalizationLayer<T>)built[index++];
+        _classifierLayer = (DenseLayer<T>)built[index++];
     }
 
     #endregion
@@ -456,27 +475,28 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
             throw new InvalidOperationException("Cannot train in ONNX mode.");
 
         SetTrainingMode(true);
-
-        var preprocessed = PreprocessAudio(input);
-        var predicted = ForwardNative(preprocessed);
-
-        var predictedVector = predicted.ToVector();
-        var expectedVector = expectedOutput.ToVector();
-
-        var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
-        var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted._shape);
-
-        _optimizer?.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape performs the complete forward, loss, backward, and
+            // configured-optimizer step.  The previous implementation calculated
+            // a loss derivative and discarded it, then asked the optimizer to
+            // update layers that had never received gradients.
+            TrainWithTape(PreprocessAudio(input), expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input);
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
-        foreach (var layer in GetAllLayers())
+        foreach (var layer in Layers)
         {
             var layerParams = layer.GetParameters();
             var newParams = parameters.Slice(offset, layerParams.Length);
@@ -500,7 +520,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
             {
                 { "Architecture", "VoxLingua107 (ECAPA-TDNN)" },
                 { "EmbeddingDimension", _options.EmbeddingDimension },
-                { "NumLanguages", 107 },
+                { "NumLanguages", _numLanguages },
                 { "SampleRate", SampleRate },
                 { "IsOnnxMode", IsOnnxMode }
             }
@@ -528,13 +548,13 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
             return;
         }
 
-        // Use LayerHelper to create default VoxLingua107 layers (ECAPA-TDNN with 107 languages)
-        Layers.AddRange(LayerHelper<T>.CreateDefaultVoxLingua107Layers(
-            Architecture,
-            numMels: _options.NumMels,
-            tdnnChannels: _options.TdnnChannels,
-            embeddingDimension: _options.EmbeddingDimension,
-            dilations: _options.Dilations));
+        // Build the paper-faithful ECAPA-TDNN topology and publish those exact
+        // instances through Layers.  ForwardNative needs their block roles to
+        // apply SE gates, residuals, MFA concatenation, and attentive statistics
+        // pooling, while the framework needs the same instances for parameter,
+        // gradient, optimizer, serialization, and clone discovery.
+        InitializeNativeLayers();
+        Layers.AddRange(GetAllLayers());
     }
 
     /// <inheritdoc/>
@@ -544,7 +564,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         writer.Write(SampleRate);
         writer.Write(_options.EmbeddingDimension);
         writer.Write(_options.TdnnChannels);
-        writer.Write(107); // NumLanguages is always 107 for VoxLingua107
+        writer.Write(_numLanguages); // classifier head width (paper default 107)
     }
 
     /// <inheritdoc/>
@@ -564,7 +584,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         return new VoxLingua107Identifier<T>(
             Architecture,
             _options,
-            _optimizer,
+            optimizer: null,
             _lossFunction);
     }
 
@@ -591,6 +611,19 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
     private Tensor<T> ForwardNative(Tensor<T> features)
     {
+        // A caller-supplied architecture is an ordinary custom layer chain; the
+        // ECAPA role-aware traversal below applies only to the default topology.
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            var customOutput = features;
+            foreach (var layer in Layers)
+            {
+                customOutput = layer.Forward(customOutput);
+            }
+
+            return customOutput;
+        }
+
         var output = features;
 
         // TDNN layers
@@ -676,37 +709,28 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
     private Tensor<T> GlobalAveragePooling(Tensor<T> input)
     {
-        int features = input.Shape.Length > 1 ? input.Shape[^1] : input.Length;
-        int timeSteps = input.Length / features;
+        // ECAPA activations are time-major [time, channels]. Keep the
+        // reduction on the engine so the SE gate remains part of the tape.
+        if (input.Rank <= 1)
+            return input;
 
-        var output = new T[features];
-        for (int f = 0; f < features; f++)
-        {
-            double sum = 0;
-            for (int t = 0; t < timeSteps; t++)
-                sum += _numOps.ToDouble(input[t * features + f]);
-            output[f] = _numOps.FromDouble(sum / timeSteps);
-        }
-
-        return new Tensor<T>(output, [features]);
+        int[] timeAxes = new int[input.Rank - 1];
+        for (int axis = 0; axis < timeAxes.Length; axis++)
+            timeAxes[axis] = axis;
+        return Engine.ReduceMean(input, timeAxes, keepDims: false);
     }
 
     private Tensor<T> ApplyChannelAttention(Tensor<T> input, Tensor<T> attention)
     {
-        var output = new T[input.Length];
-        int features = attention.Length;
-        int timeSteps = input.Length / features;
+        if (input.Rank <= 1)
+            return Engine.TensorMultiply(input, attention);
 
-        for (int t = 0; t < timeSteps; t++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                int idx = t * features + f;
-                output[idx] = _numOps.Multiply(input[idx], attention[f]);
-            }
-        }
-
-        return new Tensor<T>(output, input._shape);
+        var broadcastShape = new int[input.Rank];
+        for (int axis = 0; axis < broadcastShape.Length; axis++)
+            broadcastShape[axis] = 1;
+        broadcastShape[^1] = attention.Length;
+        var channelGate = Engine.Reshape(attention, broadcastShape);
+        return Engine.TensorBroadcastMultiply(input, channelGate);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -721,36 +745,21 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
     private Tensor<T> AttentiveStatisticsPooling(Tensor<T> input)
     {
-        int features = input.Shape.Length > 1 ? input.Shape[^1] : input.Length / 10;
-        int timeSteps = input.Length / features;
+        if (input.Rank <= 1)
+            return Engine.TensorConcatenate([input, input], axis: 0);
 
-        var mean = new T[features];
-        for (int f = 0; f < features; f++)
-        {
-            double sum = 0;
-            for (int t = 0; t < timeSteps; t++)
-                sum += _numOps.ToDouble(input[t * features + f]);
-            mean[f] = _numOps.FromDouble(sum / timeSteps);
-        }
+        int[] timeAxes = new int[input.Rank - 1];
+        for (int axis = 0; axis < timeAxes.Length; axis++)
+            timeAxes[axis] = axis;
 
-        var std = new T[features];
-        for (int f = 0; f < features; f++)
-        {
-            double sumSq = 0;
-            double meanVal = _numOps.ToDouble(mean[f]);
-            for (int t = 0; t < timeSteps; t++)
-            {
-                double diff = _numOps.ToDouble(input[t * features + f]) - meanVal;
-                sumSq += diff * diff;
-            }
-            std[f] = _numOps.FromDouble(Math.Sqrt(sumSq / timeSteps));
-        }
-
-        var output = new T[features * 2];
-        Array.Copy(mean, 0, output, 0, features);
-        Array.Copy(std, 0, output, features, features);
-
-        return new Tensor<T>(output, [features * 2]);
+        var meanKeepDims = Engine.ReduceMean(input, timeAxes, keepDims: true);
+        var centered = Engine.TensorBroadcastSubtract(input, meanKeepDims);
+        var variance = Engine.ReduceMean(
+            Engine.TensorMultiply(centered, centered), timeAxes, keepDims: false);
+        var std = Engine.TensorSqrt(
+            Engine.TensorAddScalar(variance, NumericalStabilityHelper.GetEpsilon<T>()));
+        var mean = Engine.ReduceMean(input, timeAxes, keepDims: false);
+        return Engine.TensorConcatenate([mean, std], axis: 0);
     }
 
     private IReadOnlyList<LanguageSegment<T>> MergeConsecutiveSegments(List<LanguageSegment<T>> segments)

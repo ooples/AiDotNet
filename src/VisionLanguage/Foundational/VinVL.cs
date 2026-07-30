@@ -103,14 +103,15 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     {
         _options = options ?? new VinVLOptions();
         _useNativeMode = true;
-        // Honour a paper-faithful fine-tuning step size. VinVL / Oscar+ (Zhang et al. 2021) fine-tunes
-        // in the 5e-5 range; built bare, AdamW's own default step was large enough to drive this
-        // ~86M-parameter stack straight to NaN once the optimizer was actually connected to training.
-        // Callers can still pass any optimizer they want through the constructor.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        // VinVL trains Oscar+'s BERT-style single-stream fusion encoder with
+        // AdamW at transformer-scale hyperparameters. Honor the public options
+        // instead of AdamW's generic 1e-3 default.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 5e-5,
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
             });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -275,12 +276,18 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        // Pass the configured optimizer through, as the InstructBLIP and MiniGPTv2 siblings already
-        // do. The two-argument overload left the AdamW built in the constructor assigned but never
-        // read, so training ran on the framework default and the forward pass came back NaN after 10
-        // iterations.
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        try
+        {
+            // Passing no optimizer here silently selects NeuralNetworkBase's
+            // generic Adam at 1e-3 and ignores VinVLOptions. That rate is 20x
+            // the official VinVL/Oscar+ recipe and can make the first FP32
+            // update non-finite on the 12-layer encoder.
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)

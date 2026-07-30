@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -10,7 +11,7 @@ using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.MultiModal;
 
-/// <summary>WhisperSpeech: text-to-speech using Whisper encoder features as semantic tokens plus acoustic generation.</summary>
+/// <summary>WhisperSpeech: a two-stage discrete-token text-to-speech pipeline derived from SPEAR-TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "WhisperSpeech: Inverse Whisper TTS" (Collabora, 2024)</item></list></para><para><b>For Beginners:</b> WhisperSpeech: text-to-speech using Whisper encoder features as semantic tokens plus acoustic generation.. This model converts text input into speech audio output.</para></remarks>
 /// <example>
@@ -35,8 +36,10 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "WhisperSpeech: Text-to-Speech via Whisper",
-    "https://github.com/collabora/WhisperSpeech"
+    "Speak, Read and Prompt: High-Fidelity Text-to-Speech with Minimal Supervision",
+    "https://arxiv.org/abs/2302.03540",
+    Year = 2023,
+    Authors = "Kharitonov et al."
 )]
 public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
 {
@@ -53,7 +56,7 @@ public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
         string modelPath,
         WhisperSpeechOptions? options = null
     )
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>(classAxis: -1))
     {
         _options = options ?? new WhisperSpeechOptions();
         _useNativeMode = false;
@@ -75,11 +78,21 @@ public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
         WhisperSpeechOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>(classAxis: -1))
     {
         _options = options ?? new WhisperSpeechOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.AdamBeta1,
+                Beta2 = _options.AdamBeta2,
+                EnableGradientClipping = true,
+                MaxGradientNorm = _options.MaxGradientNorm,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -122,10 +135,17 @@ public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
 
     protected override Tensor<T> PreprocessText(string text)
     {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
+        if (text is null)
+            throw new ArgumentNullException(nameof(text));
+
+        // The native stack begins with an index-mode EmbeddingLayer. WhisperSpeech/SPEAR-TTS
+        // predicts discrete semantic and acoustic tokens; continuous character fractions make
+        // every ASCII value truncate to embedding index zero and erase the text signal.
+        byte[] utf8 = System.Text.Encoding.UTF8.GetBytes(text);
+        int len = Math.Min(utf8.Length, _options.MaxTextLength);
         var t = new Tensor<T>([len]);
         for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
+            t[i] = NumOps.FromDouble(utf8[i]);
         return t;
     }
 
@@ -146,7 +166,8 @@ public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -170,10 +191,9 @@ public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            // Pass the configured optimizer through. The two-argument overload left _optimizer
-            // assigned and never read, so training silently used the framework default and any
-            // caller-supplied optimizer was discarded. Same dead-dependency shape already fixed on
-            // MegaTTS, LiteDVDNet, LLMTime and InstructBLIP.
+            // WhisperSpeech trains token logits with cross-entropy. Pass the configured
+            // AdamW instance explicitly; otherwise TrainWithTape silently selects the generic
+            // base optimizer and ignores the model's paper/project learning-rate settings.
             TrainWithTape(input, expected, _optimizer);
         }
         finally
@@ -262,8 +282,8 @@ public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new WhisperSpeech<T>(Architecture, mp, _options);
-        return new WhisperSpeech<T>(Architecture, _options);
+            return new WhisperSpeech<T>(Architecture, mp, new WhisperSpeechOptions(_options));
+        return new WhisperSpeech<T>(Architecture, new WhisperSpeechOptions(_options));
     }
 
     private void ThrowIfDisposed()

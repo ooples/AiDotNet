@@ -35,6 +35,7 @@ public class TimeBridgeOptions<T> : TimeSeriesRegressionOptions<T>
         ModelSize = other.ModelSize;
         BridgeDimension = other.BridgeDimension;
         UseStationarityGating = other.UseStationarityGating;
+        LearningRate = other.LearningRate;
     }
 
     public int ContextLength { get; set; } = 512;
@@ -58,4 +59,8 @@ public class TimeBridgeOptions<T> : TimeSeriesRegressionOptions<T>
     /// </summary>
     /// <value>Defaults to true.</value>
     public bool UseStationarityGating { get; set; } = true;
+
+    /// <summary>Gets or sets the Adam learning rate used for native training.</summary>
+    /// <value>Defaults to 0.0001.</value>
+    public double LearningRate { get; set; } = 1e-4;
 }

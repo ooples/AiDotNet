@@ -468,6 +468,43 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         return current;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// TOTO's native forward normalizes the series and presents the patch
+    /// reshape as one batch row. The base activation walker feeds the raw
+    /// rank-1 series directly to <see cref="ReshapeLayer{T}"/>, which treats
+    /// every scalar as a separate sample and cannot form a context patch.
+    /// Mirror the real forward preparation so introspection observes the same
+    /// paper path that prediction and training use.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            var activations = new Dictionary<string, Tensor<T>>();
+            var current = ApplyInstanceNormalization(input);
+            if (!(current.Rank == 2 && current.Shape[0] == 1))
+                current = current.Reshape(new[] { 1, current.Length });
+
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+
+            return activations;
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)

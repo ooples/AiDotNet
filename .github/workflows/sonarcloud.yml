@@ -469,7 +469,7 @@ jobs:
             filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           # 'Unit - 08e NN-Remaining (catch-all)' removed: it was a duplicate
           # of the ModelFamily NeuralNetworks shards (`A-F` + `G-L` + `M-N` +
-          # `O-R` + `S` + `T-Z`, same ModelFamilyTests.NeuralNetworks scope,
+          # `O-R` + `S` + `T` + `U-Z`, same ModelFamilyTests.NeuralNetworks scope,
           # only excluding 5 unit-test classes already covered by their
           # dedicated 08a-08d shards). Running ~800 paper-scale NN model tests
           # a SECOND time inside an already-OOMing process is what was actually
@@ -599,12 +599,20 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.NeuralNetworks&FullyQualifiedName~NeuralNetworks.S
-          - name: ModelFamily - NeuralNetworks T-Z
+          # The serialized T-Z tail was too close to the 45-minute job ceiling.
+          # Split at the existing letter boundary so the filters remain gap-free and
+          # non-overlapping while leaving margin for runner variance.
+          - name: ModelFamily - NeuralNetworks T
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.NeuralNetworks&FullyQualifiedName~NeuralNetworks.T
+          - name: ModelFamily - NeuralNetworks U-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
-              (FullyQualifiedName~NeuralNetworks.T|FullyQualifiedName~NeuralNetworks.U|FullyQualifiedName~NeuralNetworks.V|FullyQualifiedName~NeuralNetworks.W|FullyQualifiedName~NeuralNetworks.X|FullyQualifiedName~NeuralNetworks.Y|FullyQualifiedName~NeuralNetworks.Z)
+              (FullyQualifiedName~NeuralNetworks.U|FullyQualifiedName~NeuralNetworks.V|FullyQualifiedName~NeuralNetworks.W|FullyQualifiedName~NeuralNetworks.X|FullyQualifiedName~NeuralNetworks.Y|FullyQualifiedName~NeuralNetworks.Z)
           - name: ModelFamily - TimeSeries/Activation/Loss
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -862,12 +870,19 @@ jobs:
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
               (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.SU|FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sil|FullyQualifiedName~Generated.Sim|FullyQualifiedName~Generated.Sw|FullyQualifiedName~Generated.Sy)
-          - name: ModelFamily - Generated Layers T-Z
+          # The T-Z tail is 201 model classes / 4,378 tests. Split T from U-Z
+          # to leave safe margin beneath the 45-minute serialized job timeout.
+          - name: ModelFamily - Generated Layers T
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.T
+          - name: ModelFamily - Generated Layers U-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.T|FullyQualifiedName~Generated.U|FullyQualifiedName~Generated.V|FullyQualifiedName~Generated.W|FullyQualifiedName~Generated.X|FullyQualifiedName~Generated.Y|FullyQualifiedName~Generated.Z)
+              (FullyQualifiedName~Generated.U|FullyQualifiedName~Generated.V|FullyQualifiedName~Generated.W|FullyQualifiedName~Generated.X|FullyQualifiedName~Generated.Y|FullyQualifiedName~Generated.Z)
           # Previously-uncovered model families (NO shard ran these): CodeModel
           # (CodeBERT), Forecasting (MGTSD), Segmentation (SwinUNETR), Survival
           # (RandomSurvivalForest). Small (1 model each) — one combined shard.
@@ -1115,13 +1130,15 @@ jobs:
             'ModelFamily - Generated Layers SAL-SAM',
             'ModelFamily - Generated Layers SAN-Sig',
             'ModelFamily - Generated Layers Sil-Sy',
-            'ModelFamily - Generated Layers T-Z',
+            'ModelFamily - Generated Layers T',
+            'ModelFamily - Generated Layers U-Z',
             'ModelFamily - NeuralNetworks A-F',
             'ModelFamily - NeuralNetworks G-L',
             'ModelFamily - NeuralNetworks M-N',
             'ModelFamily - NeuralNetworks O-R',
             'ModelFamily - NeuralNetworks S',
-            'ModelFamily - NeuralNetworks T-Z',
+            'ModelFamily - NeuralNetworks T',
+            'ModelFamily - NeuralNetworks U-Z',
             # TimeSeries/Activation/Loss: the double-precision Transformer/CNN forecasters
             # (Autoformer, Chronos, DeepANT, LSTM-VAE, ...) each fit the 60 s [Fact] budget in
             # isolation (~15 s) but TIME OUT under the shard's default 4-way collection parallelism —
@@ -1320,6 +1337,15 @@ jobs:
           Write-Host "Disk:"
           df -h /
           exit $exitCode
+
+      # Surface the COMPLETE per-shard failure list on the run's Summary page.
+      # Runs only when the shard is red, parses the TRX the run already wrote,
+      # and groups failures by error so a single root cause behind many tests
+      # reads as one line. Pure reporter (exits 0) — never changes the outcome.
+      - name: Report failed tests
+        if: failure()
+        shell: pwsh
+        run: .github/scripts/report-failed-tests.ps1
 
       - name: Report slow tests
         if: always()

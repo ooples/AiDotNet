@@ -90,10 +90,24 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
     {
         _options = options ?? new MadmomBeatTrackerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honor the model's configured LearningRate and clip gradients. The bare AdamWOptimizer(this) dropped
+        // both: it ran at Adam's own 1e-3 default, which blew the beat-activation regressor into a high-loss
+        // region on the very first step (LossStrictlyDecreasesOnMemorizationTask: step 1 = 1.59, step 2 = 24.45).
+        // Fully user-overridable via the optimizer parameter and MadmomBeatTrackerOptions.LearningRate. (#1789)
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Routes tape training through the configured optimizer. Without this override the base trainer only
+    /// consults <see cref="NeuralNetworkBase{T}.GetOrCreateBaseOptimizer"/>, so the <c>_optimizer</c> field above
+    /// was stored but never used and training silently ran at the base Adam 1e-3 default. (#1789)
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     internal static async Task<MadmomBeatTracker<T>> CreateAsync(MadmomBeatTrackerOptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {

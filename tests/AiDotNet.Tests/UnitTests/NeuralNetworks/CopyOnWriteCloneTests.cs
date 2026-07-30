@@ -1,7 +1,10 @@
 using System;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.TextToSpeech.VoiceCloning;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
@@ -70,5 +73,135 @@ public class CopyOnWriteCloneTests
         for (int i = 0; i < clonePredAfter.Length; i++)
             cloneDelta = Math.Max(cloneDelta, Math.Abs(clonePredAfter[i] - sourcePredBefore[i]));
         Assert.True(cloneDelta > 1e-6, "Mutating the clone's parameters did not change its prediction.");
+    }
+
+    [Fact]
+    public void NestedTransformerGraph_IsIdenticalAndIndependentAfterCopyOnWriteShare()
+    {
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 16);
+        var options = new XTTSv2CloneOptions
+        {
+            VocabSize = 32,
+            TextEncoderDim = 8,
+            LLMDim = 8,
+            NumEncoderLayers = 0,
+            NumLLMLayers = 1,
+            NumHeads = 2,
+            NumCodebooks = 1,
+            CodebookSize = 16,
+            SpeakerEmbeddingDim = 8,
+            DropoutRate = 0,
+        };
+        using var source = new XTTSv2Clone<float>(architecture, options);
+        using var destination = new XTTSv2Clone<float>(architecture, new XTTSv2CloneOptions(options));
+        var input = new Tensor<float>(
+            new Vector<float>(new[] { 1f, 2f, 3f, 4f }),
+            new[] { 4 });
+
+        _ = source.Predict(input);
+        _ = destination.Predict(input);
+        var sourceParamsBefore = source.GetParameters().Clone();
+
+        Assert.True(
+            CopyOnWriteCloneHelper.TryShareTrainableParameters<float>(source, destination),
+            "The registered XTTS transformer module graph was not eligible for copy-on-write sharing.");
+
+        var sourcePrediction = source.Predict(input);
+        var sharedPrediction = destination.Predict(input);
+        Assert.Equal(sourcePrediction.Length, sharedPrediction.Length);
+        for (int i = 0; i < sourcePrediction.Length; i++)
+            Assert.Equal(sourcePrediction[i], sharedPrediction[i], 5);
+
+        var mutated = destination.GetParameters().Clone();
+        for (int i = 0; i < mutated.Length; i++)
+            mutated[i] += 0.25f;
+        destination.SetParameters(mutated);
+
+        var sourceParamsAfter = source.GetParameters();
+        float maxSourceDrift = 0;
+        for (int i = 0; i < sourceParamsBefore.Length; i++)
+            maxSourceDrift = Math.Max(maxSourceDrift, Math.Abs(sourceParamsAfter[i] - sourceParamsBefore[i]));
+        Assert.True(maxSourceDrift < 1e-6f,
+            $"Mutating a nested-transformer destination changed the source by {maxSourceDrift:E3}.");
+
+        var mutatedPrediction = destination.Predict(input);
+        float destinationDelta = 0;
+        for (int i = 0; i < mutatedPrediction.Length; i++)
+            destinationDelta = Math.Max(
+                destinationDelta,
+                Math.Abs(mutatedPrediction[i] - sourcePrediction[i]));
+        Assert.True(destinationDelta > 1e-5f,
+            "Mutating the copy-on-write transformer graph did not change the destination prediction.");
+    }
+
+    [Fact]
+    public void FreshEmbedding_PreservesReboundWeightsOnFirstForward()
+    {
+        using var source = new EmbeddingLayer<float>(32, 8)
+        {
+            InputMode = EmbeddingInputMode.Indices
+        };
+        using var destination = new EmbeddingLayer<float>(32, 8)
+        {
+            InputMode = EmbeddingInputMode.Indices
+        };
+        var input = new Tensor<float>(
+            new Vector<float>(new[] { 1f, 7f, 11f, 19f }),
+            new[] { 4 });
+
+        var expected = source.Forward(input);
+        var sourceParameters = source.GetTrainableParameters();
+        var shared = new Tensor<float>[sourceParameters.Count];
+        for (int i = 0; i < sourceParameters.Count; i++)
+            shared[i] = (Tensor<float>)sourceParameters[i].CloneShared();
+
+        // The destination is intentionally still fresh. This is the state a
+        // graph-safe DeepCopy destination is in when its trained tensors are rebound.
+        destination.SetTrainableParameters(shared);
+        var actual = destination.Forward(input);
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 6);
+    }
+
+    [Fact]
+    public void DeferredGroupedQueryAttention_PreservesReboundWeightsOnFirstForward()
+    {
+        using var source = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: 4,
+            embeddingDimension: 8,
+            numHeads: 2,
+            numKVHeads: 1,
+            deferAllocation: true);
+        using var destination = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: 4,
+            embeddingDimension: 8,
+            numHeads: 2,
+            numKVHeads: 1,
+            deferAllocation: true);
+        var values = new float[32];
+        for (int i = 0; i < values.Length; i++)
+            values[i] = (i - 16) / 32f;
+        var input = new Tensor<float>(new Vector<float>(values), new[] { 4, 8 });
+
+        var expected = source.Forward(input);
+        var sourceParameters = source.GetTrainableParameters();
+        var shared = new Tensor<float>[sourceParameters.Count];
+        for (int i = 0; i < sourceParameters.Count; i++)
+            shared[i] = (Tensor<float>)sourceParameters[i].CloneShared();
+
+        // Keep the destination deferred until after rebinding, which is the
+        // exact state produced by a graph-safe clone of a decoder stack.
+        destination.SetTrainableParameters(shared);
+        var actual = destination.Forward(input);
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 5);
     }
 }

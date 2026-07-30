@@ -140,7 +140,7 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -164,7 +164,7 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -195,6 +195,19 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         _dropout = options.DropoutRate;
     }
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        TimeMAEOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
+    }
+
     #endregion
 
     #region Initialization
@@ -220,6 +233,9 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
+
+    /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -285,7 +301,8 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
             NumDecoderLayers = _numDecoderLayers,
             NumHeads = _numHeads,
             MaskRatio = _maskRatio,
-            DropoutRate = _dropout
+            DropoutRate = _dropout,
+            LearningRate = _options.LearningRate
         };
 
         // Preserve ONNX mode if the original instance was created with an ONNX model
