@@ -53,5 +53,23 @@ public class APNet2Options : VocoderOptions
     /// <value>Defaults to 1024, matching the paper's FFT size.</value>
     public int WindowLength { get; set; } = 1024;
 
+    /// <summary>
+    /// Weight of the amplitude-spectrum loss (<c>lambda_A</c>).
+    /// </summary>
+    /// <remarks>Ai &amp; Ling 2023 (arXiv:2305.07952) Eq. 37 specifies 45.</remarks>
+    public double AmplitudeLossWeight { get; set; } = 45.0;
+
+    /// <summary>
+    /// Weight of the anti-wrapping phase loss (<c>lambda_P</c>).
+    /// </summary>
+    /// <remarks>Ai &amp; Ling 2023 (arXiv:2305.07952) Eq. 37 specifies 100.</remarks>
+    public double PhaseLossWeight { get; set; } = 100.0;
+
+    /// <summary>
+    /// Weight of the reconstructed-STFT loss (<c>lambda_S</c>).
+    /// </summary>
+    /// <remarks>Ai &amp; Ling 2023 (arXiv:2305.07952) Eq. 37 specifies 20.</remarks>
+    public double StftLossWeight { get; set; } = 20.0;
+
 
 }
