@@ -2428,7 +2428,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             bool isLastLayer = (i == numLayers - 1);
-            int outputDim = isLastLayer ? outputSize : hiddenSize;
+            int outputDim = isLastLayer ? outputSize : hiddenSize / numHeads;
             int heads = isLastLayer ? 1 : numHeads;
 
             yield return new GraphAttentionLayer<T>(
@@ -2436,9 +2436,13 @@ public static class LayerHelper<T>
                 outputFeatures: outputDim,
                 numHeads: heads,
                 dropoutRate: dropoutRate,
-                activationFunction: isLastLayer ? null : new LeakyReLUActivation<T>(0.2));
+                // The LeakyReLU with slope 0.2 belongs inside the attention-score
+                // function e_ij. The paper applies ELU to the concatenated hidden-head
+                // representation; using a second LeakyReLU here changes the GAT block.
+                activationFunction: isLastLayer ? null : new ELUActivation<T>(),
+                concatenateHeads: !isLastLayer);
 
-            currentInputDim = outputDim;
+            currentInputDim = isLastLayer ? outputDim : outputDim * heads;
         }
 
         // Add final activation based on task type
@@ -26579,59 +26583,42 @@ public static class LayerHelper<T>
 
         int h = inputHeight;
         int w = inputWidth;
-        int prevChannels = inputChannels;
-
-        int[] patchKernels = [7, 3, 3, 3];
-        int[] patchStrides = [4, 2, 2, 2];
-        int[] patchPaddings = [3, 1, 1, 1];
-
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
 
         for (int stage = 0; stage < 4; stage++)
         {
             int channels = channelDims[stage];
 
-            // Downsampling stem / patch embedding
-            yield return new ConvolutionalLayer<T>(
-                channels,
-                patchKernels[stage],
-                patchStrides[stage],
-                patchPaddings[stage],
-                relu);
+            if (stage == 0)
+            {
+                // InternImage stem: two 3×3 stride-2 convolutions with GELU,
+                // rather than a ViT-style 7×7 stride-4 patch projection.
+                int stemChannels = System.Math.Max(1, channels / 2);
+                yield return new ConvolutionalLayer<T>(stemChannels, 3, 2, 1, identity);
+                yield return new ActivationLayer<T>((IActivationFunction<T>)new GELUActivation<T>());
+                yield return new ConvolutionalLayer<T>(channels, 3, 2, 1, identity);
+                yield return new ActivationLayer<T>((IActivationFunction<T>)new GELUActivation<T>());
+                h = (h + 1) / 2;
+                h = (h + 1) / 2;
+                w = (w + 1) / 2;
+                w = (w + 1) / 2;
+            }
+            else
+            {
+                // Stage transition: normalized blocks on either side protect
+                // the 3×3 stride-2 channel expansion.
+                yield return new ConvolutionalLayer<T>(channels, 3, 2, 1, identity);
+                h = (h + 1) / 2;
+                w = (w + 1) / 2;
+            }
 
-            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-
-            // DCNv3 blocks (Wang et al. 2023): a grouped deformable 3×3 conv (the DCNv3 core
-            // operator) + a 1×1-expand→1×1-project feed-forward. The grouping is what gives DCNv3 its
-            // parameter efficiency — InternImage uses group width 16 (groups = channels/16, matching the
-            // paper's per-stage groups [4,8,16,32]…[20,40,80,160]); the 3×3 weight is therefore
-            // [channels, channels/groups=16, 3, 3] rather than the full [channels, channels, 3, 3].
-            // (Modulation/mask is omitted here so the path is trainable via the wired DCNv1 autograd; the
-            // fused grouped-deformable kernel + modulation is the production follow-up, #1691.)
+            // Each block owns both paper residual branches: pre-norm grouped
+            // modulated deformable mixing, then pre-norm 4× GELU FFN.
             int dcnGroups = System.Math.Max(1, channels / 16);
             for (int block = 0; block < depths[stage]; block++)
             {
-                // DCNv3 grouped deformable spatial mixing (channels -> channels)
-                yield return new DeformableConvolutionalLayer<T>(
-                    outputChannels: channels,
-                    kernelSize: 3, stride: 1, padding: 1,
-                    groups: dcnGroups, deformGroups: dcnGroups, useModulation: false);
-
-                // Feed-forward network (1×1 expand 4× -> 1×1 project back)
-                int ffnDim = channels * 4;
-                yield return new ConvolutionalLayer<T>(
-                    ffnDim,
-                    1, 1, 0,
-                    relu);
-
-                yield return new ConvolutionalLayer<T>(
-                    channels,
-                    1, 1, 0,
-                    relu);
+                yield return new InternImageBlockLayer<T>(channels, dcnGroups);
             }
-
-            prevChannels = channels;
         }
     }
 

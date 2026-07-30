@@ -251,7 +251,13 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         if (wasTraining) SetTrainingMode(false);
         try
         {
-            var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+
+            return current;
         }
         finally
         {

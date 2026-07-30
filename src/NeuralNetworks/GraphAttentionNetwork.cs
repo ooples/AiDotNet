@@ -167,7 +167,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         ILearningRateScheduler? learningRateScheduler = null,
         GraphAttentionNetworkOptions? options = null)
         : base(architecture,
-               lossFunction ?? new MeanSquaredErrorLoss<T>(),
+               lossFunction ?? new CrossEntropyWithLogitsLoss<T>(),
                maxGradNorm)
     {
         _options = options ?? new GraphAttentionNetworkOptions();
@@ -177,12 +177,19 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         HiddenDim = 64; // Default hidden dimension
         NumLayers = numLayers;
 
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        // The graph-aware layer builder intentionally leaves the per-node prediction
+        // head as logits (a global ActivationLayer would normalize nodes together).
+        // Fuse the paper's final softmax with cross-entropy so normalization remains
+        // per node and numerically stable.
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
-            InitialLearningRate = 0.001,
-            LearningRateScheduler = learningRateScheduler ?? new ExponentialLRScheduler(
-                baseLearningRate: 0.001, gamma: 0.99),
+            // Veličković et al. train the Cora/Citeseer GAT with Adam at 0.005.
+            // Their early stopping is validation-driven; an unconditional per-batch
+            // exponential decay is not part of the paper and nearly freezes the
+            // optimizer by the end of a 200-step fit.
+            InitialLearningRate = 0.005,
+            LearningRateScheduler = learningRateScheduler,
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
         };
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
@@ -280,35 +287,48 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         int epochs = 200,
         double learningRate = 0.005)
     {
-        var lr = NumOps.FromDouble(learningRate);
+        if (learningRate <= 0 || double.IsNaN(learningRate) || double.IsInfinity(learningRate))
+            throw new ArgumentOutOfRangeException(nameof(learningRate));
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        SetAdjacencyMatrix(adjacencyMatrix);
+        Tensor<T> trainingLabels = labels;
+        if (trainMask is not null)
         {
-            // Set all layers to training mode
-            foreach (var layer in Layers)
+            if (labels.Rank < 2 || trainMask.Length != labels.Shape[0])
+                throw new ArgumentException("The training mask must contain one entry per labeled node.", nameof(trainMask));
+
+            trainingLabels = labels.Clone();
+            int valuesPerNode = labels.Length / labels.Shape[0];
+            for (int node = 0; node < trainMask.Length; node++)
             {
-                layer.SetTrainingMode(true);
-            }
-
-            // Forward pass
-            var output = Forward(nodeFeatures, adjacencyMatrix);
-
-            // Compute loss gradient
-            var gradOutput = ComputeLossGradient(output, labels, trainMask);
-
-            // Backward pass
-
-            // Update parameters
-            foreach (var layer in Layers)
-            {
-                layer.UpdateParameters(lr);
+                if (trainMask[node]) continue;
+                for (int i = 0; i < valuesPerNode; i++)
+                    trainingLabels.SetFlat(node * valuesPerNode + i, NumOps.Zero);
             }
         }
 
-        // Set layers back to inference mode
-        foreach (var layer in Layers)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> trainingOptimizer =
+            Math.Abs(learningRate - 0.005) < 1e-15
+                ? _optimizer
+                : new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this,
+                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                    {
+                        InitialLearningRate = learningRate,
+                        UseAMSGrad = false,
+                    });
+
+        for (int epoch = 0; epoch < epochs; epoch++)
         {
-            layer.SetTrainingMode(false);
+            SetTrainingMode(true);
+            try
+            {
+                TrainWithTape(nodeFeatures, trainingLabels, trainingOptimizer);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
     }
 
@@ -688,9 +708,8 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// <para><b>For Beginners:</b> This is the main method for using a trained GAT network.
     /// Pass in node features and get predictions back. For classification, the output
     /// will be class probabilities for each node. If no adjacency matrix has been set,
-    /// a fully-connected adjacency matrix is generated for convenience. Note that this
-    /// treats every node as connected to every other node, which can mask real graph
-    /// structure; call <see cref="SetAdjacencyMatrix"/> to supply the true graph.
+    /// a self-loop-only matrix is generated as the neutral fallback; call
+    /// <see cref="SetAdjacencyMatrix"/> to supply the true graph.
     /// </para>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -746,14 +765,13 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
             return _cachedAdjacencyMatrix;
         }
 
+        // A feature tensor contains no topology. Preserve each node through the
+        // mandatory GAT self-loop without inventing edges between unrelated samples.
+        // The previous all-ones fallback silently turned ordinary batched training
+        // into one fully connected graph and mixed targets across nodes.
         var adjacencyMatrix = new Tensor<T>([numNodes, numNodes]);
         for (int i = 0; i < numNodes; i++)
-        {
-            for (int j = 0; j < numNodes; j++)
-            {
-                adjacencyMatrix.SetFlat(i * numNodes + j, NumOps.One);
-            }
-        }
+            adjacencyMatrix.SetFlat(i * numNodes + i, NumOps.One);
 
         _cachedAdjacencyMatrix = adjacencyMatrix;
         return adjacencyMatrix;
@@ -779,10 +797,8 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method performs one training step.
     /// For full training, call TrainOnGraph which handles multiple epochs and
-    /// adjacency matrix setup. If no adjacency matrix has been set, a
-    /// fully-connected adjacency matrix is generated for convenience. This means
-    /// every node is treated as connected to every other node, which can hide the
-    /// true graph structure unless you provide an explicit adjacency matrix.
+    /// adjacency matrix setup. If no adjacency matrix has been set, a self-loop-only
+    /// matrix is generated; provide an explicit matrix to train with graph edges.
     /// </para>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
