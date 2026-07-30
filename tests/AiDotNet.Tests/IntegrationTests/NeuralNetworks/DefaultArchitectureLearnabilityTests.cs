@@ -25,7 +25,13 @@ public class DefaultArchitectureLearnabilityTests
             taskType: NeuralNetworkTaskType.Regression,
             complexity: complexity,
             inputSize: 1,
-            outputSize: 1));
+            outputSize: 1)
+        {
+            // This regression validates architecture topology and trainability, not RNG luck.
+            // Pin the public per-architecture seed so full-shard construction order cannot
+            // change its initialization stream.
+            RandomSeed = 42
+        });
 
     [Theory]
     [InlineData(NetworkComplexity.Simple)]
