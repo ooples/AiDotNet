@@ -7,6 +7,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
@@ -79,12 +80,25 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
+    /// <param name="architecture">The network architecture.</param>
+    /// <param name="options">Vocoder options; defaults to the paper's configuration.</param>
+    /// <param name="optimizer">Optimizer; defaults to the paper's AdamW settings.</param>
+    /// <param name="lossFunction">
+    /// Training objective. Defaults to <see cref="APNet2GeneratorLoss{T}"/>, the paper's
+    /// <c>lambda_A * L_A + lambda_P * L_P + lambda_S * L_S</c>. The inherited squared-error default
+    /// penalised phase as though it were an ordinary number, which the anti-wrapping losses exist
+    /// precisely to avoid.
+    /// </param>
     public APNet2(
         NeuralNetworkArchitecture<T> architecture,
         APNet2Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null
     )
-        : base(architecture)
+        : base(architecture, lossFunction ?? new APNet2GeneratorLoss<T>(
+            (options ?? new APNet2Options()).AmplitudeLossWeight,
+            (options ?? new APNet2Options()).PhaseLossWeight,
+            (options ?? new APNet2Options()).StftLossWeight))
     {
         _options = options ?? new APNet2Options();
         _useNativeMode = true;
@@ -445,7 +459,13 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
             return new APNet2<T>(Architecture, mp, _options);
-        return new APNet2<T>(Architecture, _options);
+
+        // Carry the objective and the optimizer across explicitly. Rebuilding from architecture and
+        // options alone silently re-derives them, so a model trained under a caller-supplied loss
+        // came back as a clone trained under a different one: the more-data invariant trains the
+        // original for a few steps and its CLONE for more, and the clone's parameters were
+        // bit-identical no matter which objective the original had been given.
+        return new APNet2<T>(Architecture, _options, _optimizer, LossFunction);
     }
 
     private void ThrowIfDisposed()
