@@ -5671,13 +5671,19 @@ public static class LayerHelper<T>
         int embeddingDimension = 256,
         int[]? dilations = null)
     {
-        // VoxLingua107 uses ECAPA-TDNN with 107 output classes
+        // VoxLingua107 (Valk & Alumäe, SLT 2021) trains ECAPA-TDNN over its
+        // 107-language label set, so 107 is the paper default — but honour a
+        // caller-configured output size instead of hardcoding it. A caller asking
+        // for a smaller head previously still got a 107-way classifier, and
+        // CrossEntropyWithLogitsLoss.ClassIndicesToOneHot then indexed past the end
+        // of its one-hot buffer.
+        int numLanguages = architecture.OutputSize > 0 ? architecture.OutputSize : 107;
         return CreateDefaultECAPATDNNLanguageIdentifierLayers(
             architecture,
             numMels: numMels,
             tdnnChannels: tdnnChannels,
             embeddingDimension: embeddingDimension,
-            numLanguages: 107,
+            numLanguages: numLanguages,
             dilations: dilations);
     }
 

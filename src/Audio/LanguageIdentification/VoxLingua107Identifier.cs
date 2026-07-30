@@ -112,6 +112,13 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     private DenseLayer<T>? _classifierLayer;
     private BatchNormalizationLayer<T>? _finalBatchNorm;
 
+    // The classifier head width. VoxLingua107's paper label set is 107 languages
+    // (the default), but the head honours a caller-configured Architecture.OutputSize
+    // so the identifier can target any label set. Hardcoding 107 overrode a smaller
+    // configured head and CrossEntropyWithLogitsLoss.ClassIndicesToOneHot then indexed
+    // past its one-hot buffer.
+    private readonly int _numLanguages;
+
     // Language mapping for 107 languages
     private readonly Dictionary<int, string> _languageIdToCode;
     private readonly Dictionary<string, int> _languageCodeToId;
@@ -132,9 +139,11 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     public IReadOnlyList<string> SupportedLanguages => VoxLingua107Languages.ToList();
 
     /// <summary>
-    /// Gets the number of supported languages (107).
+    /// Gets the number of languages the classifier head predicts. Defaults to the
+    /// paper's 107-language VoxLingua107 label set, or the configured
+    /// <see cref="NeuralNetworkArchitecture{T}.OutputSize"/> when one is given.
     /// </summary>
-    public int NumLanguages => 107;
+    public int NumLanguages => _numLanguages;
 
     /// <summary>
     /// Gets the embedding dimension.
@@ -166,6 +175,10 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         _options = options ?? new VoxLingua107Options();
         Options = _options;
         _options.ModelPath = modelPath;
+
+        // The ONNX graph's output width is the paper's 107 by default; honour a
+        // configured output size for a re-headed export.
+        _numLanguages = architecture.OutputSize > 0 ? architecture.OutputSize : 107;
 
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;
@@ -209,6 +222,9 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         _options = options ?? new VoxLingua107Options();
         Options = _options;
 
+        // Honour a configured output size; fall back to the paper's 107 languages.
+        _numLanguages = architecture.OutputSize > 0 ? architecture.OutputSize : 107;
+
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;
 
@@ -245,48 +261,43 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
     private void InitializeNativeLayers()
     {
-        int inputDim = _options.NumMels * 3;
-        int channels = _options.TdnnChannels;
+        // Build the default ECAPA-TDNN stack from the shared factory rather than
+        // inline, so this model follows the same "custom layers or LayerHelper
+        // defaults" contract as the rest of the framework. The factory yields the
+        // layers in a fixed order; the role-aware forward keeps them in typed
+        // groups, so partition the flat list back into those roles here.
+        var built = LayerHelper<T>.CreateDefaultVoxLingua107Layers(
+            Architecture,
+            numMels: _options.NumMels,
+            tdnnChannels: _options.TdnnChannels,
+            embeddingDimension: _options.EmbeddingDimension,
+            dilations: _options.Dilations).ToList();
 
-        // Initial TDNN layer
-        _tdnnLayers.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _tdnnLayers.Add(new BatchNormalizationLayer<T>());
+        int index = 0;
 
-        // ECAPA-TDNN SE-Res2 blocks
-        foreach (int dilation in _options.Dilations)
+        // Initial TDNN: DenseLayer + BatchNormalizationLayer.
+        _tdnnLayers.Add(built[index++]);
+        _tdnnLayers.Add(built[index++]);
+
+        // One SE-Res2 block per dilation: the factory emits six residual-path
+        // layers followed by two squeeze-excitation layers. The forward keeps
+        // residual and SE layers in separate lists indexed 6-per-block and
+        // 2-per-block, so de-interleave them here.
+        foreach (int _ in _options.Dilations)
         {
-            AddSERes2Block(channels, dilation);
+            for (int i = 0; i < 6; i++)
+            {
+                _resBlocks.Add(built[index++]);
+            }
+
+            _seBlocks.Add(built[index++]);
+            _seBlocks.Add(built[index++]);
         }
 
-        // MFA output dimension
-        int mfaOutputDim = channels * _options.Dilations.Length;
-
-        // Attentive Statistics Pooling
-        _poolingLayer = new DenseLayer<T>(_options.EmbeddingDimension * 2);
-
-        // Final layers
-        _finalBatchNorm = new BatchNormalizationLayer<T>();
-        _classifierLayer = new DenseLayer<T>(107); // 107 languages
-    }
-
-    private void AddSERes2Block(int channels, int dilation)
-    {
-        // 1x1 reduction
-        _resBlocks.Add(new DenseLayer<T>(channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>());
-
-        // Dilated conv
-        _resBlocks.Add(new DenseLayer<T>(channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>());
-
-        // 1x1 expansion
-        _resBlocks.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>());
-
-        // SE block
-        int seReduction = 8;
-        _seBlocks.Add(new DenseLayer<T>(channels / seReduction, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _seBlocks.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new SigmoidActivation<T>()));
+        // Attentive-statistics-pooling projection, final BatchNorm, classifier head.
+        _poolingLayer = (DenseLayer<T>)built[index++];
+        _finalBatchNorm = (BatchNormalizationLayer<T>)built[index++];
+        _classifierLayer = (DenseLayer<T>)built[index++];
     }
 
     #endregion
@@ -509,7 +520,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
             {
                 { "Architecture", "VoxLingua107 (ECAPA-TDNN)" },
                 { "EmbeddingDimension", _options.EmbeddingDimension },
-                { "NumLanguages", 107 },
+                { "NumLanguages", _numLanguages },
                 { "SampleRate", SampleRate },
                 { "IsOnnxMode", IsOnnxMode }
             }
@@ -553,7 +564,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         writer.Write(SampleRate);
         writer.Write(_options.EmbeddingDimension);
         writer.Write(_options.TdnnChannels);
-        writer.Write(107); // NumLanguages is always 107 for VoxLingua107
+        writer.Write(_numLanguages); // classifier head width (paper default 107)
     }
 
     /// <inheritdoc/>
