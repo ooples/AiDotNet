@@ -235,7 +235,21 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             _barrierCounters.Remove(key);
         }
 
-        var messagesToRemove = _messageQueues.Keys.Where(k => k.StartsWith($"{environmentId}_")).ToList();
+        // Remove this environment's point-to-point queues — but NOT any queue still holding an
+        // UNDELIVERED message. Same rationale as the in-flight collective buffers below: this backend
+        // simulates separate processes with SHARED static state, so a rank that finishes its half of a
+        // Send/Receive exchange and calls Shutdown() must NOT destroy a message a PEER rank has not
+        // dequeued yet — that peer blocks in Receive() until its 30s timeout and fails.
+        // (Concretely: HybridShardedModel's data-parallel subgroup reduce has the leader Send the
+        // averaged gradient (tag 0x5D1) and then immediately return; the leader can reach Shutdown()
+        // before the pulsed follower re-acquires _globalLock, deleting the reply out from under it.
+        // Monitor is not FIFO-fair, so this loses reliably on a saturated CI runner.)
+        // Fully-drained queues delete themselves in Receive(), so any queue still present here is
+        // genuinely in flight and is left for its receiver.
+        var messagesToRemove = _messageQueues.Keys
+            .Where(k => k.StartsWith($"{environmentId}_"))
+            .Where(k => _messageQueues[k].Count == 0)
+            .ToList();
         foreach (var key in messagesToRemove)
         {
             _messageQueues.Remove(key);

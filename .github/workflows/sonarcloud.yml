@@ -271,7 +271,12 @@ jobs:
         # dropped — they existed to work around MSBuild file-locking on Windows and
         # aren't needed on Linux. net471 cross-compiles on Linux via the modern SDK's
         # auto-included reference assembly pack.
-        run: dotnet build -c Release --no-restore
+        # Bound project-level compilation concurrency independently from the runner's
+        # four CPUs. With the generated source set, the default four-way build launches
+        # net8/net10/net471 csc processes together, reaches the 16-GB runner limit, and
+        # the kernel kills a compiler with exit 137. Two projects at a time retain
+        # parallel compilation without exceeding the measured memory envelope.
+        run: dotnet build -c Release --no-restore -m:2
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -464,7 +469,7 @@ jobs:
             filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           # 'Unit - 08e NN-Remaining (catch-all)' removed: it was a duplicate
           # of the ModelFamily NeuralNetworks shards (`A-F` + `G-L` + `M-N` +
-          # `O-R` + `S` + `T-Z`, same ModelFamilyTests.NeuralNetworks scope,
+          # `O-R` + `S` + `T` + `U-Z`, same ModelFamilyTests.NeuralNetworks scope,
           # only excluding 5 unit-test classes already covered by their
           # dedicated 08a-08d shards). Running ~800 paper-scale NN model tests
           # a SECOND time inside an already-OOMing process is what was actually
@@ -594,12 +599,20 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.NeuralNetworks&FullyQualifiedName~NeuralNetworks.S
-          - name: ModelFamily - NeuralNetworks T-Z
+          # The serialized T-Z tail was too close to the 45-minute job ceiling.
+          # Split at the existing letter boundary so the filters remain gap-free and
+          # non-overlapping while leaving margin for runner variance.
+          - name: ModelFamily - NeuralNetworks T
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.NeuralNetworks&FullyQualifiedName~NeuralNetworks.T
+          - name: ModelFamily - NeuralNetworks U-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
-              (FullyQualifiedName~NeuralNetworks.T|FullyQualifiedName~NeuralNetworks.U|FullyQualifiedName~NeuralNetworks.V|FullyQualifiedName~NeuralNetworks.W|FullyQualifiedName~NeuralNetworks.X|FullyQualifiedName~NeuralNetworks.Y|FullyQualifiedName~NeuralNetworks.Z)
+              (FullyQualifiedName~NeuralNetworks.U|FullyQualifiedName~NeuralNetworks.V|FullyQualifiedName~NeuralNetworks.W|FullyQualifiedName~NeuralNetworks.X|FullyQualifiedName~NeuralNetworks.Y|FullyQualifiedName~NeuralNetworks.Z)
           - name: ModelFamily - TimeSeries/Activation/Loss
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -790,25 +803,131 @@ jobs:
           # before their splits. Split N-Z → N-S + T-Z; N-S itself was STILL a
           # 55-min timeout (dense with the SAM / segmentation family: ODISE, OMGSeg,
           # OneFormer, SAM/SAM21/SAMHQ, SegFormer, SegMamba, SwinUNETR, ...), so split
-          # N-S again → N-P + Q-S. Gap-free + non-overlapping: union == N-S.
-          - name: ModelFamily - Generated Layers N-P
+          # N-S again → N-P + Q-S. N-P later exceeded the 45-min budget with 2,300+
+          # tests already green and no OOM, so split it by measured wall weight into
+          # N-O + P. P then reached the exact 45-min gate locally with 1,490/1,531 tests
+          # green and no OOM. Split P by measured second-letter buckets into two balanced
+          # jobs (798 + 759 tests after ParaformerLarge rejoined the PR lane). The filters
+          # are gap-free and non-overlapping over the generated P inventory; their union is
+          # the original P shard.
+          - name: ModelFamily - Generated Layers N-O
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O|FullyQualifiedName~Generated.P)
-          - name: ModelFamily - Generated Layers Q-S
+              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O)
+          - name: ModelFamily - Generated Layers P A,C,I,L,N,P
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.R|FullyQualifiedName~Generated.S)
-          - name: ModelFamily - Generated Layers T-Z
+              (FullyQualifiedName~Generated.Pa|FullyQualifiedName~Generated.Pc|
+              FullyQualifiedName~Generated.Pi|FullyQualifiedName~Generated.Pl|
+              FullyQualifiedName~Generated.Pn|FullyQualifiedName~Generated.Pp)
+          - name: ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.T|FullyQualifiedName~Generated.U|FullyQualifiedName~Generated.V|FullyQualifiedName~Generated.W|FullyQualifiedName~Generated.X|FullyQualifiedName~Generated.Y|FullyQualifiedName~Generated.Z)
+              (FullyQualifiedName~Generated.Pe|FullyQualifiedName~Generated.Ph|
+              FullyQualifiedName~Generated.Po|FullyQualifiedName~Generated.Pr|
+              FullyQualifiedName~Generated.Ps|FullyQualifiedName~Generated.Pu|
+              FullyQualifiedName~Generated.Pw|FullyQualifiedName~Generated.Py)
+          # Q-S was itself a 45-min CANCELLATION, exactly like N-Z and N-S before it.
+          # MEASURED (full local run, all correctness fixes in place): 203 classes,
+          # 83.8 min of summed per-test time, and ~125 min WALL — the ~1.5x factor is
+          # per-class construction/GC that per-test timings do not attribute. So the job
+          # could never pass on a 45-min budget regardless of how many tests were fixed.
+          #
+          # Split 5 ways by MEASURED per-class weight (not class count), which balances
+          # the binding metric — the MAX shard:
+          #     N=3 -> max 29.2 min (~44 min wall, no headroom)
+          #     N=4 -> max 30.5 min (WORSE: the splitter keeps runs contiguous so they
+          #                          stay prefix-expressible, and the greedy pass
+          #                          overloads the tail)
+          #     N=5 -> max 24.9 min (~37 min wall)  <-- chosen
+          #     N=6 -> max 25.1 min (no gain; the tail shard is contiguity-bound)
+          #
+          # Machine-verified: all 203 classes match EXACTLY ONE shard, union == the old
+          # Q-S set, gap-free, non-overlapping, and checked CASE-INSENSITIVELY because
+          # VSTest's FullyQualifiedName~ operator ignores case (a case-sensitive check
+          # emits prefixes that silently overlap — e.g. SPIRAL vs SpiralConvLayer).
+          # Weights are pre-float for the seven heaviest classes, so real times land
+          # BELOW these figures. Every shard name is added to $heavyShards below.
+          - name: ModelFamily - Generated Layers Q-R1
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            # 56 classes, 15.9 min. Heaviest: RecurrentGemmaLanguageModel 5.9m, RealESRGANVideo 2.3m.
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.RA|FullyQualifiedName~Generated.RB|FullyQualifiedName~Generated.RC|FullyQualifiedName~Generated.RE|FullyQualifiedName~Generated.RF|FullyQualifiedName~Generated.RI|FullyQualifiedName~Generated.RM|FullyQualifiedName~Generated.RN|FullyQualifiedName~Generated.RoBE)
+          - name: ModelFamily - Generated Layers R2-SAI
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            # 23 classes, 11.0 min. Heaviest: RWKV4LanguageModel 1.6m, RoomImpulseResponse 1.5m.
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.RP|FullyQualifiedName~Generated.RR|FullyQualifiedName~Generated.RS|FullyQualifiedName~Generated.RT|FullyQualifiedName~Generated.RV|FullyQualifiedName~Generated.RW|FullyQualifiedName~Generated.RoM|FullyQualifiedName~Generated.Robu|FullyQualifiedName~Generated.Rod|FullyQualifiedName~Generated.Roo|FullyQualifiedName~Generated.Rot|FullyQualifiedName~Generated.S4|FullyQualifiedName~Generated.S5|FullyQualifiedName~Generated.SAC|FullyQualifiedName~Generated.SAI)
+          - name: ModelFamily - Generated Layers SAL-SAM
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            # Only 8 classes but 15.6 min: the two heaviest classes in the whole shard
+            # (SALMONN 6.6m, SambaLanguageModel 6.2m) plus the SAM family. Kept together
+            # because SAL*/SAM* cannot be separated further by prefix.
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.SAL|FullyQualifiedName~Generated.SAM)
+          - name: ModelFamily - Generated Layers SAN-Sig
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            # 40 classes, 16.4 min. Heaviest: SECBERT 5.5m, SeACo 2.8m.
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.SAN|FullyQualifiedName~Generated.SAR|FullyQualifiedName~Generated.SC|FullyQualifiedName~Generated.SE|FullyQualifiedName~Generated.Sh|FullyQualifiedName~Generated.Sig)
+          - name: ModelFamily - Generated Layers Sil-Sy
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            # 76 classes, 24.9 min — the binding shard. Heaviest: SpERTNER 5.0m, SPIRAL 2.5m,
+            # SVTR 2.2m. Contiguity-bound: N=6 could not break it up further.
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.SU|FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sil|FullyQualifiedName~Generated.Sim|FullyQualifiedName~Generated.Sw|FullyQualifiedName~Generated.Sy)
+          # The T-Z tail is 201 model classes / 4,378 tests. T remains isolated.
+          # U-Z contains 2,676 tests across 119 classes and hit the 45-minute job limit
+          # after exposing only 999 results. A two-way split still left 2,171 tests in
+          # U-W, so use the discovered test list plus the partial timing trace to isolate
+          # each substantial initial: U=493, V=1,000, W=678, X=212, Y-Z=293 tests.
+          - name: ModelFamily - Generated Layers T
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.T
+          - name: ModelFamily - Generated Layers U
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.U
+          - name: ModelFamily - Generated Layers V
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.V
+          - name: ModelFamily - Generated Layers W
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.W
+          - name: ModelFamily - Generated Layers X
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.X
+          - name: ModelFamily - Generated Layers Y-Z
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.Y|FullyQualifiedName~Generated.Z)
           # Previously-uncovered model families (NO shard ran these): CodeModel
           # (CodeBERT), Forecasting (MGTSD), Segmentation (SwinUNETR), Survival
           # (RandomSurvivalForest). Small (1 model each) — one combined shard.
@@ -1050,15 +1169,27 @@ jobs:
             'ModelFamily - Generated Layers M A-Medi',
             'ModelFamily - Generated Layers M MedS-Meta',
             'ModelFamily - Generated Layers M MetaV-Mu',
-            'ModelFamily - Generated Layers N-P',
-            'ModelFamily - Generated Layers Q-S',
-            'ModelFamily - Generated Layers T-Z',
+            'ModelFamily - Generated Layers N-O',
+            'ModelFamily - Generated Layers P A,C,I,L,N,P',
+            'ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y',
+            'ModelFamily - Generated Layers Q-R1',
+            'ModelFamily - Generated Layers R2-SAI',
+            'ModelFamily - Generated Layers SAL-SAM',
+            'ModelFamily - Generated Layers SAN-Sig',
+            'ModelFamily - Generated Layers Sil-Sy',
+            'ModelFamily - Generated Layers T',
+            'ModelFamily - Generated Layers U',
+            'ModelFamily - Generated Layers V',
+            'ModelFamily - Generated Layers W',
+            'ModelFamily - Generated Layers X',
+            'ModelFamily - Generated Layers Y-Z',
             'ModelFamily - NeuralNetworks A-F',
             'ModelFamily - NeuralNetworks G-L',
             'ModelFamily - NeuralNetworks M-N',
             'ModelFamily - NeuralNetworks O-R',
             'ModelFamily - NeuralNetworks S',
-            'ModelFamily - NeuralNetworks T-Z',
+            'ModelFamily - NeuralNetworks T',
+            'ModelFamily - NeuralNetworks U-Z',
             # TimeSeries/Activation/Loss: the double-precision Transformer/CNN forecasters
             # (Autoformer, Chronos, DeepANT, LSTM-VAE, ...) each fit the 60 s [Fact] budget in
             # isolation (~15 s) but TIME OUT under the shard's default 4-way collection parallelism —
@@ -1106,8 +1237,14 @@ jobs:
             'TopLevel - FederatedLearning',
             'TopLevel - Audio/Onnx/Tokenization'
           )
-          $serializeShard = $heavyShards -contains $shardName
-          $collectCoverage = -not $serializeShard
+          $heavyShard = $heavyShards -contains $shardName
+          # Generated D-F's formerly multi-GB fixtures are now FP32/bounded, and an exact
+          # 4-core/16-GB trace stays near 1 GB while serial execution uses only 1-2 cores and
+          # cannot fit the 45-minute budget. Keep heavy-shard coverage disabled and memory
+          # telemetry enabled, but let this one shard use the repository's four-thread xUnit
+          # default. All other heavy shards retain one-at-a-time model loading.
+          $serializeShard = $heavyShard -and $shardName -ne 'ModelFamily - Generated Layers D-F'
+          $collectCoverage = -not $heavyShard
           Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 
           # Build the argument list as a PowerShell array so the `--`
@@ -1147,7 +1284,7 @@ jobs:
           # xUnit adapter. The opt-in AIDOTNET_TEST_TRACE_FILE below is written by every source-generated
           # test constructor before its model/component factory runs and streamed by the sampler, so an OOM has
           # an attributable [test-start] class marker in the live log.
-          $consoleVerbosity = if ($serializeShard) { 'detailed' } else { 'normal' }
+          $consoleVerbosity = if ($heavyShard) { 'detailed' } else { 'normal' }
           $dotnetArgs += @(
             '--logger', 'trx;LogFileName=test-results.trx',
             '--logger', "console;verbosity=$consoleVerbosity",
@@ -1222,7 +1359,7 @@ jobs:
           # captures (a Start-Process grandchild's stdout was NOT captured — it produced zero output).
           # [Console]::Out is thread-safe and flushed per line, so samples stream immediately.
           $memSampler = $null
-          if ($serializeShard) {
+          if ($heavyShard) {
             $testTrace = Join-Path $results 'active-test.trace'
             $env:AIDOTNET_TEST_TRACE_FILE = $testTrace
             $memSampler = [powershell]::Create()
@@ -1262,6 +1399,15 @@ jobs:
           Write-Host "Disk:"
           df -h /
           exit $exitCode
+
+      # Surface the COMPLETE per-shard failure list on the run's Summary page.
+      # Runs only when the shard is red, parses the TRX the run already wrote,
+      # and groups failures by error so a single root cause behind many tests
+      # reads as one line. Pure reporter (exits 0) — never changes the outcome.
+      - name: Report failed tests
+        if: failure()
+        shell: pwsh
+        run: .github/scripts/report-failed-tests.ps1
 
       - name: Report slow tests
         if: always()
@@ -1397,7 +1543,10 @@ jobs:
 
       - name: Build (Release)
         # Windows-only MSBuild flags dropped — file-locking workarounds not needed on Linux.
-        run: dotnet build -c Release --no-restore
+        # Match the memory-safe project concurrency used by the artifact build. Sonar's
+        # compiler instrumentation only increases the need to avoid four large csc
+        # processes competing inside the 16-GB runner.
+        run: dotnet build -c Release --no-restore -m:2
 
       - name: End SonarCloud analysis
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250

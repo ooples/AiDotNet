@@ -133,6 +133,20 @@ public class AudioProcessingTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
+    public async Task STFT_WhisperWindow_PreservesExact400PointTransform()
+    {
+        const int nFft = 400;
+        var stft = new ShortTimeFourierTransform<float>(nFft: nFft, hopLength: 160);
+        var signal = new Tensor<float>(new[] { 1600 });
+
+        var spectrogram = stft.Forward(signal);
+
+        Assert.Equal(nFft, stft.NFft);
+        Assert.Equal(201, stft.NumFrequencyBins);
+        Assert.Equal(201, spectrogram.Shape[^1]);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task STFT_Magnitude_ProducesNonNegativeValues()
     {
         // Arrange

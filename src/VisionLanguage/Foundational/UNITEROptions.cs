@@ -62,5 +62,8 @@ public class UNITEROptions : FoundationalVLMOptions
         TextDim = 768;
         FusionDim = 768;
         NumFusionLayers = 12;
+        // Official UNITER-base all-data pre-training configuration.
+        LearningRate = 5e-5;
+        WeightDecay = 0.01;
     }
 }

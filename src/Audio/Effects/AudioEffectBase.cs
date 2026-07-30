@@ -92,11 +92,14 @@ public abstract class AudioEffectBase<T> : IAudioEffect<T>
         }
 
         // Create tensor and copy output data
+        // Write DIRECTLY into the tensor's storage. Tensor<T>.ToVector() materializes a COPY, not a
+        // view, so the previous `result.ToVector()[i] = ...` filled a throwaway vector and returned
+        // the freshly-allocated (all-zero) tensor — every effect emitted SILENCE regardless of input.
         var result = new Tensor<T>([output.Length]);
-        var resultVector = result.ToVector();
+        var resultSpan = result.Data.Span;
         for (int i = 0; i < output.Length; i++)
         {
-            resultVector[i] = output[i];
+            resultSpan[i] = output[i];
         }
         return result;
     }

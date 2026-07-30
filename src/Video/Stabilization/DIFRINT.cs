@@ -52,10 +52,19 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("DIFRINT: A Framework for Full-Frame Video Stabilization",
-    "https://arxiv.org/abs/2005.07055",
+// Citation corrected in full — title, URL and authors were all wrong. arXiv 2005.07055 is "Pinsker
+// inequalities and related Monge-Ampere equations for log concave functions", unrelated. The recorded
+// authors (Shi, Shi, Lai, Liang, Liang) are the authors of "Deep Online Fused Video Stabilization", a
+// different paper. DIFRINT is Choi & Kweon, ACM TOG 39(1) / SIGGRAPH Asia 2019, arXiv 1909.02641.
+//
+// IMPLEMENTATION NOTE: the paper's mechanism is DEEP ITERATIVE FRAME INTERPOLATION — repeatedly
+// synthesizing an intermediate frame from its neighbours so jitter is removed without cropping (hence
+// "full-frame"). This class has the iterative structure but only one reference to interpolation at all,
+// so whether the interpolation step is genuinely present needs checking; tracked separately.
+[ResearchPaper("Deep Iterative Frame Interpolation for Full-frame Video Stabilization",
+    "https://arxiv.org/abs/1909.02641",
     Year = 2020,
-    Authors = "Zhenmei Shi, Fuhao Shi, Wei-Sheng Lai, Chia-Kai Liang, Yingyu Liang")]
+    Authors = "Jinsoo Choi, In So Kweon")]
 public class DIFRINT<T> : VideoStabilizationBase<T>
 {
     private readonly DIFRINTOptions _options;

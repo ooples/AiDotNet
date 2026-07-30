@@ -70,7 +70,14 @@ public class MadmomBeatTrackerOptions : ModelOptions
     #region Training
 
     /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 1e-3;
+    /// <summary>
+    /// Gets or sets the learning rate. Default 1e-4 — the beat-activation head is a soft REGRESSION target
+    /// (madmom's activation function is a continuous beat likelihood, not a hard label), and at 1e-3 the first
+    /// Adam step overshot into a high-loss region it could not recover from
+    /// (LossStrictlyDecreasesOnMemorizationTask: step 1 = 1.59 -> step 2 = 24.45). Fully user-overridable via
+    /// this option or the constructor's optimizer parameter.
+    /// </summary>
+    public double LearningRate { get; set; } = 1e-4;
 
     #endregion
 }

@@ -419,6 +419,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         GradientBasedOptimizerOptions<T, TInput, TOutput> options) :
         base(model, options)
     {
+        // Publish this optimizer to the network it was built for, so a model that configures an optimizer in its
+        // constructor actually trains with it. Without this the field stays private to the derived model and the
+        // tape trainer silently uses the base Adam default instead — see
+        // NeuralNetworkBase.AdoptConfiguredOptimizer for the scale of that defect. Adoption never overwrites an
+        // optimizer the model already chose. (#1789)
+        if (model is NeuralNetworkBase<T> configuredNetwork
+            && this is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> tapeOptimizer)
+        {
+            configuredNetwork.AdoptConfiguredOptimizer(tapeOptimizer);
+        }
+
         GradientOptions = options;
         _currentMomentum = GradientOptions.InitialMomentum;
         _previousGradient = Vector<T>.Empty();

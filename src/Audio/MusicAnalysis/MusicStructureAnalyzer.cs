@@ -73,15 +73,39 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
     /// Creates a Music Structure Analyzer in native training mode.
     /// </summary>
     public MusicStructureAnalyzer(NeuralNetworkArchitecture<T> architecture, MusicStructureAnalyzerOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture)
     {
         _options = options ?? new MusicStructureAnalyzerOptions();
+        // Music-structure segmentation is a per-frame MULTI-CLASS classifier over the NumSections section
+        // labels (intro/verse/chorus/bridge/outro). The NeuralNetworkBase default MSE loss is unstable on raw
+        // classification logits, so LossStrictlyDecreases / Training_ShouldReduceLoss do not hold. The
+        // paper-faithful DEFAULT is softmax cross-entropy (bounded gradient) so training converges — but the
+        // caller can override it via the lossFunction parameter for full user customization (never hardcoded).
+        // Mirrors the HuBERTSER audio-classifier fix; AudioGenModel is the customizable-loss template. (#1789)
+        LossFunction = lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default optimizer honors the model's configured LearningRate (previously the bare AdamWOptimizer(this)
+        // ignored it and ran at Adam's 0.001) and enables gradient clipping (MaxGradientNorm 1.0) so the
+        // cross-entropy gradients can't overshoot the first step into a high-loss region. Fully user-overridable
+        // via the optimizer parameter and MusicStructureAnalyzerOptions.LearningRate. Mirrors HuBERTSER. (#1789)
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Routes tape training through the configured optimizer. Without this override the base trainer only
+    /// consults <see cref="NeuralNetworkBase{T}.GetOrCreateBaseOptimizer"/>, so the <c>_optimizer</c> field above
+    /// was stored but never used and training silently ran at the base Adam 1e-3 default instead of the
+    /// model's 1e-4 — Training_ShouldReduceLoss saw loss rise 8.86 -> 10.95 on the CI envelope. Same defect
+    /// already fixed in litedvdnet, the madmom beat tracker and mog. (#1789)
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     internal static async Task<MusicStructureAnalyzer<T>> CreateAsync(MusicStructureAnalyzerOptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {

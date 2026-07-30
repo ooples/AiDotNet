@@ -5964,6 +5964,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         => System.Linq.Enumerable.Empty<LayerBase<T>?>();
 
     /// <summary>
+    /// Returns the registered module roots used by copy-on-write cloning.
+    /// </summary>
+    /// <remarks>
+    /// This deliberately mirrors the training graph: ordinary layers come
+    /// from <see cref="Layers"/>, while models with trainable modules outside
+    /// that list expose them through <see cref="GetExtraTrainableLayers"/>.
+    /// Registered child modules are traversed by <c>TapeTrainingStep</c>.
+    /// </remarks>
+    internal IReadOnlyList<ILayer<T>> GetCopyOnWriteLayerRoots()
+    {
+        var roots = new List<ILayer<T>>(_layers.Count);
+        roots.AddRange(_layers);
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is not null)
+                roots.Add(extra);
+        }
+        return roots;
+    }
+
+    /// <summary>
     /// Structural estimate of this model's trainable parameter count, computed
     /// from its architecture/options WITHOUT materializing any lazy weight
     /// tensors. Returns 0 by default (meaning "no estimate available — rely on
@@ -6125,8 +6146,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual T GetLastLoss()
     {
-        // If we haven't calculated a loss yet, return a default value
-        if (LastLoss == null || NumOps.IsNaN(LastLoss))
+        // A missing loss means training has not produced one yet. Preserve NaN/Infinity:
+        // replacing a non-finite training result with zero makes divergence look like
+        // successful convergence and prevents callers from diagnosing the real failure.
+        if (LastLoss == null)
         {
             return NumOps.Zero;
         }
@@ -8034,10 +8057,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// — so the relative direction of the gradient field is preserved while
     /// its magnitude is bounded.
     /// </summary>
+    /// <summary>
+    /// Whether the most recent clipped training step observed a NON-FINITE total gradient norm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A non-finite gradient means the step corrupted (or would have corrupted) the parameters, and
+    /// previously it was swallowed silently: clipping simply declined to scale, the optimizer applied
+    /// the bad gradients, and the only visible symptom was NaN weights some layers later. Exposing it
+    /// makes "this step was poisoned" observable at the point it is detected rather than inferred
+    /// afterwards from wrecked parameters.
+    /// </para>
+    /// <para>
+    /// Reset at the start of every clipped step, so it always describes the latest one.
+    /// </para>
+    /// </remarks>
+    public bool LastStepHadNonFiniteGradients { get; private set; }
+
     private void ApplyGradientClipping(
         Dictionary<Tensor<T>, Tensor<T>> grads, double maxNorm,
         IReadOnlyList<Tensor<T>> iterationOrder)
     {
+        LastStepHadNonFiniteGradients = false;
         // Step 1: total L2 norm across all gradient tensors, iterating in
         // the caller-supplied deterministic order (NOT dict bucket order —
         // that's process-randomized for reference-keyed dicts).
@@ -8055,6 +8096,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
         if (totalNormSq == 0.0) return;
+
+        // A NON-FINITE total norm must not be scaled through. If any single gradient element is NaN
+        // or Inf, totalNormSq becomes NaN; `totalNormSq == 0.0` is false, Math.Sqrt(NaN) is NaN, and
+        // `totalNorm <= maxNorm` is FALSE for NaN (every NaN comparison is), so the scaling below
+        // would run with scale = maxNorm / (NaN + 1e-6) = NaN and multiply EVERY gradient by NaN.
+        // That converts one bad element into a fully corrupted parameter vector — measured on
+        // RWKVForecaster<float> at batch 1, where a single step took all 17,576 parameters to NaN —
+        // and it destroys the evidence of which layer actually produced the bad gradient. Leaving the
+        // gradients untouched keeps the damage localized so the real cause stays diagnosable, and lets
+        // any downstream non-finite guard see the true extent of the problem.
+        if (double.IsNaN(totalNormSq) || double.IsInfinity(totalNormSq))
+        {
+            LastStepHadNonFiniteGradients = true;
+            return;
+        }
+
         double totalNorm = Math.Sqrt(totalNormSq);
         if (totalNorm <= maxNorm) return;
 
@@ -9080,6 +9137,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// default and the fused fast path.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Adopts an optimizer that was constructed FOR this network as its tape-training optimizer, unless one has
+    /// already been chosen.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Models overwhelmingly configure their optimizer as
+    /// <c>_optimizer = optimizer ?? new SomeOptimizer&lt;T, ...&gt;(this, new SomeOptions { InitialLearningRate = ... })</c>
+    /// and then never publish it — the field is private to the derived class, and unless the model also overrides
+    /// <see cref="GetOrCreateBaseOptimizer"/> or calls <c>SetBaseTrainOptimizer</c>, the trainer never sees it and
+    /// falls back to the base Adam default. A survey of this repository found 850 models assigning such a field and
+    /// only 56 with a live path to it: roughly 794 models were silently training at the base default instead of the
+    /// learning rate their own options declared, usually an order of magnitude away from it. Four of those were
+    /// diagnosed one at a time as test failures (litedvdnet, the madmom beat tracker, mog, musicstructureanalyzer);
+    /// each was fixed by adding the missing override, which is the symptom of a defect that belongs here rather
+    /// than in 794 constructors.
+    /// </para>
+    /// <para>
+    /// Adoption is deliberately conservative: the FIRST optimizer built for this network wins, so an explicit
+    /// <c>SetBaseTrainOptimizer</c> call still takes precedence, a model that constructs several optimizers
+    /// (generator/discriminator pairs) keeps its first, and any model overriding
+    /// <see cref="GetOrCreateBaseOptimizer"/> bypasses this entirely. (#1789)
+    /// </para>
+    /// </remarks>
+    internal void AdoptConfiguredOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        _baseTrainOptimizer ??= optimizer;
+    }
+
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
         if (_baseTrainOptimizer is not null) return _baseTrainOptimizer;
@@ -9846,8 +9932,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Write each layer's type and shape
         foreach (var layer in Layers)
         {
-            // Write layer type
-            writer.Write(layer.GetType().Name);
+            // Write layer type. Use the generic type DEFINITION's full,
+            // namespace-qualified name. GetType().Name is only the arity-suffixed
+            // short name ("MaxPoolingLayer`1"), which collides across namespaces
+            // and left one of two same-named layers unrecoverable on deserialize.
+            // The closed generic's own FullName is unusable here — it bakes in the
+            // T argument ("...MaxPoolingLayer`1[[System.Double, ...]]") — so take
+            // the definition's FullName, which is exactly the key
+            // DeserializationHelper registers. Deserialize still accepts the old
+            // short name via the retained short-name registry entries.
+            var layerRuntimeType = layer.GetType();
+            var layerDefinitionType = layerRuntimeType.IsGenericType
+                ? layerRuntimeType.GetGenericTypeDefinition()
+                : layerRuntimeType;
+            writer.Write(layerDefinitionType.FullName ?? layerDefinitionType.Name);
 
             // Write input shape
             var inputShape = layer.GetInputShape();
@@ -10367,12 +10465,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         !(e == "0" || string.Equals(e, "false", StringComparison.OrdinalIgnoreCase) ||
           string.Equals(e, "off", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Gets whether this model can use tensor-level copy-on-write cloning.
+    /// </summary>
+    /// <remarks>
+    /// Models whose forward path maintains aliases or derived state that must
+    /// be rebuilt by the normal layer deserializer can opt out. The eager path
+    /// remains fully faithful and is appropriate for bounded-size models.
+    /// </remarks>
+    protected virtual bool SupportsCopyOnWriteDeepCopy => true;
+
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
         // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.
         // Falls back to the eager paths below for any model it cannot share safely (layer-count or
         // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
-        if (UseCopyOnWriteDeepCopy && TryDeepCopyCopyOnWrite(out var cowCopy))
+        if (UseCopyOnWriteDeepCopy && SupportsCopyOnWriteDeepCopy
+            && TryDeepCopyCopyOnWrite(out var cowCopy))
             return cowCopy;
 
         // Internal in-memory clone: open a persistence-guard InternalOperation scope for the remainder
@@ -12082,28 +12191,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // buffers that mixed-precision teardown wants to recycle.
             DisableMemoryManagement();
             DisableMixedPrecision();
-
-            // Cascade to child layers. Guard against null because Layers may not be
-            // populated on a partially-constructed network (e.g., if a ctor threw
-            // before InitializeLayers ran).
-            if (Layers is not null)
-            {
-                foreach (var layer in Layers)
-                {
-                    if (layer is IDisposable disposable)
-                    {
-                        try
-                        {
-                            disposable.Dispose();
-                        }
-                        catch (ObjectDisposedException)
-                        {
-                            // A layer shared between networks may have been disposed
-                            // already — not a bug, don't let it abort the cascade.
-                        }
-                    }
-                }
-            }
         }
     }
 

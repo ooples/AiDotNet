@@ -50,6 +50,23 @@ public static class DeserializationHelper
 
         foreach (var type in layerTypes)
         {
+            // Key by the full, namespace-qualified name so layers that share a
+            // short name across namespaces each get a distinct, resolvable
+            // identity — e.g. AiDotNet.PointCloud.Layers.MaxPoolingLayer`1 vs
+            // AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer`1. Keyed only by
+            // type.Name, the second registration silently overwrote the first, so
+            // one of the two was unreachable and any model using it failed to
+            // clone/deserialize ("MaxPooling requires 3D [C,H,W]" when the point
+            // cloud layer was rebuilt as the image one).
+            if (type.FullName is { } fullName)
+            {
+                LayerTypes[fullName] = type;
+            }
+
+            // The short name is still registered for backward compatibility with
+            // models serialized before full names were written. For a colliding
+            // short name this entry stays ambiguous (last registration wins, as
+            // before) — full names are what resolve it going forward.
             LayerTypes[type.Name] = type;
         }
     }
@@ -722,6 +739,50 @@ public static class DeserializationHelper
                 instance = spCtor.Invoke(new object?[] { spOut, spLen, spAct });
             }
         }
+        else if (genericDef == typeof(AiDotNet.PointCloud.Models.SetAbstractionLayer<>))
+        {
+            // SetAbstractionLayer is a multi-branch composite whose parameter
+            // count is fixed by its per-branch MLP widths, radii, neighbour counts
+            // and centroid count — none of which the generic type-name + shape +
+            // flat-vector serialization carries. Its GetMetadata emits them here.
+            // Rebuild every scale uniformly through the multi-scale constructor (a
+            // single-scale layer is just one branch), so the reconstructed layer
+            // has exactly the parameters the saved vector expects. Without this the
+            // reflection fallback built a default-shaped shell and SetParameters
+            // threw "Expected 4 parameters, but got 248" on Clone/DeepCopy (#1789).
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            int saNumPoints = TryGetInt(additionalParams, "SA_NumPoints")
+                ?? throw new InvalidOperationException(
+                    "SetAbstractionLayer deserialize: missing SA_NumPoints metadata — re-save the model on a "
+                    + "build that emits it via GetMetadata.");
+            int saInputChannels = TryGetInt(additionalParams, "SA_InputChannels")
+                ?? throw new InvalidOperationException(
+                    "SetAbstractionLayer deserialize: missing SA_InputChannels metadata.");
+
+            double[] saRadii = (TryGetString(additionalParams, "SA_Radii") ?? "")
+                .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => double.Parse(s, inv)).ToArray();
+            int[] saNeighbors = (TryGetString(additionalParams, "SA_NeighborSamples") ?? "")
+                .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => int.Parse(s, inv)).ToArray();
+            int[][] saMlp = (TryGetString(additionalParams, "SA_Mlp") ?? "")
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(branch => branch.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.Parse(s, inv)).ToArray())
+                .ToArray();
+
+            if (saRadii.Length == 0 || saRadii.Length != saNeighbors.Length || saRadii.Length != saMlp.Length)
+                throw new InvalidOperationException(
+                    "SetAbstractionLayer deserialize: branch metadata (SA_Radii/SA_NeighborSamples/SA_Mlp) is "
+                    + "missing or inconsistent.");
+
+            var saCtor = type.GetConstructor(
+                new[] { typeof(int), typeof(double[]), typeof(int), typeof(int[][]), typeof(int[]) });
+            if (saCtor is null)
+                throw new MissingLayerCtorException(
+                    "Cannot find SetAbstractionLayer(int, double[], int, int[][], int[]) constructor.");
+            instance = saCtor.Invoke(new object?[] { saNumPoints, saRadii, saInputChannels, saMlp, saNeighbors });
+        }
         else if (genericDef == typeof(PositionalEncodingLayer<>))
         {
             // Handled by the generated factory above; this branch remains only for payloads
@@ -1268,6 +1329,40 @@ public static class DeserializationHelper
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             instance = new CitrinetBlockLayer<T>(channels, kernelSize, numSubBlocks, seReductionRatio, dropoutRate, stride);
         }
+        else if (genericDef == typeof(DepthwiseSeparableConvolutionalLayer<>))
+        {
+            // DepthwiseSeparableConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
+            //                                      IActivationFunction<T>?)
+            // This layer had NO case here at all, so it fell through to the generic reconstruction path and was
+            // rebuilt with a guessed output depth. Its parameter count is
+            //   inputDepth * (kernelSize^2 + outputDepth) + outputDepth,
+            // so a wrong outputDepth makes the layer reject its own saved weights — Clone() and
+            // Clone_AfterTraining threw "Expected 2000 parameters, but got 5136" (a block built with
+            // outputDepth 96 came back as 32). The layer now publishes these four values in GetMetadata. (#1789)
+            int dsKernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
+            int dsStride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int dsPadding = TryGetInt(additionalParams, "Padding") ?? 0;
+            // Prefer the published depth; fall back to the declared output shape, whose last axis carries
+            // outputDepth for this layer (its base output shape is [-1, -1, outputDepth]).
+            int dsOutputDepth = TryGetInt(additionalParams, "OutputDepth")
+                ?? (outputShape.Length > 0 ? outputShape[outputShape.Length - 1] : 1);
+
+            // Constructed DIRECTLY rather than through GetConstructor/Invoke: T is a compile-time type parameter
+            // of this method, so the concrete layer type is known here and no reflection is needed. That keeps
+            // this case type-checked at compile time and avoids the reflection cost the ctor-matching paths pay.
+            // (The one unavoidable reflective step is materializing the activation, whose type arrives as a
+            // string in the metadata.)
+            var dsActivationType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? dsActivationObj = TryCreateActivationInstance(additionalParams, "ScalarActivationType", dsActivationType);
+            if (dsActivationObj is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
+                throw new InvalidOperationException(
+                    $"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for DepthwiseSeparableConvolutionalLayer.");
+
+            instance = new DepthwiseSeparableConvolutionalLayer<T>(
+                dsOutputDepth, dsKernelSize, dsStride, dsPadding, dsActivationObj as IActivationFunction<T>);
+            // Left lazy on purpose: the caller resolves it from the layer's own serialized input shape, and
+            // SetParameters can still infer inputDepth from the parameter vector if that shape is unavailable.
+        }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
             // ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)
@@ -1743,6 +1838,30 @@ public static class DeserializationHelper
                 throw new MissingLayerCtorException("Cannot find UpsamplingLayer constructor.");
             }
             instance = ctor.Invoke(new object[] { scaleFactor });
+        }
+        else if (genericDef == typeof(AiDotNet.PointCloud.Layers.MaxPoolingLayer<>))
+        {
+            // Point-cloud global max-pool over [N, C] -> [1, C], no learnable
+            // parameters. Distinct from the image MaxPoolingLayer below; now that
+            // layers serialize their full type name the two no longer collide.
+            // It needs its channel count, which is the last dim of the input (or
+            // output) shape it was serialized with.
+            int pcFeatures = inputShape is { Length: > 0 } ? inputShape[^1] : 0;
+            if (pcFeatures <= 0 && outputShape is { Length: > 0 })
+            {
+                pcFeatures = outputShape[^1];
+            }
+            if (pcFeatures <= 0)
+            {
+                throw new InvalidOperationException(
+                    "PointCloud MaxPoolingLayer deserialize: cannot determine channel count from shape.");
+            }
+            var pcCtor = type.GetConstructor(new[] { typeof(int) });
+            if (pcCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find PointCloud MaxPoolingLayer(int) constructor.");
+            }
+            instance = pcCtor.Invoke(new object?[] { pcFeatures });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.MaxPoolingLayer`1")))

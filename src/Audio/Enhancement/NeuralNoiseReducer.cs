@@ -72,7 +72,13 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelTask(ModelTask.Enhancement)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("A Regression Approach to Speech Enhancement Based on Deep Neural Networks", "https://arxiv.org/abs/1406.2279", Year = 2015, Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
+// Citation URL corrected. arXiv 1406.2279 is "$B_s \to K \ell v$ form factors from lattice QCD" — an
+// unrelated particle-physics paper. This work was published in IEEE/ACM TASLP vol. 23 no. 1 (Jan 2015),
+// pp. 7-19, and is not on arXiv, so the canonical DOI replaces the invented preprint id.
+[ResearchPaper("A Regression Approach to Speech Enhancement Based on Deep Neural Networks",
+    "https://doi.org/10.1109/TASLP.2014.2364452",
+    Year = 2015,
+    Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
 public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly NeuralNoiseReducerOptions _options;

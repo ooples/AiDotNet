@@ -772,26 +772,74 @@ public abstract class LayerTestBase
 
         var rng = RandomHelper.CreateSeededRandom(7777);
 
+        // SPARSE parameters (SparseLinearLayer's SparseTensor<T> weights) mirror
+        // torch.autograd.gradcheck's "masked" semantics: it walks a sparse tensor's STORED (nnz)
+        // entries via indices()/values() and perturbs only those, never densifying. Two reasons
+        // this matters here rather than being a style choice:
+        //   1. Flat indexing a SparseTensor throws outright — "GetFlat is not supported on sparse
+        //      tensors. Use SparseTensor-specific APIs or call ToDense() first." — so the check
+        //      cannot even run against one.
+        //   2. Densifying would be WORSE than the crash: it would perturb STRUCTURAL ZEROS, which
+        //      are not trainable parameters and therefore have no analytical gradient, producing
+        //      false mismatches and an inflated parameter count. SparseLinearLayer's own
+        //      ParameterCount is NonZeroCount + OutputFeatures, confirming the stored values are
+        //      the trainable set.
+        // Dense parameters keep the exact previous behaviour (flat index over Length).
+        // Access the sparse payload through DataVector.AsSpan(), NOT through the Values property:
+        // `public T[] Values => DataVector.ToArray()` allocates a FRESH COPY on every access, so the
+        // earlier `sp.Values[i] = v` wrote into a throwaway array and never perturbed the parameter.
+        // Both finite-difference evaluations therefore saw identical weights, making the numerical
+        // gradient exactly 0 for every sparse entry while the analytical gradient was non-zero —
+        // which is what produced "disagrees ... on 5/12 sampled trainable scalars" (the entries that
+        // "agreed" were simply the ones whose analytical gradient was also ~0). Same copy-versus-view
+        // trap as Tensor<T>.ToVector(); AsSpan() is the documented zero-copy path.
+        static int TrainableScalarCount(Tensor<double> p) =>
+            p is SparseTensor<double> sp ? sp.NonZeroCount : p.Length;
+        static double ReadScalar(Tensor<double> p, int i) =>
+            p is SparseTensor<double> sp ? sp.DataVector[i] : p[i];
+        static void WriteScalar(Tensor<double> p, int i, double v)
+        {
+            if (p is SparseTensor<double> sp) sp.DataVector[i] = v;
+            else p[i] = v;
+        }
+        // The analytical gradient of a SPARSE parameter is not necessarily sparse. When it comes back
+        // DENSE, index i (a position in the sparse nnz payload) addresses a completely different
+        // matrix entry in a dense flat buffer, so comparing them positionally checks unrelated
+        // numbers. Map through the COO coordinates instead. A sparse gradient shares the parameter's
+        // payload layout, so it is read directly.
+        static double ReadAnalyticalScalar(Tensor<double> grad, Tensor<double> param, int i)
+        {
+            if (grad is SparseTensor<double> gsp) return gsp.DataVector[i];
+            if (param is SparseTensor<double> psp)
+            {
+                int cols = psp.Shape[psp.Shape.Length - 1];
+                int flat = psp.RowIndices[i] * cols + psp.ColumnIndices[i];
+                return flat >= 0 && flat < grad.Length ? grad.DataVector[flat] : 0.0;
+            }
+            return grad[i];
+        }
+
         foreach (var param in trainableParams)
         {
-            if (param is null || param.Length == 0) continue;
+            if (param is null || TrainableScalarCount(param) == 0) continue;
             if (!analyticalGrads.TryGetValue(param, out var analyticalGrad) || analyticalGrad is null)
                 continue;
 
-            int sampleCount = Math.Min(MaxSampledPerParam, param.Length);
+            int trainableCount = TrainableScalarCount(param);
+            int sampleCount = Math.Min(MaxSampledPerParam, trainableCount);
             for (int s = 0; s < sampleCount; s++)
             {
-                int idx = rng.Next(0, param.Length);
+                int idx = rng.Next(0, trainableCount);
 
-                double original = param[idx];
-                param[idx] = original + Eps;
+                double original = ReadScalar(param, idx);
+                WriteScalar(param, idx, original + Eps);
                 var lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original - Eps;
+                WriteScalar(param, idx, original - Eps);
                 var lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original;
+                WriteScalar(param, idx, original);
 
                 double numerical = (lossPlus - lossMinus) / (2.0 * Eps);
-                double analytical = analyticalGrad[idx];
+                double analytical = ReadAnalyticalScalar(analyticalGrad, param, idx);
                 double absDiff = Math.Abs(numerical - analytical);
                 double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
 

@@ -72,11 +72,11 @@ public class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         XTTSv2Options? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture)
+        : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(classAxis: -1))
     {
         _options = options ?? new XTTSv2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -168,10 +168,14 @@ public class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
 
     protected override Tensor<T> PreprocessText(string text)
     {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
+        if (text is null)
+            throw new ArgumentNullException(nameof(text));
+
+        byte[] utf8 = System.Text.Encoding.UTF8.GetBytes(text);
+        int len = Math.Min(utf8.Length, _options.MaxTextLength);
         var t = new Tensor<T>([len]);
         for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
+            t[i] = NumOps.FromDouble(utf8[i]);
         return t;
     }
 
@@ -215,8 +219,14 @@ public class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -290,9 +300,23 @@ public class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new XTTSv2<T>(Architecture, mp, _options);
-        return new XTTSv2<T>(Architecture, _options);
+            return new XTTSv2<T>(Architecture, mp, new XTTSv2Options(_options));
+        return new XTTSv2<T>(Architecture, new XTTSv2Options(_options));
     }
+
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.AdamBeta1,
+                Beta2 = _options.AdamBeta2,
+                Epsilon = _options.AdamEpsilon,
+                UseAdaptiveLearningRate = false,
+            }
+        );
 
     private void ThrowIfDisposed()
     {

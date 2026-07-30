@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -12,21 +13,23 @@ using AiDotNet.Video.Options;
 namespace AiDotNet.Video.Denoising;
 
 /// <summary>
-/// UDVD unidirectional deep video denoising for blind self-supervised denoising.
+/// UDVD unsupervised deep video denoising with a multi-frame blind-spot network.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet">
-/// <item>Paper: "Unsupervised Deep Video Denoising" (Sheth et al., CVPR 2021)</item>
+/// <item>Paper: "Unsupervised Deep Video Denoising" (Sheth et al., ICCV 2021)</item>
 /// </list></para>
-/// <para><b>For Beginners:</b> UDVD (Unidirectional Video Denoising) processes video in a single temporal direction for causal denoising. This makes it suitable for streaming applications where future frames are not available.</para>
+/// <para><b>For Beginners:</b> UDVD learns from noisy video alone. It uses nearby frames and a
+/// blind spot around each predicted pixel so that independent noise cannot simply be copied to
+/// the output.</para>
 /// <para>
-/// UDVD performs blind video denoising without paired training data. In the original paper,
-/// training uses a self-supervised loss that exploits temporal redundancy. The native Train
-/// method uses a supervised approach with paired clean/noisy data for simplicity; the full
-/// self-supervised training pipeline is available through the ONNX model. It processes frames
-/// unidirectionally using only past frames, enabling real-time streaming operation.
+/// The paper maps five contiguous noisy frames to an estimate of the middle frame. Four rotated,
+/// vertically-causal branches exclude the center pixel, then a three-layer 1x1 head combines the
+/// directional features. Native <see cref="Train(Tensor{T}, Tensor{T})"/> supports the framework's
+/// paired-target training contract; callers can reproduce the paper's self-supervised objective by
+/// supplying the noisy middle frame as the target. ONNX mode is inference-only.
 /// </para>
 /// </remarks>
 /// <example>
@@ -93,10 +96,14 @@ public class UDVD<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new UDVDOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        // The paper/released training recipe uses Adam at 1e-4. Merely storing an optimizer is not
+        // sufficient: Train must also pass this instance into TrainWithTape (see below), otherwise
+        // the base trainer silently falls back to its generic optimizer and UDVD diverges.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                InitialLearningRate = _options.LearningRate,
             });
         IsBlindDenoising = true;
         InitializeLayers();
@@ -144,7 +151,13 @@ public class UDVD<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected, _optimizer);
+            // Denoise/Predict normalize public pixel-domain input before the native forward and
+            // denormalize its result afterwards. Train in that same model domain; otherwise the
+            // optimizer fits F(input) to expected while inference measures 255*F(input/255),
+            // which is a different function as soon as convolution biases/nonlinearities exist.
+            var normalizedInput = NormalizeFrames(input);
+            var normalizedExpected = NormalizeFrames(expected);
+            TrainWithTape(normalizedInput, normalizedExpected, _optimizer);
         }
         finally
         {
@@ -215,9 +228,10 @@ public class UDVD<T> : VideoDenoisingBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var copiedOptions = new UDVDOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new UDVD<T>(Architecture, p, _options);
-        return new UDVD<T>(Architecture, _options);
+            return new UDVD<T>(Architecture, p, copiedOptions);
+        return new UDVD<T>(Architecture, copiedOptions);
     }
 
     private void ThrowIfDisposed()

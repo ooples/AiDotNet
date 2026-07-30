@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -901,54 +901,12 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        // RevIN forward (Das et al. 2024 §3.1, Kim et al. 2022): subtract each
-        // instance's mean and divide by its std so the decoder sees a normalized
-        // series. A rank-1 input is a single univariate context (one instance),
-        // not one instance per time step.
-        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
-        _revinMean = new Vector<T>(batchSize);
-        _revinStd = new Vector<T>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            _revinMean[b] = mean;
-            _revinStd[b] = std;
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _revinMean, out _revinStd);
 
     /// <summary>
     /// RevIN reverse step: restores each instance's mean/std to the forecast so it

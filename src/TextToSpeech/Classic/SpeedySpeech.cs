@@ -93,7 +93,17 @@ public class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new SpeedySpeechOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Build the default optimizer from the model's OWN configured rate. A bare
+        // AdamWOptimizer(this) silently takes AdamWOptimizerOptions' global 1e-3 default and drops
+        // SpeedySpeechOptions.LearningRate (1e-4, inherited from TtsModelOptions) — a 10x over-rate,
+        // and not the paper's rate either (Vainer & Dusek 2020 train SpeedySpeech with Adam at 1e-4).
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -224,6 +234,13 @@ public class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
+            // Pass the model's configured optimizer. The 2-arg TrainWithTape resolves
+            // optimizer: null and falls back to NeuralNetworkBase's lazily-created DEFAULT Adam at
+            // its global 1e-3 rate, so _optimizer — including any instance the CALLER supplied to
+            // the constructor — was never used for a single step. Measured effect on the generated
+            // Q-S shard: LossStrictlyDecreasesOnMemorizationTask went step 1 = 10.548724 ->
+            // step 2 = 27.990997, a 2.65x overshoot on the first update, because the model was
+            // running at 10x its own configured rate.
             TrainWithTape(input, expected, _optimizer);
         }
         finally

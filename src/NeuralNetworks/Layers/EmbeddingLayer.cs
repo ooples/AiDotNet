@@ -369,17 +369,18 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         {
             if (_embeddingInitialized) return;
 
-            // Adopt an embedding that is ALREADY in place instead of allocating over it.
-            // DeepCopy/Clone installs the source layer's trained weights straight into this field
-            // through the generated SetTrainableParameters, which assigns the tensor but does not
-            // flip _embeddingInitialized. Gating solely on that flag meant the copy's first forward
-            // came through here, allocated a new tensor and re-randomized it, so a cloned model
-            // silently lost its trained embedding while every other layer copied correctly — the
-            // weights were not "dropped by serialization" at all, they were overwritten afterwards.
-            if (_embeddingTensor.Length > 0
-                && _embeddingTensor.Length == _vocabularySize * _embeddingDimension)
+            // A deserializer, ParameterBuffer, or copy-on-write clone can install a
+            // fully materialized embedding tensor before this fresh layer has ever
+            // executed Forward. In that case the tensor is the authoritative trained
+            // state. Treat it exactly like PyTorch treats a materialized lazy module:
+            // synchronize the runtime latch/registration without allocating over it.
+            // Reinitializing here silently replaced the COW-shared trained table on a
+            // clone's first prediction (UniAudio Clone_AfterTraining).
+            if (WeightsAlreadyAllocated(_embeddingTensor, _vocabularySize, _embeddingDimension))
             {
                 RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
+                if (_projectionWeights.Length > 0)
+                    RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
                 _embeddingInitialized = true;
                 return;
             }
