@@ -100,8 +100,15 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         ValidateOptions();
         ApplyOptionsToBase();
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        // Yu et al. 2020 (arXiv:2005.07150) Table 1 specifies Adam at 1e-3 for the biaffine span
+        // scorer, and the sibling span architectures follow it. Constructing AdamW here applied a
+        // decoupled weight decay of 0.01 -- AdamW's own default, since only the learning rate was
+        // supplied -- to every parameter on every step, which no span-NER paper asks for. With the
+        // biaffine tensor's large fan-in that decay drove the parameters to NaN in a single step
+        // (measured: L2 42.2154 -> NaN), which is what OptimizerStep_ParamL2_DoesNotExplode reports
+        // and its message predicted: "weight decay too aggressive".
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate
             });
