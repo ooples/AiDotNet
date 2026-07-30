@@ -43,9 +43,13 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("MetaMix: Improved Meta-Learning with Task Interpolation",
-    "https://arxiv.org/abs/2003.04274",
-    Year = 2021,
+// Citation corrected. arXiv 2003.04274 is "Describe NMR relaxation by effective diffusion equation",
+// an unrelated physics paper; the correct id is 2009.13735. The subtitle was also wrong — the paper is
+// "Interpolation-based Consistency Regularization", not "Task Interpolation" (that phrasing belongs to
+// a different task-interpolation line of work) — and it is ICPR 2020, not 2021. Authors were right.
+[ResearchPaper("MetaMix: Improved Meta-Learning with Interpolation-based Consistency Regularization",
+    "https://arxiv.org/abs/2009.13735",
+    Year = 2020,
     Authors = "Yangbin Chen, Yun Ma, Tom Ko, Jianping Wang")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]

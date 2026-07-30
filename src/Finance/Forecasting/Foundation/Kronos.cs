@@ -395,54 +395,12 @@ public class Kronos<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        // The Kronos input is ONE multivariate OHLCV series laid out row-major as
-        // [contextLength, numFeatures] (or a flat [contextLength*numFeatures]).
-        // RevIN normalizes EACH feature over the time axis (the leading dimension
-        // is time, NOT a batch). Per-feature mean/std are stored for the reverse
-        // denormalization of the forecast.
-        int features = input.Rank > 1 ? input.Shape[input.Rank - 1] : 1;
-        int steps = features > 0 ? input.Length / features : input.Length;
-        var result = new Tensor<T>(input._shape);
-        _revinMean = new Vector<T>(features);
-        _revinStd = new Vector<T>(features);
-
-        for (int f = 0; f < features; f++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < steps; t++)
-            {
-                int idx = t * features + f;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(steps));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < steps; t++)
-            {
-                int idx = t * features + f;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(steps));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-            _revinMean[f] = mean;
-            _revinStd[f] = std;
-
-            for (int t = 0; t < steps; t++)
-            {
-                int idx = t * features + f;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
-        }
-
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizePerFeatureOnTape(input, DefaultRevInEpsilon, out _revinMean, out _revinStd);
 
     /// <summary>
     /// RevIN reverse step (Kim et al. 2022): restores each feature's mean/std to

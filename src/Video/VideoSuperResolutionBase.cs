@@ -27,7 +27,7 @@ namespace AiDotNet.Video;
 /// temporal consistency (no flickering between frames).
 /// </para>
 /// </remarks>
-public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>
+public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>, IVideoSuperResolution<T>
 {
     /// <summary>
     /// Gets the spatial upscaling factor (e.g., 2 for 2x, 4 for 4x).
@@ -98,12 +98,27 @@ public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>
     /// <param name="frame1">First frame [channels, height, width].</param>
     /// <param name="frame2">Second frame [channels, height, width].</param>
     /// <returns>Optical flow field [2, height, width] representing (dx, dy) displacement.</returns>
-    protected virtual Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
+    public virtual Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
     {
-        int height = frame1.Shape[^2];
-        int width = frame1.Shape[^1];
-        return new Tensor<T>([2, height, width]);
+        // Delegates to the library's RAFT implementation (Teed & Deng 2020) instead of returning zeros.
+        //
+        // The previous default returned `new Tensor<T>([2, height, width])` — an all-zero flow field,
+        // i.e. "no motion" — and NO video super-resolution model overrode it. Every temporal-alignment
+        // path in all 26 VSR models was therefore a no-op: warping a neighbouring frame by zero flow
+        // just returns that frame unchanged, so the models were doing per-frame image upscaling while
+        // their architectures claimed to exploit motion. Temporal alignment is the whole distinction
+        // between video and image super-resolution.
+        //
+        // RAFT<T> already exists in this assembly (src/Video/Motion/RAFT.cs) and is the estimator the
+        // VSR literature standardly builds on, so this reuses it rather than adding a second one.
+        // Created lazily and cached: constructing it per call would allocate a full flow network on
+        // every frame pair.
+        _flowEstimator ??= new AiDotNet.Video.Motion.RAFT<T>();
+        return _flowEstimator.EstimateFlow(frame1, frame2);
     }
+
+    /// <summary>Lazily created RAFT estimator backing the default <see cref="EstimateFlow"/>.</summary>
+    private AiDotNet.Video.Motion.RAFT<T>? _flowEstimator;
 
     /// <summary>
     /// Performs bilinear upsampling as a baseline or initialization.

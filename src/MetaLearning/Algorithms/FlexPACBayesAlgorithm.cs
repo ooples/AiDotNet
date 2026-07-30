@@ -54,8 +54,11 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+// Citation URL corrected: the correct arXiv id for this title is 2003.02455. The recorded 2003.05529
+// is "Computing LDOS resonance energy shifts of monatomic doped chains", an unrelated physics paper.
+// Title and authors were already right.
 [ResearchPaper("PAC-Bayes Meta-Learning with Implicit Task-Specific Posteriors",
-    "https://arxiv.org/abs/2003.05529",
+    "https://arxiv.org/abs/2003.02455",
     Year = 2020,
     Authors = "Cuong Nguyen, Thanh-Toan Do, Gustavo Carneiro")]
 [ComponentType(ComponentType.MetaLearner)]

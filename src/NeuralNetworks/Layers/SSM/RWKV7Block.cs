@@ -246,19 +246,69 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// <param name="numHeads">Number of heads for multi-headed states. Default: 4. Must divide modelDimension.</param>
     /// <param name="ffnMultiplier">FFN expansion multiplier. Default: 3.5 (RWKV-7 standard).</param>
     /// <param name="activationFunction">Optional activation on final output.</param>
+    /// <summary>
+    /// The paper's "Global ICLR Multiplier" <c>c</c> in the transition matrix
+    /// <c>A_t = diag(w_t) - c * kappaHat_t^T(a_t (*) kappaHat_t)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// From Peng et al. 2025 (arXiv 2503.14456) Appendix C, Theorem 1: with every entry of
+    /// <c>w</c> in <c>(u, 1)</c> where <c>u = exp(-e^-0.5) = 0.5452...</c>, every entry of
+    /// <c>a</c> in <c>(0, 1)</c>, and <c>kappaHat</c> a unit row vector, then for
+    /// <c>c in (0, 1 + u)</c> all eigenvalues of <c>A</c> lie in <c>(-1, 1)</c>. The paper states
+    /// <c>c</c> "is set to 1 in the current implementations of RWKV-7 language modeling", which is
+    /// this default.
+    /// </para>
+    /// <para>
+    /// Two clauses of that theorem matter for long sequences. Item 4 only guarantees the PRODUCT
+    /// of transitions is bounded "if a_t is time-independent", which RWKV-7 deliberately violates
+    /// (a_t is data-dependent per token), and footnote 4 of the paper records that the authors
+    /// "allow only part of the range of possible negative eigenvalues in our pre-trained large
+    /// language models due to experimentally observed training instabilities". A negative
+    /// eigenvalue appears exactly when <c>c*a &gt; w</c>; choosing <c>c &lt;= u</c> keeps
+    /// <c>w - c*a &gt; 0</c> for every admissible w and a, so the transition stays strictly
+    /// positive-definite-like and the long product is bounded by the theorem's own conditions.
+    /// Long-context consumers can therefore restrict the range the way the authors do, rather than
+    /// relying on the unrestricted theoretical range.
+    /// </para>
+    /// </remarks>
+    private readonly double _globalIclrMultiplier;
+
+    /// <summary>
+    /// The paper's clamping lower bound <c>u = exp(-e^(-1/2))</c> on the decay multiplier
+    /// (arXiv 2503.14456, Eq 12 and Appendix C, Theorem 1 — quoted there as 0.5452...).
+    /// </summary>
+    /// <remarks>
+    /// DERIVED from the paper's formula rather than written as a decimal literal, so it stays exact
+    /// and self-documenting: the same <c>exp(-1/2)</c> constant appears in Eq 12's decay
+    /// <c>w_t = exp(-e^(-0.5) * sigmoid(d_t))</c>, and the two cannot drift apart.
+    /// </remarks>
+    private static readonly double DecayClampLowerBound = Math.Exp(-Math.Exp(-0.5));
+
     public RWKV7Block(
         int sequenceLength,
         int modelDimension = 256,
         int numHeads = 4,
         double ffnMultiplier = 3.5,
         IActivationFunction<T>? activationFunction = null,
-        IInitializationStrategy<T>? initializationStrategy = null)
+        IInitializationStrategy<T>? initializationStrategy = null,
+        double globalIclrMultiplier = 1.0)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
+        // Theorem 1 (arXiv 2503.14456, Appendix C) is stated for c in (0, 1 + u); outside that range
+        // the eigenvalue bound it proves no longer applies, so reject rather than silently accept.
+        if (globalIclrMultiplier <= 0.0 || globalIclrMultiplier >= 1.0 + DecayClampLowerBound)
+            throw new ArgumentOutOfRangeException(
+                nameof(globalIclrMultiplier),
+                globalIclrMultiplier,
+                $"The Global ICLR Multiplier must lie in (0, {1.0 + DecayClampLowerBound:F6}) — the interval " +
+                "over which RWKV-7's Theorem 1 bounds the transition matrix eigenvalues in (-1, 1).");
+        _globalIclrMultiplier = globalIclrMultiplier;
 
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
@@ -622,7 +672,17 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // one fused kernel; decomposing it into per-step Engine ops would time out immediately.
         //   wkv_t = wkv_{t-1}(diag(w_t) - kappaHat_t^T(a_t (*) kappaHat_t)) + v_t^T kTilde_t
         //   o_t   = wkv_t . r_t
-        var wkvAll = Engine.Rwkv7SequenceForward(Rall, kappaAll, kTildeAll, Vall, Aall, aRate, _numHeads);
+        // Apply the paper's Global ICLR Multiplier c to the TRANSITION's removal term only. Scaling
+        // the in-context learning rate here is exactly equivalent to
+        //   A_t = diag(w_t) - c * kappaHat^T(a (*) kappaHat)
+        // because the kernel forms the removal as kappaHat^T(a (*) kappaHat). It must NOT be applied
+        // to the replacement key: Eq 7 defines kTilde = k (*) lerp(1, a, alpha) with no c, so kTilde
+        // above deliberately keeps the unscaled aRate.
+        var aRateTransition = _globalIclrMultiplier == 1.0
+            ? aRate
+            : Engine.TensorMultiplyScalar(aRate, NumOps.FromDouble(_globalIclrMultiplier));
+
+        var wkvAll = Engine.Rwkv7SequenceForward(Rall, kappaAll, kTildeAll, Vall, Aall, aRateTransition, _numHeads);
 
         // Group-normalize (per head, per position) and project to the output — both batched over all
         // positions as [batch*seqLen, modelDim], so NO per-timestep ops remain in time-mixing.
@@ -659,8 +719,11 @@ public partial class RWKV7Block<T> : LayerBase<T>
         }
         else
         {
+            // aRateTransition, NOT aRate: the streaming state must apply the same Global ICLR
+            // Multiplier as the fused training kernel, or inference would run a different
+            // transition A_t than the one the weights were trained under.
             _recurrentState = ComputeFinalWkvState(
-                state, Aall, aRate, kappaAll, kTildeAll, Vall, batchSize, seqLen);
+                state, Aall, aRateTransition, kappaAll, kTildeAll, Vall, batchSize, seqLen);
             // .Clone() is REQUIRED, not defensive. GetSliceAlongDimension returns a VIEW over x's
             // buffer, and x is an Engine/tape intermediate whose storage is arena/pool-rented for the
             // duration of THIS forward only. Storing the bare view in a field that outlives the

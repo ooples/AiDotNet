@@ -46,10 +46,19 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("LiteDVDNet: A Lightweight Deep Video Denoising Network",
-    "https://arxiv.org/abs/2004.08569",
-    Year = 2020,
-    Authors = "Matias Tassano, Julie Delon, Thomas Veit")]
+// Citation corrected in full — the title, URL, year AND authors were all wrong. arXiv 2004.08569 is
+// "You are now an Influencer! Measuring CEO Reputation in Social Media", entirely unrelated. The
+// recorded title did not exist, and the recorded authors (Tassano, Delon, Veit) are the authors of
+// DVDnet/FastDVDnet, not of LiteDVDNet. LiteDVDNet is by Ilchenko & Stirenko in IJIGSP 17(3):1-11
+// (2025) and is not on arXiv, so the publisher URL is used.
+//
+// For context, LiteDVDNet is explicitly a set of optimizations OF FastDVDnet (arXiv 1907.01361, by
+// Tassano et al.) — caching intermediate results, fewer intermediate channels, simplified conv blocks,
+// and halved channel counts — which is presumably how the two got conflated.
+[ResearchPaper("LiteDVDNet: Optimizing FastDVDNet for High-Speed Video Denoising",
+    "https://www.mecs-press.org/ijigsp/ijigsp-v17-n3/v17n3-1.html",
+    Year = 2025,
+    Authors = "Andrii Ilchenko, Sergii Stirenko")]
 public class LiteDVDNet<T> : VideoDenoisingBase<T>
 {
     private readonly LiteDVDNetOptions _options;
