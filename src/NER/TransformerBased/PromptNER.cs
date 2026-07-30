@@ -134,8 +134,10 @@ public class PromptNER<T> : TransformerNERBase<T>
         var promptOptions = options as PromptNEROptions;
         int warmupSteps = promptOptions?.WarmupSteps ?? 10;
         int totalTrainingSteps = promptOptions?.TotalTrainingSteps ?? 100;
-        double warmupInitialLearningRate = promptOptions?.WarmupInitialLearningRate
-            ?? (warmupSteps > 0 ? options.LearningRate / warmupSteps : options.LearningRate);
+        double warmupInitialLearningRate = promptOptions is not null &&
+            promptOptions.WarmupInitialLearningRate > 0.0
+                ? promptOptions.WarmupInitialLearningRate
+                : (warmupSteps > 0 ? options.LearningRate / warmupSteps : options.LearningRate);
         double endLearningRate = promptOptions?.EndLearningRate ?? 0.0;
         double beta1 = promptOptions?.AdamBeta1 ?? 0.9;
         double beta2 = promptOptions?.AdamBeta2 ?? 0.999;

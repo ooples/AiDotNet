@@ -12,9 +12,9 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// <remarks>
 /// <para>
 /// RWKV-7 is the seventh generation of the RWKV architecture, introducing expressive dynamic state
-/// evolution that replaces the fixed exponential decay of previous versions with learnable, data-dependent
-/// transition matrices. This allows the model to dynamically control how information is stored, retained,
-/// and forgotten in the recurrent state.
+/// evolution based on a generalized delta rule with data-dependent decay and vector-valued in-context
+/// learning rates. This allows the model to dynamically control how information is stored, replaced,
+/// retained, and forgotten in the recurrent state.
 /// </para>
 /// <para>
 /// Each block contains two sub-layers with residual connections:
@@ -80,8 +80,8 @@ public partial class RWKV7Block<T> : LayerBase<T>
     private Tensor<T> _timeMixR;
     private Tensor<T> _timeMixK;
     private Tensor<T> _timeMixV;
-    private Tensor<T> _timeMixA;  // v7: shift coefficient for 'a' (state decay)
-    private Tensor<T> _timeMixB;  // v7: shift coefficient for 'b' (state injection)
+    private Tensor<T> _timeMixA;  // v7: shift coefficient for the decay logit
+    private Tensor<T> _timeMixB;  // v7: shift coefficient for the in-context learning rate
 
     // Linear projections: [modelDim, modelDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -703,8 +703,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // keeping the #1464 per-step-overhead win. In INFERENCE the autoregressive streaming contract
         // requires the final WKV state S_T so the next call can continue the sequence; the fused
         // Rwkv7SequenceForward returns only the gated outputs (not S_T), so compute S_T from the same
-        // documented recurrence (off-tape; inference only):
-        //   S_t[di,vi] = sigmoid(A_t)[di]*S_{t-1}[di,vi] + (sigmoid(B_t)[di]*K_t[di])*V_t[vi]
+        // documented generalized delta-rule recurrence (off-tape; inference only)
         // seeded from the prior state (`state`) so token-by-token streaming accumulates correctly.
         if (IsTrainingMode)
         {
@@ -776,6 +775,8 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// <param name="kappaAll">kappa_t (pre-normalisation) over the sequence, [batch, seqLen, modelDim].</param>
     /// <param name="kTildeAll">kTilde_t over the sequence, [batch, seqLen, modelDim].</param>
     /// <param name="vAll">Value projection over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="decayLogitAll">Decay logits over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="iclRateAll">Post-sigmoid in-context learning rates, [batch, seqLen, modelDim].</param>
     /// <param name="batchSize">The batch size.</param>
     /// <param name="seqLen">The sequence length.</param>
     /// <returns>The final state S_T, shape [batch, numHeads, headDim, headDim].</returns>

@@ -25,13 +25,10 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// <see cref="FlashAttentionLayer{T}"/> engages
 /// <see cref="AiDotNet.Training.CompiledTapeTrainingStep{T}.TryStepWithFusedOptimizer"/>
 /// when trained via the public network API (canary test below).</item>
-/// <item>The remaining consumer-side gap that the #1346 investigation
-/// surfaced — Tensors plan-loss-readout silently returning literal 0
-/// instead of the actual NaN/Inf when a CCE-style chain produces NaN under
-/// many trainable parameters — is tracked at
-/// <a href="https://github.com/ooples/AiDotNet.Tensors/issues/396">AiDotNet.Tensors#396</a>.
-/// The Skip'd regression test below auto-enables once that fix lands and
-/// the consuming NuGet version bumps.</item>
+/// <item>The Tensors#396 loss-readout regression remains covered through a
+/// deterministic reference comparison: the fused plan must return the same
+/// positive CCE value computed from the pre-step prediction, rather than a
+/// stale or orphaned zero.</item>
 /// </list>
 /// </summary>
 /// <remarks>
@@ -176,33 +173,21 @@ public class FlashAttentionFusedCompiledTrainingIssue1346Tests
     }
 
     /// <summary>
-    /// Future-fix regression for the consumer-side gap surfaced during AiDotNet#1346
-    /// investigation. Tracks <a href="https://github.com/ooples/AiDotNet.Tensors/issues/396">AiDotNet.Tensors#396</a>:
-    /// when a model with multiple trainable parameters routes raw logits through
-    /// <see cref="CategoricalCrossEntropyLoss{T}"/> on the fused-Adam path,
-    /// the loss chain's <c>log(negative_logit + eps)</c> produces NaN that
-    /// SHOULD propagate to <see cref="NeuralNetworkBase{T}.GetLastLoss"/> but
-    /// instead surfaces as literal float 0. This silent zeroing was the
-    /// actual reason the original #1346 reporter's HE PathB sanity test
-    /// stayed at top1=0% / top5=100% / ppl=V after the engine-side
-    /// FlashAttention fix landed — the consumer's loss-curve looked
-    /// "converged" while gradients were corrupted.
-    /// <para>
-    /// Skipped until AiDotNet.Tensors#396 ships and the NuGet version bumps.
-    /// On enabling: this test must report <c>lastLoss = NaN</c> (or a finite
-    /// positive value if the underlying chain doesn't actually NaN at this seed),
-    /// but MUST NOT report literal 0.
-    /// </para>
+    /// Regression for the consumer-side loss-readout gap surfaced during
+    /// AiDotNet#1346. It computes the exact pre-step CCE reference from the
+    /// initialized model, chooses a class whose clamped probability yields a
+    /// positive loss, and requires fused Adam to report the same value through
+    /// <see cref="NeuralNetworkBase{T}.GetLastLoss"/>.
     /// </summary>
-    [Fact(Timeout = 60000, Skip = "Blocked on AiDotNet.Tensors#396 — fused-Adam loss-readout returns literal 0 instead of NaN under CCE+raw-logits+many-params. Unskip once that fix lands and the AiDotNet.Tensors NuGet version bumps past the build containing it.")]
-    public async Task DenseIdentity_CCE_OnFusedAdam_DoesNotSilentlyZeroNaN()
+    [Fact(Timeout = 60000)]
+    public async Task DenseIdentity_CCE_OnFusedAdam_MatchesDeterministicReferenceLoss()
     {
         await Task.Yield();
         AiDotNet.Training.CompiledTapeTrainingStep<float>.ResetFusedStepCount();
         AiDotNet.Training.CompiledTapeTrainingStep<float>.Invalidate();
 
-        // Force-negative-logit setup: Dense layer with IdentityActivation passes
-        // raw logits (potentially negative) into CCE, whose log(p + 1e-7) goes NaN.
+        // Identity activations keep the final values observable so the test can
+        // independently apply CCE's documented [1e-7, 1] clamp.
         var layers = new List<ILayer<float>>
         {
             new DenseLayer<float>(EmbedDim, (IActivationFunction<float>)new IdentityActivation<float>()),
@@ -229,31 +214,56 @@ public class FlashAttentionFusedCompiledTrainingIssue1346Tests
         var model = new Transformer<float>(arch,
             lossFunction: new CategoricalCrossEntropyLoss<float>(),
             optimizer: optimizer);
-        model.SetTrainingMode(true);
-
         var input = BuildFingerprintInput(0, seed: 42);
-        var target = BuildOneHotTarget(0);
+
+        // Select the lowest-scoring class from the exact initialized model and
+        // compute CCE independently. This makes the regression deterministic:
+        // the previous fixed class could legitimately have a raw logit >= 1,
+        // which CCE correctly clamps to 1 and therefore gives an exact zero
+        // loss. That was indistinguishable from the historic silent-zero bug.
+        model.SetTrainingMode(false);
+        // Use the public training-forward surface so the reference sees the
+        // exact explicit [batch, seq, dim] shape that Train will replay.
+        var prediction = model.ForwardForTraining(input);
+        int classOffset = prediction.Length - NumClasses;
+        int targetClass = 0;
+        float selectedPrediction = prediction[classOffset];
+        for (int c = 1; c < NumClasses; c++)
+        {
+            float candidate = prediction[classOffset + c];
+            if (candidate < selectedPrediction)
+            {
+                selectedPrediction = candidate;
+                targetClass = c;
+            }
+        }
+
+        float clampedPrediction = Math.Clamp(selectedPrediction, 1e-7f, 1.0f);
+        float expectedLoss = -MathF.Log(clampedPrediction);
+        Assert.True(expectedLoss > 0.0f,
+            $"Reference precondition failed: selected class {targetClass} had " +
+            $"prediction={selectedPrediction}, clamped={clampedPrediction}.");
+
+        var target = BuildOneHotTarget(targetClass);
+        model.SetTrainingMode(true);
 
         model.Train(input, target);
         long fusedSteps = AiDotNet.Training.CompiledTapeTrainingStep<float>.GetFusedStepCount();
         float lastLoss = model.GetLastLoss();
 
-        _output.WriteLine($"Identity+CCE on fused-Adam: fusedSteps={fusedSteps}, lastLoss={lastLoss}, " +
+        _output.WriteLine($"Identity+CCE on fused-Adam: class={targetClass}, " +
+            $"prediction={selectedPrediction}, expectedLoss={expectedLoss}, " +
+            $"fusedSteps={fusedSteps}, lastLoss={lastLoss}, " +
             $"IsNaN={float.IsNaN(lastLoss)}, IsInfinity={float.IsInfinity(lastLoss)}, " +
             $"IsZero={lastLoss == 0f}");
 
         Assert.True(fusedSteps > 0, "Fused path must have engaged");
 
-        // The signal: lastLoss must be either a sane positive number OR NaN/Inf.
-        // Literal 0 means the silent-failure mode behind AiDotNet#1346 / Tensors#396 —
-        // NaN was produced inside the loss chain but the fused readout silently
-        // zeroed it, so the consumer thinks training is converging while
-        // gradients are corrupted and the model never moves off random init.
-        bool isSilentlyZero = lastLoss == 0f && !float.IsNaN(lastLoss);
-        Assert.False(isSilentlyZero,
-            $"AiDotNet.Tensors#396 regression: Identity+CCE on fused-Adam reports " +
-            $"lastLoss=0 (literal 0, not NaN). The fused readout is silently zeroing " +
-            "the NaN that the CCE log(negative_logit+eps) chain produces. Consumer " +
-            "would see 'loss converged' while gradients are corrupted.");
+        // A live fused readout must match the independent forward reference;
+        // a stale/copy-backed loss buffer would remain at zero and fail here.
+        Assert.True(float.IsFinite(lastLoss),
+            $"Fused CCE loss must be finite; got {lastLoss}.");
+        float tolerance = Math.Max(1e-5f, expectedLoss * 1e-4f);
+        Assert.InRange(lastLoss, expectedLoss - tolerance, expectedLoss + tolerance);
     }
 }

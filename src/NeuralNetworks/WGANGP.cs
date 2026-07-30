@@ -2,6 +2,7 @@ using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
@@ -100,12 +101,12 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the generator network that creates synthetic data.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Generator { get; private set; }
+    public NeuralNetworkBase<T> Generator { get; private set; }
 
     /// <summary>
     /// Gets the critic network that evaluates data quality.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Critic { get; private set; }
+    public NeuralNetworkBase<T> Critic { get; private set; }
 
     /// <summary>
     /// Gets the total number of trainable parameters in the WGAN-GP.
@@ -150,6 +151,35 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Derives the scalar critic required by WGAN-GP when callers use the convenience
+    /// constructor that supplies only the generator architecture.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateDefaultCriticArchitecture(
+        NeuralNetworkArchitecture<T> generatorArchitecture)
+    {
+        if (generatorArchitecture is null)
+            throw new ArgumentNullException(nameof(generatorArchitecture));
+
+        // The convenience constructor describes z -> generated sample. For vector generators,
+        // the critic therefore consumes generator.OutputSize values and emits one unrestricted
+        // Wasserstein score. The paper also evaluates MLPs (including language models), so a CNN
+        // is neither required nor valid for this case.
+        if (generatorArchitecture.InputType is InputType.OneDimensional or InputType.TwoDimensional)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                complexity: generatorArchitecture.Complexity,
+                inputSize: generatorArchitecture.OutputSize,
+                outputSize: 1);
+        }
+
+        // Image callers that want distinct latent and image shapes should use the full
+        // generator/critic constructor. Preserve the historical shared image architecture here.
+        return generatorArchitecture;
+    }
+
+    /// <summary>
     /// Creates a WGAN-GP with default generator and critic architectures derived from a single architecture.
     /// Per Gulrajani et al. 2017: gradient penalty coefficient 10, 5 critic iterations per generator step.
     /// </summary>
@@ -162,7 +192,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         double gradientPenaltyCoefficient = 10.0,
         int criticIterations = 5,
         WGANGPOptions? options = null)
-        : this(architecture, architecture, architecture.InputType,
+        : this(architecture, CreateDefaultCriticArchitecture(architecture), architecture.InputType,
                gradientPenaltyCoefficient: gradientPenaltyCoefficient,
                criticIterations: criticIterations, options: options)
     {
@@ -232,17 +262,38 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         _gradientPenaltyCoefficient = gradientPenaltyCoefficient;
         _criticIterations = criticIterations;
 
-        Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
-        Critic = new ConvolutionalNeuralNetwork<T>(criticArchitecture);
+        Generator = CreateNetworkForArchitecture(generatorArchitecture);
+        Critic = CreateNetworkForArchitecture(criticArchitecture);
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
-        // Initialize optimizers (default to Adam if not provided)
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
-        _criticOptimizer = criticOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Critic);
+        // Algorithm 1 defaults: Adam(alpha=1e-4, beta1=0, beta2=0.9).
+        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            Generator, CreatePaperAdamOptions());
+        _criticOptimizer = criticOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            Critic, CreatePaperAdamOptions());
 
         InitializeLayers();
     }
+
+    private static NeuralNetworkBase<T> CreateNetworkForArchitecture(
+        NeuralNetworkArchitecture<T> architecture)
+    {
+        return architecture.InputType switch
+        {
+            InputType.ThreeDimensional or InputType.FourDimensional =>
+                new ConvolutionalNeuralNetwork<T>(architecture),
+            _ => new FeedForwardNeuralNetwork<T>(architecture),
+        };
+    }
+
+    private AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreatePaperAdamOptions()
+        => new()
+        {
+            InitialLearningRate = _options.LearningRate,
+            Beta1 = _options.Beta1,
+            Beta2 = _options.Beta2,
+        };
 
     /// <summary>
     /// Performs one training step for the WGAN-GP using tensor batches.
@@ -278,6 +329,12 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(noise), "Noise tensor cannot be null.");
         }
 
+        // Public Predict accepts a single unbatched sample. Algorithm 1 is batch-based, so
+        // promote those samples to batch size one before interpolation/reduction. Treating a
+        // length-N vector as N scalar samples makes the gradient-penalty norm mathematically wrong.
+        realImages = EnsureBatchDimension(realImages, Critic.Architecture.InputType);
+        noise = EnsureBatchDimension(noise, Generator.Architecture.InputType);
+
         Generator.SetTrainingMode(true);
         Critic.SetTrainingMode(true);
 
@@ -307,11 +364,16 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var trainableGen = (NeuralNetworkBase<T>)Generator;
         T generatorLoss = trainableGen.TrainWithCustomLoss(newNoise, genOutput =>
         {
-            var criticScore = Critic.Predict(ShapeAsCriticInput(genOutput));
+            // Keep the critic forward on the generator's active tape. Predict() is an
+            // inference API and deliberately suppresses gradient recording; using it here
+            // detached D(G(z)) from G and made every generator update a no-op. Only the
+            // generator parameters are handed to the optimizer, so the critic remains fixed
+            // while its input gradient carries the adversarial signal back into G.
+            var criticScore = Critic.ForwardForTraining(ShapeAsCriticInput(genOutput));
             var negScore = Engine.TensorNegate(criticScore);
             var allAxes = Enumerable.Range(0, negScore.Shape.Length).ToArray();
             return Engine.ReduceMean(negScore, allAxes, keepDims: false);
-        });
+        }, _generatorOptimizer);
 
         // Track losses
         _criticLosses.Add(avgCriticLoss);
@@ -324,6 +386,27 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         }
 
         return (avgCriticLoss, generatorLoss);
+    }
+
+    private static Tensor<T> EnsureBatchDimension(Tensor<T> tensor, InputType inputType)
+    {
+        int sampleRank = inputType switch
+        {
+            InputType.OneDimensional => 1,
+            InputType.TwoDimensional => 2,
+            InputType.ThreeDimensional => 3,
+            InputType.FourDimensional => 4,
+            _ => tensor.Rank,
+        };
+
+        if (tensor.Rank != sampleRank)
+            return tensor;
+
+        var batchedShape = new int[tensor.Rank + 1];
+        batchedShape[0] = 1;
+        for (int i = 0; i < tensor.Rank; i++)
+            batchedShape[i + 1] = tensor.Shape[i];
+        return tensor.Reshape(batchedShape);
     }
 
     /// <summary>
@@ -707,7 +790,11 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
-        // WGAN-GP doesn't use layers directly
+        // Publish the complete composite module graph. Predict still routes through Generator
+        // only, but framework services (parameters, gradients, COW cloning, serialization and
+        // layer inspection) must see both trainable subnetworks.
+        Layers.AddRange(Generator.Layers);
+        Layers.AddRange(Critic.Layers);
     }
 
     /// <inheritdoc/>
@@ -807,7 +894,8 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             null, // Use default optimizer
             _lossFunction,
             _gradientPenaltyCoefficient,
-            _criticIterations);
+            _criticIterations,
+            new WGANGPOptions(_options));
     }
 
     /// <summary>

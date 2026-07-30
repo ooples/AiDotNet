@@ -123,8 +123,12 @@ public class WavLMSEROptions : ModelOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 1e-5;
+    /// <summary>
+    /// Gets or sets the downstream emotion-recognition learning rate.
+    /// WavLM Table IX uses <c>1e-4</c> for the Base and Base+ ER models
+    /// (the <c>1e-5</c> setting applies to WavLM Large).
+    /// </summary>
+    public double LearningRate { get; set; } = 1e-4;
 
     /// <summary>Gets or sets the decoupled AdamW weight decay.</summary>
     public double WeightDecay { get; set; } = 0.01;

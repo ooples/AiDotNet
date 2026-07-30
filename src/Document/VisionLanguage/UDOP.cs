@@ -805,6 +805,17 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     }
 
     /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // UDOP is an encoder-decoder graph with cross-attention, followed by sequence
+        // pooling and a classification head. The base implementation treats Layers as a
+        // flat sequential chain, which bypasses that topology and applies the class head
+        // before pooling. Run the same tape-aware graph used by inference instead.
+        EnsureLayerRandomSeedsWired();
+        return Forward(input);
+    }
+
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);
@@ -818,15 +829,26 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        // TrainWithTape runs the full forward + backward + optimizer step over the tape. The previous
-        // code then ALSO called UpdateParameters(CollectGradients()) — a SECOND, manual gradient-descent
-        // step (lr=1e-4) on top of the tape's optimizer step, double-updating the weights (and reading
-        // per-layer gradients that TrainWithTape had already consumed). One tape step is the correct,
-        // complete update. Pass the constructor-supplied optimizer so a user-configured optimizer
-        // actually drives the update (it is gradient-based — e.g. the default AdamOptimizer); when it is
-        // not gradient-based the `as` yields null and TrainWithTape falls back to its default optimizer.
-        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape runs the full forward + backward + optimizer step over the tape. The previous
+            // code then ALSO called UpdateParameters(CollectGradients()) — a SECOND, manual gradient-descent
+            // step (lr=1e-4) on top of the tape's optimizer step, double-updating the weights (and reading
+            // per-layer gradients that TrainWithTape had already consumed). One tape step is the correct,
+            // complete update. Pass the constructor-supplied optimizer so a user-configured optimizer
+            // actually drives the update (it is gradient-based — e.g. the default AdamOptimizer); when it is
+            // not gradient-based the `as` yields null and TrainWithTape falls back to its default optimizer.
+            // PredictCore evaluates ImageNet-normalized pages, so train on that same representation rather
+            // than fitting raw pixels and measuring the objective on a different input distribution.
+            TrainWithTape(
+                PreprocessDocument(input),
+                expectedOutput,
+                _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
