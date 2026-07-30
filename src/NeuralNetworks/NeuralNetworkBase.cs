@@ -10764,6 +10764,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return false;
         }
 
+        // Resolve lazy destinations and validate the complete tensor structure BEFORE sharing any
+        // storage. Count equality alone is insufficient: a layer can rebuild against the runtime
+        // input width while its freshly-constructed clone still has the architecture's declared
+        // width. In that case the tensor counts match but their shapes do not (for example, a
+        // trained [16]-wide GFLU or NODE layer versus a fresh [10]-wide clone). Rebinding those
+        // tensors leaves the destination's shape metadata stale, and its first Forward rebuilds the
+        // layer and discards the trained weights. The generic CopyOnWriteCloneHelper already applies
+        // this same per-tensor shape preflight; keep NeuralNetworkBase's optimized path equally safe.
         for (int i = 0; i < srcLayers.Count; i++)
         {
             var src = srcLayers[i];
@@ -10782,7 +10790,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
-            // Share trainable tensors copy-on-write (privatizes on the first in-place write to either side).
             var sp = src.GetTrainableParameters();
             var dp = dst.GetTrainableParameters();
             bool shapeOnlyDestination = dp.Count == 0
@@ -10793,6 +10800,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (copy as IDisposable)?.Dispose();
                 return false;
             }
+            if (!shapeOnlyDestination)
+            {
+                for (int p = 0; p < sp.Count; p++)
+                {
+                    if (!sp[p]._shape.SequenceEqual(dp[p]._shape))
+                    {
+                        (copy as IDisposable)?.Dispose();
+                        return false;
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            var src = srcLayers[i];
+            var dst = dstLayers[i];
+
+            // Share trainable tensors copy-on-write (privatizes on the first in-place write to either side).
+            var sp = src.GetTrainableParameters();
             if (sp.Count > 0)
             {
                 var shared = new Tensor<T>[sp.Count];
