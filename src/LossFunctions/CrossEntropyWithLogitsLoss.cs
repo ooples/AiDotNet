@@ -200,8 +200,33 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             return Engine.TensorNegate(perSample);
 
         var batchAxes = Enumerable.Range(0, perSample.Shape.Length).ToArray();
-        var mean = Engine.ReduceMean(perSample, batchAxes, keepDims: false);
-        return Engine.TensorNegate(mean);
+
+        // Average over SUPERVISED slots, not over every slot. An ignored target (an index outside
+        // [0, numClasses), the -1 sentinel) one-hot encodes to an all-zero row, so it contributes
+        // nothing to the numerator -- but counting it in the denominator silently shrinks the
+        // gradient by the ignored fraction. PyTorch's reduction='mean' divides by the number of
+        // non-ignored targets, which is the parity this class documents.
+        //
+        // Each supervised row's target mass is 1 (one-hot) or sums to 1 (a distribution), and an
+        // ignored row's is 0, so summing the mass counts exactly the supervised slots. When
+        // nothing is ignored that count equals the slot count and this is identical to the plain
+        // mean, so existing callers are unaffected.
+        var targetMass = Engine.ReduceSum(target, new[] { classAxis }, keepDims: false);
+        var supervised = Engine.ReduceSum(targetMass, batchAxes, keepDims: false);
+
+        double supervisedCount = Convert.ToDouble(supervised[0]);
+        if (supervisedCount <= 0.0)
+        {
+            // Nothing was supervised; there is no loss to report rather than a divide by zero.
+            return Engine.TensorNegate(Engine.ReduceSum(perSample, batchAxes, keepDims: false));
+        }
+
+        var total = Engine.ReduceSum(perSample, batchAxes, keepDims: false);
+        var divisor = new Tensor<T>(total.Shape.ToArray());
+        var scale = NumOps.FromDouble(supervisedCount);
+        for (int i = 0; i < divisor.Length; i++) divisor[i] = scale;
+
+        return Engine.TensorNegate(Engine.TensorDivide(total, divisor));
     }
 
     private Tensor<T> ComputeLogSoftmax(Tensor<T> logits, int classAxis)
