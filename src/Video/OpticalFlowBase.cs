@@ -85,6 +85,26 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
     public abstract Tensor<T> EstimateFlow(Tensor<T> frame0, Tensor<T> frame1);
 
     /// <summary>
+    /// Gets whether <see cref="EstimateFlow"/> accepts a BATCHED frame pair
+    /// (<c>[batch, channels, height, width]</c>) and returns <c>[batch, 2, height, width]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Defaults to <c>false</c>, matching the documented rank-3 contract above. When a derived model
+    /// genuinely handles a batch dimension, overriding this to <c>true</c> lets
+    /// <see cref="PredictCore"/> estimate the whole batch in ONE forward pass instead of looping over
+    /// samples — the loop runs the entire flow network once per sample, which dominates the cost of a
+    /// batched prediction.
+    /// </para>
+    /// <para>
+    /// Only override this after confirming the implementation really is batch-correct. Claiming batch
+    /// support that does not exist produces silently wrong flow rather than an error, because a
+    /// rank-3-only implementation will happily interpret the batch axis as channels.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsBatchedEstimateFlow => false;
+
+    /// <summary>
     /// Estimates optical flow at multiple scales for handling large motions.
     /// Override this in derived classes to provide actual multi-scale pyramid estimation.
     /// The default implementation returns only the full-scale flow as a single-element list.
@@ -201,15 +221,57 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var frame0 = new Tensor<T>([channels, height, width]);
-        var frame1 = new Tensor<T>([channels, height, width]);
+        // Split the stacked pair along the CHANNEL axis with recorded narrows.
+        //
+        // This previously allocated two fresh tensors and copied element-by-element through
+        // Data.Span, which had three defects. (1) A raw buffer write is not a recorded operation, so
+        // the frames arrived as tape leaves and no gradient could reach the caller's input — which is
+        // precisely what an optical-flow term in a loss needs, since it differentiates the flow with
+        // respect to the frames. (2) It indexed the flat buffer as [0, halfSize) and
+        // [halfSize, 2*halfSize), which is only the correct channel split when batch == 1; for any
+        // larger batch it silently mixed sample 0's channels with sample 1's data. (3) It allocated
+        // per call and looped per element where one narrow suffices.
+        var frames0 = Engine.TensorNarrow(input, 1, 0, channels);        // [B, C, H, W]
+        var frames1 = Engine.TensorNarrow(input, 1, channels, channels); // [B, C, H, W]
 
-        int halfSize = channels * height * width;
-        for (int i = 0; i < halfSize; i++)
+        if (batch > 1 && SupportsBatchedEstimateFlow)
         {
-            frame0.Data.Span[i] = input.Data.Span[i];
-            frame1.Data.Span[i] = input.Data.Span[halfSize + i];
+            // One forward pass for the whole batch. Estimating per sample would run the entire flow
+            // network `batch` times, which is the dominant cost of this method — enough to push
+            // training tests over their time budget under parallel load.
+            var batchedFlow = EstimateFlow(frames0, frames1);
+            return batchedFlow.Rank == 3
+                ? Engine.Reshape(
+                    batchedFlow,
+                    [1, batchedFlow.Shape[0], batchedFlow.Shape[1], batchedFlow.Shape[2]])
+                : batchedFlow;
         }
+
+        if (batch > 1)
+        {
+            // EstimateFlow is defined for a single frame pair, so estimate per sample and stack the
+            // results rather than conflating samples. Correct but `batch` times the work; models that
+            // accept a batched pair should opt into the fast path above.
+            var perSample = new Tensor<T>[batch];
+            for (int b = 0; b < batch; b++)
+            {
+                var f0 = Engine.Reshape(
+                    Engine.TensorNarrow(frames0, 0, b, 1), [channels, height, width]);
+                var f1 = Engine.Reshape(
+                    Engine.TensorNarrow(frames1, 0, b, 1), [channels, height, width]);
+                var sampleFlow = EstimateFlow(f0, f1);
+                perSample[b] = sampleFlow.Rank == 3
+                    ? Engine.Reshape(
+                        sampleFlow,
+                        [1, sampleFlow.Shape[0], sampleFlow.Shape[1], sampleFlow.Shape[2]])
+                    : sampleFlow;
+            }
+
+            return Engine.Concat(perSample, 0);
+        }
+
+        var frame0 = Engine.Reshape(frames0, [channels, height, width]);
+        var frame1 = Engine.Reshape(frames1, [channels, height, width]);
 
         // EstimateFlow returns rank-3 [2, H, W] (single frame-pair flow field
         // per the public API contract). Promote to rank-4 [B, 2, H, W] so

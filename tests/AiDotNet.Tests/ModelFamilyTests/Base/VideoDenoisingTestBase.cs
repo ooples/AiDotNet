@@ -10,7 +10,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for video denoising models. Inherits video NN invariants
 /// and adds denoising-specific: clean input preserved and output bounded.
 /// </summary>
-public abstract class VideoDenoisingTestBase : VideoNNModelTestBase
+/// <remarks>
+/// Generic over T so the source generator's float scaffold can emit
+/// <c>VideoDenoisingTestBase&lt;float&gt;</c>. While this base was non-generic its models
+/// (LiteDVDNet, ...) were locked to &lt;double&gt; and the float-first remedy was CS0308, leaving
+/// only fixture shrinks/caps. Mirrors the FinancialModelTestBase/VideoNNModelTestBase pattern.
+/// </remarks>
+public abstract class VideoDenoisingTestBase<T> : VideoNNModelTestBase<T>
 {
     [Fact(Timeout = 120000)]
     public async Task CleanInput_ShouldBePreserved()
@@ -28,7 +34,7 @@ public abstract class VideoDenoisingTestBase : VideoNNModelTestBase
         int minLen = Math.Min(cleanInput.Length, output.Length);
         for (int i = 0; i < minLen; i++)
         {
-            double diff = cleanInput[i] - output[i];
+            double diff = ConvertToDouble(cleanInput[i]) - ConvertToDouble(output[i]);
             mse += diff * diff;
         }
         mse /= Math.Max(1, minLen);
@@ -50,10 +56,17 @@ public abstract class VideoDenoisingTestBase : VideoNNModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            double v = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(v),
                 $"Denoised output[{i}] is NaN — denoising introduced instability.");
-            Assert.True(Math.Abs(output[i]) < 1e6,
-                $"Denoised output[{i}] = {output[i]:E4} is unbounded.");
+            Assert.True(Math.Abs(v) < 1e6,
+                $"Denoised output[{i}] = {v:E4} is unbounded.");
         }
     }
 }
+
+/// <summary>
+/// Non-generic double-precision shim so existing <c>: VideoDenoisingTestBase</c> derivations
+/// keep compiling (same pattern as VideoNNModelTestBase).
+/// </summary>
+public abstract class VideoDenoisingTestBase : VideoDenoisingTestBase<double> { }

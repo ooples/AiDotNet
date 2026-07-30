@@ -61,7 +61,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "VILA-U: a Unified Foundation Model Integrating Visual Understanding and Generation",
-    "https://arxiv.org/abs/2402.11894",
+    "https://arxiv.org/abs/2409.04429",
     Year = 2024,
     Authors = "Wu et al."
 )]

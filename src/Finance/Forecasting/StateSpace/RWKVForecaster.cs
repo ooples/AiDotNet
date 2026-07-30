@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -148,11 +148,15 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
-        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
         _numFeatures = 1;
         InitializeLayers();
+
+        // Same ordering requirement as the native constructor: a stateful optimizer sizes its
+        // per-parameter state from the model it is given, so it must not be constructed while the
+        // model still has zero layers. See the native ctor for the measured failure signature.
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
     }
 
     /// <summary>
@@ -170,11 +174,24 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _options = options;
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         ApplyOptions(options);
         _numFeatures = numFeatures;
         InitializeLayers();
+
+        // Optimizer construction MUST come after InitializeLayers(). CreateDefaultOptimizer passes
+        // `this` to the optimizer, and a stateful optimizer sizes its per-parameter state (Adam's
+        // moments, SGD's momentum) from the model it is handed. Built before InitializeLayers() the
+        // model still has ZERO layers and ZERO parameters, so that state was allocated against an
+        // empty parameter set and its in-place writes then landed against a 17,576-element
+        // ParameterBuffer they were never sized for.
+        //
+        // Measured signature of that mismatch on the FP32 fixture at batch 1: gradients finite at the
+        // clipping check, parameters finite before the step, and after ONE step the ENTIRE buffer
+        // ([0..17575]) non-finite, on 11-16 of 25 fresh draws. Stateless GradientDescentOptimizer was
+        // clean 25/25 precisely because it has no per-parameter state to misalign, while Adam (15/25)
+        // and SGD (16/25) both failed.
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
     }
 
     private void ApplyOptions(RWKVForecastingOptions<T> options)
@@ -205,6 +222,33 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
 
     #endregion
 
+    /// <summary>
+    /// RWKV's time-mixing is a RECURRENT per-timestep update, so its forward is not a static operation
+    /// graph that can be compiled once and replayed safely.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every sibling in this family already opts out — HiPPO in this same folder, plus
+    /// GatedDeltaNet, GLA, Griffin and Hawk — for exactly this reason. RWKV was the outlier, silently
+    /// inheriting the base default of <c>true</c>.
+    /// </para>
+    /// <para>
+    /// The measured symptom was ForwardPass_ShouldBeFinite_AfterTraining and
+    /// Clone_AfterTraining_ShouldPreserveLearnedWeights failing on roughly half of all runs (5 of 10
+    /// draws locally), with the whole parameter buffer going NaN after a single training step. A replayed
+    /// plan over a recurrent forward reads trace-time state that is no longer valid, which is
+    /// order-dependent and therefore intermittent rather than deterministic.
+    /// </para>
+    /// <para>
+    /// This also explains two observations that had made the fault look like a memory-allocator problem.
+    /// It reproduced ONLY with stateful optimizers because the fused path requires
+    /// <c>IFusedOptimizerSpec</c>, which plain gradient descent does not implement — so compiled training
+    /// never engaged for GD. And it survived a zero learning rate because a NaN arriving through the
+    /// graph is still NaN after being multiplied by zero.
+    /// </para>
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
+
     #region Initialization
 
     /// <inheritdoc/>
@@ -220,7 +264,8 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultRWKVForecastingLayers(
                 Architecture, _contextLength, _forecastHorizon, _numFeatures,
-                _modelDimension, _numHeads, _numLayers, _dropout));
+                _modelDimension, _numHeads, _numLayers, _dropout,
+                _options.GlobalIclrMultiplier));
             ExtractLayerReferences();
         }
     }
@@ -275,6 +320,33 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         // tape.ComputeGradients + optimizer.Step) that every other
         // NeuralNetworkBase subclass uses.
         base.Train(input, target);
+    }
+
+    /// <summary>
+    /// One-shot guard for <see cref="ResolveLazyLayerShapes"/>, mirroring the Wav2Vec2 precedent.
+    /// </summary>
+    private bool _shapesProbed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The real <see cref="Forward"/> reshapes [batch, seqLen, numFeatures] to
+    /// [batch*seqLen, numFeatures] before the input embedding, so that embedding must resolve to
+    /// inputSize = numFeatures (1 for a univariate series). The base sequential walk instead feeds
+    /// the architecture's FLAT input shape ([contextLength]) straight in and resolves the embedding
+    /// to contextLength -> 131,328 parameters instead of 512. The first real forward then silently
+    /// REBUILDS the layer at the correct shape, so ParameterCount and GetParameters().Length CHANGE
+    /// across a training step (measured 5,985,632 -> 5,854,816), which in turn makes every
+    /// parameter-vector-sized consumer - optimizer moment state, Clone/serialization round-trips,
+    /// and the param-L2 invariants - disagree with the model depending on whether anything queried
+    /// parameters before the first forward. Probe the real forward once so every lazy layer resolves
+    /// to what Forward actually feeds it. This is virtual for exactly this case (non-sequential
+    /// forward topology) and is one-shot, so lazy initialization keeps its performance benefit.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_shapesProbed || !_useNativeMode || Layers.Count == 0) return;
+        _shapesProbed = true;
+        _ = Forward(new Tensor<T>(new[] { _contextLength, _numFeatures }));
     }
 
     /// <inheritdoc/>
@@ -397,45 +469,20 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+        // RevIN forward (Kim et al. 2022) over each instance: every non-batch element of a row is
+        // normalized together. Delegates to the shared tape-tracked helper -- the previous hand-rolled
+        // loop accumulated the statistics with scalar NumOps arithmetic and wrote the output through
+        // result.Data.Span[...], which the tape cannot see, so the normalized input came back as a
+        // LEAF and nothing could differentiate through the normalization.
     {
-        // RevIN forward (Kim et al. 2022): subtract each instance's mean and
-        // divide by its std. Stats are taken over every non-batch element of each
-        // row so this works for 1-D / 2-D / 3-D inputs alike.
-        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
-        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
-        if (instanceSize <= 0)
-            return input;
-
-        var result = new Tensor<T>(input._shape);
-        _revinMean = new Vector<T>(batchSize);
-        _revinStd = new Vector<T>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
+        if (!_options.UseReversibleNormalization)
         {
-            int start = b * instanceSize;
-
-            T mean = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-                mean = NumOps.Add(mean, input[start + t]);
-            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-            {
-                var diff = NumOps.Subtract(input[start + t], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            _revinMean[b] = mean;
-            _revinStd[b] = std;
-
-            for (int t = 0; t < instanceSize; t++)
-                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
+            _revinMean = new Vector<T>(0);
+            _revinStd = new Vector<T>(0);
+            return input;
         }
 
-        return result;
+        return NormalizeInstanceOnTape(input, _options.RevInEpsilon, out _revinMean, out _revinStd);
     }
 
     /// <summary>
@@ -461,7 +508,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
         var scaled = Engine.TensorBroadcastMultiply(work, stdT);
         var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
-        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
+        return reshaped ? Engine.Reshape(shifted, (int[])forecast._shape.Clone()) : shifted;
     }
 
     /// <inheritdoc/>
@@ -505,7 +552,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         // Input embedding: [batch*seqLen, numFeatures] -> [batch*seqLen, modelDim]
         if (_inputEmbedding is not null)
         {
-            current = current.Reshape(new[] { batchSize * seqLen, _numFeatures });
+            current = Engine.Reshape(current, new[] { batchSize * seqLen, _numFeatures });
             current = _inputEmbedding.Forward(current);
             current = Engine.Reshape(current, new[] { batchSize, seqLen, _modelDimension });
         }
@@ -573,7 +620,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
 
         if (_inputEmbedding is not null)
         {
-            current = current.Reshape(new[] { batchSize * seqLen, _numFeatures });
+            current = Engine.Reshape(current, new[] { batchSize * seqLen, _numFeatures });
             current = _inputEmbedding.Forward(current);
             current = Engine.Reshape(current, new[] { batchSize, seqLen, _modelDimension });
             activations["InputEmbedding"] = current.Clone();
@@ -607,18 +654,18 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     private Tensor<T> NormalizeInputTo3D(Tensor<T> input)
     {
         if (input.Rank == 3) return input;
-        if (input.Rank == 2) return input.Reshape(new[] { 1, input.Shape[0], input.Shape[1] });
+        if (input.Rank == 2) return Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] });
         if (input.Rank == 1)
         {
             int seqLen, features;
             if (_numFeatures > 1 && input.Length % _numFeatures == 0) { seqLen = input.Length / _numFeatures; features = _numFeatures; }
             else if (_contextLength > 0 && input.Length % _contextLength == 0) { seqLen = _contextLength; features = input.Length / _contextLength; }
             else { seqLen = input.Length; features = 1; }
-            return input.Reshape(new[] { 1, seqLen, features });
+            return Engine.Reshape(input, new[] { 1, seqLen, features });
         }
         int batchDims = 1;
         for (int i = 0; i < input.Rank - 2; i++) batchDims *= input.Shape[i];
-        return input.Reshape(new[] { batchDims, input.Shape[input.Rank - 2], input.Shape[input.Rank - 1] });
+        return Engine.Reshape(input, new[] { batchDims, input.Shape[input.Rank - 2], input.Shape[input.Rank - 1] });
     }
 
     /// <inheritdoc/>

@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -68,21 +69,23 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>
     /// <c>true</c>: the alpha predictor is genuinely trained.
     /// </summary>
     /// <remarks>
-    /// <para>This was previously <c>false</c> because <see cref="Forward"/> materialized α and
-    /// the integrated hidden states into scalar <c>T</c> values through per-element indexers and
-    /// <c>NumOps</c> arithmetic, which the gradient tape cannot record — so the alignment head
-    /// was frozen at initialization.</para>
-    /// <para><see cref="Forward"/> now takes the second route this remark used to prescribe: a
-    /// continuous accumulation matrix recorded through standard <c>Engine</c> ops. The
-    /// threshold crossings still decide the firing structure in a non-differentiable pass, but
-    /// every emitted token is then formed as
-    /// <c>out = (A ⊙ αB + C) · h</c> via <c>Engine.TensorMultiply</c>,
-    /// <c>Engine.TensorAdd</c> and <c>Engine.TensorBatchMatMul</c>, so the tape records the whole
-    /// contraction and gradients reach both <see cref="_alphaPredictor"/> and the encoder
-    /// states automatically.</para>
-    /// <para>One deliberate truncation remains: the completing fraction <c>α_t^c = θ − acc</c>
-    /// enters as a constant, so the dependence of a fire on the ENTIRE preceding alpha sequence
-    /// is not carried. Each frame's own alpha — the dominant term — is exact.</para>
+    /// Fixing this to <c>true</c> requires one of:
+    /// <list type="bullet">
+    /// <item>A custom <c>Backward</c> implementation that walks
+    /// recorded CIF split decisions in reverse and accumulates
+    /// gradients for the alpha predictor (analytic derivatives of
+    /// the integrate-and-fire dynamics).</item>
+    /// <item>Implemented: the forward is now the soft CIF described below, so the tape records the
+    /// whole alignment and the alpha predictor trains.</item>
+    /// </list>
+    /// </remarks>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// TRUE since the forward became the soft, differentiable CIF: the alignment is a continuous matrix
+    /// built from Engine ops and applied with a matmul, so gradient reaches the alpha predictor
+    /// (<c>DenseLayer(1, sigmoid)</c>). It previously reported FALSE because the hard integrate-and-fire
+    /// scan wrote its output through raw indexing, which the tape cannot observe — that made the
+    /// predictor untrainable and Paraformer's L_MAE term (Eq 6) impossible to express.
     /// </remarks>
     public override bool SupportsTraining => true;
 
@@ -223,242 +226,93 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        // Predict per-timestep fire weights via the Dense+Sigmoid head.
-        // The alpha predictor is the layer's only trainable component;
-        // we run it on the input *before* the CIF integrate-and-fire so
-        // its gradient path (through the loss on aligned outputs) is
-        // independent of the non-differentiable threshold crossing.
+        // ---- Soft (differentiable) CIF -------------------------------------------------------------
+        // Gao 2022's Algorithm 1 is a hard integrate-and-fire scan: it splits alpha at each
+        // threshold crossing with scalar arithmetic and writes the result through raw indexing. That
+        // write is invisible to the autodiff tape, so the alpha predictor below could never receive a
+        // gradient and Paraformer's L_MAE term (Eq 6), which supervises the predicted token COUNT, had
+        // nothing to optimise.
         //
-        // Dong & Xu 2020 (arXiv:1905.11235) compute α_u from a WINDOW centred on h_u —
-        // "pass a window centered at h_u (e.g. [h_{u-1}, h_u, h_{u+1}]) to a 1-dimensional
-        // convolutional layer and then a fully connected layer with one output unit and a
-        // sigmoid activation". This previously fed h_u alone, so α could not see its
-        // neighbours — and a firing boundary is defined by the CHANGE between adjacent
-        // frames, which is precisely the information a single-frame predictor cannot access.
+        // The soft re-formulation this uses is the one the layer's own remarks pointed at (Zhao & Gao
+        // 2024, "Distill the soft CIF"): replace the hard scan with a continuous alignment matrix and
+        // a matmul, so every step is an Engine op the tape records.
         //
-        // The window is materialized as the concatenation [h_{u-1} | h_u | h_{u+1}] with
-        // zero padding at the sequence edges. A width-3 conv1d followed by a 1-unit FC, with
-        // no activation between them, composes to a single affine map of that 3D-wide window,
-        // so one Dense(1, sigmoid) over the concatenation is mathematically equivalent to the
-        // paper's conv+FC pair while keeping this layer's parameter/gradient plumbing intact.
-        var windowed = BuildAlphaWindow(input, B, S, D);
-        var alphaTensor = _alphaPredictor.Forward(windowed);  // [B, S, 1]
+        //   alpha_t = sigmoid(W h_t)                      (unchanged, the trainable predictor)
+        //   cum_t   = sum_{i<=t} alpha_i                  = alpha . U, U upper-triangular ones
+        //   A[l,t]  = clamp(1 - |cum_t - (l+1)|, 0, 1)    triangular kernel around each firing point
+        //   E_l     = sum_t A[l,t] h_t                    = A . H
+        //
+        // cum is a matmul rather than TensorCumSum because TensorCumSum is not in the differentiable
+        // op registry, while TensorMatMul is. A[l,t] peaks where the cumulative alpha crosses integer
+        // l+1 — the same firing points the hard scan finds — but with a smooth, differentiable
+        // neighbourhood instead of a discontinuous split.
+        var alphaTensor = _alphaPredictor.Forward(input);          // [B, S, 1]
+        var alpha2d = Engine.Reshape(alphaTensor, new[] { B, S }); // [B, S]
 
-        // A constant ones column, reused below for both the alpha sum and the broadcasts. Every
-        // combination with it goes through Engine ops so the tape keeps tracking alpha.
-        var onesColumn = new Tensor<T>(new[] { B, S, 1 });
-        for (int i = 0; i < onesColumn.Length; i++) onesColumn[i] = NumOps.One;
-
-        if (TargetTokenCount is int targetCount && targetCount > 0)
+        // U[i, t] = 1 when i <= t, so (alpha . U)[b, t] = sum_{i<=t} alpha[b, i].
+        var upper = new Tensor<T>(new[] { S, S });
+        for (int i = 0; i < S; i++)
         {
-            // Σα per batch as a tape-visible reduction: [B, 1, S] x [B, S, 1] = [B, 1, 1].
-            // Computed ONLY when a target length is supplied. Building it unconditionally left a
-            // tape node whose result never reached the output on the inference path, which is
-            // both wasted work and a dangling contribution to gradient accumulation.
-            var alphaRowForSum = Engine.Reshape(alphaTensor, [B, 1, S]);
-            var alphaSum = Engine.TensorBatchMatMul(alphaRowForSum, onesColumn);   // [B, 1, 1]
-
-            var target = new Tensor<T>(new[] { B, 1, 1 });
-            for (int i = 0; i < target.Length; i++) target[i] = NumOps.FromDouble(targetCount);
-
-            // Quantity loss |Σα − S~| (Dong & Xu 2020 §3.2, weighted by λ₂ = 1.0 by default).
-            // Built from Engine ops so a consumer that folds it into the objective keeps a live
-            // gradient path back to the alpha predictor.
-            var quantityLoss = Engine.TensorAbs(Engine.TensorSubtract(alphaSum, target));
-            T lossSum = NumOps.Zero;
-            for (int i = 0; i < quantityLoss.Length; i++) lossSum = NumOps.Add(lossSum, quantityLoss[i]);
-            LastQuantityLoss = B > 0 ? NumOps.Divide(lossSum, NumOps.FromDouble(B)) : NumOps.Zero;
-
-            // Alpha scaling: multiply every weight by S~/Σα so the integrated count matches the
-            // target. Training-time only, exactly as the paper specifies — at inference the
-            // target length is unknown and the raw alphas decide the output length.
-            if (AlphaScalingEnabled && IsTrainingMode)
+            for (int t = i; t < S; t++)
             {
-                // Guard the denominator. Sigma-alpha is a sum of non-negative firing weights, so
-                // it approaches zero whenever the weight predictor's outputs collapse — which is
-                // easy early in training, before the quantity loss has pulled the integrated
-                // count toward the target. Dividing by it then produces an enormous ratio that
-                // scales every weight, and d(1/u)/du = -1/u^2 makes the backward pass worse than
-                // the forward.
-                //
-                // This is a latent hazard rather than an observed failure: the enclosing branch
-                // only runs when TargetTokenCount is set, which the generated fixtures never do,
-                // so it is not the cause of CIFEncoder's NaN.
-                var denominatorFloor = new Tensor<T>(alphaSum.Shape.ToArray());
-                for (int i = 0; i < denominatorFloor.Length; i++)
-                    denominatorFloor[i] = NumOps.FromDouble(1e-6);
-
-                var ratio = Engine.TensorDivide(
-                    target,
-                    Engine.TensorAdd(alphaSum, denominatorFloor));                 // [B, 1, 1]
-                var ratioBroadcast = Engine.TensorBatchMatMul(onesColumn, ratio);  // [B, S, 1]
-                alphaTensor = Engine.TensorMultiply(alphaTensor, ratioBroadcast);
+                upper.Data.Span[(i * S) + t] = NumOps.One;
             }
         }
-        else
+
+        var cum = Engine.TensorMatMul(alpha2d, upper);             // [B, S]
+
+        // Build the alignment directly in [b, l, t] order so no transpose is needed: replicate cum across
+        // the token axis with a batched matmul against a column of ones.
+        //   cumRep[b, l, t] = cum[b, t]   for every l
+        var onesCol = new Tensor<T>(new[] { B, S, 1 });
+        for (int i = 0; i < onesCol.Length; i++) onesCol.Data.Span[i] = NumOps.One;
+        var cumRep = Engine.BatchMatMul(
+            onesCol,                                      // [B, L=S, 1]
+            Engine.Reshape(cum, new[] { B, 1, S }));      // [B, 1, S]  ->  [B, S, S]
+
+        // Firing points: level[b, l, t] = (l + 1) * threshold, so a non-unit threshold stretches the
+        // spacing exactly as the hard scan's accumulator would. Supervision-side constant, off-tape.
+        double thresholdValue = NumOps.ToDouble(_threshold);
+        var level = new Tensor<T>(new[] { B, S, S });
+        for (int b2 = 0; b2 < B; b2++)
         {
-            LastQuantityLoss = NumOps.Zero;
-        }
-
-        T thresh = _threshold;
-        T tailThresh = _tailThreshold;
-
-        // The integrate-and-fire output is a WEIGHTED SUM of the encoder states:
-        //     out[b, j, :] = Σ_t W[b, j, t] · h[b, t, :]
-        // and every weight is affine in that frame's own alpha:
-        //     W[b, j, t] = A[b, j, t] · α_t + C[b, j, t]
-        // The threshold crossings decide WHICH (j, t) pairs exist and with what A/C — that
-        // decision is non-differentiable and is taken below from the alpha VALUES. But given
-        // those decisions the output is an ordinary product, so building W with Engine ops and
-        // contracting with a batched matmul lets the gradient tape record the whole thing
-        // automatically: gradients reach the alpha predictor through A ⊙ αB, and the encoder
-        // states through the matmul. This is the "continuous accumulation matrix ... standard
-        // Engine ops" route this layer's own remarks prescribe, and it is what makes
-        // SupportsTraining true rather than an advertised-but-frozen head.
-        //
-        // A and C are constants w.r.t. the tape; only αB carries alpha's gradient.
-        var coeff = Zeroed(new[] { B, S, S });             // A — multiplies α_t
-        var prefixCoeff = Zeroed(new[] { B, S, S });        // Bp — multiplies P_t = Σ_{s<t} α_s
-        var constant = Zeroed(new[] { B, S, S });           // C — the fixed part
-
-        // Per Gao 2022 Algorithm 1, executed per-batch independently:
-        //   acc_α ← 0,  acc_h ← 0
-        //   for t in 1..S:
-        //     if acc_α + α_t >= θ:
-        //       split α_t = α_t^c + α_t^r where α_t^c = θ − acc_α
-        //       acc_h += α_t^c · h_t       // complete the current token
-        //       emit acc_h                 // fire
-        //       acc_α ← α_t^r,  acc_h ← α_t^r · h_t   // seed next
-        //     else:
-        //       acc_α += α_t,  acc_h += α_t · h_t
-        //   if acc_α >= tail_θ:
-        //     emit acc_h / acc_α          // renormalize partial token
-        for (int b = 0; b < B; b++)
-        {
-            T accAlpha = NumOps.Zero;
-            int outIdx = 0;
-            int fireCount = 0;
-
-            // Frames feeding the token currently being accumulated, so the tail emission can
-            // renormalize exactly the weights that formed it.
-            var pending = new List<int>(S);
-
-            for (int t = 0; t < S && outIdx < S; t++)
+            for (int l = 0; l < S; l++)
             {
-                T a = alphaTensor[b, t, 0];
-                T proposedAcc = NumOps.Add(accAlpha, a);
-
-                if (NumOps.GreaterThanOrEquals(proposedAcc, thresh))
+                T value = NumOps.FromDouble((l + 1) * thresholdValue);
+                int rowOffset = ((b2 * S) + l) * S;
+                for (int t2 = 0; t2 < S; t2++)
                 {
-                    // Split alpha at the threshold-crossing.
-                    T contribFraction = NumOps.Subtract(thresh, accAlpha);   // α_t^c
-                    T remainderFraction = NumOps.Subtract(a, contribFraction); // α_t^r
-
-                    // α_t^c = θ − acc completes THIS token. It is a function of the PRIOR
-                    // alphas — and that dependence is now carried exactly rather than dropped.
-                    //
-                    // The accumulator obeys acc_t = acc_{t-1} + α_t − (θ if fired) in BOTH
-                    // branches, so it telescopes:
-                    //     acc_{t-1} = P_t − F·θ,   P_t = Σ_{s<t} α_s,   F = fires before t
-                    // which makes the split an exact affine function of the alphas:
-                    //     α_t^c = θ(1 + F) − P_t
-                    //     α_t^r = α_t − α_t^c = α_t + P_t − θ(1 + F)
-                    // Expressing it through the prefix sum is what lets the tape see a fire's
-                    // dependence on the ENTIRE preceding alpha sequence, instead of the earlier
-                    // truncation that held α_t^c constant.
-                    T thresholdTerm = NumOps.Multiply(thresh, NumOps.FromDouble(fireCount + 1));
-
-                    // Completing fraction closes THIS token: no α_t term, −1 on the prefix sum.
-                    constant[b, outIdx, t] = NumOps.Add(constant[b, outIdx, t], thresholdTerm);
-                    prefixCoeff[b, outIdx, t] = NumOps.Subtract(prefixCoeff[b, outIdx, t], NumOps.One);
-
-                    // Remainder seeds the NEXT token: +1 on α_t and +1 on the prefix sum.
-                    if (outIdx + 1 < S)
-                    {
-                        coeff[b, outIdx + 1, t] = NumOps.Add(coeff[b, outIdx + 1, t], NumOps.One);
-                        prefixCoeff[b, outIdx + 1, t] = NumOps.Add(prefixCoeff[b, outIdx + 1, t], NumOps.One);
-                        constant[b, outIdx + 1, t] = NumOps.Subtract(constant[b, outIdx + 1, t], thresholdTerm);
-                    }
-
-                    accAlpha = remainderFraction;
-                    fireCount++;
-                    outIdx++;
-                    pending.Clear();
-                    pending.Add(t);
-                }
-                else
-                {
-                    // Standard accumulation step: the whole α_t lands on the current token.
-                    accAlpha = proposedAcc;
-                    coeff[b, outIdx, t] = NumOps.Add(coeff[b, outIdx, t], NumOps.One);
-                    pending.Add(t);
+                    level.Data.Span[rowOffset + t2] = value;
                 }
             }
-
-            // Tail emission per Gao 2022 §3.2 — a remainder above
-            // tailThreshold gets renormalized into one final token so
-            // the last partial fire isn't dropped on the floor.
-            if (outIdx < S && NumOps.GreaterThanOrEquals(accAlpha, tailThresh))
-            {
-                T invAlpha = NumOps.GreaterThan(accAlpha, NumOps.Zero)
-                    ? NumOps.Divide(NumOps.One, accAlpha)
-                    : NumOps.Zero;
-
-                // Scale the weights already accumulated into this slot by 1/acc_α. The 1/acc_α
-                // factor itself is held constant w.r.t. the tape — carrying its derivative would
-                // couple the tail to every alpha that formed it.
-                foreach (int t in pending)
-                {
-                    coeff[b, outIdx, t] = NumOps.Multiply(coeff[b, outIdx, t], invAlpha);
-                    prefixCoeff[b, outIdx, t] = NumOps.Multiply(prefixCoeff[b, outIdx, t], invAlpha);
-                    constant[b, outIdx, t] = NumOps.Multiply(constant[b, outIdx, t], invAlpha);
-                }
-                outIdx++;
-            }
-
-            // Remaining output slots [outIdx, S) stay zero — downstream
-            // attention should mask them out via the standard padding-
-            // mask path. Rows of A and C for those slots are all zero, so the
-            // contraction below emits zeros there. Nothing more to do.
         }
 
-        // Inclusive-minus-self prefix sum P_t = Σ_{s<t} α_s. A cumulative sum along the sequence
-        // axis is O(S); the strictly-lower-triangular matmul this replaces built a [B, S, S]
-        // operand and contracted it just to add up earlier alphas.
-        var inclusivePrefix = Engine.TensorCumSum(alphaTensor, axis: 1);      // [B, S, 1]
-        var prefix = Engine.TensorSubtract(inclusivePrefix, alphaTensor);     // exclusive
+        // A = clamp(1 - |cum - level|, 0, 1), every step tape-recorded.
+        var distance = Engine.TensorAbs(Engine.TensorSubtract(cumRep, level));
+        var kernel = Engine.TensorAddScalar(Engine.TensorNegate(distance), NumOps.One);
+        var alignment = Engine.TensorClamp(kernel, NumOps.Zero, NumOps.One);   // [B, L, S]
 
-        // The contraction, algebraically rearranged to keep the tape off the S-by-S plane.
-        //
-        // Each output row is out_i = Σ_t W[i,t] · h_t with
-        //     W[i,t] = A[i,t]·α_t + Bp[i,t]·P_t + C[i,t].
-        // Because α_t and P_t do not depend on the OUTPUT index i, the broadcast copies of them
-        // are redundant: (A ⊙ αB) · h = A · (α ⊙ h), and likewise for the prefix term. So
-        //     out = A·(α ⊙ h) + Bp·(P ⊙ h) + C·h
-        // which is identical arithmetic with the elementwise products moved from [B, S, S] down
-        // to [B, S, D].
-        //
-        // That matters beyond memory. A, Bp and C are constants with respect to the tape -- the
-        // firing structure is decided in the non-differentiable pass above -- so in this form
-        // they are plain matmul operands and the only tape intermediates are [B, S, D]. The
-        // previous form multiplied them INTO tape tensors, so the tape had to carry three
-        // S-by-S intermediates per forward. Under an active TensorArena that was enough to make
-        // the alpha predictor's gradient come back non-finite after a single training step,
-        // while the forward stayed finite and the same model trained cleanly with no arena.
-        var alphaBroadcast = Engine.TensorBroadcastTo(alphaTensor, [B, S, D]);
-        var prefixBroadcast = Engine.TensorBroadcastTo(prefix, [B, S, D]);
+        // E[b, l, :] = sum_t A[b, l, t] * H[b, t, :]
+        var aggregated = Engine.BatchMatMul(alignment, input);                  // [B, L=S, D]
 
-        var alphaWeighted = Engine.TensorMultiply(alphaBroadcast, input);     // [B, S, D]
-        var prefixWeighted = Engine.TensorMultiply(prefixBroadcast, input);   // [B, S, D]
+        // Paraformer Eq 6's MAE term supervises this: the predicted token count per batch item.
+        LastPredictedTokenCount = Engine.ReduceSum(alpha2d, new[] { 1 }, keepDims: false);
 
-        var output = Engine.TensorAdd(
-            Engine.TensorAdd(
-                Engine.TensorBatchMatMul(coeff, alphaWeighted),
-                Engine.TensorBatchMatMul(prefixCoeff, prefixWeighted)),
-            Engine.TensorBatchMatMul(constant, input));                       // [B, S, D]
-
-        return output;
+        return aggregated;
     }
+
+    /// <summary>
+    /// The predicted token count from the most recent forward: <c>sum_t alpha_t</c> per batch item.
+    /// </summary>
+    /// <remarks>
+    /// This is the quantity Paraformer's MAE term supervises. Gao et al. 2022 (arXiv 2206.08317) §2.2
+    /// train the CIF predictor to predict the number of tokens, and Eq 6's
+    /// <c>L_total = gamma*L_CE + L_MAE + L_MWER</c> includes the MAE between this sum and the target
+    /// length, described in §2.4 as guiding "the predictor to convergence". Exposed so a model can add
+    /// that term; it is produced by <c>Engine.ReduceSum</c> over the tape-tracked alphas, so a loss
+    /// built on it propagates into the predictor's weights.
+    /// </remarks>
+    public Tensor<T>? LastPredictedTokenCount { get; private set; }
 
     /// <inheritdoc/>
     /// <summary>

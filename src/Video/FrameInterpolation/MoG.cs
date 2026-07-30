@@ -93,10 +93,24 @@ public class MoG<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new MoGOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honor the model's configured LearningRate (1e-4) and clip gradients. The bare AdamWOptimizer(this)
+        // dropped both and ran at Adam's own 1e-3 default, which is 10x the rate this model declares and left
+        // MoreData_ShouldNotDegrade oscillating. Fully user-overridable via the optimizer parameter and
+        // MoGOptions.LearningRate. (#1789)
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Routes tape training through the configured optimizer. Without this override the base trainer only
+    /// consults <see cref="NeuralNetworkBase{T}.GetOrCreateBaseOptimizer"/>, so the <c>_optimizer</c> field above
+    /// was stored but never used and training silently ran at the base Adam 1e-3 default. (#1789)
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     #endregion
 

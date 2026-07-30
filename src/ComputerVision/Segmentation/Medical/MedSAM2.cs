@@ -124,7 +124,7 @@ public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _useNativeMode = true; _onnxModelPath = null;
         _hasUserSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
         InitializeLayers();
     }
 
@@ -159,7 +159,7 @@ public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize, _options);
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load MedSAM2 ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -237,13 +237,38 @@ public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     #endregion
 
     #region Private Methods
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(MedSAM2ModelSize modelSize) => modelSize switch
+    /// <summary>
+    /// Resolves the encoder configuration, preferring explicit caller overrides over the paper preset.
+    /// </summary>
+    /// <remarks>
+    /// The presets below are the published Hiera encoders and remain the default in every case, so
+    /// production behaviour is unchanged. Previously they were the ONLY reachable configurations, so
+    /// even MedSAM2ModelSize.Tiny built a full 96/192/384/768 encoder — no caller could construct the
+    /// model at a bounded size for a test or a memory-constrained deployment. Options.ChannelDims /
+    /// Depths / DecoderDim now allow that; leaving them null selects the preset exactly as before.
+    /// </remarks>
+    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(
+        MedSAM2ModelSize modelSize, MedSAM2Options? options)
     {
-        MedSAM2ModelSize.Tiny => ([96, 192, 384, 768], [2, 2, 6, 2], 256),
-        MedSAM2ModelSize.Base => ([112, 224, 448, 896], [2, 3, 16, 3], 256),
-        MedSAM2ModelSize.Large => ([144, 288, 576, 1152], [2, 6, 36, 4], 256),
-        _ => ([96, 192, 384, 768], [2, 2, 6, 2], 256)
-    };
+        var (presetDims, presetDepths, presetDecoder) = modelSize switch
+        {
+            MedSAM2ModelSize.Tiny => ((int[])[96, 192, 384, 768], (int[])[2, 2, 6, 2], 256),
+            MedSAM2ModelSize.Base => ((int[])[112, 224, 448, 896], (int[])[2, 3, 16, 3], 256),
+            MedSAM2ModelSize.Large => ((int[])[144, 288, 576, 1152], (int[])[2, 6, 36, 4], 256),
+            _ => ((int[])[96, 192, 384, 768], (int[])[2, 2, 6, 2], 256)
+        };
+
+        int[] dims = options?.ChannelDims is { Length: > 0 } d ? d : presetDims;
+        int[] depths = options?.Depths is { Length: > 0 } p ? p : presetDepths;
+        if (dims.Length != depths.Length)
+        {
+            throw new ArgumentException(
+                $"MedSAM2Options.ChannelDims ({dims.Length}) and Depths ({depths.Length}) must have the " +
+                "same number of stages.", nameof(options));
+        }
+
+        return (dims, depths, options?.DecoderDim ?? presetDecoder);
+    }
 
     private Tensor<T> Forward(Tensor<T> input)
     {

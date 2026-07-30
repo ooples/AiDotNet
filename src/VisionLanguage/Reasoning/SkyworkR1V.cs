@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "Skywork R1V: Pioneering Multimodal Reasoning with Chain-of-Thought",
-    "https://arxiv.org/abs/2501.12368",
+    "https://arxiv.org/abs/2504.05599",
     Year = 2025,
     Authors = "Skywork Team"
 )]

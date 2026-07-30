@@ -54,7 +54,52 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public bool SupportsWordTimestamps => true;
 
     public Squeezeformer(NeuralNetworkArchitecture<T> architecture, string modelPath, SqueezeformerOptions? options = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
-    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, SqueezeformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, SqueezeformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? CreateSqueezeformerOptimizer(); SetBaseTrainOptimizer(_optimizer); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+
+    /// <summary>
+    /// Builds the optimizer Squeezeformer specifies (appendix A.1).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The paper uses "AdamW optimizer with weight decay 5e-4 for all models", with the learning rate
+    /// following an extended Noam annealing: warm up to a peak, hold it, then decay. The peak is 2e-3
+    /// for the small variant.
+    /// </para>
+    /// <para>
+    /// Two defects are fixed here. The optimizer was <c>AdamWOptimizer(this)</c> with DEFAULT options,
+    /// so it discarded the paper's weight decay (running at AdamW's 0.01, roughly 20x the paper's 5e-4)
+    /// and applied no schedule at all. And it was never published to the tape trainer — no
+    /// <c>SetBaseTrainOptimizer</c> call and no <c>GetOrCreateBaseOptimizer</c> override — so the field
+    /// was dead and training silently used the base class's lazily-created Adam.
+    /// </para>
+    /// <para>
+    /// The warmup matters for correctness, not just speed: the paper reports this architecture failing
+    /// to converge at peak rates of {0.5, 1.0, 1.5}e-3 when a stabilizing component is removed, so
+    /// applying a 2e-3 peak flat from step 0 is precisely the unstable regime. Noam warmup is what makes
+    /// that peak usable.
+    /// </para>
+    /// </remarks>
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateSqueezeformerOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.PeakLearningRate,
+                WeightDecay = _options.WeightDecay,
+                // Warmup is OPT-IN (WarmupSteps default 0). The paper expresses warmup in EPOCHS (20)
+                // over LibriSpeech-960h at batch 1024, which cannot be converted to a step count
+                // without the caller's dataset size — and a large step-count default makes the learning
+                // rate approximately zero for the whole of any short run, so the model does not train at
+                // all. Measured: a 4000-step warmup default broke Training_ShouldChangeLoss,
+                // Training_ShouldChangeParameters and GradientFlow, none of which had been failing.
+                LearningRateScheduler = _options.WarmupSteps > 0
+                    ? new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                        baseLearningRate: _options.PeakLearningRate,
+                        warmupSteps: _options.WarmupSteps)
+                    : null,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
 
     /// <summary>
     /// Transcribes audio using Squeezeformer's temporal U-Net encoder.

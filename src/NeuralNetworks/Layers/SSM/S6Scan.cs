@@ -398,9 +398,15 @@ public static class S6Scan<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var delta_t = delta.GetSliceAlongDimension(t, 1);  // [batch, innerDim]
-            var B_t = b.GetSliceAlongDimension(t, 1);          // [batch, stateDim]
-            var x_t = x.GetSliceAlongDimension(t, 1);          // [batch, innerDim]
+            // RECORDED slices. A bare tensor.GetSliceAlongDimension returns a non-owning VIEW and is
+            // not a recorded graph op, so the fused compiled-training plan captures each one as a
+            // graph LEAF frozen at trace time; on replay the parent is recomputed into the plan's own
+            // pre-allocated buffer while the frozen view still points at the abandoned trace-time
+            // storage (zeros first, recycled garbage later), and the slice never joins the gradient
+            // tape either. Same defect and fix as RealGatedLinearRecurrenceLayer / RWKVLayer (#1789).
+            var delta_t = Engine.TensorSqueeze(Engine.TensorNarrow(delta, 1, t, 1), axis: 1);  // [batch, innerDim]
+            var B_t = Engine.TensorSqueeze(Engine.TensorNarrow(b, 1, t, 1), axis: 1);          // [batch, stateDim]
+            var x_t = Engine.TensorSqueeze(Engine.TensorNarrow(x, 1, t, 1), axis: 1);          // [batch, innerDim]
 
             var delta_t_3D = Engine.TensorExpandDims(delta_t, 2);  // [batch, innerDim, 1]
             var B_t_3D = Engine.TensorExpandDims(B_t, 1);          // [batch, 1, stateDim]
@@ -459,8 +465,9 @@ public static class S6Scan<T>
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, innerDimension });
         for (int t = 0; t < seqLen; t++)
         {
-            var C_t = c.GetSliceAlongDimension(t, 1);          // [batch, stateDim]
-            var x_t = x.GetSliceAlongDimension(t, 1);          // [batch, innerDim]
+            // RECORDED slices - see the rationale at the gate/value loop above (#1789).
+            var C_t = Engine.TensorSqueeze(Engine.TensorNarrow(c, 1, t, 1), axis: 1);          // [batch, stateDim]
+            var x_t = Engine.TensorSqueeze(Engine.TensorNarrow(x, 1, t, 1), axis: 1);          // [batch, innerDim]
             var C_t_3D = Engine.TensorExpandDims(C_t, 1);      // [batch, 1, stateDim]
 
             var Ch = Engine.TensorBroadcastMultiply(C_t_3D, hiddenStates[t]);

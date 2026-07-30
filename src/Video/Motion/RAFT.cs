@@ -213,8 +213,19 @@ public class RAFT<T> : OpticalFlowBase<T>
             frame2 = AddBatchDimension(frame2);
         }
 
-        var concatenated = ConcatenateChannels(frame1, frame2);
-        var result = Predict(concatenated);
+        // Run the iterative refinement graph DIRECTLY rather than going through Predict.
+        //
+        // Predict is the inference entry point: when the inference arena is enabled it copies its
+        // output out of the arena (DetachFromArena), which severs the autodiff tape at the boundary.
+        // Routing through it meant EstimateFlow produced a correct flow field that carried no gradient,
+        // so any loss differentiating flow with respect to the frames (a flow-consistency term) trained
+        // nothing while still reporting a plausible loss value.
+        //
+        // It was also wasteful: Predict's PredictCore immediately slices the pair back apart, so the
+        // concatenate-then-slice round trip did no work. ForwardIterative is the same graph both
+        // PredictCore and ForwardForTraining use, so inference results are unchanged.
+        var flowIterations = ForwardIterative(frame1, frame2);
+        var result = flowIterations[^1];
 
         if (!hasBatch)
         {
@@ -612,26 +623,31 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
-        // Convert [C, H, W] to [1, C, H, W]
+        // Convert [C, H, W] to [1, C, H, W].
+        //
+        // A recorded reshape, NOT a buffer copy. This previously allocated a new tensor and
+        // Data.Span.CopyTo'd into it, which is not a recorded operation: it severed the tape at the
+        // very entry of EstimateFlow, so no gradient could reach the input frames. Any loss that
+        // differentiates flow with respect to the frames (a flow-consistency term) therefore produced
+        // a loss value while training nothing. Adding a leading singleton axis does not move data, so
+        // a reshape is exactly equivalent and stays on the tape.
         int c = tensor.Shape[0];
         int h = tensor.Shape[1];
         int w = tensor.Shape[2];
 
-        var result = new Tensor<T>([1, c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, [1, c, h, w]);
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
-        // Convert [1, C, H, W] to [C, H, W]
+        // Convert [1, C, H, W] to [C, H, W] — a recorded reshape, for the same reason as
+        // AddBatchDimension. Dropping a singleton leading axis leaves element order unchanged, so the
+        // buffer copy this replaced bought nothing and cost the gradient path on the way back out.
         int c = tensor.Shape[1];
         int h = tensor.Shape[2];
         int w = tensor.Shape[3];
 
-        var result = new Tensor<T>([c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, [c, h, w]);
     }
 
     #endregion

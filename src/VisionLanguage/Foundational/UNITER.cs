@@ -107,7 +107,23 @@ public class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
     {
         _options = options ?? new UNITEROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                // The official UNITER recipe uses AdamW with transformer-scale
+                // learning rates, beta2=0.98, epsilon=1e-6, weight decay, and
+                // global-norm clipping. Previously this configured optimizer was
+                // never passed to TrainWithTape, which silently substituted the
+                // framework's generic Adam at 1e-3.
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = 0.9,
+                Beta2 = 0.98,
+                Epsilon = 1e-6,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 2.0,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;

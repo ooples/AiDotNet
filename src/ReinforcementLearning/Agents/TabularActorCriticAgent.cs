@@ -70,20 +70,31 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
         EnsureStateExists(state);
         string stateKey = GetStateKey(state);
 
-        // Sample from policy distribution
         var probs = ComputeSoftmax(_policy[stateKey]);
-        double r = Random.NextDouble();
-        double cumulative = 0.0;
-        int selectedAction = 0;
-
-        for (int a = 0; a < _options.ActionSize; a++)
+        int selectedAction;
+        if (training)
         {
-            cumulative += NumOps.ToDouble(probs[a]);
-            if (r <= cumulative)
+            // The actor is a stochastic softmax policy while collecting training
+            // experience (Sutton & Barto, Actor-Critic Methods). Sampling here is
+            // what supplies on-policy exploration.
+            double r = Random.NextDouble();
+            double cumulative = 0.0;
+            selectedAction = _options.ActionSize - 1;
+            for (int a = 0; a < _options.ActionSize; a++)
             {
-                selectedAction = a;
-                break;
+                cumulative += NumOps.ToDouble(probs[a]);
+                if (r <= cumulative)
+                {
+                    selectedAction = a;
+                    break;
+                }
             }
+        }
+        else
+        {
+            // Evaluation/Predict must be deterministic. Return the maximum-
+            // probability action, using the lowest index as the stable tie-break.
+            selectedAction = ArgMax(probs);
         }
 
         var result = new Vector<T>(_options.ActionSize);

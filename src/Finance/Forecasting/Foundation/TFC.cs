@@ -75,6 +75,16 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     private ILayer<T>? _projectionHead;
     private ILayer<T>? _forecastHead;
 
+    // Fixed, non-trainable Fourier bases. The reference TF-C implementation uses
+    // torch.fft.fft(...).abs(), whose output has exactly the same length as the
+    // time-domain input. AiDotNet.Tensors.RFFT requires a power-of-two input and
+    // pads other lengths internally, so using it for TF-C's paper-default 200-step
+    // window silently produces 129 complex bins (a 256-point FFT) instead of 101.
+    // Explicit DFT projections preserve the exact n-point transform while keeping
+    // the operation visible to the gradient tape through TensorMatMul.
+    private Tensor<T>? _dftRealBasis;
+    private Tensor<T>? _dftImaginaryBasis;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly TFCOptions<T> _options;
@@ -284,8 +294,8 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         // GPU-RESIDENT fast path — compiled fused SGD on the combined supervised +
         // contrastive objective. Safe now that ApplyInstanceNormalization and
         // ComputeFrequencyRepresentation both use traceable Engine ops (ReduceMean /
-        // ReduceVariance / TensorSqrt / broadcast for RevIN, Engine.RFFT + magnitude
-        // + concat/flip mirror for the DFT) — both re-execute on every replay from
+        // ReduceVariance / TensorSqrt / broadcast for RevIN, TensorMatMul + magnitude
+        // for the DFT) — both re-execute on every replay from
         // the current-step persistent slot data instead of freezing at trace time.
         var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableLayers.Count > 0)
@@ -904,61 +914,86 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     #region Frequency Transform
 
     /// <summary>
-    /// Traceable DFT magnitude spectrum. Uses <see cref="IEngine.RFFT{T}"/> for the batched
-    /// real-to-complex FFT, then computes per-bin magnitude via elementwise square +
-    /// axis-reduction + sqrt, and mirrors the one-sided spectrum to full length via
-    /// <see cref="IEngine.TensorConcatenate{T}"/> + <see cref="IEngine.TensorFlip{T}"/>.
-    /// All ops record on the autodiff tape and re-execute on every compiled-plan replay —
-    /// the previous <c>.Data.Span</c> DFT loop froze the trace-batch spectrum into the plan.
+    /// Traceable full-length DFT magnitude spectrum. The TF-C reference implementation
+    /// constructs its frequency view with <c>torch.fft.fft(x).abs()</c>, which returns
+    /// one magnitude per input time step. Real and imaginary DFT bases are applied with
+    /// <see cref="IEngine.TensorMatMul{T}"/>, followed by tape-aware magnitude operations.
+    /// This also supports non-power-of-two windows exactly; <see cref="IEngine.RFFT{T}"/>
+    /// pads such windows and therefore does not implement TF-C's required n-point FFT.
     /// </summary>
     /// <remarks>
-    /// Output layout matches the previous scalar impl: <c>[..., n]</c> with the first
-    /// <c>halfN = n/2 + 1</c> bins holding <c>|X[k]| / n</c> and the tail mirroring bins
-    /// <c>1 .. n-halfN</c> so downstream freq encoders that expect the full-<c>n</c> layout
-    /// see identical shapes.
+    /// Output shape is <c>[..., n]</c>, matching both the time-domain view and the
+    /// frequency encoder's configured context width. Magnitudes retain the existing
+    /// <c>1/n</c> normalization so changing the transform implementation does not alter
+    /// the model's established activation scale.
     /// </remarks>
     private Tensor<T> ComputeFrequencyRepresentation(Tensor<T> input)
     {
-        int n = input.Rank > 1 ? input.Shape[^1] : input.Length;
-        int numSamples = input.Rank > 1 ? input.Length / n : 1;
-        int halfN = n / 2 + 1;
+        // TF-C computes the DFT magnitude spectrum over the CONTEXT (time) axis.
+        // The model is univariate (NumFeatures == 1), so every sample contributes
+        // exactly _contextLength contiguous time values however it is shaped:
+        // [context], [batch, context], or the framework's canonical time-series
+        // layout [batch, context, 1]. Reading the transform length from the last
+        // axis broke that canonical layout — it saw the trailing feature axis (1)
+        // as the context and rejected the input with "expects a N-step context but
+        // received 1 steps on the last axis". Derive the length from the configured
+        // context instead and treat the flattened input as numSamples x context.
+        int n = _contextLength;
+        if (input.Length % n != 0)
+        {
+            throw new ArgumentException(
+                $"TFC is univariate (NumFeatures = {NumFeatures}), so each sample must contain " +
+                $"exactly {_contextLength} time steps, but the input holds {input.Length} elements, " +
+                $"which is not a whole number of {_contextLength}-step samples.",
+                nameof(input));
+        }
 
-        // Normalize to [B, n] for the batched RFFT contract.
-        bool reshaped = input.Rank != 2;
+        int numSamples = input.Length / n;
+        // Only skip the reshape when the input is already exactly [numSamples, n];
+        // any other rank or shape (including [batch, context, 1]) is normalized.
+        bool reshaped = !(input.Rank == 2 && input.Shape[0] == numSamples && input.Shape[1] == n);
         var flat = reshaped ? Engine.Reshape(input, new[] { numSamples, n }) : input;
 
-        // RFFT returns interleaved [re0, im0, re1, im1, ..., re(halfN-1), im(halfN-1)],
-        // shape [B, halfN * 2] = [B, n + 2]. Tape-tracked: gradients flow back through the DFT to the
-        // raw input, so the frequency branch trains end-to-end alongside the time branch. (The earlier
-        // StopGradient detour that dodged the Engine.IRFFT length-1 adjoint crash — AiDotNet.Tensors#779
-        // / #1856 — is removed now that 0.114.1 fixes it.)
-        var rfft = Engine.RFFT(flat);
-        var complexPairs = Engine.Reshape(rfft, new[] { numSamples, halfN, 2 });
+        EnsureDftBases(n);
+        var real = Engine.TensorMatMul(flat, _dftRealBasis!);
+        var imaginary = Engine.TensorMatMul(flat, _dftImaginaryBasis!);
+        var realSquared = Engine.TensorMultiply(real, real);
+        var imaginarySquared = Engine.TensorMultiply(imaginary, imaginary);
+        var magnitude = Engine.TensorSqrt(Engine.TensorAdd(realSquared, imaginarySquared));
+        var normalized = Engine.TensorMultiplyScalar(
+            magnitude, NumOps.Divide(NumOps.One, NumOps.FromDouble(n)));
 
-        // magSquared[b, k] = re[b, k]^2 + im[b, k]^2 via TensorMultiply + ReduceSum on the
-        // last (re/im) axis. Axis 2 reduces the pair into a scalar → shape [B, halfN].
-        var squares = Engine.TensorMultiply(complexPairs, complexPairs);
-        var magSquared = Engine.ReduceSum(squares, new[] { 2 }, keepDims: false);
-        var mag = Engine.TensorSqrt(magSquared);
-        // Normalize by 1/n to match the previous impl (which multiplied by invN post-sqrt).
-        var oneSided = Engine.TensorMultiplyScalar(mag, NumOps.Divide(NumOps.One, NumOps.FromDouble(n)));
+        return reshaped ? Engine.Reshape(normalized, input._shape) : normalized;
+    }
 
-        Tensor<T> full;
-        int mirrorLen = n - halfN;
-        if (mirrorLen > 0)
+    /// <summary>
+    /// Creates the constant real and imaginary n-point DFT projection matrices.
+    /// Matrix row <c>j</c>, column <c>k</c> contains the contribution from input
+    /// sample <c>j</c> to frequency bin <c>k</c>.
+    /// </summary>
+    private void EnsureDftBases(int n)
+    {
+        if (_dftRealBasis is not null && _dftImaginaryBasis is not null &&
+            _dftRealBasis.Shape[0] == n && _dftRealBasis.Shape[1] == n)
         {
-            // Mirror indices [1 .. n-halfN] reversed → tail of the full spectrum.
-            // Slice: start=[0, 1], length=[B, mirrorLen] gives bins 1..mirrorLen inclusive.
-            var mirrorSource = Engine.TensorSlice(oneSided, new[] { 0, 1 }, new[] { numSamples, mirrorLen });
-            var mirrorReversed = Engine.TensorFlip(mirrorSource, new[] { 1 });
-            full = Engine.TensorConcatenate(new[] { oneSided, mirrorReversed }, axis: 1);
-        }
-        else
-        {
-            full = oneSided;
+            return;
         }
 
-        return reshaped ? Engine.Reshape(full, input._shape) : full;
+        var real = new Tensor<T>(new[] { n, n });
+        var imaginary = new Tensor<T>(new[] { n, n });
+        double scale = 2.0 * Math.PI / n;
+        for (int j = 0; j < n; j++)
+        {
+            for (int k = 0; k < n; k++)
+            {
+                double angle = scale * j * k;
+                real[j, k] = NumOps.FromDouble(Math.Cos(angle));
+                imaginary[j, k] = NumOps.FromDouble(-Math.Sin(angle));
+            }
+        }
+
+        _dftRealBasis = real;
+        _dftImaginaryBasis = imaginary;
     }
 
     #endregion

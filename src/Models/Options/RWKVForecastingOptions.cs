@@ -55,6 +55,7 @@ public class RWKVForecastingOptions<T> : TimeSeriesRegressionOptions<T>
         NumLayers = other.NumLayers;
         DropoutRate = other.DropoutRate;
         LearningRate = other.LearningRate;
+        GlobalIclrMultiplier = other.GlobalIclrMultiplier;
         AdamBeta1 = other.AdamBeta1;
         AdamBeta2 = other.AdamBeta2;
         AdamEpsilon = other.AdamEpsilon;
@@ -95,6 +96,50 @@ public class RWKVForecastingOptions<T> : TimeSeriesRegressionOptions<T>
     /// smallest-model training recipe reported by the RWKV paper.
     /// </summary>
     public double LearningRate { get; set; } = 6e-4;
+
+    /// <summary>
+    /// Gets or sets RWKV-7's "Global ICLR Multiplier" c in the state transition
+    /// A_t = diag(w_t) - c * kappaHat^T(a_t (*) kappaHat).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Peng et al. 2025 (arXiv 2503.14456) Appendix C, Theorem 1 bounds all eigenvalues of A in
+    /// (-1, 1) for c in (0, 1 + u), where u = exp(-e^-0.5) = 0.5452..., and states that c "is set to
+    /// 1 in the current implementations of RWKV-7 language modeling" -- hence the default of 1.
+    /// </para>
+    /// <para>
+    /// Long-context forecasting can restrict the range the way the paper's own authors do. Theorem 1
+    /// item 4 only guarantees the PRODUCT of transitions is bounded when a_t is time-independent,
+    /// which RWKV-7 violates by design, and the paper's footnote 4 records that they "allow only part
+    /// of the range of possible negative eigenvalues in our pre-trained large language models due to
+    /// experimentally observed training instabilities". A negative eigenvalue arises exactly when
+    /// c*a > w, so any c &lt;= u keeps w - c*a positive for every admissible w and a and the long
+    /// product bounded. The default is exactly that bound, u = exp(-e^-0.5), the same constant Eq 12
+    /// clamps the decay to; set this to 1.0 to reproduce RWKV-7 language modeling verbatim.
+    /// </para>
+    /// </remarks>
+    public double GlobalIclrMultiplier { get; set; } = Math.Exp(-Math.Exp(-0.5));
+
+    /// <summary>
+    /// Gets or sets the variance floor used by RevIN's per-instance standard deviation,
+    /// std = sqrt(var + eps). Default: 1e-5, the value Kim et al. 2022 use.
+    /// </summary>
+    /// <remarks>
+    /// This is what keeps a constant (zero-variance) series from dividing by zero. It is exposed
+    /// because a series whose natural scale is far from unity may need a different floor.
+    /// </remarks>
+    public double RevInEpsilon { get; set; } = 1e-5;
+
+    /// <summary>
+    /// Gets or sets whether reversible instance normalization (RevIN) is applied around the forecast.
+    /// Default: true, which is the published behaviour.
+    /// </summary>
+    /// <remarks>
+    /// RevIN is an optional wrapper in Kim et al. 2022, not part of the RWKV architecture itself, so it
+    /// is switchable. Turning it off makes the model consume the raw series and forecast on the raw
+    /// scale.
+    /// </remarks>
+    public bool UseReversibleNormalization { get; set; } = true;
 
     /// <summary>
     /// Gets or sets Adam's first-moment decay. Default: 0.9.
