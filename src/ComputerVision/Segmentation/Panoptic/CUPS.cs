@@ -54,7 +54,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("CUPS: Comprehensive Use of Pixels and Semantics for Panoptic Segmentation", "https://arxiv.org/abs/2212.05920", Year = 2023, Authors = "Daan de Geus, Gijs Dubbelman")]
+// Citation was wrong in every field, including an INVENTED expansion of the acronym. CUPS does not
+// stand for "Comprehensive Use of Pixels and Semantics"; the paper is "Scene-Centric Unsupervised
+// Panoptic Segmentation" (CVPR 2025 highlight, arXiv 2504.01955, Hahn et al.). The recorded authors
+// (de Geus & Dubbelman) work on panoptic segmentation but did not write this, and the recorded id
+// 2212.05920 is a different paper again.
+//
+// IMPLEMENTATION NOTE: the real CUPS is UNSUPERVISED — it derives panoptic pseudo-labels from motion
+// and depth in stereo pairs, then trains a monocular panoptic network on them. Whether this class does
+// anything of the kind needs checking; a supervised panoptic head would not be this paper.
+[ResearchPaper("Scene-Centric Unsupervised Panoptic Segmentation",
+    "https://arxiv.org/abs/2504.01955",
+    Year = 2025,
+    Authors = "Oliver Hahn, Christoph Reich, Nikita Araslanov, Daniel Cremers, Christian Rupprecht, Stefan Roth")]
 public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly CUPSOptions _options;
