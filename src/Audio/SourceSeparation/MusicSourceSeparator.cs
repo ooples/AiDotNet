@@ -253,6 +253,10 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             {
                 Layers.Add(layer);
             }
+            // A caller-supplied layer chain is an ordinary sequential network, not the
+            // private Demucs encoder/decoder topology assembled below. Keep the typed
+            // Demucs views empty so Predict/Train route through the base Layers walk.
+            _demucsDepth = 0;
             return;
         }
 
@@ -303,6 +307,78 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             Layers.Add(deconv);
         }
     }
+
+    /// <summary>
+    /// Rebuilds the typed views used by the explicit Demucs U-Net forward from the
+    /// framework-owned <see cref="NeuralNetworkBase{T}.Layers"/> collection.
+    /// </summary>
+    /// <remarks>
+    /// Deserialization replaces every entry in <c>Layers</c> with a restored layer
+    /// instance. Without rebinding these views, the explicit forward continued to use
+    /// the fresh random layers created by the constructor and silently ignored all
+    /// deserialized/trained weights. Keeping <c>Layers</c> as the single ownership graph
+    /// also preserves the standard custom-layers contract: a non-Demucs custom chain is
+    /// executed sequentially by the base class.
+    /// </remarks>
+    private bool TryBindDemucsTopologyFromLayers()
+    {
+        _demucsEncConv.Clear();
+        _demucsEncGate.Clear();
+        _demucsDecGate.Clear();
+        _demucsDecDeconv.Clear();
+        _demucsBottleneck = null;
+        _demucsDepth = 0;
+
+        int bottleneckIndex = -1;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is LSTMLayer<T>)
+            {
+                if (bottleneckIndex >= 0)
+                    return false;
+                bottleneckIndex = i;
+            }
+        }
+
+        if (bottleneckIndex <= 0 || bottleneckIndex % 2 != 0)
+            return false;
+
+        int depth = bottleneckIndex / 2;
+        if (Layers.Count != depth * 4 + 1)
+            return false;
+
+        // Validate the complete shape before publishing any typed references.
+        for (int i = 0; i < depth; i++)
+        {
+            if (Layers[i * 2] is not Conv1DLayer<T>
+                || Layers[i * 2 + 1] is not Conv1DLayer<T>
+                || Layers[bottleneckIndex + 1 + i * 2] is not Conv1DLayer<T>
+                || Layers[bottleneckIndex + 2 + i * 2] is not Conv1DTransposeLayer<T>)
+            {
+                return false;
+            }
+        }
+
+        for (int i = 0; i < depth; i++)
+        {
+            _demucsEncConv.Add((Conv1DLayer<T>)Layers[i * 2]);
+            _demucsEncGate.Add((Conv1DLayer<T>)Layers[i * 2 + 1]);
+            _demucsDecGate.Add((Conv1DLayer<T>)Layers[bottleneckIndex + 1 + i * 2]);
+            _demucsDecDeconv.Add((Conv1DTransposeLayer<T>)Layers[bottleneckIndex + 2 + i * 2]);
+        }
+
+        _demucsBottleneck = (LSTMLayer<T>)Layers[bottleneckIndex];
+        _demucsDepth = depth;
+        return true;
+    }
+
+    private bool HasBoundDemucsTopology =>
+        _demucsDepth > 0
+        && _demucsBottleneck is not null
+        && _demucsEncConv.Count == _demucsDepth
+        && _demucsEncGate.Count == _demucsDepth
+        && _demucsDecGate.Count == _demucsDepth
+        && _demucsDecDeconv.Count == _demucsDepth;
 
     #endregion
 
@@ -487,7 +563,9 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             return CreateUniformMasks(input);
         }
 
-        return DemucsForward(input);
+        // The paper topology needs the explicit skip-connected forward. A user-provided
+        // custom layer chain retains the normal framework contract and runs sequentially.
+        return HasBoundDemucsTopology ? DemucsForward(input) : base.PredictCore(input);
     }
 
     // Faithful waveform-Demucs forward with U-Net skip connections. A flat layer walk cannot express
@@ -553,6 +631,11 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             return activations;
         }
 
+        if (!HasBoundDemucsTopology)
+        {
+            return base.GetNamedLayerActivations(input);
+        }
+
         var eng = Engine;
         int total = 1;
         for (int d = 0; d < input.Rank; d++) total *= input.Shape[d];
@@ -593,7 +676,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         EnsureLayerRandomSeedsWired();
-        return DemucsForward(input);
+        return HasBoundDemucsTopology ? DemucsForward(input) : base.ForwardForTraining(input);
     }
 
     /// <summary>
@@ -735,6 +818,12 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
                 $"Deserialized HpssKernelSize ({hpssKernelSize}) does not match constructor option ({_options.HpssKernelSize}).");
 
         _useNativeMode = useNativeMode;
+
+        // The base deserializer has just replaced Layers with the restored instances.
+        // Rebind the explicit Demucs forward to those instances so inference and
+        // training consume the restored weights rather than constructor-fresh layers.
+        if (_useNativeMode)
+            TryBindDemucsTopologyFromLayers();
     }
 
     /// <summary>

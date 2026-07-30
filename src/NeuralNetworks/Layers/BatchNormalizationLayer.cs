@@ -271,11 +271,26 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         {
             _gamma = Tensor<T>.CreateDefault([channels], NumOps.One);
             _beta = Tensor<T>.CreateDefault([channels], NumOps.Zero);
-            _runningMean = Tensor<T>.CreateDefault([channels], NumOps.Zero);
-            _runningVariance = Tensor<T>.CreateDefault([channels], NumOps.One);
+            _runningMean = TensorAllocator.RentPinned<T>([channels]);
+            _runningMean.Fill(NumOps.Zero);
+            _runningVariance = TensorAllocator.RentPinned<T>([channels]);
+            _runningVariance.Fill(NumOps.One);
             RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
             RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+            RegisterRunningStatisticBuffers();
         }
+    }
+
+    /// <summary>
+    /// Registers BatchNorm's running statistics as persistent, non-trainable
+    /// buffers. Lazy initialization can occur inside a training arena, so leaving
+    /// these tensors unregistered allows arena/tape cleanup to recycle storage that
+    /// must survive into the subsequent inference-mode generator pass.
+    /// </summary>
+    private void RegisterRunningStatisticBuffers()
+    {
+        RegisterBuffer(_runningMean, "running_mean");
+        RegisterBuffer(_runningVariance, "running_variance");
     }
 
     /// <summary>
@@ -412,12 +427,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _gamma = new Tensor<T>([numFeatures]);
         _gamma.Fill(NumOps.One);
         _beta = new Tensor<T>([numFeatures]);
-        _runningMean = new Tensor<T>([numFeatures]);
-        _runningVariance = new Tensor<T>([numFeatures]);
+        _runningMean = TensorAllocator.RentPinned<T>([numFeatures]);
+        _runningVariance = TensorAllocator.RentPinned<T>([numFeatures]);
         _runningVariance.Fill(NumOps.One);
 
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+        RegisterRunningStatisticBuffers();
     }
 
     /// <summary>
@@ -504,12 +520,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             _gamma = AllocateLazyWeight([numFeatures]);
             _gamma.Fill(gammaInit);
             _beta = AllocateLazyWeight([numFeatures]);
-            _runningMean = AllocateLazyWeight([numFeatures]);
-            _runningVariance = AllocateLazyWeight([numFeatures]);
+            // Running statistics are persistent buffers, not scratch. Lazy
+            // initialization happens during the first training forward while a
+            // TensorArena is active, so use the pinned allocator explicitly;
+            // otherwise arena disposal can recycle these buffers before the GAN's
+            // subsequent eval-mode discriminator pass.
+            _runningMean = TensorAllocator.RentPinned<T>([numFeatures]);
+            _runningVariance = TensorAllocator.RentPinned<T>([numFeatures]);
             _runningVariance.Fill(NumOps.One);
 
             RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
             RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+            RegisterRunningStatisticBuffers();
         }
 
         // BatchNorm is SHAPE-PRESERVING (output shape == input shape). For image
@@ -697,13 +719,22 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // LazyTensorScope.RecordInPlace) so each replay re-applies
             // the mutation — EMA accumulates correctly under both eager
             // and compiled execution.
-            T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
-            Engine.TensorMultiplyScalarInPlace(_runningMean, _momentum);
-            var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
-            Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
-            Engine.TensorMultiplyScalarInPlace(_runningVariance, _momentum);
-            var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
-            Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
+            // Running statistics are persistent buffers, not trainable state. Keep
+            // their EMA update outside the autodiff graph, matching the semantics of
+            // PyTorch BatchNorm buffers. GraphMode still records the in-place
+            // mutations for compiled-plan replay; NoGradScope only suppresses tape
+            // recording. Without this boundary the batch-variance EMA can be retained
+            // as differentiable state and corrupted when the training tape is released.
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
+                Engine.TensorMultiplyScalarInPlace(_runningMean, _momentum);
+                var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
+                Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
+                Engine.TensorMultiplyScalarInPlace(_runningVariance, _momentum);
+                var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
+                Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
+            }
 
             // Invalidate cached inference scale/shift since running stats changed
             _inferenceScaleDirty = true;
@@ -895,6 +926,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             momentumDouble,
             IsTrainingMode);
 
+        // GPU backends may replace the ref buffers when materializing device
+        // state. Refresh the name-based registration if their identity changed.
+        RegisterRunningStatisticBuffers();
+
         // Store saved values for backward pass (if training)
         if (IsTrainingMode && saveMean is not null && saveVar is not null)
         {
@@ -1045,8 +1080,11 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         var meanVec = extraParameters.Slice(0, featureSize);
         var varVec = extraParameters.Slice(featureSize, featureSize);
 
-        _runningMean = Tensor<T>.FromVector(meanVec, [featureSize]);
-        _runningVariance = Tensor<T>.FromVector(varVec, [featureSize]);
+        _runningMean = TensorAllocator.RentPinned<T>([featureSize]);
+        meanVec.AsSpan().CopyTo(_runningMean.AsWritableSpan());
+        _runningVariance = TensorAllocator.RentPinned<T>([featureSize]);
+        varVec.AsSpan().CopyTo(_runningVariance.AsWritableSpan());
+        RegisterRunningStatisticBuffers();
         _inferenceScaleDirty = true;
     }
 

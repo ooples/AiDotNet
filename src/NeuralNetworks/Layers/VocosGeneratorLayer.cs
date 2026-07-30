@@ -39,6 +39,7 @@ public class VocosGeneratorLayer<T> : LayerBase<T>
     private readonly int _hopLength;
 
     private readonly Conv1DLayer<T> _inputEmbedding;
+    private readonly LayerNormalizationLayer<T> _inputNormalization;
     private readonly DepthwiseConv1DLayer<T>[] _depthwiseConvolutions;
     private readonly LayerNormalizationLayer<T>[] _blockNormalizations;
     private readonly FullyConnectedLayer<T>[] _blockExpansions;
@@ -82,7 +83,11 @@ public class VocosGeneratorLayer<T> : LayerBase<T>
 
         // Official Vocos: Conv1d(num_mels, dim, kernel_size=7, padding=3).
         _inputEmbedding = new Conv1DLayer<T>(numMels, hiddenDim, kernelSize: 7, padding: 3, activation: identity);
+        // The reference backbone normalizes the embedded features before the first
+        // ConvNeXt block, in addition to each block's own pre-MLP normalization.
+        _inputNormalization = new LayerNormalizationLayer<T>(hiddenDim, epsilon: 1e-6);
         RegisterSubLayer(_inputEmbedding);
+        RegisterSubLayer(_inputNormalization);
 
         _depthwiseConvolutions = new DepthwiseConv1DLayer<T>[numBackboneBlocks];
         _blockNormalizations = new LayerNormalizationLayer<T>[numBackboneBlocks];
@@ -94,7 +99,7 @@ public class VocosGeneratorLayer<T> : LayerBase<T>
         for (int i = 0; i < numBackboneBlocks; i++)
         {
             _depthwiseConvolutions[i] = new DepthwiseConv1DLayer<T>(hiddenDim, kernelSize: 7, padding: 3, activation: identity);
-            _blockNormalizations[i] = new LayerNormalizationLayer<T>(hiddenDim);
+            _blockNormalizations[i] = new LayerNormalizationLayer<T>(hiddenDim, epsilon: 1e-6);
             _blockExpansions[i] = new FullyConnectedLayer<T>(hiddenDim, intermediateDim, gelu);
             _blockProjections[i] = new FullyConnectedLayer<T>(intermediateDim, hiddenDim, identity);
             _layerScales[i] = new Tensor<T>([hiddenDim]);
@@ -107,7 +112,7 @@ public class VocosGeneratorLayer<T> : LayerBase<T>
             RegisterTrainableParameter(_layerScales[i], PersistentTensorRole.Weights);
         }
 
-        _outputNormalization = new LayerNormalizationLayer<T>(hiddenDim);
+        _outputNormalization = new LayerNormalizationLayer<T>(hiddenDim, epsilon: 1e-6);
         _fourierProjection = new FullyConnectedLayer<T>(hiddenDim, nFft + 2, identity);
         RegisterSubLayer(_outputNormalization);
         RegisterSubLayer(_fourierProjection);
@@ -183,6 +188,9 @@ public class VocosGeneratorLayer<T> : LayerBase<T>
             : input;
 
         x = _inputEmbedding.Forward(x); // [B, C, T]
+        x = Engine.TensorPermute(x, new[] { 0, 2, 1 });
+        x = _inputNormalization.Forward(x);
+        x = Engine.TensorPermute(x, new[] { 0, 2, 1 });
         for (int i = 0; i < _numBackboneBlocks; i++)
         {
             // ConvNeXt block: DWConv7 -> channels-last LN -> Linear/GELU/Linear ->
@@ -381,6 +389,7 @@ public class VocosGeneratorLayer<T> : LayerBase<T>
         get
         {
             long count = _inputEmbedding.ParameterCount
+                + _inputNormalization.ParameterCount
                 + _outputNormalization.ParameterCount
                 + _fourierProjection.ParameterCount;
             for (int i = 0; i < _numBackboneBlocks; i++)
@@ -398,6 +407,7 @@ public class VocosGeneratorLayer<T> : LayerBase<T>
     private IEnumerable<(ILayer<T>? Layer, Tensor<T>? Scale)> OrderedParameterParts()
     {
         yield return (_inputEmbedding, null);
+        yield return (_inputNormalization, null);
         for (int i = 0; i < _numBackboneBlocks; i++)
         {
             yield return (_depthwiseConvolutions[i], null);
@@ -450,6 +460,44 @@ public class VocosGeneratorLayer<T> : LayerBase<T>
                 Engine.InvalidatePersistentTensor(scale);
                 offset += scale.Length;
             }
+        }
+    }
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() => _layerScales;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Copy-on-write cloning and contiguous parameter buffers replace tensor objects rather
+    /// than copying values. Rebind the array consumed by <see cref="Forward"/> as well as the
+    /// base registration list; otherwise a trained clone keeps forwarding with its freshly
+    /// initialized layer scales even though the framework supplied the trained tensors.
+    /// </remarks>
+    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (parameters.Count != _layerScales.Length)
+        {
+            throw new ArgumentException(
+                $"Expected {_layerScales.Length} Vocos layer-scale tensors, got {parameters.Count}.",
+                nameof(parameters));
+        }
+
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            if (parameters[i].Rank != 1 || parameters[i].Length != _hiddenDim)
+            {
+                throw new ArgumentException(
+                    $"Vocos layer scale {i} must have shape [{_hiddenDim}], got " +
+                    $"[{string.Join(",", parameters[i].Shape)}].",
+                    nameof(parameters));
+            }
+        }
+
+        ClearRegisteredParameters();
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            _layerScales[i] = parameters[i];
+            AppendTrainableParameter(_layerScales[i], PersistentTensorRole.Weights);
         }
     }
 

@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -66,7 +67,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _nodeDim;
     private int _edgeDim;
     private int _gcnLayers;
@@ -169,7 +170,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         _gcnLayers = gcnLayers;
         _numClasses = numClasses;
         _maxNodes = maxNodes;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = ResolveOptimizer(optimizer);
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -209,7 +210,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         _gcnLayers = gcnLayers;
         _numClasses = numClasses;
         _maxNodes = maxNodes;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = ResolveOptimizer(optimizer);
 
         InitializeLayers();
         InitializeEmbeddings();
@@ -257,6 +258,35 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
             tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
         }
+    }
+
+    /// <summary>
+    /// Resolves Doc-GCN's trainable optimizer while preserving the public constructor's
+    /// general <see cref="IOptimizer{T, TInput, TOutput}"/> contract.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ResolveOptimizer(
+        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    {
+        if (optimizer is not null)
+        {
+            return optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+                ?? throw new ArgumentException(
+                    "DocGCN training requires a gradient-based optimizer.", nameof(optimizer));
+        }
+
+        // Luo et al. train the semantic/syntactic GCNs with Adam at 1e-4
+        // (COLING 2022, section 4.3). The previous bare Adam silently used
+        // the framework-wide 1e-3 rate, and Train() then ignored this field
+        // altogether in favor of another lazily-created 1e-3 Adam. On the
+        // small native stack that double mismatch overshot immediately.
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
     }
 
     #endregion
@@ -527,7 +557,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

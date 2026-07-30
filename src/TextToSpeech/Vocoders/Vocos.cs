@@ -100,7 +100,7 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
 
     /// <summary>
     /// Converts mel to waveform using Vocos' ConvNeXt backbone predicting STFT coefficients.
-    /// Per the paper (Siuzdak, 2023): ConvNeXt V2 backbone processes mel features at mel-spectrogram resolution (no upsampling). Output heads predict STFT magnitude and instantaneous frequency (phase derivative). Waveform reconstructed via iSTFT. Achieves HiFi-GAN quality at 3x fewer parameters and faster inference.
+    /// Per the paper (Siuzdak, 2023): a ConvNeXt backbone processes mel features at mel-spectrogram resolution (no learnable upsampling). The output head predicts STFT magnitude and wrapped phase, and the waveform is reconstructed via iSTFT.
     /// </summary>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
