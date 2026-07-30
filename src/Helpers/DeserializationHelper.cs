@@ -655,14 +655,14 @@ public static class DeserializationHelper
                     "SetAbstractionLayer deserialize: missing SA_InputChannels metadata.");
 
             double[] saRadii = (TryGetString(additionalParams, "SA_Radii") ?? "")
-                .Split('|', StringSplitOptions.RemoveEmptyEntries)
+                .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => double.Parse(s, inv)).ToArray();
             int[] saNeighbors = (TryGetString(additionalParams, "SA_NeighborSamples") ?? "")
-                .Split('|', StringSplitOptions.RemoveEmptyEntries)
+                .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => int.Parse(s, inv)).ToArray();
             int[][] saMlp = (TryGetString(additionalParams, "SA_Mlp") ?? "")
-                .Split(';', StringSplitOptions.RemoveEmptyEntries)
-                .Select(branch => branch.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(branch => branch.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(s => int.Parse(s, inv)).ToArray())
                 .ToArray();
 
