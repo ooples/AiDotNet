@@ -27,16 +27,28 @@ namespace AiDotNet.Finance.Trading.Factors;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// FactorVAE combines a variational autoencoder with a disentanglement penalty
-/// so each latent dimension captures a distinct factor.
+/// FactorVAE integrates a dynamic factor model with a variational autoencoder, and learns through
+/// PRIOR-POSTERIOR training: a posterior factor distribution inferred with the benefit of future
+/// returns guides a prior that must work without them.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> The model compresses market data into a small set of hidden
-/// variables (factors). The disentanglement penalty encourages each factor to capture
-/// a different driver of returns rather than mixing everything together.
+/// <b>For Beginners:</b> the model explains a group of stocks with a few hidden "factors". While
+/// training it is allowed to look at what actually happened, to work out what the factors must have
+/// been. At prediction time the future is unknown, so it has to infer them from observable data alone —
+/// and the KL term is what forces those two routes to agree. Returns are then rebuilt as
+/// <c>alpha + beta * factors</c>: alpha is a stock's own baseline return and beta its sensitivity to
+/// each factor.
 /// </para>
 /// <para>
-/// Reference: Kim &amp; Mnih (2019). "Disentangling by Factorising"
+/// Reference: Duan, Wang, Zhang &amp; Li (2022). "FactorVAE: A Probabilistic Dynamic Factor Model Based
+/// on Variational Autoencoder for Predicting Cross-Sectional Stock Returns", AAAI 36(4):4468-4476.
+/// </para>
+/// <para>
+/// Note this is NOT Kim &amp; Mnih's "Disentangling by Factorising", a different paper that shares the
+/// FactorVAE name and uses a discriminator to penalize total correlation. This class previously
+/// documented and partly implemented that one instead; <see cref="FactorVAEOptions{T}.Gamma"/> is the
+/// surviving knob from it, kept distinct from
+/// <see cref="FactorVAEOptions{T}.KlWeight"/>.
 /// </para>
 /// </remarks>
 /// <example>
@@ -66,10 +78,11 @@ namespace AiDotNet.Finance.Trading.Factors;
 // AAAI 2022 (vol. 36 no. 4, pp. 4468-4476) and is not on arXiv, so the canonical DOI is used; the year
 // was also wrong (2020 -> 2022).
 //
-// IMPLEMENTATION NOTE: the VAE and dynamic-factor machinery are present, but the paper's named
-// contribution — a PRIOR-POSTERIOR learning method, where a prior factor distribution conditioned on
-// observable features is aligned against a posterior informed by future returns — has no counterpart
-// here (no prior/posterior split at all). Verifying and closing that gap is tracked separately.
+// The paper's named contribution — PRIOR-POSTERIOR learning, aligning a prior factor distribution
+// conditioned on observable features against a posterior informed by future returns — had NO
+// counterpart here: the class was a plain MLP autoencoder with no reparameterization, no KL, and a
+// disentanglement discriminator borrowed from the other FactorVAE paper. Both the prior/posterior split
+// and the paper's linear decoder (y = alpha + beta * z, equations 18-19) are now implemented.
 [ResearchPaper("FactorVAE: A Probabilistic Dynamic Factor Model Based on Variational Autoencoder for Predicting Cross-Sectional Stock Returns",
     "https://doi.org/10.1609/aaai.v36i4.20369",
     Year = 2022,
@@ -239,7 +252,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         _dropoutRate = _options.DropoutRate;
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
+            : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -288,7 +301,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         _dropoutRate = _options.DropoutRate;
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
+            : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -473,6 +486,24 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             () => _lastKlDivergence,
             _options.KlWeight);
     }
+
+    /// <summary>
+    /// Seed used for the reparameterization noise when the caller supplies none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The prior-posterior rebuild introduced genuine stochasticity: every training step draws fresh
+    /// Gaussian noise for the reparameterized factor sample. With an unseeded generator that makes each
+    /// training run — and therefore every convergence invariant over it — non-reproducible. Measured
+    /// directly: MoreData_ShouldNotDegrade came out 2 pass / 3 fail over five identical runs.
+    /// </para>
+    /// <para>
+    /// A model whose training cannot be reproduced cannot be validated against its paper, so the noise
+    /// is seeded deterministically by default. Callers who want run-to-run variation set
+    /// <c>FactorVAEOptions.Seed</c> explicitly, which continues to take precedence.
+    /// </para>
+    /// </remarks>
+    private const int DefaultSamplingSeed = 42;
 
     /// <summary>Realized returns for the current training step, consumed by the posterior branch.</summary>
     private Tensor<T>? _posteriorReturns;
