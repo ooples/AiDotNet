@@ -7631,6 +7631,39 @@ public static class LayerHelper<T>
     #region Video AI Layers
 
     /// <summary>
+    /// Creates the native VideoGigaGAN generator described by Xu et al. (CVPR 2024).
+    /// </summary>
+    /// <remarks>
+    /// The returned composite owns the complete generator graph: style-conditioned spatial
+    /// residual blocks, temporally inflated convolutions, anti-aliased bidirectional flow
+    /// propagation, progressive pixel-shuffle reconstruction, and the high-frequency shuttle.
+    /// Keeping it as one registered layer preserves the architecture's non-sequential skip and
+    /// recurrent connections while exposing every parameter to the framework.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateVideoGigaGANLayers(
+        int inputChannels = 3,
+        int inputHeight = 64,
+        int inputWidth = 64,
+        int numFeatures = 128,
+        int numResBlocks = 23,
+        int numStyleLayers = 14,
+        int scaleFactor = 4,
+        int flowPyramidLevels = 5,
+        double hfShuttleWeight = 0.5)
+    {
+        yield return new VideoGigaGANGeneratorLayer<T>(
+            inputChannels,
+            inputHeight,
+            inputWidth,
+            numFeatures,
+            numResBlocks,
+            numStyleLayers,
+            scaleFactor,
+            flowPyramidLevels,
+            hfShuttleWeight);
+    }
+
+    /// <summary>
     /// Creates layers for a video super-resolution model (Real-ESRGAN/BasicVSR++ style).
     /// </summary>
     /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
@@ -22102,26 +22135,27 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultVocosLayers(
         int numMels = 100, int hiddenDim = 512,
         int numBackboneBlocks = 8, int intermediateDim = 1536,
-        int numFrequencyBins = 513, double dropoutRate = 0.0)
+        int numFrequencyBins = 513, double dropoutRate = 0.0,
+        int hopLength = 256)
     {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-
-        // Input projection (mel or codec tokens to hidden)
-        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-
-        // ConvNeXt backbone blocks
-        for (int i = 0; i < numBackboneBlocks; i++)
+        if (numFrequencyBins < 2)
+            throw new ArgumentOutOfRangeException(nameof(numFrequencyBins));
+        if (dropoutRate != 0.0)
         {
-            yield return new FullyConnectedLayer<T>(intermediateDim, geluActivation);
-            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            throw new ArgumentException(
+                "The Vocos paper and reference generator do not use dropout in the ConvNeXt backbone. " +
+                "Supply Architecture.Layers to define a custom dropout architecture.",
+                nameof(dropoutRate));
         }
 
-        // ISTFT head: predict magnitude and phase
-        yield return new FullyConnectedLayer<T>(numFrequencyBins, (IActivationFunction<T>?)null);
-        yield return new FullyConnectedLayer<T>(numFrequencyBins, (IActivationFunction<T>?)null);
+        int nFft = (numFrequencyBins - 1) * 2;
+        yield return new VocosGeneratorLayer<T>(
+            numMels,
+            hiddenDim,
+            numBackboneBlocks,
+            intermediateDim,
+            nFft,
+            hopLength);
     }
 
     #endregion
@@ -26774,6 +26808,26 @@ public static class LayerHelper<T>
     #endregion
 
     #region ViTCoMer Layers
+
+    /// <summary>
+    /// Creates the complete native ViT-CoMer graph with parallel ViT/CNN branches,
+    /// MRFP refinement, bidirectional CTI, and the multi-scale segmentation decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateViTCoMerLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int embedDim = 384,
+        int[]? cnnChannels = null,
+        int[]? depths = null,
+        int decoderDim = 256,
+        int numClasses = 150,
+        double dropRate = 0.1)
+    {
+        yield return new ViTCoMerSegmentationLayer<T>(
+            inputChannels, inputHeight, inputWidth, embedDim, cnnChannels, depths,
+            decoderDim, numClasses, dropRate);
+    }
 
     /// <summary>
     /// Creates the ViT-CoMer hybrid encoder layers combining CNN and transformer features.
