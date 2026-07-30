@@ -189,6 +189,12 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Resolve the sequence-preserving block contract from the real tensor when a
+        // static chain walk could only provide the feature width. Composite layers
+        // override Forward directly, so they must opt into LayerBase's lazy-shape hook
+        // explicitly just like the leaf layers do.
+        EnsureInitializedFromInput(input);
+
         // Self-attention sublayer expects [B, S, H] (or [S, H]).
         var normed1 = _norm1.Forward(input);
         var attnOut = _attention.Forward(normed1);
@@ -229,9 +235,9 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Resolves every sublayer's shape without a data-carrying forward. This block overrides
-    /// <see cref="Forward"/> directly (bypassing the base lazy-init hook), so this runs ONLY via
-    /// <see cref="LayerBase{T}.ResolveFromShape"/> — the deserialization / shape-oracle path. The norms and
+    /// Resolves every sublayer's shape without a data-carrying forward. This runs both through
+    /// <see cref="LayerBase{T}.ResolveFromShape"/> (the deserialization / shape-oracle path) and from
+    /// the first real <see cref="Forward"/> when a static chain could not preserve the sequence axis. The norms and
     /// FFN DenseLayers are lazy (input dim resolved on first use), so without this the reconstructed block
     /// reported a too-small <see cref="ParameterCount"/> and <c>SetParameters</c> rejected the saved vector.
     /// Sublayers resolve in forward order so any RNG-based weight init consumes the stream exactly as a
@@ -248,7 +254,17 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         if (!_ffnUp.IsShapeResolved) _ffnUp.ResolveFromShape(hiddenShape);
         if (!_ffnDown.IsShapeResolved) _ffnDown.ResolveFromShape(new[] { 1, _ffnDim });
 
-        int seq = input.Shape.Length >= 2 ? input.Shape[input.Shape.Length - 2] : 1;
+        // A rank-1 probe carries only the feature width. It does NOT establish a
+        // one-token sequence: T5's embedding declaration intentionally omits its
+        // data-dependent sequence axis, so the sequential shape walk can arrive here
+        // with [hiddenSize]. Keep the declared [-1, hiddenSize] contract in that case;
+        // Forward will resolve it from the real [B, S, H] tensor. Pinning it to
+        // [1, hiddenSize] made every non-singleton T5 sequence contradict the block's
+        // metadata even though the paper-canonical residual block preserved S exactly.
+        if (input.Shape.Length < 2)
+            return;
+
+        int seq = input.Shape[input.Shape.Length - 2];
         ResolveShapes(new[] { seq, hidden }, new[] { seq, hidden });
     }
 
