@@ -59,6 +59,9 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
     /// <summary>Phase spectrum predictor (PSP) branch, ending in the parallel estimator.</summary>
     private readonly List<ILayer<T>> _phaseLayers = new();
 
+    private int _amplitudeLayerCount;
+    private int _phaseLayerCount;
+
     public APNet2(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -260,6 +263,37 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         // not as one sequential stack.
         Layers.AddRange(_amplitudeLayers);
         Layers.AddRange(_phaseLayers);
+
+        // Deserialization rebuilds Layers with fresh objects; remember where the branches sit so
+        // RebindBranchLayers can re-point the private lists at the restored ones.
+        _amplitudeLayerCount = _amplitudeLayers.Count;
+        _phaseLayerCount = _phaseLayers.Count;
+    }
+
+    /// <summary>
+    /// Re-points the branch lists at the layers deserialization just rebuilt.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both branches are appended to <c>Layers</c>, so their weights serialize and restore
+    /// correctly. But the forward pass reads <c>_amplitudeLayers</c> / <c>_phaseLayers</c>, and
+    /// those still referenced the objects this instance built in its own constructor —
+    /// deserialization replaces the contents of <c>Layers</c> without touching them. The restored
+    /// weights therefore landed in layers the model never evaluated, and a clone predicted from
+    /// its initialisation values while reporting success.
+    /// </para>
+    /// </remarks>
+    private void RebindBranchLayers()
+    {
+        int branchTotal = _amplitudeLayerCount + _phaseLayerCount;
+        if (branchTotal == 0 || Layers.Count < branchTotal) return;
+
+        int start = Layers.Count - branchTotal;
+
+        _amplitudeLayers.Clear();
+        _phaseLayers.Clear();
+        for (int i = 0; i < _amplitudeLayerCount; i++) _amplitudeLayers.Add(Layers[start + i]);
+        for (int i = 0; i < _phaseLayerCount; i++) _phaseLayers.Add(Layers[start + _amplitudeLayerCount + i]);
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -453,6 +487,8 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         base.HopSize = _options.HopSize;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    
+        RebindBranchLayers();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

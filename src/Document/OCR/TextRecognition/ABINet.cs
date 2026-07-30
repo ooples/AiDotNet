@@ -90,6 +90,8 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// <summary>Character head for the language branch, supervised by L_l.</summary>
     private readonly List<ILayer<T>> _languageHead = [];
 
+    private int[]? _branchCounts;
+
     /// <summary>
     /// True when this instance built the paper's three-branch stack. False when the caller
     /// supplied a flat <c>Architecture.Layers</c> chain, which has no branch structure to
@@ -336,6 +338,14 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         Layers.AddRange(_fusionLayers);
         Layers.AddRange(_visionHead);
         Layers.AddRange(_languageHead);
+
+        // Deserialization refills Layers with new objects; record the branch extents so
+        // RebindBranchLayers can re-point these lists at the restored ones.
+        _branchCounts = new[]
+        {
+            _visionModelLayers.Count, _languageModelLayers.Count, _fusionLayers.Count,
+            _visionHead.Count, _languageHead.Count
+        };
 
         _branched = true;
     }
@@ -632,6 +642,38 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Re-points the branch lists at the layers deserialization just rebuilt.
+    /// </summary>
+    /// <remarks>
+    /// Every branch is appended to <c>Layers</c>, so the weights round-trip correctly, but the
+    /// forward pass reads these private lists and deserialization never re-points them — they
+    /// still referenced the objects this instance built in its own constructor. The restored
+    /// weights landed in layers the model never evaluated, so a clone predicted from its
+    /// initialisation values while reporting success.
+    /// </remarks>
+    private void RebindBranchLayers()
+    {
+        if (_branchCounts is not { Length: 5 }) return;
+
+        int total = 0;
+        foreach (var count in _branchCounts) total += count;
+        if (total == 0 || Layers.Count < total) return;
+
+        var targets = new[]
+        {
+            _visionModelLayers, _languageModelLayers, _fusionLayers, _visionHead, _languageHead
+        };
+
+        int offset = Layers.Count - total;
+        for (int b = 0; b < targets.Length; b++)
+        {
+            targets[b].Clear();
+            for (int i = 0; i < _branchCounts[b]; i++) targets[b].Add(Layers[offset + i]);
+            offset += _branchCounts[b];
+        }
+    }
+
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         int visionDim = reader.ReadInt32();
@@ -647,6 +689,8 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         ImageSize = imageSize;
         base.MaxSequenceLength = maxSeqLen;
+    
+        RebindBranchLayers();
     }
 
     /// <inheritdoc/>
