@@ -383,9 +383,15 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 
     private int PosteriorSpanEnd => PosteriorSpanStart + LayerHelper<T>.FactorVAEPosteriorLayerCount;
 
-    private int DecoderSpanStart => PosteriorSpanEnd;
+    private int AlphaSpanStart => PosteriorSpanEnd;
 
-    private int DecoderSpanEnd => DecoderSpanStart + LayerHelper<T>.FactorVAEDecoderLayerCount;
+    private int AlphaSpanEnd => AlphaSpanStart + LayerHelper<T>.FactorVAEAlphaLayerCount;
+
+    private int BetaSpanStart => AlphaSpanEnd;
+
+    private int BetaSpanEnd => BetaSpanStart + LayerHelper<T>.FactorVAEBetaLayerCount;
+
+    private int DecoderSpanEnd => BetaSpanEnd;
 
     /// <summary>
     /// True when <c>Layers</c> matches the four-span layout this model drives explicitly. A caller that
@@ -554,12 +560,37 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     }
 
     /// <summary>
-    /// Decodes factors into predicted cross-sectional returns, conditioned on the stock features.
+    /// Decodes factors into predicted cross-sectional returns using the paper's linear factor
+    /// structure, <c>y = alpha + beta * z</c> (equations 18-19).
     /// </summary>
+    /// <remarks>
+    /// <c>alpha</c> is each stock's idiosyncratic expected return and <c>beta</c> its exposures to the
+    /// factors, both read off the stock latent features; the factors enter ONLY through the linear
+    /// product. This is the dynamic-factor-model half of the paper, and it is also why an imperfect
+    /// prior degrades gracefully: alpha still carries the baseline return.
+    /// </remarks>
     private Tensor<T> DecodeReturns(Tensor<T> factors, Tensor<T> features)
     {
-        var joined = Engine.Concat([factors, features], factors.Shape.Length - 1);
-        return RunSpan(joined, DecoderSpanStart, DecoderSpanEnd);
+        var alpha = RunSpan(features, AlphaSpanStart, AlphaSpanEnd);   // [.., numAssets]
+        var betaFlat = RunSpan(features, BetaSpanStart, BetaSpanEnd);  // [.., numAssets * numFactors]
+
+        int numFactors = factors.Shape[factors.Shape.Length - 1];
+        int numAssets = alpha.Shape[alpha.Shape.Length - 1];
+
+        if (alpha.Shape.Length == 1)
+        {
+            // Unbatched: beta is [numAssets, numFactors], z is [numFactors].
+            var beta = Engine.Reshape(betaFlat, [numAssets, numFactors]);
+            var z = Engine.Reshape(factors, [numFactors, 1]);
+            var contribution = Engine.Reshape(Engine.TensorMatMul(beta, z), [numAssets]);
+            return Engine.TensorAdd(alpha, contribution);
+        }
+
+        int batch = alpha.Shape[0];
+        var betaBatched = Engine.Reshape(betaFlat, [batch, numAssets, numFactors]);
+        var zBatched = Engine.Reshape(factors, [batch, numFactors, 1]);
+        var product = Engine.BatchMatMul(betaBatched, zBatched);       // [batch, numAssets, 1]
+        return Engine.TensorAdd(alpha, Engine.Reshape(product, [batch, numAssets]));
     }
 
     /// <summary>

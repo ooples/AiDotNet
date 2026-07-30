@@ -17252,15 +17252,33 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DenseLayer<T>(numFactors * 2, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // --- Factor DECODER: sampled factors (+ features) -> predicted cross-sectional returns ---
-        // The paper's decoder predicts RETURNS, not a reconstruction of the input features. Returns are
-        // signed, so the output head is linear for the same reason as above; a ReLU head would clip
-        // every negative return to zero and dead-ReLU into a constant prediction.
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>();
+        // --- Factor DECODER: the paper's LINEAR factor structure, y = alpha + beta * z (eq 18-19) ---
+        // Not an MLP over [factors, features]. This is the "dynamic factor model" half of the paper:
+        // alpha(e) is each stock's idiosyncratic expected return and beta(e) its factor EXPOSURES, both
+        // read off the stock latent features, with the factors entering only through the linear product
+        // beta * z. The distinction matters for behaviour, not just fidelity: alpha carries the baseline
+        // return independently of z, so an imperfect prior degrades predictions gracefully, whereas an
+        // MLP that entangles factors with features lets a lagging prior corrupt the whole prediction.
+        //
+        // Both heads are linear for the same reason as the distribution heads: returns and exposures are
+        // signed, and DenseLayer(n, null) would fall back to ReLU and clip them.
+        //
+        // Alpha head (FactorVAEAlphaLayerCount layers): features -> per-stock idiosyncratic return.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new IdentityActivation<T>());
+
+        // Beta head (FactorVAEBetaLayerCount layers): features -> numAssets x numFactors exposures,
+        // emitted flat and reshaped by the model.
+        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(
+            numAssets * numFactors, (IActivationFunction<T>)new IdentityActivation<T>());
     }
+
+    /// <summary>Layers in the FactorVAE alpha (idiosyncratic return) head.</summary>
+    public const int FactorVAEAlphaLayerCount = 2;
+
+    /// <summary>Layers in the FactorVAE beta (factor exposure) head.</summary>
+    public const int FactorVAEBetaLayerCount = 2;
 
     /// <summary>Number of layers in the FactorVAE feature extractor span.</summary>
     public const int FactorVAEFeatureExtractorLayerCount = 5;
