@@ -10038,7 +10038,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // model had run a forward pass; if a layer's saved shape contains -1 placeholders
             // and this is the network's first layer, fall back to the architecture's input
             // shape (the only authoritative concrete shape we have at this point).
-            if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+            // Ask whether the layer's tensors exist yet, not merely whether its shape is resolved.
+            // Those are different questions since IsShapeResolved was narrowed to "parameter shapes
+            // are derivable": a layer with a dynamic OUTPUT axis reports resolved while its weights
+            // are still unmaterialised, and skipping it here left SetParameters below with nowhere
+            // to put them -- the restored model came back at its initialisation values with no
+            // error raised, which is the eager half of the same defect fixed in the COW path.
+            if (layer is LayerBase<T> lb
+                && (!lb.IsShapeResolved || lb.GetTrainableParameters().Count == 0))
             {
                 int[]? candidate = inputShape is { Length: > 0 } && inputShape.All(d => d > 0)
                     ? inputShape
@@ -10672,8 +10679,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             // Resolve a lazy destination LayerBase from the source's input shape so its parameter list
             // exists (and won't re-initialize over the shared tensors on first forward) before we map it.
+            // Trigger on "the destination has no parameter tensors yet", not merely on "its shape is
+            // unresolved". Those came apart once IsShapeResolved was narrowed to ask whether parameter
+            // shapes are derivable (input shape concrete) rather than whether every axis is concrete:
+            // a layer with a legitimately dynamic OUTPUT axis now reports resolved while its weights
+            // are still unmaterialised, and this block would skip it.
             if (dst is LayerBase<T> dstBase && src is LayerBase<T> srcBase
-                && !dstBase.IsShapeResolved && srcBase.ParameterCount > 0)
+                && srcBase.ParameterCount > 0
+                && (!dstBase.IsShapeResolved || dst.GetTrainableParameters().Count == 0))
             {
                 int[] s = srcBase.GetInputShape();
                 if (s is { Length: > 0 } && Array.TrueForAll(s, d => d > 0))
@@ -10686,7 +10699,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Share trainable tensors copy-on-write (privatizes on the first in-place write to either side).
             var sp = src.GetTrainableParameters();
             var dp = dst.GetTrainableParameters();
-            bool shapeOnlyDestination = dp.Count == 0
+            // A destination holding no tensors is only acceptable when the source holds none either.
+            // Allowing it through while the source HAS parameters is a silent weight drop: nothing is
+            // shared, no error is raised, and the clone comes back at its initialisation values --
+            // which is how a cloned model trained to a completely different result while reporting
+            // success. Any real mismatch must take the eager full-fidelity copy below instead.
+            bool shapeOnlyDestination = dp.Count == 0 && sp.Count == 0
                 && dst is LayerBase<T> dstShapeOnly
                 && dstShapeOnly.IsShapeResolved;
             if (sp.Count != dp.Count && !shapeOnlyDestination)
