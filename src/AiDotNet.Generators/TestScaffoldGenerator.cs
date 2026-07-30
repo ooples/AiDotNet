@@ -964,6 +964,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // ladder: FP32 also enrols it in the audio family's smoke-iteration caps, which is
         // float and cap together. Production defaults are untouched.
         "ConvTasNet",
+        // Timeout ladder, rung 1. These three trained to completion for the first time once their
+        // layers stopped publishing stale output shapes (previously they threw within milliseconds
+        // on a shape mismatch, so the cost of a full training probe was never paid). Their
+        // 50+200-iteration MoreData probes then overran the 120 s gate in Release. FP32 halves the
+        // per-step footprint and keeps the paper-scale topology and iteration counts intact, which
+        // is why it is tried before any capping or shrinking.
+        "CLAP", "AudioMAE", "CoCa",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -4491,14 +4498,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // options at CI-smoke scale, bounding the span enumeration as well as the
                 // encoder so the reduction actually reaches the dominant term. Production
                 // defaults and every customization point are unchanged.
+                //
+                // The span bound is tighter than it was, and NegativeSpanSampleRatio is gone,
+                // because the model no longer subsamples negatives: Yu et al. score every
+                // candidate span and the sampling was removed as unfaithful. That made the
+                // dominant term grow rather than shrink and pushed DifferentInputs_AfterTraining
+                // past its gate, so the enumeration itself has to come down to compensate --
+                // 16x4 candidate spans become 12x3.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 32, outputSize: 9), " +
                     "new AiDotNet.NER.Options.SpanBasedNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
-                    "NumLabels = 9, MaxSequenceLength = 16, MaxSpanLength = 4, " +
-                    "SpanEmbeddingDimension = 32, NegativeSpanSampleRatio = 5, " +
+                    "NumLabels = 9, MaxSequenceLength = 12, MaxSpanLength = 3, " +
+                    "SpanEmbeddingDimension = 32, " +
                     "DropoutRate = 0.0, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "BLINKNER" && model.TypeParameterCount == 1)
@@ -8124,6 +8138,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputFrames: 2, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
                     "new AiDotNet.Video.Options.FloRNNOptions { NumFeatures = 8, NumRecurrentLayers = 1, " +
                     "HiddenDim = 8, NumFlowScales = 1, LearningRate = 1e-5, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "AnomalyTransformerDetector" && model.TypeParameterCount == 1)
+            {
+                // Timeout ladder, rung 3. FP32 (rung 1) was already applied and left it at 128 s,
+                // and capping iterations (rung 2) cannot help here because the cost is not repeated
+                // training probes: every anomaly-detector invariant calls Fit independently, so even
+                // Parameters_ShouldBeNonEmpty pays for a full 10-epoch run of a 64-wide attention
+                // stack over a 100-step window, whose O(seqLength^2) attention dominates. That is
+                // per-construction scale, so only a fixture bound addresses it -- the same reasoning
+                // and the same remedy as DeepSVDDDetector directly below.
+                //
+                // Exercises the identical association-discrepancy, attention, training and scoring
+                // paths at CI-smoke scale. Production defaults (64/4/100/10) are untouched, as is
+                // every public customization point.
+                constructorExpr = $"new {typeName}<double>(modelDim: 16, numHeads: 2, seqLength: 16, " +
+                    "epochs: 3, learningRate: 0.0001, contamination: 0.1, randomSeed: 42)";
             }
             else if (model.ClassName == "DeepSVDDDetector" && model.TypeParameterCount == 1)
             {
