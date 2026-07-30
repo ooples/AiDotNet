@@ -8235,6 +8235,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual bool SupportsFusedCompiledTraining => true;
 
     /// <summary>
+    /// Permanently opts this network instance out of standalone fused-optimizer
+    /// compilation when a parent model owns a larger stateful training graph.
+    /// Unlike <see cref="_fusedTrainingDisabled"/>, this architectural graph-break
+    /// is not cleared by parameter-buffer or structure invalidation.
+    /// </summary>
+    private bool _parentOwnedTrainingGraph;
+
+    internal void DisableStandaloneFusedTraining()
+        => _parentOwnedTrainingGraph = true;
+
+    /// <summary>
     /// Tracks whether the fused compiled training path has EVER successfully
     /// run on this model. Once true, Adam/AdamW/SGD moment buffers live
     /// exclusively inside the compiled plan — falling back to eager would
@@ -8481,7 +8492,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // (added as a #1328 workaround) was removed in #1331 once the
         // fused-compiled training path was fixed; the EnableCompilation
         // gate is now the single supported way to bypass fused training.
-        if (!SupportsFusedCompiledTraining)
+        if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback("model opts out of fused compiled training (dynamic/stateful forward)");
         if (_fusedTrainingDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");

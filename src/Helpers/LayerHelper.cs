@@ -11447,20 +11447,25 @@ public static class LayerHelper<T>
         int numClasses = 7)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Initial projection
+        // Project the supplied node features to the graph hidden width. Production callers can
+        // provide explicit graph-convolution layers (and adjacency) through Architecture.Layers;
+        // the default feature-only path keeps the same per-node transforms with self information.
         yield return new DenseLayer<T>(hiddenDim, reluActivation);
-        yield return new DropoutLayer<T>(0.5);
 
-        // GCN layers (using dense as approximation)
+        // GCN feature projections. Luo et al. use ReLU in the first graph-convolution layer and
+        // extract the learned node representation from it. Keep ReLU on the compact default stack.
         for (int i = 0; i < numGCNLayers; i++)
         {
             yield return new DenseLayer<T>(hiddenDim, reluActivation);
-            yield return new DropoutLayer<T>(0.5);
         }
 
-        // Classification head
+        // Paper section 3.4 / 4.3: the pooled aspect features feed a two-layer MLP classifier
+        // with tanh and 0.1 dropout, followed by raw class logits for cross-entropy.
+        yield return new DenseLayer<T>(hiddenDim, tanhActivation);
+        yield return new DropoutLayer<T>(0.1);
         yield return new DenseLayer<T>(numClasses, identityActivation);
     }
 
