@@ -123,6 +123,7 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
             spanEmbeddingDimension: NEROptions.SpanEmbeddingDimension,
             numLabels: NEROptions.NumLabels,
             dropoutRate: NEROptions.DropoutRate,
+            ffnnDepth: NEROptions.FfnnDepth,
             biLstmHiddenSize: BiaffineOptions.BiLstmHiddenSize,
             biLstmLayers: BiaffineOptions.BiLstmLayers,
             biLstmDropout: BiaffineOptions.BiLstmDropout,

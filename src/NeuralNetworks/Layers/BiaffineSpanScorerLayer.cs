@@ -40,8 +40,15 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
     private readonly int _spanDim;
     private readonly int _numCategories;
 
-    private readonly DenseLayer<T> _startFfnn;
-    private readonly DenseLayer<T> _endFfnn;
+    /// <summary>
+    /// Start-boundary FFNN, <c>ffnnDepth</c> layers deep. Separate weights from the end FFNN so a
+    /// token is represented differently depending on which end of a span it occupies.
+    /// </summary>
+    private readonly DenseLayer<T>[] _startFfnn;
+    private readonly DenseLayer<T>[] _endFfnn;
+
+    /// <summary>Layers per boundary FFNN; the reference uses 2.</summary>
+    private readonly int _ffnnDepth;
 
     /// <summary>Dropout on the boundary FFNN outputs; Yu et al. Table 1 specifies 0.2.</summary>
     private readonly double _ffnnDropout;
@@ -62,7 +69,7 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override long ParameterCount =>
-        _startFfnn.ParameterCount + _endFfnn.ParameterCount +
+        SumParameterCounts(_startFfnn) + SumParameterCounts(_endFfnn) +
         _bilinear.Length + _additive.Length + _bias.Length;
 
     /// <summary>
@@ -84,7 +91,8 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
         [LayerState] int spanDim,
         [LayerState] int numCategories,
         IActivationFunction<T>? activation = null,
-        [LayerState] double ffnnDropout = 0.2)
+        [LayerState] double ffnnDropout = 0.2,
+        [LayerState] int ffnnDepth = 2)
         : base(new[] { -1, -1, inputDim }, new[] { -1, -1, numCategories })
     {
         if (inputDim <= 0) throw new ArgumentOutOfRangeException(nameof(inputDim));
@@ -99,10 +107,19 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
 
         // Two SEPARATE FFNNs, per the paper: the same token gets a different representation
         // depending on whether it is acting as a span start or a span end.
-        _startFfnn = new DenseLayer<T>(spanDim, act);
-        _endFfnn = new DenseLayer<T>(spanDim, act);
-        RegisterSubLayer(_startFfnn);
-        RegisterSubLayer(_endFfnn);
+        // ffnn_depth layers per boundary, matching the reference configuration
+        // (juntaoy/biaffine-ner, experiments.conf: ffnn_size = 150, ffnn_depth = 2).
+        int depth = ffnnDepth > 0 ? ffnnDepth : 1;
+        _ffnnDepth = depth;
+        _startFfnn = new DenseLayer<T>[depth];
+        _endFfnn = new DenseLayer<T>[depth];
+        for (int i = 0; i < depth; i++)
+        {
+            _startFfnn[i] = new DenseLayer<T>(spanDim, act);
+            _endFfnn[i] = new DenseLayer<T>(spanDim, act);
+            RegisterSubLayer(_startFfnn[i]);
+            RegisterSubLayer(_endFfnn[i]);
+        }
 
         // Yu et al. Table 1 lists an FFNN dropout of 0.2. Without it the two boundary
         // representations are free to co-adapt, which is exactly what the separate-FFNN design
@@ -120,7 +137,11 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
         _additive = new Tensor<T>(new[] { 2 * spanDim, numCategories });
         _bias = new Tensor<T>(new[] { numCategories });
 
-        InitializeParameter(_bilinear, spanDim);
+        // The biaffine tensor starts at ZERO, matching the reference implementation
+        // (juntaoy/biaffine-ner, util.py: bilinear_map is created with tf.zeros_initializer();
+        // only the boundary FFNNs get a random init there). Every span's score therefore begins as
+        // the additive term plus bias, and the interaction is learned from there.
+        for (int i = 0; i < _bilinear.Length; i++) _bilinear[i] = NumOps.Zero;
         InitializeParameter(_additive, 2 * spanDim);
 
         // Register so the tape and ParameterBuffer see these tensors. Omitting this is silent:
@@ -146,8 +167,20 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
     /// </remarks>
     private void ResolveChildShapes()
     {
-        if (!_startFfnn.IsShapeResolved) _startFfnn.ResolveFromShape(new[] { 1, 1, _inputDim });
-        if (!_endFfnn.IsShapeResolved) _endFfnn.ResolveFromShape(new[] { 1, 1, _inputDim });
+        // Only the first layer of each stack sees the encoder width; the rest are spanDim -> spanDim.
+        for (int i = 0; i < _startFfnn.Length; i++)
+        {
+            int width = i == 0 ? _inputDim : _spanDim;
+            if (!_startFfnn[i].IsShapeResolved) _startFfnn[i].ResolveFromShape(new[] { 1, 1, width });
+            if (!_endFfnn[i].IsShapeResolved) _endFfnn[i].ResolveFromShape(new[] { 1, 1, width });
+        }
+    }
+
+    private static long SumParameterCounts(DenseLayer<T>[] layers)
+    {
+        long total = 0;
+        foreach (var layer in layers) total += layer.ParameterCount;
+        return total;
     }
 
     private void InitializeParameter(Tensor<T> tensor, int fanIn)
@@ -180,8 +213,11 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
             throw new ArgumentException($"BiaffineSpanScorerLayer was configured for inputDim={_inputDim} but got D={D}.", nameof(input));
 
         // Separate start/end boundary representations: [B, S, d].
-        var hs = _startFfnn.Forward(input);
-        var he = _endFfnn.Forward(input);
+        var hs = input;
+        foreach (var layer in _startFfnn) hs = layer.Forward(hs);
+
+        var he = input;
+        foreach (var layer in _endFfnn) he = layer.Forward(he);
 
         if (_startDropout is not null && _endDropout is not null)
         {
@@ -256,11 +292,39 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
         return batch > 1 ? Engine.TensorBroadcastTo(reshaped, [batch, rows, cols]) : reshaped;
     }
 
+    /// <summary>Concatenates a boundary stack's parameters in layer order.</summary>
+    private static Vector<T> StackParameters(DenseLayer<T>[] layers)
+    {
+        int total = 0;
+        foreach (var layer in layers) total += layer.GetParameters().Length;
+
+        var flat = new Vector<T>(total);
+        int k = 0;
+        foreach (var layer in layers)
+        {
+            var p = layer.GetParameters();
+            for (int i = 0; i < p.Length; i++) flat[k++] = p[i];
+        }
+        return flat;
+    }
+
+    /// <summary>Distributes a flat slice back across a boundary stack, in the same order.</summary>
+    private static void SetStackParameters(DenseLayer<T>[] layers, Vector<T> source, ref int offset)
+    {
+        foreach (var layer in layers)
+        {
+            int count = layer.GetParameters().Length;
+            var slice = new Vector<T>(count);
+            for (int i = 0; i < count; i++) slice[i] = source[offset++];
+            layer.SetParameters(slice);
+        }
+    }
+
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var start = _startFfnn.GetParameters();
-        var end = _endFfnn.GetParameters();
+        var start = StackParameters(_startFfnn);
+        var end = StackParameters(_endFfnn);
         int total = start.Length + end.Length + _bilinear.Length + _additive.Length + _bias.Length;
 
         var flat = new Vector<T>(total);
@@ -282,21 +346,16 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
         // compares the payload against a count of just the bilinear/additive/bias tensors.
         ResolveChildShapes();
 
-        var start = _startFfnn.GetParameters();
-        var end = _endFfnn.GetParameters();
+        var start = StackParameters(_startFfnn);
+        var end = StackParameters(_endFfnn);
         int expected = start.Length + end.Length + _bilinear.Length + _additive.Length + _bias.Length;
 
         if (parameters.Length != expected)
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
 
         int k = 0;
-        var newStart = new Vector<T>(start.Length);
-        for (int i = 0; i < start.Length; i++) newStart[i] = parameters[k++];
-        _startFfnn.SetParameters(newStart);
-
-        var newEnd = new Vector<T>(end.Length);
-        for (int i = 0; i < end.Length; i++) newEnd[i] = parameters[k++];
-        _endFfnn.SetParameters(newEnd);
+        SetStackParameters(_startFfnn, parameters, ref k);
+        SetStackParameters(_endFfnn, parameters, ref k);
 
         for (int i = 0; i < _bilinear.Length; i++) _bilinear[i] = parameters[k++];
         for (int i = 0; i < _additive.Length; i++) _additive[i] = parameters[k++];
@@ -311,8 +370,8 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
     public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
     {
         var result = new List<Tensor<T>>();
-        result.AddRange(_startFfnn.GetTrainableParameters());
-        result.AddRange(_endFfnn.GetTrainableParameters());
+        foreach (var layer in _startFfnn) result.AddRange(layer.GetTrainableParameters());
+        foreach (var layer in _endFfnn) result.AddRange(layer.GetTrainableParameters());
         result.Add(_bilinear);
         result.Add(_additive);
         result.Add(_bias);
@@ -322,17 +381,29 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
     {
-        var startParams = _startFfnn.GetTrainableParameters();
-        var endParams = _endFfnn.GetTrainableParameters();
-        int expected = startParams.Count + endParams.Count + 3;
+        int startCount = 0, endCount = 0;
+        foreach (var layer in _startFfnn) startCount += layer.GetTrainableParameters().Count;
+        foreach (var layer in _endFfnn) endCount += layer.GetTrainableParameters().Count;
+        int expected = startCount + endCount + 3;
 
         if (parameters.Count != expected)
             throw new ArgumentException($"Expected {expected} trainable tensors, got {parameters.Count}.", nameof(parameters));
 
-        _startFfnn.SetTrainableParameters(parameters.Take(startParams.Count).ToList());
-        _endFfnn.SetTrainableParameters(parameters.Skip(startParams.Count).Take(endParams.Count).ToList());
+        int cursor = 0;
+        foreach (var layer in _startFfnn)
+        {
+            int n = layer.GetTrainableParameters().Count;
+            layer.SetTrainableParameters(parameters.Skip(cursor).Take(n).ToList());
+            cursor += n;
+        }
+        foreach (var layer in _endFfnn)
+        {
+            int n = layer.GetTrainableParameters().Count;
+            layer.SetTrainableParameters(parameters.Skip(cursor).Take(n).ToList());
+            cursor += n;
+        }
 
-        int at = startParams.Count + endParams.Count;
+        int at = cursor;
         _bilinear = parameters[at];
         _additive = parameters[at + 1];
         _bias = parameters[at + 2];
@@ -366,7 +437,7 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _startFfnn.ResetState();
-        _endFfnn.ResetState();
+        foreach (var layer in _startFfnn) layer.ResetState();
+        foreach (var layer in _endFfnn) layer.ResetState();
     }
 }
