@@ -55,6 +55,7 @@ public class LiteDVDNetOptions : NeuralNetworkOptions
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
         DropoutRate = other.DropoutRate;
+        ResidualHeadInitScale = other.ResidualHeadInitScale;
     }
 
     #region Architecture
@@ -115,6 +116,15 @@ public class LiteDVDNetOptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.0;
+
+    /// <summary>
+    /// Gets or sets the scale applied to the residual-prediction head's initial weights. The network
+    /// predicts the NOISE and the denoised frame is the input minus that estimate, so scaling the head
+    /// down makes an untrained model start near the identity (predicts ~zero noise) — the standard prior
+    /// for a residual denoiser ("having learned nothing, change nothing"). Default 0.01. Set to 1.0 to
+    /// disable the damping and keep the head's raw initialization. Fully user-overridable.
+    /// </summary>
+    public double ResidualHeadInitScale { get; set; } = 0.01;
 
     #endregion
 }
