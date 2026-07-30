@@ -44,6 +44,8 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly int _numHeads;
+    private readonly bool _concatenateHeads;
+    private readonly int _combinedOutputFeatures;
     private readonly T _alpha; // LeakyReLU negative slope
     private readonly double _dropoutRate;
     private readonly Random _random;
@@ -165,7 +167,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// When sparse aggregation is enabled via SetEdges(), the layer uses O(E) GPU operations
     /// for efficient attention computation on large graphs.
     /// </remarks>
-    protected override bool SupportsGpuExecution => true;
+    protected override bool SupportsGpuExecution => !_concatenateHeads;
 
     /// <inheritdoc/>
     public override long ParameterCount => _weights.Length + _attentionWeights.Length + _bias.Length;
@@ -186,14 +188,20 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         [LayerState] double alpha = 0.2,
         [LayerState] double dropoutRate = 0.0,
         IActivationFunction<T>? activationFunction = null,
-        IInitializationStrategy<T>? initializationStrategy = null)
-        : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
+        IInitializationStrategy<T>? initializationStrategy = null,
+        bool concatenateHeads = false)
+        : base(
+            [inputFeatures],
+            [concatenateHeads ? checked(outputFeatures * numHeads) : outputFeatures],
+            activationFunction ?? new IdentityActivation<T>())
     {
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         _inputFeatures = inputFeatures;
         _outputFeatures = outputFeatures;
         _numHeads = numHeads;
+        _concatenateHeads = concatenateHeads;
+        _combinedOutputFeatures = concatenateHeads ? checked(outputFeatures * numHeads) : outputFeatures;
         _alpha = NumOps.FromDouble(alpha);
         _dropoutRate = dropoutRate;
         // Seed from the layer's RandomSeed (wired from architecture.RandomSeed via the
@@ -210,7 +218,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Initialize weights as Tensors for GPU acceleration
         _weights = new Tensor<T>([_numHeads, _inputFeatures, _outputFeatures]);
         _attentionWeights = new Tensor<T>([_numHeads, 2 * _outputFeatures]);
-        _bias = new Tensor<T>([_outputFeatures]);
+        _bias = new Tensor<T>([_combinedOutputFeatures]);
 
         InitializeParameters();
 
@@ -371,7 +379,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             var attnWeightsSource = Engine.TensorSlice(_attentionWeights, [0, 0], [_numHeads, _outputFeatures]);
             var attnWeightsTarget = Engine.TensorSlice(_attentionWeights, [0, _outputFeatures], [_numHeads, _outputFeatures]);
 
-            output = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
+            output = TensorAllocator.Rent<T>([batchSize, numNodes, _combinedOutputFeatures]);
             output.Fill(NumOps.Zero);
 
             for (int b = 0; b < batchSize; b++)
@@ -388,11 +396,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                     attnWeightsSource,
                     attnWeightsTarget,
                     NumOps.ToDouble(_alpha),
-                    concatenate: false,  // Average heads
+                    concatenate: _concatenateHeads,
                     out var batchAttnCoeffs);
 
                 // Add bias using broadcasting and set in output
-                var biasBroadcast = Engine.Reshape(_bias, [1, _outputFeatures]);
+                var biasBroadcast = Engine.Reshape(_bias, [1, _combinedOutputFeatures]);
                 var biasedOutput = Engine.TensorBroadcastAdd(batchOutput, biasBroadcast);
                 output.SetSlice(b, biasedOutput);
             }
@@ -407,11 +415,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             Tensor<T> sparseReshaped;
             if (rank == 1)
             {
-                sparseReshaped = Engine.Reshape(activatedOutput, [_outputFeatures]);
+                sparseReshaped = Engine.Reshape(activatedOutput, [_combinedOutputFeatures]);
             }
             else if (rank == 2)
             {
-                sparseReshaped = Engine.Reshape(activatedOutput, [numNodes, _outputFeatures]);
+                sparseReshaped = Engine.Reshape(activatedOutput, [numNodes, _combinedOutputFeatures]);
             }
             else
             {
@@ -424,7 +432,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 for (int d = 0; d < rank - 2; d++)
                     outputShape[d] = originalShape[d];
                 outputShape[rank - 2] = numNodes;
-                outputShape[rank - 1] = _outputFeatures;
+                outputShape[rank - 1] = _combinedOutputFeatures;
                 sparseReshaped = Engine.Reshape(activatedOutput, outputShape);
             }
 
@@ -463,7 +471,9 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         for (int b = 0; b < batchSize; b++)
             perBatchMasks[b] = BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
 
-        // Sum of the per-head aggregated outputs: [batchSize, numNodes, outputFeatures] (on-tape).
+        // Retain every head output until the paper's head-combination operation. Hidden
+        // GAT layers concatenate heads; the final prediction layer averages them.
+        var denseHeadOutputs = new Tensor<T>[_numHeads];
         Tensor<T>? denseHeadSum = null;
         for (int h = 0; h < _numHeads; h++)
         {
@@ -515,13 +525,16 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             }
 
             var headOutput = batchSize == 1 ? perBatchOutputs[0] : Engine.Concat(perBatchOutputs, 0);
-            denseHeadSum = denseHeadSum is null ? headOutput : Engine.TensorAdd(denseHeadSum, headOutput);
+            denseHeadOutputs[h] = headOutput;
+            if (!_concatenateHeads)
+                denseHeadSum = denseHeadSum is null ? headOutput : Engine.TensorAdd(denseHeadSum, headOutput);
         }
 
-        // Average across heads, then add the output bias (on-tape).
-        var headAveraged = Engine.TensorDivideScalar(denseHeadSum!, NumOps.FromDouble(_numHeads));
-        var denseBias = Engine.Reshape(_bias, [1, 1, _outputFeatures]);
-        output = Engine.TensorBroadcastAdd(headAveraged, denseBias);
+        var combinedHeads = _concatenateHeads
+            ? Engine.Concat(denseHeadOutputs, 2)
+            : Engine.TensorDivideScalar(denseHeadSum!, NumOps.FromDouble(_numHeads));
+        var denseBias = Engine.Reshape(_bias, [1, 1, _combinedOutputFeatures]);
+        output = Engine.TensorBroadcastAdd(combinedHeads, denseBias);
 
         activatedOutput = ApplyActivation(output);
 
@@ -530,12 +543,12 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         if (rank == 1)
         {
             // Original was [inputFeatures], output should be [outputFeatures]
-            denseReshaped = Engine.Reshape(activatedOutput, [_outputFeatures]);
+            denseReshaped = Engine.Reshape(activatedOutput, [_combinedOutputFeatures]);
         }
         else if (rank == 2)
         {
             // Original was [numNodes, inputFeatures], output should be [numNodes, outputFeatures]
-            denseReshaped = Engine.Reshape(activatedOutput, [numNodes, _outputFeatures]);
+            denseReshaped = Engine.Reshape(activatedOutput, [numNodes, _combinedOutputFeatures]);
         }
         else
         {
@@ -549,7 +562,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             for (int d = 0; d < rank - 2; d++)
                 outputShape[d] = originalShape[d];
             outputShape[rank - 2] = numNodes;
-            outputShape[rank - 1] = _outputFeatures;
+            outputShape[rank - 1] = _combinedOutputFeatures;
             denseReshaped = Engine.Reshape(activatedOutput, outputShape);
         }
 
@@ -882,6 +895,8 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     {
         var metadata = base.GetMetadata();
         metadata["NumHeads"] = _numHeads.ToString();
+        metadata["HeadOutputFeatures"] = _outputFeatures.ToString();
+        metadata["ConcatenateHeads"] = _concatenateHeads.ToString();
         metadata["Alpha"] = NumOps.ToDouble(_alpha).ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -1418,6 +1433,12 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// Gets the number of attention heads used in multi-head attention.
     /// </summary>
     public int NumHeads => _numHeads;
+
+    /// <summary>
+    /// Gets whether the per-head outputs are concatenated (hidden-layer GAT rule)
+    /// instead of averaged (prediction-layer GAT rule).
+    /// </summary>
+    public bool ConcatenateHeads => _concatenateHeads;
 
     /// <summary>
     /// Gets the dropout rate applied to attention coefficients during training.

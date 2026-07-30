@@ -3787,6 +3787,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Buffer name must not be empty.", nameof(name));
 
+        // Buffer registration is name-based, matching PyTorch's register_buffer
+        // contract. Lazy initialization and deserialization can replace a buffer
+        // tensor after a placeholder or restored value is installed; keep the
+        // engine's persistent-tensor registry and the layer's named view aligned.
+        for (int i = 0; i < _registeredBuffers.Count; i++)
+        {
+            if (!string.Equals(_registeredBuffers[i].Name, name, StringComparison.Ordinal))
+                continue;
+
+            var previous = _registeredBuffers[i].Tensor;
+            if (ReferenceEquals(previous, tensor))
+                return;
+
+            Engine.UnregisterPersistentTensor(previous);
+            Engine.RegisterPersistentTensor(tensor, role);
+            _registeredBuffers[i] = (name, tensor);
+            return;
+        }
+
         Engine.RegisterPersistentTensor(tensor, role);
         _registeredBuffers.Add((name, tensor));
     }

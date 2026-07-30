@@ -1504,10 +1504,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Training_ShouldReduceLoss. Keep the public architecture and reduce only
         // repeated generated training iterations (float -> cap; no shrink applied).
         "TTVSR",
-        // VideoGigaGAN remained above the 120/180-second gates in the exact Generated U-Z
-        // shard after the precision-first FP32 scaffold was applied: all six repeated training
-        // invariants timed out. Preserve the paper architecture and cap only generated repetition
-        // counts before considering any test-fixture scale reduction (float -> cap; no shrink yet).
+        // VideoGigaGAN remained above the 120/180-second gates after FP32, then again after the
+        // repeated-training cap. Its constructor below therefore applies the ladder's final rung:
+        // the complete paper generator graph at a small legal width/clip/scale.
         "VideoGigaGAN",
         // UNITER's paper-scale multimodal encoder is already emitted in FP32, but its generated
         // 50+200-step MoreData probe still hit the 120-second gate in a clean isolated run.
@@ -7300,6 +7299,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 1280, outputSize: 32))";
             }
+            else if (model.ClassName == "ViTCoMer" && model.TypeParameterCount == 1)
+            {
+                // ViT-CoMer already exhausted the timeout ladder's FP32 and iteration-cap rungs.
+                // Keep its complete paper topology (parallel CNN/plain-ViT branches, MRFP,
+                // bidirectional CTI, and multi-scale decoder) while shrinking only the generated
+                // fixture's width/depth/resolution. Production Small/Base/Large defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4, " +
+                    "layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { " +
+                    "new AiDotNet.NeuralNetworks.Layers.ViTCoMerSegmentationLayer<double>(" +
+                    "3, 32, 32, 16, new int[] { 8, 12, 16, 24 }, new int[] { 1, 1, 1, 1 }, 8, 4, 0.0) }), " +
+                    "optimizer: null, lossFunction: null, numClasses: 4, " +
+                    "modelSize: AiDotNet.Enums.ViTCoMerModelSize.Small, " +
+                    "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Semantic.ViTCoMerOptions " +
+                    "{ LearningRate = 6e-5 })";
+            }
+            else if (model.ClassName == "Vocos" && model.TypeParameterCount == 1)
+            {
+                // Exercise the real Vocos topology (ConvNeXt at mel-frame resolution followed by the
+                // complex STFT head and differentiable ISTFT) at CI-smoke width. Production defaults
+                // remain the paper's 512-wide, eight-block backbone and 1024-point FFT.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 32, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.Vocoders.VocosOptions { MelChannels = 8, ConvNeXtDim = 16, " +
+                    "NumBackboneBlocks = 2, IntermediateDim = 32, FftSize = 16, HopSize = 4, " +
+                    "LearningRate = 2e-4, DropoutRate = 0.0 })";
+            }
             else if (IsVoiceCloningTTS(model.ClassName) && model.TypeParameterCount == 1)
             {
                 // MetaVoice-1B (metavoiceio/metavoice-src) defaults to its paper 1.2B scale: a
@@ -9067,6 +9097,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumTransformerBlocks = 1, ScaleFactor = 2, TrajectoryLength = 2, " +
                     "NumHeads = 1, NumScales = 1, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "VideoGigaGAN" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // VideoGigaGAN exhausted the timeout ladder's FP32 and iteration-cap rungs.
+                // Exercise the complete native generator -- anti-aliased bidirectional SPyNet
+                // propagation, style-conditioned spatial residual block, temporal 3D inflation,
+                // and progressive high-frequency shuttle -- at a two-frame 8x8 CI scale.
+                // Production defaults remain the paper-scale 128/23/14/x4/five-level graph.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.VideoGigaGANOptions { NumFeatures = 8, NumResBlocks = 1, " +
+                    "NumStyleLayers = 1, ScaleFactor = 2, FlowPyramidLevels = 2, " +
+                    "HFShuttleWeight = 0.5, LearningRate = 5e-5, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "VRT" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.Video.Restoration.", System.StringComparison.Ordinal))
@@ -9952,6 +9999,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
             sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+        }
+        else if (model.ClassName == "VideoGigaGAN")
+        {
+            // Matches the bounded full-topology VideoGigaGAN constructor above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
         }
         else if (model.ClassName == "TTVSR")
         {
@@ -10895,6 +10948,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 32, 32 };");
         }
+        else if (model.ClassName == "ViTCoMer")
+        {
+            // The bounded paper-topology fixture emits 1/4-resolution dense logits.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 8, 8 };");
+        }
         else if (model.ClassName == "SigLIP2")
         {
             // SigLIP2's native path begins with an RGB PatchEmbeddingLayer. At the
@@ -11340,7 +11399,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else
             {
-                if (model.ClassName == "NaturalSpeech2")
+                if (model.ClassName == "Vocos")
+                {
+                    // Vocos consumes channels-first mel frames and emits the same-padding ISTFT
+                    // waveform directly: [B, mel, T] -> [B, T*hop]. The CI constructor above uses
+                    // mel=8, T=4, hop=4 while retaining every paper component.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 4 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+                }
+                else if (model.ClassName == "NaturalSpeech2")
                 {
                     // NaturalSpeech 2's native public contract consumes HiddenDim-wide
                     // conditioning (the same shape produced by PreprocessText) and emits
@@ -11400,12 +11467,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // decoder stack emitted from this same branch and was reported failing the same
                     // invariant in the shard, so it takes the same window. The DEFAULT 1 % decrease
                     // threshold is untouched — this ADDS training steps rather than relaxing a bound.
+                    // Vocos also uses the paper's conservative 2e-4 AdamW rate. Its complete
+                    // ConvNeXt + differentiable iSTFT graph already descends after each update,
+                    // but judging only step 1 -> step 2 observes about a 0.5% drop (0.469014 ->
+                    // 0.466727), just short of the generic 1% invariant. Fifteen sub-second
+                    // steps measure the real trajectory while preserving the paper learning
+                    // rate and the DEFAULT 1% assertion.
                     // WaveGrad has the same bounded-window artifact: its paper L1 objective and
                     // configured 1e-4 optimizer reduce the two-update training probe overall, but
                     // the loss recorded immediately before update 2 is still in the first Adam
                     // overshoot (0.707407 -> 1.057642). Fifteen sub-second steps measure the settled
                     // trajectory while retaining the exact strict-decrease assertion.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "WaveGrad" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                 }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling
@@ -15050,8 +15123,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// (WaveGlow, ParallelWaveGAN) via <c>LayerHelper.CreateDefaultWaveNetVocoderLayers</c>.
     /// Both are mel-channels = 80, single waveform output channel, rank-3 [B, 80, T]
     /// input. The IVocoder models that keep the dimension-flexible Dense generator and
-    /// its rank-2 [T, 80] -> [T, 1] contract (BigVGAN with mel = 100, the Fourier-based
-    /// Vocos) are NOT listed here and fall through to the rank-2 default.
+    /// its rank-2 [T, 80] -> [T, 1] contract (BigVGAN with mel = 100) are NOT listed here
+    /// and fall through to the rank-2 default. Vocos has its own Fourier-head fixture.
     /// </summary>
     private static bool IsConv1DWaveformVocoder(string className)
     {

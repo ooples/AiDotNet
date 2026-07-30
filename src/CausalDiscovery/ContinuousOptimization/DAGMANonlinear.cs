@@ -53,6 +53,7 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
     private const double INNER_CONVERGENCE_TOL = 1e-6;
     private const int CHECKPOINT_INTERVAL = 500;
     private const int DEFAULT_HIDDEN_SIZE = 10;
+    private const double EDGE_TOLERANCE = 1e-12;
 
     #endregion
 
@@ -196,7 +197,7 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
                 if (from != to)
                 {
                     double weight = Math.Abs(NumOps.ToDouble(input[from, to]));
-                    if (weight > 0) edges.Add((from, to, weight));
+                    if (weight > EDGE_TOLERANCE) edges.Add((from, to, weight));
                 }
 
         edges.Sort((a, b) => b.Weight.CompareTo(a.Weight));
@@ -218,7 +219,7 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
             if (state[node] == 2) return false;
             state[node] = 1;
             for (int next = 0; next < d; next++)
-                if (next != node && NumOps.ToDouble(graph[node, next]) != 0 && Visit(next))
+                if (next != node && Math.Abs(NumOps.ToDouble(graph[node, next])) > EDGE_TOLERANCE && Visit(next))
                     return true;
             state[node] = 2;
             return false;

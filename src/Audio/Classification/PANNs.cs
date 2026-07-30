@@ -254,7 +254,32 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     #region Helpers
 
-    private T[] ClassifyWindow(Tensor<T> melSpec) { Tensor<T> output; if (IsOnnxMode && OnnxEncoder is not null) { var inp = NormalizeModelInput(melSpec); output = PostprocessOutput(OnnxEncoder.Run(inp)); } else if (_useNativeMode) { output = Predict(melSpec); } else { throw new InvalidOperationException("No model available for classification. Provide an ONNX model path or use native training mode."); } var scores = new T[ClassLabels.Count]; for (int i = 0; i < Math.Min(output.Length, scores.Length); i++) scores[i] = output[i]; return scores; }
+    private T[] ClassifyWindow(Tensor<T> melSpec)
+    {
+        Tensor<T> output;
+        if (IsOnnxMode && OnnxEncoder is not null)
+        {
+            var input = NormalizeModelInput(melSpec);
+            output = PostprocessOutput(OnnxEncoder.Run(input));
+        }
+        else if (_useNativeMode)
+        {
+            output = Predict(melSpec);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "No model available for classification. Provide an ONNX model path or use native training mode.");
+        }
+
+        var scores = new T[ClassLabels.Count];
+        for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
+        {
+            scores[i] = output[i];
+        }
+
+        return scores;
+    }
 
     private Tensor<T> NormalizeModelInput(Tensor<T> input)
     {

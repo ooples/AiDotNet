@@ -2501,7 +2501,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             bool isLastLayer = (i == numLayers - 1);
-            int outputDim = isLastLayer ? outputSize : hiddenSize;
+            int outputDim = isLastLayer ? outputSize : hiddenSize / numHeads;
             int heads = isLastLayer ? 1 : numHeads;
 
             yield return new GraphAttentionLayer<T>(
@@ -2509,9 +2509,13 @@ public static class LayerHelper<T>
                 outputFeatures: outputDim,
                 numHeads: heads,
                 dropoutRate: dropoutRate,
-                activationFunction: isLastLayer ? null : new LeakyReLUActivation<T>(0.2));
+                // The LeakyReLU with slope 0.2 belongs inside the attention-score
+                // function e_ij. The paper applies ELU to the concatenated hidden-head
+                // representation; using a second LeakyReLU here changes the GAT block.
+                activationFunction: isLastLayer ? null : new ELUActivation<T>(),
+                concatenateHeads: !isLastLayer);
 
-            currentInputDim = outputDim;
+            currentInputDim = isLastLayer ? outputDim : outputDim * heads;
         }
 
         // Add final activation based on task type
@@ -7723,6 +7727,39 @@ public static class LayerHelper<T>
     #region Video AI Layers
 
     /// <summary>
+    /// Creates the native VideoGigaGAN generator described by Xu et al. (CVPR 2024).
+    /// </summary>
+    /// <remarks>
+    /// The returned composite owns the complete generator graph: style-conditioned spatial
+    /// residual blocks, temporally inflated convolutions, anti-aliased bidirectional flow
+    /// propagation, progressive pixel-shuffle reconstruction, and the high-frequency shuttle.
+    /// Keeping it as one registered layer preserves the architecture's non-sequential skip and
+    /// recurrent connections while exposing every parameter to the framework.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateVideoGigaGANLayers(
+        int inputChannels = 3,
+        int inputHeight = 64,
+        int inputWidth = 64,
+        int numFeatures = 128,
+        int numResBlocks = 23,
+        int numStyleLayers = 14,
+        int scaleFactor = 4,
+        int flowPyramidLevels = 5,
+        double hfShuttleWeight = 0.5)
+    {
+        yield return new VideoGigaGANGeneratorLayer<T>(
+            inputChannels,
+            inputHeight,
+            inputWidth,
+            numFeatures,
+            numResBlocks,
+            numStyleLayers,
+            scaleFactor,
+            flowPyramidLevels,
+            hfShuttleWeight);
+    }
+
+    /// <summary>
     /// Creates layers for a video super-resolution model (Real-ESRGAN/BasicVSR++ style).
     /// </summary>
     /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
@@ -11574,20 +11611,25 @@ public static class LayerHelper<T>
         int numClasses = 7)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Initial projection
+        // Project the supplied node features to the graph hidden width. Production callers can
+        // provide explicit graph-convolution layers (and adjacency) through Architecture.Layers;
+        // the default feature-only path keeps the same per-node transforms with self information.
         yield return new DenseLayer<T>(hiddenDim, reluActivation);
-        yield return new DropoutLayer<T>(0.5);
 
-        // GCN layers (using dense as approximation)
+        // GCN feature projections. Luo et al. use ReLU in the first graph-convolution layer and
+        // extract the learned node representation from it. Keep ReLU on the compact default stack.
         for (int i = 0; i < numGCNLayers; i++)
         {
             yield return new DenseLayer<T>(hiddenDim, reluActivation);
-            yield return new DropoutLayer<T>(0.5);
         }
 
-        // Classification head
+        // Paper section 3.4 / 4.3: the pooled aspect features feed a two-layer MLP classifier
+        // with tanh and 0.1 dropout, followed by raw class logits for cross-entropy.
+        yield return new DenseLayer<T>(hiddenDim, tanhActivation);
+        yield return new DropoutLayer<T>(0.1);
         yield return new DenseLayer<T>(numClasses, identityActivation);
     }
 
@@ -22520,26 +22562,27 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultVocosLayers(
         int numMels = 100, int hiddenDim = 512,
         int numBackboneBlocks = 8, int intermediateDim = 1536,
-        int numFrequencyBins = 513, double dropoutRate = 0.0)
+        int numFrequencyBins = 513, double dropoutRate = 0.0,
+        int hopLength = 256)
     {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-
-        // Input projection (mel or codec tokens to hidden)
-        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-
-        // ConvNeXt backbone blocks
-        for (int i = 0; i < numBackboneBlocks; i++)
+        if (numFrequencyBins < 2)
+            throw new ArgumentOutOfRangeException(nameof(numFrequencyBins));
+        if (dropoutRate != 0.0)
         {
-            yield return new FullyConnectedLayer<T>(intermediateDim, geluActivation);
-            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            throw new ArgumentException(
+                "The Vocos paper and reference generator do not use dropout in the ConvNeXt backbone. " +
+                "Supply Architecture.Layers to define a custom dropout architecture.",
+                nameof(dropoutRate));
         }
 
-        // ISTFT head: predict magnitude and phase
-        yield return new FullyConnectedLayer<T>(numFrequencyBins, (IActivationFunction<T>?)null);
-        yield return new FullyConnectedLayer<T>(numFrequencyBins, (IActivationFunction<T>?)null);
+        int nFft = (numFrequencyBins - 1) * 2;
+        yield return new VocosGeneratorLayer<T>(
+            numMels,
+            hiddenDim,
+            numBackboneBlocks,
+            intermediateDim,
+            nFft,
+            hopLength);
     }
 
     #endregion
@@ -27053,59 +27096,42 @@ public static class LayerHelper<T>
 
         int h = inputHeight;
         int w = inputWidth;
-        int prevChannels = inputChannels;
-
-        int[] patchKernels = [7, 3, 3, 3];
-        int[] patchStrides = [4, 2, 2, 2];
-        int[] patchPaddings = [3, 1, 1, 1];
-
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
 
         for (int stage = 0; stage < 4; stage++)
         {
             int channels = channelDims[stage];
 
-            // Downsampling stem / patch embedding
-            yield return new ConvolutionalLayer<T>(
-                channels,
-                patchKernels[stage],
-                patchStrides[stage],
-                patchPaddings[stage],
-                relu);
+            if (stage == 0)
+            {
+                // InternImage stem: two 3×3 stride-2 convolutions with GELU,
+                // rather than a ViT-style 7×7 stride-4 patch projection.
+                int stemChannels = System.Math.Max(1, channels / 2);
+                yield return new ConvolutionalLayer<T>(stemChannels, 3, 2, 1, identity);
+                yield return new ActivationLayer<T>((IActivationFunction<T>)new GELUActivation<T>());
+                yield return new ConvolutionalLayer<T>(channels, 3, 2, 1, identity);
+                yield return new ActivationLayer<T>((IActivationFunction<T>)new GELUActivation<T>());
+                h = (h + 1) / 2;
+                h = (h + 1) / 2;
+                w = (w + 1) / 2;
+                w = (w + 1) / 2;
+            }
+            else
+            {
+                // Stage transition: normalized blocks on either side protect
+                // the 3×3 stride-2 channel expansion.
+                yield return new ConvolutionalLayer<T>(channels, 3, 2, 1, identity);
+                h = (h + 1) / 2;
+                w = (w + 1) / 2;
+            }
 
-            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-
-            // DCNv3 blocks (Wang et al. 2023): a grouped deformable 3×3 conv (the DCNv3 core
-            // operator) + a 1×1-expand→1×1-project feed-forward. The grouping is what gives DCNv3 its
-            // parameter efficiency — InternImage uses group width 16 (groups = channels/16, matching the
-            // paper's per-stage groups [4,8,16,32]…[20,40,80,160]); the 3×3 weight is therefore
-            // [channels, channels/groups=16, 3, 3] rather than the full [channels, channels, 3, 3].
-            // (Modulation/mask is omitted here so the path is trainable via the wired DCNv1 autograd; the
-            // fused grouped-deformable kernel + modulation is the production follow-up, #1691.)
+            // Each block owns both paper residual branches: pre-norm grouped
+            // modulated deformable mixing, then pre-norm 4× GELU FFN.
             int dcnGroups = System.Math.Max(1, channels / 16);
             for (int block = 0; block < depths[stage]; block++)
             {
-                // DCNv3 grouped deformable spatial mixing (channels -> channels)
-                yield return new DeformableConvolutionalLayer<T>(
-                    outputChannels: channels,
-                    kernelSize: 3, stride: 1, padding: 1,
-                    groups: dcnGroups, deformGroups: dcnGroups, useModulation: false);
-
-                // Feed-forward network (1×1 expand 4× -> 1×1 project back)
-                int ffnDim = channels * 4;
-                yield return new ConvolutionalLayer<T>(
-                    ffnDim,
-                    1, 1, 0,
-                    relu);
-
-                yield return new ConvolutionalLayer<T>(
-                    channels,
-                    1, 1, 0,
-                    relu);
+                yield return new InternImageBlockLayer<T>(channels, dcnGroups);
             }
-
-            prevChannels = channels;
         }
     }
 
@@ -27282,6 +27308,26 @@ public static class LayerHelper<T>
     #endregion
 
     #region ViTCoMer Layers
+
+    /// <summary>
+    /// Creates the complete native ViT-CoMer graph with parallel ViT/CNN branches,
+    /// MRFP refinement, bidirectional CTI, and the multi-scale segmentation decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateViTCoMerLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int embedDim = 384,
+        int[]? cnnChannels = null,
+        int[]? depths = null,
+        int decoderDim = 256,
+        int numClasses = 150,
+        double dropRate = 0.1)
+    {
+        yield return new ViTCoMerSegmentationLayer<T>(
+            inputChannels, inputHeight, inputWidth, embedDim, cnnChannels, depths,
+            decoderDim, numClasses, dropRate);
+    }
 
     /// <summary>
     /// Creates the ViT-CoMer hybrid encoder layers combining CNN and transformer features.

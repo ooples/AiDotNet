@@ -447,6 +447,16 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             generatorArchitecture.InputType, lossFunction: null);
         Discriminator = CreateNetworkForInputType(discriminatorArchitecture,
             discriminatorArchitecture.InputType, lossFunction: lossFunction);
+
+        // Generator and discriminator are subgraphs of one adversarial update,
+        // not independently-trained top-level models. The GAN keeps the generator
+        // tape open across the discriminator step and freezes/reuses the
+        // discriminator for the generator objective. A standalone fused optimizer
+        // trace on either child cannot represent that parent-owned state transition;
+        // use an explicit graph break (the same contract torch.compile applies to
+        // dynamic/stateful regions) and let the eager nested tapes compose safely.
+        Generator.DisableStandaloneFusedTraining();
+        Discriminator.DisableStandaloneFusedTraining();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         // Initialize optimizers (default to GAN-standard Adam if not provided). Derived GANs can

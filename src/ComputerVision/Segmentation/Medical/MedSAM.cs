@@ -263,14 +263,14 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(
         MedSAMModelSize modelSize, MedSAMOptions? options)
     {
-        var (presetDims, presetDepths, presetDecoder) = modelSize switch
+        (int[] ChannelDims, int[] Depths, int DecoderDim) preset = modelSize switch
         {
-            MedSAMModelSize.ViTBase => ((int[])[64, 128, 320, 768], (int[])[2, 2, 4, 12], 256),
-            _ => ((int[])[64, 128, 320, 768], (int[])[2, 2, 4, 12], 256)
+            MedSAMModelSize.ViTBase => ([64, 128, 320, 768], [2, 2, 4, 12], 256),
+            _ => ([64, 128, 320, 768], [2, 2, 4, 12], 256)
         };
 
-        int[] dims = options?.ChannelDims is { Length: > 0 } d ? d : presetDims;
-        int[] depths = options?.Depths is { Length: > 0 } p ? p : presetDepths;
+        int[] dims = options?.ChannelDims is { Length: > 0 } d ? d : preset.ChannelDims;
+        int[] depths = options?.Depths is { Length: > 0 } p ? p : preset.Depths;
         if (dims.Length != depths.Length)
         {
             throw new ArgumentException(
@@ -278,7 +278,7 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
                 "same number of stages.", nameof(options));
         }
 
-        return (dims, depths, options?.DecoderDim ?? presetDecoder);
+        return (dims, depths, options?.DecoderDim ?? preset.DecoderDim);
     }
 
     private Tensor<T> Forward(Tensor<T> input)
