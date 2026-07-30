@@ -35,6 +35,9 @@ public class SqueezeformerOptions : ModelOptions
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
+        PeakLearningRate = other.PeakLearningRate;
+        WarmupSteps = other.WarmupSteps;
+        WeightDecay = other.WeightDecay;
         Language = other.Language;
         Vocabulary = other.Vocabulary;
     }
@@ -50,6 +53,44 @@ public class SqueezeformerOptions : ModelOptions
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets the PEAK learning rate for the Noam-annealed schedule.
+    /// </summary>
+    /// <value>
+    /// Defaults to 2e-3, the paper's peak rate for the SMALL variant (appendix A.1 gives 2e-3, 1.5e-3
+    /// and {1, 0.5}e-3 for the small, medium and large variants respectively).
+    /// </value>
+    /// <remarks>
+    /// In the paper this is the PEAK of a warmup-then-decay schedule rather than a constant rate. With
+    /// <see cref="WarmupSteps"/> at its default of 0 it is applied flat, so for long training runs set
+    /// WarmupSteps as well — the paper warms up over 20 epochs before reaching this value, and reports
+    /// the architecture failing to converge at comparable peak rates when a stabilizing component is
+    /// removed. Gradient clipping is enabled alongside it as a safeguard.
+    /// </remarks>
+    public double PeakLearningRate { get; set; } = 2e-3;
+
+    /// <summary>
+    /// Gets or sets the warmup steps for the Noam-annealed learning-rate schedule.
+    /// </summary>
+    /// <remarks>
+    /// The paper specifies warmup in EPOCHS (20, then holding the peak for a further 160, decaying with
+    /// d = 1), which cannot be converted to steps without knowing the dataset size and batch size — it
+    /// trained on LibriSpeech-960h at batch 1024/2048. Defaults to 0, meaning NO warmup: a non-zero
+    /// default would hold the learning rate near zero for the whole of any short run. Set it from your
+    /// own dataset size (20 epochs worth of steps) to reproduce the paper exactly.
+    /// </remarks>
+    public int WarmupSteps { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets AdamW's decoupled weight decay.
+    /// </summary>
+    /// <value>
+    /// Defaults to 5e-4 — "We use AdamW optimizer with weight decay 5e-4 for all models"
+    /// (appendix A.1). Note this is an order of magnitude below AdamW's usual 0.01 default.
+    /// </value>
+    public double WeightDecay { get; set; } = 5e-4;
+
     public string Language { get; set; } = "en";
     public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
     private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
