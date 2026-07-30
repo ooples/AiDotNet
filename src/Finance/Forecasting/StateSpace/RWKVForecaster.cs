@@ -222,6 +222,33 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
 
     #endregion
 
+    /// <summary>
+    /// RWKV's time-mixing is a RECURRENT per-timestep update, so its forward is not a static operation
+    /// graph that can be compiled once and replayed safely.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every sibling in this family already opts out — HiPPO in this same folder, plus
+    /// GatedDeltaNet, GLA, Griffin and Hawk — for exactly this reason. RWKV was the outlier, silently
+    /// inheriting the base default of <c>true</c>.
+    /// </para>
+    /// <para>
+    /// The measured symptom was ForwardPass_ShouldBeFinite_AfterTraining and
+    /// Clone_AfterTraining_ShouldPreserveLearnedWeights failing on roughly half of all runs (5 of 10
+    /// draws locally), with the whole parameter buffer going NaN after a single training step. A replayed
+    /// plan over a recurrent forward reads trace-time state that is no longer valid, which is
+    /// order-dependent and therefore intermittent rather than deterministic.
+    /// </para>
+    /// <para>
+    /// This also explains two observations that had made the fault look like a memory-allocator problem.
+    /// It reproduced ONLY with stateful optimizers because the fused path requires
+    /// <c>IFusedOptimizerSpec</c>, which plain gradient descent does not implement — so compiled training
+    /// never engaged for GD. And it survived a zero learning rate because a NaN arriving through the
+    /// graph is still NaN after being multiplied by zero.
+    /// </para>
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
+
     #region Initialization
 
     /// <inheritdoc/>
