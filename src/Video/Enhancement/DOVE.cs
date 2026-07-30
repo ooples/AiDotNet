@@ -50,10 +50,10 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("DOVE: Harnessing Large-Scale Video Diffusion Priors for General Video Restoration",
-    "https://arxiv.org/abs/2501.00766",
+[ResearchPaper("DOVE: Efficient One-Step Diffusion Model for Real-World Video Super-Resolution",
+    "https://arxiv.org/abs/2505.16239",
     Year = 2025,
-    Authors = "Zheyuan Chen, Yue Wu, Zijian Chen, Ming Lu, Shanghang Zhang")]
+    Authors = "Zheng Chen, Zichen Zou, Kewei Zhang, Xiongfei Su, Xin Yuan, Yong Guo, Yulun Zhang")]
 public class DOVE<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
