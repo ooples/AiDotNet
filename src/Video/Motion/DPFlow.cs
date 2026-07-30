@@ -44,10 +44,10 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("DPFlow: Deformable Patches for Optical Flow Estimation",
-    "https://arxiv.org/abs/2501.10440",
+[ResearchPaper("DPFlow: Adaptive Optical Flow Estimation with a Dual-Pyramid Framework",
+    "https://arxiv.org/abs/2503.14880",
     Year = 2025,
-    Authors = "Donghao Zhang, Yibing Song")]
+    Authors = "Henrique Morimitsu, Xiaobin Zhu, Roberto M. Cesar Jr., Xiangyang Ji, Xu-Cheng Yin")]
 public class DPFlow<T> : OpticalFlowBase<T>
 {
     private readonly DPFlowOptions _options;

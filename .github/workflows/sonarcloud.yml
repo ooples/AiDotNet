@@ -126,7 +126,10 @@ jobs:
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The traced C# build alone consumed the old 20-minute job budget on PR #1789;
+    # cancellation began before the analyze step could run. Match the build/test ceiling
+    # so CodeQL has time to finish extraction and upload on generated-source-heavy changes.
+    timeout-minutes: 45
     if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
@@ -712,36 +715,25 @@ jobs:
           # A-F was a single serial $heavyShard that OOM-killed the runner (shutdown signal
           # ~2.5 min in) — it is DENSE with full-scale codec-LM TTS models (Amphion, AudioLM,
           # Bark, ChatTTS, Chatterbox, CosyVoice*, ...) whose per-model peak (~2.6 GB weights +
-          # Adam state) stacks past the 16 GB envelope even serialized. Split A-F → A-C + D-F so
-          # each serial half holds fewer heavy models at once. Gap-free + non-overlapping: union == A-F.
-          # Split from a single "Generated Layers A-C" shard, which measurably could not finish.
-          # A full local run under the CI profile (16 GB / 4 CPU, serialized, same filter) exited
-          # 124 having completed 1,313 of its 3,625 tests — 36% — so the shard needed roughly
-          # 2.5x its 45-minute budget. Capping helps but cannot close a gap that size on its own:
-          # the four most expensive classes alone (CASTLEAlgorithm 381s, CodeSwitchingASR 266s,
-          # CATSeg 189s, AudioPaLM 177s) are ~17 minutes alone.
-          #
-          # Split by leading letter, following the same prefix pattern already used for the M
-          # sub-shards. Three jobs run concurrently instead of one job serializing all three
-          # letters, so the wall-clock each must fit into is roughly a third of the work.
+          # Adam state) stacks past the 16 GB envelope even serialized. Split A-F → A-C + D-F;
+          # A-C then reached the 45-minute ceiling after only 2,516/3,625 results, leaving 51
+          # classes untouched. Isolate its initials (A=1,008, B=824, C=1,793 tests) so all three
+          # retain headroom. Gap-free + non-overlapping: union == the old A-C shard.
           - name: ModelFamily - Generated Layers A
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
-              FullyQualifiedName~ModelFamilyTests.Generated&
-              FullyQualifiedName~Generated.A
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.A
           - name: ModelFamily - Generated Layers B
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
-              FullyQualifiedName~ModelFamilyTests.Generated&
-              FullyQualifiedName~Generated.B
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.B
           - name: ModelFamily - Generated Layers C
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
-              FullyQualifiedName~ModelFamilyTests.Generated&
-              FullyQualifiedName~Generated.C
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.C
           - name: ModelFamily - Generated Layers D-F
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -894,9 +886,9 @@ jobs:
               (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.SU|FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sil|FullyQualifiedName~Generated.Sim|FullyQualifiedName~Generated.Sw|FullyQualifiedName~Generated.Sy)
           # The T-Z tail is 201 model classes / 4,378 tests. T remains isolated.
           # U-Z contains 2,676 tests across 119 classes and hit the 45-minute job limit
-          # after exposing only 999 results. A two-way split still left 2,171 tests in
-          # U-W, so use the discovered test list plus the partial timing trace to isolate
-          # each substantial initial: U=493, V=1,000, W=678, X=212, Y-Z=293 tests.
+          # after exposing only 999 results. Isolating each substantial initial fixed U/W/X/Y-Z,
+          # but V still reached the limit after 892/1,000 results. Split its 43 classes into four
+          # prefix groups: VA-VF=247, Video=224, Vi-VM=346, Vo-VR=183 tests.
           - name: ModelFamily - Generated Layers T
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -907,11 +899,29 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.U
-          - name: ModelFamily - Generated Layers V
+          - name: ModelFamily - Generated Layers VA-VF
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
-              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.V
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.VA|FullyQualifiedName~Generated.VF)
+          - name: ModelFamily - Generated Layers Video
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.Video
+          - name: ModelFamily - Generated Layers Vi-VM
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              ((FullyQualifiedName~Generated.Vi&FullyQualifiedName!~Generated.Video)|FullyQualifiedName~Generated.VM)
+          - name: ModelFamily - Generated Layers Vo-VR
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.Vo|FullyQualifiedName~Generated.VR)
           - name: ModelFamily - Generated Layers W
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -1179,7 +1189,10 @@ jobs:
             'ModelFamily - Generated Layers Sil-Sy',
             'ModelFamily - Generated Layers T',
             'ModelFamily - Generated Layers U',
-            'ModelFamily - Generated Layers V',
+            'ModelFamily - Generated Layers VA-VF',
+            'ModelFamily - Generated Layers Video',
+            'ModelFamily - Generated Layers Vi-VM',
+            'ModelFamily - Generated Layers Vo-VR',
             'ModelFamily - Generated Layers W',
             'ModelFamily - Generated Layers X',
             'ModelFamily - Generated Layers Y-Z',

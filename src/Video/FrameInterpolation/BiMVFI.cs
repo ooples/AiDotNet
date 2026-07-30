@@ -52,9 +52,9 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("BiMVFI: Bidirectional Motion Field-Based Video Frame Interpolation",
-    "https://arxiv.org/abs/2501.07838",
-    Year = 2025,
+[ResearchPaper("BiM-VFI: Bidirectional Motion Field-Guided Frame Interpolation for Video with Non-uniform Motions",
+    "https://arxiv.org/abs/2412.11365",
+    Year = 2024,
     Authors = "Wonyong Seo, Jihyong Oh, Munchurl Kim")]
 public class BiMVFI<T> : FrameInterpolationBase<T>
 {

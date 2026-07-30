@@ -44,7 +44,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Branchformer: Parallel MLP-Attention Architectures to Achieve High Accuracy and Linear-Time Complexity for Speech Processing", "https://arxiv.org/abs/2207.02971", Year = 2022, Authors = "Peng et al.")]
+[ResearchPaper("Branchformer: Parallel MLP-Attention Architectures to Capture Local and Global Context for Speech Recognition and Understanding", "https://arxiv.org/abs/2207.02971", Year = 2022, Authors = "Peng et al.")]
 public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly BranchformerOptions _options;

@@ -47,10 +47,6 @@ namespace AiDotNet.Video.Denoising;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-// BSVD stands for Bidirectional Streaming Video Denoising. The previous title here,
-// "Blind Spot Video Denoising", named an unrelated technique — blind-spot networks are a
-// self-supervised denoising family — and the arXiv id pointed elsewhere. Corrected to the
-// published title and identifier.
 [ResearchPaper("Real-time Streaming Video Denoising with Bidirectional Buffers",
     "https://arxiv.org/abs/2207.06937",
     Year = 2022,

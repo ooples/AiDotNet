@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "Perception Encoder: The best satisfies all",
+    "Perception Encoder: The best visual embeddings are not at the output of the network",
     "https://arxiv.org/abs/2504.13181",
     Year = 2025,
     Authors = "Meta"
