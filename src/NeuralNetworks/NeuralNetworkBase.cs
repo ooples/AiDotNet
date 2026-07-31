@@ -10599,9 +10599,37 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         }
                     }
 
-                    if (srcLayer.ParameterCount > 0 && dstLayer.ParameterCount == srcLayer.ParameterCount)
+                    // Do not require a freshly constructed destination to report the source's full
+                    // parameter count before asking it to load those parameters. Composite layers can
+                    // own lazy children while their own top-level shape is already concrete (for
+                    // example TransformerEncoderBlock's FFN projections). Their SetParameters contract
+                    // materializes those children from the serialized vector, but the old equality
+                    // guard skipped the call entirely and returned a clone with fresh-random nested
+                    // weights. This only surfaced once a model crossed the large-copy threshold and
+                    // bypassed the normal layer deserializer (XTTSv2Clone's full transformer stack).
+                    if (srcLayer.ParameterCount > 0)
                     {
-                        dstLayer.SetParameters(srcLayer.GetParameters());
+                        try
+                        {
+                            dstLayer.SetParameters(srcLayer.GetParameters());
+                        }
+                        catch (ArgumentException ex)
+                        {
+                            (largeCopy as IDisposable)?.Dispose();
+                            throw new InvalidOperationException(
+                                $"Cannot clone large model layer {i} ({srcLayer.GetType().Name}): " +
+                                $"the destination could not materialize {srcLayer.ParameterCount} parameters.",
+                                ex);
+                        }
+
+                        if (dstLayer.ParameterCount != srcLayer.ParameterCount)
+                        {
+                            (largeCopy as IDisposable)?.Dispose();
+                            throw new InvalidOperationException(
+                                $"Cannot clone large model layer {i} ({srcLayer.GetType().Name}): " +
+                                $"expected {srcLayer.ParameterCount} parameters after loading, but the " +
+                                $"destination exposes {dstLayer.ParameterCount}.");
+                        }
                     }
                     if (srcLayer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> srcExtras
                         && dstLayer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> dstExtras

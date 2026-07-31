@@ -136,7 +136,7 @@ public partial class Conv1DLayer<T> : LayerBase<T>
         [LayerState] int kernelSize,
         [LayerState] int dilation = 1,
         [LayerState] int stride = 1,
-        int? padding = null,
+        [LayerState(Key = "Padding")] int? padding = null,
         IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { inputChannels, -1 }, new[] { outputChannels, -1 },
