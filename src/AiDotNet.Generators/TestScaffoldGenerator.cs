@@ -13407,7 +13407,56 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
         }
 
+        generated = DropDuplicateOverrides(generated);
+
         context.AddSource(hintName, generated);
+    }
+
+    /// <summary>
+    /// Removes repeated single-line <c>protected override</c> declarations, keeping the first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A model can be matched by more than one emission site — a per-model pin plus a per-family
+    /// chain, or two per-model blocks that a rebase left side by side. Each site appends without
+    /// knowing what the others already wrote, so the class ends up declaring the same member twice
+    /// and the generated code fails to compile with CS0102.
+    /// </para>
+    /// <para>
+    /// This has now happened repeatedly (PANNsModel's memorization count was duplicated by a
+    /// restore, and GraFPrint, PANNs, Pengi and SALMONN each collided with a family chain), and
+    /// every occurrence breaks the WHOLE test assembly rather than the one model at fault — so
+    /// nobody can build or run anything until it is found. Enforcing uniqueness once, here, is
+    /// what stops the next collision costing another debugging session.
+    /// </para>
+    /// <para>
+    /// First writer wins, which preserves the existing precedence: the specific per-model pins are
+    /// emitted before the generic family chains. Only property-style declarations are considered;
+    /// method overrides are left alone so genuine overloads are never touched.
+    /// </para>
+    /// </remarks>
+    private static string DropDuplicateOverrides(string source)
+    {
+        var lines = source.Split('\n');
+        var seen = new HashSet<string>(System.StringComparer.Ordinal);
+        var kept = new System.Text.StringBuilder(source.Length);
+
+        foreach (var line in lines)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(
+                line, @"^\s*protected override [^\s]+(?:<[^>]*>)?(?:\[\])? ([A-Za-z_][A-Za-z0-9_]*)\s*=>");
+
+            if (match.Success && !seen.Add(match.Groups[1].Value))
+                continue;
+
+            kept.Append(line).Append('\n');
+        }
+
+        // Split/join on '\n' adds a trailing newline the original may not have had.
+        if (kept.Length > 0 && !source.EndsWith("\n", System.StringComparison.Ordinal))
+            kept.Length -= 1;
+
+        return kept.ToString();
     }
 
     /// <summary>
