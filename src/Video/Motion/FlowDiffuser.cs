@@ -94,6 +94,18 @@ public class FlowDiffuser<T> : OpticalFlowBase<T>
         _options = options ?? new FlowDiffuserOptions();
         Options = _options;
 
+        if (_options.LearningRate is double learningRate)
+        {
+            if (learningRate <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "Learning rate must be greater than zero.");
+
+            SetBaseTrainOptimizer(new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = learningRate
+                }));
+        }
+
         _numFeatures = numFeatures;
         _numLayers = numLayers;
         _processingBlocks = [];
