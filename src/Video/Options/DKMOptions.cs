@@ -11,4 +11,11 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class DKMOptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Gets or sets an optional Adam learning rate for native training.
+    /// </summary>
+    /// <remarks>
+    /// When <see langword="null"/>, DKM retains the framework's default optimizer behavior.
+    /// </remarks>
+    public double? LearningRate { get; set; }
 }

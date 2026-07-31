@@ -9492,6 +9492,44 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(hiddenDim: 16, outputDim: 8, epochs: 10, " +
                     "learningRate: 0.001, contamination: 0.1, randomSeed: 42)";
             }
+            else if (model.ClassName is "DKM" or "FlowDiffuser"
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Motion.", System.StringComparison.Ordinal))
+            {
+                // Both models estimate a dense two-channel motion field from two RGB frames stacked
+                // channel-wise. Keep their native convolutional topology and default feature/layer
+                // counts, but declare the 64x64 geometry emitted by the generated optical-flow fixture.
+                // The public parameterless constructors retain their production 256x256 defaults.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
+                    $"options: new AiDotNet.Video.Options.{model.ClassName}Options {{ LearningRate = 1e-4 }})";
+            }
+            else if (model.ClassName == "DIFRINT"
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Stabilization.", System.StringComparison.Ordinal))
+            {
+                // DIFRINT performs full-frame stabilization through iterative frame interpolation.
+                // Exercise the same native layers and default iteration count at the generated
+                // temporal fixture's 32x32 resolution; production defaults remain 256x256.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3))";
+            }
+            else if (model.ClassName == "FastDVDNet"
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Denoising.", System.StringComparison.Ordinal))
+            {
+                // FastDVDNet's native multi-frame denoising stack is unchanged. Only align its
+                // declared spatial geometry with the generated 32x32 video fixture; the public
+                // parameterless constructor retains the production 256x256 default.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3))";
+            }
             // These models expose convenient parameterless constructors that intentionally build their
             // paper/default scale. Do not let the generic fallback shadow their explicit CI-smoke branches
             // below. Production behavior is unchanged; only generated fixtures use the bounded constructors.

@@ -475,7 +475,10 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         var config = new EfficientNetConfiguration(
             _configuration.Variant,
             _configuration.NumClasses,
-            _configuration.InputChannels);
+            _configuration.InputChannels,
+            _configuration.CustomInputHeight,
+            _configuration.CustomWidthMultiplier,
+            _configuration.CustomDepthMultiplier);
 
         return new EfficientNetNetwork<T>(Architecture, config, _optimizer, _lossFunction);
     }
