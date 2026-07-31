@@ -2,6 +2,7 @@ using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.ActionRecognition;
 using AiDotNet.Video.Denoising;
 using AiDotNet.Video.Depth;
@@ -639,6 +640,54 @@ public class VideoExtendedIntegrationTests
         var arch = CreateArch();
         var model = new VideoCLIP<double>(arch);
         Assert.True(model.SupportsTraining);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task VideoCLIP_CloneTraining_UpdatesPublishedParametersOnlyOnClone()
+    {
+        await Task.Yield();
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4);
+        var options = new VideoCLIPVideoOptions
+        {
+            HiddenDimension = 32,
+            NumSpatialBlocks = 1,
+            NumTemporalBlocks = 1,
+            NumTextBlocks = 1,
+            WarmupSteps = 0
+        };
+        using var source = new VideoCLIP<float>(
+            arch, numFrames: 4, embeddingDim: 4, textMaxLength: 8,
+            vocabSize: 64, options: options);
+        var input = new Tensor<float>([4, 3, 32, 32]);
+        for (int i = 0; i < input.Length; i++)
+            input[i] = (float)Math.Sin(i * 0.01);
+        var target = new Tensor<float>(new[] { 0.1f, 0.2f, 0.3f, 0.4f }, [4]);
+
+        _ = source.Predict(input); // Materialize lazy convolution parameters before cloning.
+        using var clone = (VideoCLIP<float>)source.Clone();
+        var sourceBefore = source.GetParameters().Clone();
+        var cloneBefore = clone.GetParameters().Clone();
+
+        clone.Train(input, target);
+
+        var sourceAfter = source.GetParameters();
+        var cloneAfter = clone.GetParameters();
+        double sourceMaxDelta = 0.0;
+        double cloneMaxDelta = 0.0;
+        for (int i = 0; i < cloneBefore.Length; i++)
+        {
+            sourceMaxDelta = Math.Max(
+                sourceMaxDelta, Math.Abs(sourceAfter[i] - sourceBefore[i]));
+            cloneMaxDelta = Math.Max(
+                cloneMaxDelta, Math.Abs(cloneAfter[i] - cloneBefore[i]));
+        }
+
+        Assert.Equal(0.0, sourceMaxDelta);
+        Assert.True(cloneMaxDelta > 0.0,
+            "Training a cloned VideoCLIP did not update its framework-visible parameters.");
     }
 
     [Fact(Timeout = 120000)]

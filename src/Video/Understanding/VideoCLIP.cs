@@ -42,7 +42,7 @@ namespace AiDotNet.Video.Understanding;
 /// - Contrastive learning on video-text pairs
 /// - Temporal transformer for video understanding
 /// - Text transformer for language understanding
-/// - Joint embedding space with cosine similarity
+/// - Joint embedding space with dot-product similarity
 /// - Pre-trained on large-scale video-text datasets
 /// </para>
 /// <para>
@@ -197,7 +197,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// <param name="vocabPath">Optional path to CLIP vocabulary JSON file for production tokenization.</param>
     /// <param name="mergesPath">Optional path to CLIP BPE merges file for production tokenization.</param>
     /// <param name="options">Video and text encoder configuration.</param>
-    /// <param name="optimizer">Optional optimizer. Defaults to AdamW configured by <paramref name="options"/>.</param>
+    /// <param name="optimizer">Optional optimizer. Defaults to Adam configured by <paramref name="options"/>.</param>
     /// <param name="lossFunction">Optional objective for generic embedding training. Defaults to mean squared error.</param>
     /// <remarks>
     /// <para>
@@ -215,7 +215,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int embeddingDim = 512,
         int textMaxLength = 77,
         int vocabSize = 49408,
-        double temperature = 0.07,
+        double temperature = 1.0,
         int hiddenDim = 768,
         string? vocabPath = null,
         string? mergesPath = null,
@@ -374,7 +374,6 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         embedding = Engine.Reshape(
             embedding,
             [embeddingBatchSize, embedding.Length / embeddingBatchSize]);
-        embedding = L2Normalize(embedding);
 
         if (!hasBatch)
         {
@@ -450,12 +449,19 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         // Final layer norm
         features = TextLayerNorm(features);
 
-        // Take [EOS] token embedding (last position before padding, following CLIP)
-        var eosFeature = ExtractEOSFeature(features);
+        // VideoCLIP average-pools the valid text-token states (Xu et al.,
+        // EMNLP 2021, Eq. 3). It does not use CLIP's EOS-token pooling.
+        var validFeatures = Engine.TensorSlice(
+            features,
+            [0, 0, 0, 0],
+            [batchSize, features.Shape[1], features.Shape[2], seqLen]);
+        var pooledText = GlobalAveragePool(validFeatures);
 
         // Project to embedding space
-        var embedding = _textProjection.Forward(eosFeature);
-        embedding = L2Normalize(embedding);
+        var embedding = _textProjection.Forward(pooledText);
+        embedding = Engine.Reshape(
+            embedding,
+            [batchSize, embedding.Length / batchSize]);
 
         if (!hasBatch)
         {
@@ -473,7 +479,8 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// <returns>Similarity score (higher = more similar).</returns>
     public double ComputeSimilarity(Tensor<T> videoEmbedding, Tensor<T> textEmbedding)
     {
-        return CosineSimilarity(videoEmbedding, textEmbedding);
+        return NumOps.ToDouble(VectorHelper.DotProduct(
+            videoEmbedding.ToVector(), textEmbedding.ToVector()));
     }
 
     /// <summary>
@@ -690,6 +697,12 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
                 features = ApplyGELU(features);
             }
 
+            // VideoCLIP consumes features from a pretrained video backbone and
+            // explicitly stops gradients at that boundary (Xu et al., 2021,
+            // Eq. 1). The temporal aggregation and projection above the frozen
+            // backbone remain trainable.
+            features = Engine.StopGradient(features);
+
             allFrameFeatures.Add(features);
         }
 
@@ -759,45 +772,9 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
             [0, 2, 3, 1]);
     }
 
-    private Tensor<T> ExtractEOSFeature(Tensor<T> features)
-    {
-        int batchSize = features.Shape[0];
-        int channels = features.Shape[1];
-        int seqLen = features.Shape[3];
-
-        // Extract feature at last position
-        var eosFeature = new Tensor<T>([batchSize, channels, 1, 1]);
-        int lastPos = seqLen - 1;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                eosFeature[b, c, 0, 0] = features[b, c, 0, lastPos];
-            }
-        }
-
-        return eosFeature;
-    }
-
     private Tensor<T> GlobalAveragePool(Tensor<T> input)
     {
         return Engine.ReduceMean(input, [2, 3], keepDims: true);
-    }
-
-    private Tensor<T> L2Normalize(Tensor<T> embedding)
-    {
-        int featureAxis = embedding.Rank - 1;
-        var squared = Engine.TensorMultiply(embedding, embedding);
-        var sumSquared = Engine.ReduceSum(squared, [featureAxis], keepDims: true);
-        var norm = Engine.TensorSqrt(
-            Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-6)));
-        return Engine.TensorBroadcastDivide(embedding, norm);
-    }
-
-    private double CosineSimilarity(Tensor<T> a, Tensor<T> b)
-    {
-        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
     }
 
     private List<double> Softmax(List<double> values, double temperature)
@@ -1229,7 +1206,6 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadDouble();
-
         // Restore the learned embedding tables written above. The geometry fields are discarded
         // because they are readonly and the constructor has already rebuilt this instance at the
         // right sizes; these tensors, by contrast, carry trained values that only the stream has.
