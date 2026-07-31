@@ -10113,6 +10113,44 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
 
+        // GraFPrint is a fingerprint EMBEDDING model whose constructor branch pins outputSize: 4 /
+        // EmbeddingDim = 4, so Predict returns a 4-value embedding. Without a pin here the scaffold
+        // inherits EmbeddingModelTestBase's default OutputShape [1, 1] — product 1 — and
+        // OutputDimensionality_MatchesEmbeddingDim compared that 1 against the model's correct 4.
+        // The MODEL was right; the generated contract was wrong. InputShape is pinned alongside it
+        // because the two must agree: the ctor declares inputHeight: 64, inputWidth: 32, inputDepth: 1,
+        // which the default audio fixture does not match. Emitted here, right after the ctor, because
+        // this model reaches none of the per-family shape chains below.
+        if (model.ClassName == "PANNs")
+        {
+            // PANNs' fixture input is [depth, time, mels] = [1, 64, 32] and the MEL axis is last.
+            // AudioNNModelTestBase.VariableLengthAxis defaults to the last axis, so
+            // DifferentInputLengths_ShouldNotCrash halved the mel count to 16 while the CNN14 front end's
+            // per-mel BatchNorm still expects 32, giving "Tensors with shapes [1, 16, 32, 1] and
+            // [1, 32, 1, 1] cannot be broadcast". A shorter CLIP is fewer FRAMES, so the variable-length
+            // axis is time (axis 1); the mel count is a fixed property of the front end.
+            sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+        }
+        if (model.ClassName == "Pengi")
+        {
+            // Pengi is an audio-language transformer: its input is [batch, tokens, embedDim] and the
+            // embedDim is FIXED by the attention projection weights (AudioEncoderDim = LLMHiddenDim = 128
+            // in the generated fixture). AudioNNModelTestBase.VariableLengthAxis defaults to the LAST
+            // axis, so DifferentInputLengths_ShouldNotCrash halved the embedding width instead of the
+            // sequence and MultiHeadAttentionLayer rejected it: "Input embedding dimension (64) does not
+            // match weight dimension (128). Query shape: [1, 1, 64], Weights shape: [128, 128]".
+            //
+            // That base property's own documentation names Pengi as the model that must override it. The
+            // input also needs a real token axis for the halving to mean anything, so both are pinned
+            // together: 4 tokens halve to 2 while the embedding width stays 128.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 4, 128 };");
+            sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+        }
+        if (model.ClassName == "GraFPrint")
+        {
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
         if (GradientCheckOptOutClassNames.Contains(model.ClassName))
             sb.AppendLine("    protected override bool GradientCheckApplicable => false;");
 
