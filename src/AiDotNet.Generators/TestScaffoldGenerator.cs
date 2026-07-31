@@ -10141,6 +10141,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MemorizationTaskIterations => 3;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
         }
+        if (model.ClassName == "PANNsModel")
+        {
+            // LossStrictlyDecreasesOnMemorizationTask wants a 1% reduction and PANNsModel reached only
+            // ~0.34% at the default 100 steps (0.724477 -> 0.721986). It IS learning, just under-trained
+            // for its depth and learning rate, so it gets more steps and the 1% assertion stays strict.
+            // 400 completes inside the 180 s gate; SALMONN at the same count does not, which is why the
+            // two are pinned separately.
+            sb.AppendLine("    protected override int MemorizationTaskIterations => 400;");
+        }
         if (model.ClassName == "PANNs")
         {
             // PANNs' fixture input is [depth, time, mels] = [1, 64, 32] and the MEL axis is last.
