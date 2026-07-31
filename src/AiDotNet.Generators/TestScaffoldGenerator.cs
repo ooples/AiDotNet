@@ -10106,19 +10106,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
 
-        // GraFPrint is a fingerprint EMBEDDING model whose constructor branch pins outputSize: 4 /
-        // EmbeddingDim = 4, so Predict returns a 4-value embedding. Without a pin here the scaffold
-        // inherits EmbeddingModelTestBase's default OutputShape [1, 1] — product 1 — and
-        // OutputDimensionality_MatchesEmbeddingDim compared that 1 against the model's correct 4.
-        // The MODEL was right; the generated contract was wrong. InputShape is pinned alongside it
-        // because the two must agree: the ctor declares inputHeight: 64, inputWidth: 32, inputDepth: 1,
-        // which the default audio fixture does not match. Emitted here, right after the ctor, because
-        // this model reaches none of the per-family shape chains below.
-        if (model.ClassName == "GraFPrint")
-        {
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
-        }
         if (GradientCheckOptOutClassNames.Contains(model.ClassName))
             sb.AppendLine("    protected override bool GradientCheckApplicable => false;");
 
@@ -11700,8 +11687,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
             }
-            else if (model.ClassName == "DeepgramNova2")
-            if (model.ClassName == "WhisperModel")
+            else if (model.ClassName == "WhisperModel")
             {
                 // Whisper consumes raw 16 kHz waveform samples and predicts next-token
                 // vocabulary logits. The generic [1,64,32] audio-feature fixture is not
@@ -12977,22 +12963,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // six real steps (enough to clear warm-up and show the descent) at roughly a third
             // of the cost. Tolerances and thresholds are untouched.
             sb.AppendLine("    protected override int TrainingIterations => 2;");
-        }
-
-        // Squeezeformer routes through the specialized Conformer-family test
-        // scaffold rather than the generic audio fallback, so roster membership
-        // floats it but does not emit that fallback's bounded iteration counts.
-        // Its exact MoreData timeout still reported the generic 50-vs-200 budget
-        // after the reduced public-options fixture was introduced. Complete the
-        // timeout ladder with the same 1-vs-2 cap used by the other floated ASR
-        // encoders; the real forward/backward/update path remains exercised.
-        if (model.ClassName == "Squeezeformer")
-        {
-            sb.AppendLine("    protected override int TrainingIterations => 2;");
-            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-            sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
-            sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
         }
 
         // DiffCutSegmentation keeps its Stable-Diffusion encoder widths
