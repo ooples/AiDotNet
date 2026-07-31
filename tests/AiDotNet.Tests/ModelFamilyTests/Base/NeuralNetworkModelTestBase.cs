@@ -121,7 +121,123 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
     protected abstract INeuralNetworkModel<T> CreateNetwork();
 
-    protected virtual int[] InputShape => [1, 4];
+    /// <summary>
+    /// The probe shape every invariant feeds the model, as [batch, ...per-sample].
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Derived from the model's OWN declaration — <c>GetArchitecture().GetInputShape()</c> — rather
+    /// than a fixed literal. The architecture already states the contract (<c>InputType</c> plus the
+    /// height/width/depth/frames it was constructed with); nothing else has to agree with it by hand.
+    /// </para>
+    /// <para>
+    /// This used to be a flat <c>[1, 4]</c>, which silently disagreed with every model whose real
+    /// contract is wider or higher-rank. When a model then tightened its contract — CIF moving its
+    /// alignment onto [B, S, D], for one — the probe kept feeding rank-2 and the mismatch surfaced
+    /// far downstream as "requires rank-3", "Matrix dimensions incompatible", or a declared-vs-actual
+    /// output-shape disagreement. Reading the declaration means a contract change updates its own
+    /// tests, so that drift cannot reopen.
+    /// </para>
+    /// <para>
+    /// A fixture override still wins; this only replaces the fallback. The literal is kept for
+    /// models whose architecture cannot express a shape (no layers, degenerate dims), so nothing
+    /// that passes today loses its probe.
+    /// </para>
+    /// </remarks>
+    protected virtual int[] InputShape => DeclaredInputShape;
+
+    private static readonly int[] s_fallbackInputShape = [1, 4];
+
+    /// <summary>
+    /// Upper bound applied to input axes no weight is sized against.
+    /// </summary>
+    /// <remarks>
+    /// A model's declared geometry is production-scale — a 256x256 frame, a full mel sequence — and
+    /// feeding it verbatim pushed a single Predict past the 120 s per-test budget and aborted the
+    /// host. The rank and the axis SEMANTICS are what the invariants need; the magnitudes are not.
+    /// So free axes are capped and bound axes are left exact (see <see cref="ClampFreeAxes"/>).
+    /// </remarks>
+    private const int MaxFreeAxisExtent = 32;
+
+    /// <summary>
+    /// Caps the axes a model does not bind parameters to, in place.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Channel / feature / mel extents are structural: weights are sized against them, so changing
+    /// one produces a model that cannot run. Spatial and frame extents are free — convolution,
+    /// pooling and attention all accept any size along them — and they are also what makes a probe
+    /// expensive, since cost grows with their product.
+    /// </para>
+    /// <para>
+    /// Per <c>InputType</c>: 1-D <c>[size]</c> is a feature width, left alone. 2-D <c>[h, w]</c> is
+    /// left alone as well — for spectrogram models one of those axes IS the channel/mel count, and
+    /// guessing which would risk building an input the model cannot consume. 3-D
+    /// <c>[depth, h, w]</c> and 4-D <c>[frames, depth, h, w]</c> keep <c>depth</c> exact and cap the
+    /// rest, which is where the foundation-scale cost actually lives.
+    /// </para>
+    /// </remarks>
+    private static void ClampFreeAxes(int[] shapeWithBatch, int perSampleRank)
+    {
+        if (perSampleRank < 3) return;
+
+        // Index 0 is batch; per-sample axes start at 1. `depth` is the channel axis in both the
+        // 3-D and 4-D layouts and is the one axis here that weights are sized against.
+        int depthIndex = perSampleRank == 3 ? 1 : 2;
+
+        for (int i = 1; i < shapeWithBatch.Length; i++)
+        {
+            if (i == depthIndex) continue;
+            if (shapeWithBatch[i] > MaxFreeAxisExtent) shapeWithBatch[i] = MaxFreeAxisExtent;
+        }
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, int[]>
+        s_declaredInputShapeCache = new();
+
+    /// <summary>
+    /// The architecture's per-sample input shape with a batch axis prepended, cached per fixture.
+    /// </summary>
+    /// <remarks>
+    /// Constructing the network is the only way to ask it, so the result is cached per fixture type
+    /// exactly like the warm-up's output shape — one extra construction per model family, not per
+    /// test. Falls back to the historical literal on anything it cannot answer confidently, so this
+    /// can only add agreement, never remove a probe that already worked.
+    /// </remarks>
+    private int[] DeclaredInputShape => s_declaredInputShapeCache.GetOrAdd(GetType(), _ =>
+    {
+        try
+        {
+            using var arena = TensorArena.Create();
+            using var network = CreateNetwork();
+
+            var perSample = network.GetArchitecture()?.GetInputShape();
+            if (perSample is null || perSample.Length == 0) return s_fallbackInputShape;
+
+            var declared = new int[perSample.Length + 1];
+            declared[0] = 1;
+            for (int i = 0; i < perSample.Length; i++)
+            {
+                // An unresolved or degenerate axis is not a contract; keep the old probe rather
+                // than build a tensor the model certainly cannot consume.
+                if (perSample[i] <= 0) return s_fallbackInputShape;
+                declared[i + 1] = perSample[i];
+            }
+
+            ClampFreeAxes(declared, perSample.Length);
+            return declared;
+        }
+        catch (Exception ex) when (
+            ex is ArgumentException or InvalidOperationException
+            or NotSupportedException or NotImplementedException
+            or AiDotNet.Exceptions.TensorShapeMismatchException)
+        {
+            // Same narrow catch as the output-shape warm-up: a model that cannot be constructed or
+            // cannot describe itself keeps the historical probe, and the failure is reported by
+            // whichever invariant depends on it rather than from inside a property getter.
+            return s_fallbackInputShape;
+        }
+    });
 
     /// <summary>
     /// Caller-declared output shape. Subclasses can override this for paper-
