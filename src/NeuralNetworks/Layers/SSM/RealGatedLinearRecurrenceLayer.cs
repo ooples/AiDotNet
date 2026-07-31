@@ -171,8 +171,16 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(
-            [sequenceLength, modelDimension],
-            [sequenceLength, modelDimension],
+            // Sequence is a FREE axis: -1, not the configured maximum. sequenceLength is
+            // documented as a MAXIMUM and is used here for nothing but validation -- no weight and
+            // no buffer is sized against it, because the recurrence runs over whatever length it
+            // is handed. Publishing it as a concrete contract made the layer claim an output it
+            // does not produce for any other length, which VerifyReportedOutputShape reports as
+            // "[maxLen, D] declared but [B, actualLen, D] produced" and which anything sizing
+            // itself from the declaration -- parameter slicing, chain resolution, ONNX export --
+            // reads as fact. modelDimension IS structural and stays concrete.
+            [-1, modelDimension],
+            [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
