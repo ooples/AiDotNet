@@ -3571,7 +3571,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
                     "numFrames: 4, embeddingDim: 4, textMaxLength: 8, vocabSize: 64, " +
                     "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { HiddenDimension = 32, " +
-                    "NumSpatialBlocks = 1, NumTemporalBlocks = 1, NumTextBlocks = 1 })";
+                    "NumSpatialBlocks = 1, NumTemporalBlocks = 1, NumTextBlocks = 1, " +
+                    // Paper warm-up is 1000 optimizer steps and the model keeps that default.
+                    // These invariants train for one or two steps, where a 1000-step linear
+                    // ramp is still at ~0 (measured: step 1 = 5e-8 against a 5e-5 base), so the
+                    // model cannot move and GradientFlow / LossStrictlyDecreases correctly report
+                    // that nothing changed. Disabling warm-up here measures the optimizer the
+                    // paper specifies instead of the first rung of its ramp.
+                    "WarmupSteps = 0 })";
             }
             else if (model.ClassName == "VideoLISA" && model.TypeParameterCount == 1
                 && typeName.StartsWith(

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -308,13 +309,45 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         _positionalEmbeddingTable = new Tensor<T>([_textMaxLength, hiddenDim]);
         InitializeEmbeddingTable(_positionalEmbeddingTable, _textMaxLength, hiddenDim);
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        // Paper-faithful training configuration (Xu et al. 2021, arXiv:2109.14084, Training Details):
+        // "Adam ... with betas of (0.9, 0.98), an initial learning rate of 5e-5, 1000 steps of
+        // warm-up, and a polynomial decay learning rate schedule ... Gradients are clipped at 2.0."
+        //
+        // What was here instead: AdamW at 1e-4 with clipping at 1.0 and default betas (0.9, 0.999).
+        // Four departures from the paper, and the learning rate was twice what VideoCLIP specifies,
+        // which is what the more-data invariant caught -- an extra step on identical data raised the
+        // loss from 0.6702 to 0.7258.
+        //
+        // Every value stays overridable: pass `optimizer` for a different optimizer entirely, or set
+        // VideoCLIPVideoOptions.LearningRate / Beta1 / Beta2 / MaxGradientNorm / WarmupSteps /
+        // TotalTrainingSteps / DecayPower.
+        //
+        // The schedule is warm-up followed by polynomial decay, stepped per batch because the paper
+        // counts warm-up in optimizer STEPS, not epochs.
+        int warmupSteps = Math.Max(0, _options.WarmupSteps);
+        int decaySteps = Math.Max(1, _options.TotalTrainingSteps - warmupSteps);
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
                 EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
+                MaxGradientNorm = _options.MaxGradientNorm,
+                // "1000 steps of warm-up, and a polynomial decay learning rate schedule."
+                // Stepped per batch because the paper counts warm-up in optimizer STEPS, not epochs.
+                LearningRateScheduler = warmupSteps > 0
+                    ? new SequentialLRScheduler(
+                        new ILearningRateScheduler[]
+                        {
+                            new LinearWarmupScheduler(_options.LearningRate, warmupSteps),
+                            new PolynomialLRScheduler(_options.LearningRate, decaySteps, _options.DecayPower)
+                        },
+                        new[] { warmupSteps })
+                    : new PolynomialLRScheduler(_options.LearningRate, decaySteps, _options.DecayPower),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
             });
     }
 
