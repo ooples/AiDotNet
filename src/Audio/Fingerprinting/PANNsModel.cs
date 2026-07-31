@@ -280,6 +280,38 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         return Engine.Reshape(mel, [batchSize, 1, numFrames, numMels]);
     }
 
+    /// <summary>
+    /// Skips the architecture-driven lazy-shape pre-walk: this model's layers never see the shape the
+    /// architecture declares.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The public input is a WAVEFORM, and <see cref="PreprocessAudio"/> turns it into a
+    /// <c>[batch, 1, frames, mels]</c> log-mel image before any layer runs. The base pre-walk resolves
+    /// layers from <c>Architecture.GetInputShape()</c> — the waveform — so every layer bound to a shape
+    /// it never receives. The first TransposeLayer declared <c>[32, 64, 1]</c> (the reverse of the
+    /// declared <c>[1, 64, 32]</c>) while its forward produced <c>[16, 6, 1]</c> (the reverse of the real
+    /// <c>[1, 6, 16]</c>), and LayerBase's declared-vs-computed guard then failed all eleven
+    /// training-path invariants.
+    /// </para>
+    /// <para>
+    /// Returning the POST-preprocessing shape instead was tried and is not reliable here. Deriving it by
+    /// running the real preprocessing on a probe of the declared shape still disagreed with the training
+    /// forward — declared 7 frames against an actual 6 — because the STFT frame count is not a pure
+    /// function of the input length at this call site. Predicting a shape that must then match exactly
+    /// is the wrong shape of solution when the prediction can drift; letting each layer bind to the
+    /// input it is actually handed cannot drift at all.
+    /// </para>
+    /// <para>
+    /// This is the same escape hatch TSMixer, MGTSD and AutoDiffTabGenerator use, and the base documents
+    /// it: with no concrete shape the walk is skipped and layers resolve on first Forward. Lazy layers
+    /// lose up-front resolution, which costs nothing here — the mel front end always runs first, so the
+    /// first Forward every layer sees is already the real one.
+    /// </para>
+    /// </remarks>
+    protected override int[]? TryGetArchitectureInputShape()
+        => _useNativeMode ? null : base.TryGetArchitectureInputShape();
+
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
