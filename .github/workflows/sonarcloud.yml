@@ -876,14 +876,27 @@ jobs:
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
               (FullyQualifiedName~Generated.SAN|FullyQualifiedName~Generated.SAR|FullyQualifiedName~Generated.SC|FullyQualifiedName~Generated.SE|FullyQualifiedName~Generated.Sh|FullyQualifiedName~Generated.Sig)
-          - name: ModelFamily - Generated Layers Sil-Sy
+          # The previous Sil-Sy job reached the 45-minute job timeout after four
+          # individual MoreData watchdogs. Split its exact prefix union at the
+          # Sq/St boundary so both halves retain headroom even if a future model
+          # approaches its per-test limit.
+          - name: ModelFamily - Generated Layers Sil-Sq
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            # 76 classes, 24.9 min — the binding shard. Heaviest: SpERTNER 5.0m, SPIRAL 2.5m,
-            # SVTR 2.2m. Contiguity-bound: N=6 could not break it up further.
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.SU|FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sil|FullyQualifiedName~Generated.Sim|FullyQualifiedName~Generated.Sw|FullyQualifiedName~Generated.Sy)
+              (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|
+              FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.SP|
+              FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.Sil|
+              FullyQualifiedName~Generated.Sim)
+          - name: ModelFamily - Generated Layers St-Sy
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.SU|
+              FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sw|
+              FullyQualifiedName~Generated.Sy)
           # The T-Z tail is 201 model classes / 4,378 tests. T remains isolated.
           # U-Z contains 2,676 tests across 119 classes and hit the 45-minute job limit
           # after exposing only 999 results. Isolating each substantial initial fixed U/W/X/Y-Z,
@@ -1186,7 +1199,8 @@ jobs:
             'ModelFamily - Generated Layers R2-SAI',
             'ModelFamily - Generated Layers SAL-SAM',
             'ModelFamily - Generated Layers SAN-Sig',
-            'ModelFamily - Generated Layers Sil-Sy',
+            'ModelFamily - Generated Layers Sil-Sq',
+            'ModelFamily - Generated Layers St-Sy',
             'ModelFamily - Generated Layers T',
             'ModelFamily - Generated Layers U',
             'ModelFamily - Generated Layers VA-VF',
