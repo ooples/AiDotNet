@@ -281,6 +281,37 @@ public class AudioProcessingTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
+    public async Task MelSpectrogram_Forward_BatchedPreservesBatchFramesAndMels()
+    {
+        const int sampleRate = 16000;
+        const int nMels = 80;
+        const int signalLength = 1600;
+        var melSpec = new MelSpectrogram<float>(
+            sampleRate: sampleRate,
+            nMels: nMels,
+            nFft: 400,
+            hopLength: 160,
+            fMax: 8000,
+            logMel: false);
+        var signal = new Tensor<float>(new[] { 2, signalLength });
+
+        for (int sample = 0; sample < signalLength; sample++)
+        {
+            signal[0, sample] = (float)Math.Sin(2 * Math.PI * 440 * sample / sampleRate);
+            signal[1, sample] = (float)Math.Sin(2 * Math.PI * 880 * sample / sampleRate);
+        }
+
+        var mel = melSpec.Forward(signal);
+
+        Assert.Equal(3, mel.Rank);
+        Assert.Equal(2, mel.Shape[0]);
+        Assert.Equal(melSpec.STFT.CalculateNumFrames(signalLength), mel.Shape[1]);
+        Assert.Equal(nMels, mel.Shape[2]);
+        Assert.All(mel.ToArray(), value =>
+            Assert.False(float.IsNaN(value) || float.IsInfinity(value)));
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task MelSpectrogram_HzToMel_Invertible()
     {
         // Arrange
