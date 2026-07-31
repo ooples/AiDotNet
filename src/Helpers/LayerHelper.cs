@@ -15525,28 +15525,27 @@ public static class LayerHelper<T>
     /// <param name="contextLength">Maximum input sequence length (default: 1024).</param>
     /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
     /// <param name="modelDim">The model dimension d_model (default: 256).</param>
-    /// <param name="stateDim">The SSM state dimension (default: 16).</param>
-    /// <param name="numScales">Number of temporal scales/Mamba blocks (default: 4).</param>
-    /// <param name="numLayers">Number of SSM layers per scale (default: 2).</param>
-    /// <param name="expandFactor">Expansion factor for inner dimension (default: 2).</param>
-    /// <param name="convKernelSize">Convolution kernel size (default: 4).</param>
-    /// <param name="useMultiScaleAttention">Whether to use attention for scale combination (default: true).</param>
+    /// <param name="stateDim">The SSM state dimension (default: 256).</param>
+    /// <param name="numScales">Legacy branch-count setting; the paper graph always contains four Mambas.</param>
+    /// <param name="numLayers">Legacy per-scale depth setting retained for API compatibility.</param>
+    /// <param name="expandFactor">Expansion factor for the Mamba inner dimension (default: 1).</param>
+    /// <param name="convKernelSize">Mamba convolution kernel size (default: 2).</param>
+    /// <param name="useMultiScaleAttention">Legacy setting retained for API compatibility; the paper uses addition and concatenation.</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
+    /// <param name="dropoutRate">Dropout applied after E1 and E2 (default: 0.05).</param>
     /// <returns>A collection of layers forming the TimeMachine architecture.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> TimeMachine is a state space model designed specifically for
     /// time series forecasting. The key insight from "A Time Series is Worth 4 Mambas"
-    /// is that using multiple SSM blocks at different temporal scales captures both
-    /// short-term and long-term patterns effectively.
+    /// is to pair outer and inner Mamba branches in complementary orientations.
     /// </para>
     /// <para>
     /// The architecture follows this flow:
-    /// 1. Input embedding with reversible normalization
-    /// 2. Temporal decomposition into multiple scales
-    /// 3. Each scale has its own SSM (Mamba-style) blocks
-    /// 4. Multi-scale attention combines the scale outputs
-    /// 5. Output projection produces forecasts
+    /// 1. E1 embeds the input length, followed by two outer Mamba branches
+    /// 2. E2 creates a smaller representation for two inner Mamba branches
+    /// 3. P1 and residual connections combine the inner path
+    /// 4. Concatenation with the outer path and P2 produce the forecast
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTimeMachineLayers(
@@ -15554,13 +15553,14 @@ public static class LayerHelper<T>
         int contextLength = 512,
         int forecastHorizon = 96,
         int modelDim = 256,
-        int stateDim = 16,
+        int stateDim = 256,
         int numScales = 4,
         int numLayers = 2,
-        int expandFactor = 2,
-        int convKernelSize = 4,
+        int expandFactor = 1,
+        int convKernelSize = 2,
         bool useMultiScaleAttention = true,
-        int numFeatures = 1)
+        int numFeatures = 1,
+        double dropoutRate = 0.05)
     {
         if (contextLength < 1)
             throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
@@ -15570,61 +15570,39 @@ public static class LayerHelper<T>
             throw new ArgumentOutOfRangeException(nameof(modelDim), "Model dimension must be at least 1.");
         if (numFeatures < 1)
             throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (stateDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(stateDim), "State dimension must be at least 1.");
+        if (expandFactor < 1)
+            throw new ArgumentOutOfRangeException(nameof(expandFactor), "Expansion factor must be at least 1.");
+        if (convKernelSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(convKernelSize), "Convolution kernel size must be at least 1.");
+        if (dropoutRate < 0.0 || dropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "Dropout rate must be in [0, 1).");
 
-        int innerDim = modelDim * expandFactor;
+        // Ahamed et al. (2024), §3 and official TimeMachine.py. n1/n2 are embeddings of
+        // the INPUT LENGTH, not per-timestep feature widths. The public modelDim option is
+        // n1; n2 follows the paper default n1/2 (256 -> 128). TimeMachine.Forward supplies
+        // the paper's residual, parallel-branch, transpose, concatenation, and RevIN graph.
+        int n1 = modelDim;
+        int n2 = Math.Max(1, modelDim / 2);
 
-        // TimeMachine (Ahamed & Cheng 2024, "A Time Series is Worth 4 Mambas")
-        // stacks Mamba-style selective SSM blocks that operate PER TIME-STEP on
-        // the model dimension. The original helper sized every projection at
-        // modelDim * sequenceLength, so the first two Dense layers alone formed a
-        // [modelDim·contextLength, modelDim·contextLength] = 131072² weight
-        // (≈17 G elements) that overflowed the allocator before any forecast was
-        // produced. Tokens are SEQUENCE POSITIONS: embed each step to modelDim,
-        // run the SSM blocks per-token, then a FlattenHead projects the flattened
-        // token representations to the forecast horizon.
+        yield return new DenseLayer<T>(outputSize: n1, activationFunction: null); // E1: L -> n1
+        yield return new DropoutLayer<T>(dropoutRate);
 
-        // === Input embedding: [B, contextLength * numFeatures]
-        //     → [B, contextLength, numFeatures] → [B, contextLength, modelDim] ===
-        yield return new ReshapeLayer<T>(new[] { contextLength, numFeatures });
-        yield return new DenseLayer<T>(
-            outputSize: modelDim,
-            activationFunction: new GELUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Outer pair: one Mamba mixes channels at width n1; the other runs over the
+        // transposed n1 axis with d_model=1 (channel-independent paper default).
+        yield return new MambaBlock<T>(1, n1, stateDim, expandFactor, convKernelSize);
+        yield return new MambaBlock<T>(n1, 1, stateDim, expandFactor, convKernelSize);
 
-        // === Stacked Mamba-style selective SSM blocks (numScales × numLayers) ===
-        // Each block: input/gate projection → local-context projection →
-        // B (input→state) → A (selective state, bounded by tanh) → C
-        // (state→output) → output projection back to modelDim, with a post-norm
-        // and dropout. All projections are per-token on modelDim/innerDim/stateDim.
-        for (int scale = 0; scale < numScales; scale++)
-        {
-            for (int layer = 0; layer < numLayers; layer++)
-            {
-                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: new SiLUActivation<T>());
-                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: new SiLUActivation<T>());
-                yield return new DenseLayer<T>(outputSize: stateDim, activationFunction: null);
-                yield return new DenseLayer<T>(outputSize: stateDim, activationFunction: new TanhActivation<T>());
-                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: null);
-                yield return new DenseLayer<T>(outputSize: modelDim, activationFunction: null);
-                yield return new LayerNormalizationLayer<T>();
-                yield return new DropoutLayer<T>(0.1);
-            }
-        }
+        yield return new DenseLayer<T>(outputSize: n2, activationFunction: null); // E2: n1 -> n2
+        yield return new DropoutLayer<T>(dropoutRate);
 
-        yield return new LayerNormalizationLayer<T>();
+        // Inner pair, with the same complementary orientations at n2.
+        yield return new MambaBlock<T>(n2, 1, stateDim, expandFactor, convKernelSize);
+        yield return new MambaBlock<T>(1, n2, stateDim, expandFactor, convKernelSize);
 
-        // === Output head: average-pool the token sequence, then project to the
-        //     forecast horizon. [B, contextLength, modelDim] → [B, modelDim] →
-        //     [B, forecastHorizon]. Pooling (not flatten) keeps the head weight
-        //     small — flattening contextLength·modelDim (= 512·256) tokens would
-        //     need a multi-GB projection. ===
-        yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
-        yield return new DenseLayer<T>(
-            outputSize: Math.Max(modelDim, forecastHorizon),
-            activationFunction: new GELUActivation<T>());
-        yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
-            activationFunction: null);
+        yield return new DenseLayer<T>(outputSize: n1, activationFunction: null); // P1: n2 -> n1
+        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null); // P2: 2*n1 -> T
     }
 
     /// <summary>
