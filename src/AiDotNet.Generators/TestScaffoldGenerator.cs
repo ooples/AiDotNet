@@ -10105,6 +10105,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
+
+        // GraFPrint is a fingerprint EMBEDDING model whose constructor branch pins outputSize: 4 /
+        // EmbeddingDim = 4, so Predict returns a 4-value embedding. Without a pin here the scaffold
+        // inherits EmbeddingModelTestBase's default OutputShape [1, 1] — product 1 — and
+        // OutputDimensionality_MatchesEmbeddingDim compared that 1 against the model's correct 4.
+        // The MODEL was right; the generated contract was wrong. InputShape is pinned alongside it
+        // because the two must agree: the ctor declares inputHeight: 64, inputWidth: 32, inputDepth: 1,
+        // which the default audio fixture does not match. Emitted here, right after the ctor, because
+        // this model reaches none of the per-family shape chains below.
+        if (model.ClassName == "GraFPrint")
+        {
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
         if (GradientCheckOptOutClassNames.Contains(model.ClassName))
             sb.AppendLine("    protected override bool GradientCheckApplicable => false;");
 
