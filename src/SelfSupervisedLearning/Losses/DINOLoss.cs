@@ -37,9 +37,9 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Emerging Properties in Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.14294", Year = 2021, Authors = "Mathilde Caron, Hugo Touvron, Ishan Misra, Hervé Jégou, Julien Mairal, Piotr Bojanowski, Armand Joulin")]
-public class DINOLoss<T> : IContrastiveLoss<T>
+public class DINOLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
 
     private readonly double _studentTemperature;
     private readonly double _teacherTemperature;
@@ -361,8 +361,37 @@ public class DINOLoss<T> : IContrastiveLoss<T>
     /// <summary>
     /// IContrastiveLoss implementation — delegates to ComputeLoss with default center update.
     /// </summary>
-    T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    /// <summary>
+    /// Differentiable DINO cross-entropy: -sum(P_teacher * log P_student).
+    /// </summary>
+    /// <remarks>
+    /// The teacher is centered and sharpened at its own temperature and is treated as a CONSTANT
+    /// target (DINO stops the gradient through the teacher branch, Caron et al. 2021), so only the
+    /// student path carries tape history. log P_student uses the stable log-softmax rather than
+    /// log(softmax(x) + eps), which both loses precision and biases the loss.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        return ComputeLoss(view1, view2);
+        if (view1 is null) throw new ArgumentNullException(nameof(view1));
+        if (view2 is null) throw new ArgumentNullException(nameof(view2));
+
+        int batchSize = view1.Shape[0];
+
+        var centeredTeacher = ApplyCenter(view2);
+        var teacherLogits = Engine.TensorMultiplyScalar(
+            centeredTeacher, NumOps.FromDouble(1.0 / _teacherTemperature));
+        var teacherProbs = Engine.Softmax(teacherLogits, axis: -1);
+
+        var studentLogits = Engine.TensorMultiplyScalar(
+            view1, NumOps.FromDouble(1.0 / _studentTemperature));
+        var studentLogProbs = ObjectiveOps.LogSoftmax(studentLogits, axis: studentLogits.Shape.Length - 1);
+
+        var crossEntropy = Engine.ReduceSum(
+            Engine.TensorMultiply(teacherProbs, studentLogProbs), null, keepDims: false);
+
+        UpdateCenter(view2);
+
+        return Engine.TensorNegate(
+            Engine.TensorDivideScalar(crossEntropy, NumOps.FromDouble(batchSize)));
     }
 }

@@ -180,7 +180,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var z1 = new Tensor<double>(new double[] { 1, 0, 0, 1 }, [2, 2]);
         var z2 = new Tensor<double>(new double[] { 1, 0, 0, 1 }, [2, 2]);
 
-        double result = loss.ComputeLoss(z1, z2);
+        double result = loss.ComputeLoss(z1, z2)[0];
 
         // Combined: [[1,0], [0,1], [1,0], [0,1]]  (z1 then z2)
         // n = 4 (2*batch_size)
@@ -220,8 +220,8 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var z1 = new Tensor<double>(new double[] { 1, 0, -1, 0 }, [2, 2]);
         var z2 = new Tensor<double>(new double[] { 0.9, 0.1, -0.9, 0.1 }, [2, 2]);
 
-        double highTempResult = highTempLoss.ComputeLoss(z1, z2);
-        double lowTempResult = lowTempLoss.ComputeLoss(z1, z2);
+        double highTempResult = highTempLoss.ComputeLoss(z1, z2)[0];
+        double lowTempResult = lowTempLoss.ComputeLoss(z1, z2)[0];
 
         // With good positive pairs, lower temperature should give lower loss
         // because the softmax becomes more peaked on the correct pair
@@ -246,7 +246,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var z1 = new Tensor<double>(new double[] { 0.5, 0.3, -0.2, 0.8 }, [2, 2]);
         var z2 = new Tensor<double>(new double[] { 0.4, 0.6, 0.1, 0.7 }, [2, 2]);
 
-        double forwardLoss = loss.ComputeLoss(z1, z2);
+        double forwardLoss = loss.ComputeLoss(z1, z2)[0];
         var (gradLoss, gradZ1, gradZ2) = loss.ComputeLossWithGradients(z1, z2);
 
         Assert.Equal(forwardLoss, gradLoss, Tol);
@@ -261,8 +261,8 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var z1 = new Tensor<double>(new double[] { 1.5, -0.3, 0.2, 0.8 }, [2, 2]);
         var z2 = new Tensor<double>(new double[] { 0.4, 0.6, -0.1, 0.7 }, [2, 2]);
 
-        double loss12 = loss.ComputeLoss(z1, z2);
-        double loss21 = loss.ComputeLoss(z2, z1);
+        double loss12 = loss.ComputeLoss(z1, z2)[0];
+        double loss21 = loss.ComputeLoss(z2, z1)[0];
 
         Assert.Equal(loss12, loss21, Tol);
     }
@@ -275,7 +275,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var z1 = new Tensor<double>(new double[] { 1, 0, 0, 1, -1, 0 }, [3, 2]);
         var z2 = new Tensor<double>(new double[] { 0.5, 0.5, -0.5, 0.5, 0, -1 }, [3, 2]);
 
-        double result = loss.ComputeLoss(z1, z2);
+        double result = loss.ComputeLoss(z1, z2)[0];
         Assert.True(result >= 0, $"NT-Xent loss should be non-negative, got {result}");
     }
 
@@ -304,7 +304,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         // So C = [[0.5, 0], [0, 0.5]] - NOT identity
         // Invariance loss = (1-0.5)^2 + (1-0.5)^2 = 0.25 + 0.25 = 0.5
         // Redundancy loss = 0
-        double result = loss.ComputeLoss(z1, z2);
+        double result = loss.ComputeLoss(z1, z2)[0];
         double expected = 0.5; // (1-0.5)^2 + (1-0.5)^2
         Assert.Equal(expected, result, Tol);
     }
@@ -328,7 +328,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         // Invariance: (1-13)^2 + (1-22)^2 = 144 + 441 = 585
         // Redundancy (lambda=1): 15^2 + 19^2 = 225 + 361 = 586
         // Total = 585 + 1*586 = 1171
-        double result = loss.ComputeLoss(z1, z2);
+        double result = loss.ComputeLoss(z1, z2)[0];
         Assert.Equal(1171.0, result, Tol);
     }
 
@@ -372,8 +372,8 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var z1 = new Tensor<double>(new double[] { 1, 1, 2, 2 }, [2, 2]);
         var z2 = new Tensor<double>(new double[] { 1, 1, 2, 2 }, [2, 2]);
 
-        double lowResult = lowLambda.ComputeLoss(z1, z2);
-        double highResult = highLambda.ComputeLoss(z1, z2);
+        double lowResult = lowLambda.ComputeLoss(z1, z2)[0];
+        double highResult = highLambda.ComputeLoss(z1, z2)[0];
 
         // Higher lambda -> higher penalty for redundant features
         Assert.True(highResult >= lowResult,
@@ -395,7 +395,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var z1 = new Tensor<double>(new double[] { 0.5, 0.3, -0.2, 0.8 }, [2, 2]);
         var z2 = new Tensor<double>(new double[] { 0.4, 0.6, 0.1, 0.7 }, [2, 2]);
 
-        double forwardLoss = loss.ComputeLoss(z1, z2);
+        double forwardLoss = loss.ComputeLoss(z1, z2)[0];
         var (gradLoss, gradZ1, gradZ2) = loss.ComputeLossWithGradients(z1, z2);
 
         Assert.Equal(forwardLoss, gradLoss, Tol);
@@ -409,7 +409,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var z1 = new Tensor<double>(new double[] { 1, -2, 3, -4 }, [2, 2]);
         var z2 = new Tensor<double>(new double[] { -1, 2, -3, 4 }, [2, 2]);
 
-        double result = loss.ComputeLoss(z1, z2);
+        double result = loss.ComputeLoss(z1, z2)[0];
         Assert.True(result >= 0, $"Barlow Twins loss should be non-negative, got {result}");
     }
 
@@ -427,7 +427,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var pred = new Tensor<double>(new double[] { 1, 0, 0, 1 }, [2, 2]);
         var target = new Tensor<double>(new double[] { 1, 0, 0, 1 }, [2, 2]);
 
-        double result = loss.ComputeLoss(pred, target);
+        double result = loss.ComputeLoss(pred, target)[0];
         Assert.Equal(0.0, result, Tol);
     }
 
@@ -441,7 +441,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var pred = new Tensor<double>(new double[] { 1, 0, 0, 1 }, [2, 2]);
         var target = new Tensor<double>(new double[] { -1, 0, 0, -1 }, [2, 2]);
 
-        double result = loss.ComputeLoss(pred, target);
+        double result = loss.ComputeLoss(pred, target)[0];
         Assert.Equal(4.0, result, Tol);
     }
 
@@ -455,7 +455,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var pred = new Tensor<double>(new double[] { 1, 0 }, [1, 2]);
         var target = new Tensor<double>(new double[] { 0, 1 }, [1, 2]);
 
-        double result = loss.ComputeLoss(pred, target);
+        double result = loss.ComputeLoss(pred, target)[0];
         Assert.Equal(2.0, result, Tol);
     }
 
@@ -472,7 +472,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var pred = new Tensor<double>(new double[] { 3, 4 }, [1, 2]);
         var target = new Tensor<double>(new double[] { 1, 0 }, [1, 2]);
 
-        double result = loss.ComputeLoss(pred, target);
+        double result = loss.ComputeLoss(pred, target)[0];
         // With epsilon in normalization: norm = sqrt(25 + 1e-8) ~ 5.0
         // The result should be very close to 0.8
         Assert.Equal(0.8, result, RelaxedTol);
@@ -488,10 +488,10 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var pred2 = new Tensor<double>(new double[] { 0.5, 0.5 }, [1, 2]);
         var proj1 = new Tensor<double>(new double[] { 0.8, -0.2 }, [1, 2]);
 
-        double symLoss = loss.ComputeSymmetricLoss(pred1, proj2, pred2, proj1);
+        double symLoss = loss.ComputeSymmetricLoss(pred1, proj2, pred2, proj1)[0];
 
-        double loss1 = loss.ComputeLoss(pred1, proj2);
-        double loss2 = loss.ComputeLoss(pred2, proj1);
+        double loss1 = loss.ComputeLoss(pred1, proj2)[0];
+        double loss2 = loss.ComputeLoss(pred2, proj1)[0];
         double expected = 0.5 * (loss1 + loss2);
 
         Assert.Equal(expected, symLoss, Tol);
@@ -507,7 +507,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var pred = new Tensor<double>(new double[] { 3, 4, 1, -1 }, [2, 2]);
         var target = new Tensor<double>(new double[] { 1, 2, -1, 1 }, [2, 2]);
 
-        double cosineLoss = loss.ComputeLoss(pred, target);
+        double cosineLoss = loss.ComputeLoss(pred, target)[0];
         double mseLoss = loss.ComputeMSELoss(pred, target);
 
         // They should be proportional: BYOL loss = 2 - 2*cos = ||p_norm - z_norm||^2
@@ -529,7 +529,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var pred = new Tensor<double>(new double[] { 2, -3, 0.1, 0.9, -5, 2 }, [3, 2]);
         var target = new Tensor<double>(new double[] { 1, 1, -1, 0.5, 3, -1 }, [3, 2]);
 
-        double result = loss.ComputeLoss(pred, target);
+        double result = loss.ComputeLoss(pred, target)[0];
         Assert.True(result >= 0.0 && result <= 4.0,
             $"BYOL loss should be in [0, 4], got {result}");
     }
@@ -542,7 +542,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var pred = new Tensor<double>(new double[] { 0.5, 0.3, -0.2, 0.8 }, [2, 2]);
         var target = new Tensor<double>(new double[] { 0.4, 0.6, 0.1, 0.7 }, [2, 2]);
 
-        double forwardLoss = loss.ComputeLoss(pred, target);
+        double forwardLoss = loss.ComputeLoss(pred, target)[0];
         var (gradLoss, gradPred) = loss.ComputeLossWithGradients(pred, target);
 
         Assert.Equal(forwardLoss, gradLoss, Tol);
@@ -808,7 +808,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
 
         // Both losses should be positive for non-identical views
         double infoResult = infonce.ComputeLossInBatch(z1, z2);
-        double ntxentResult = ntxent.ComputeLoss(z1, z2);
+        double ntxentResult = ntxent.ComputeLoss(z1, z2)[0];
 
         Assert.True(infoResult >= 0, $"InfoNCE loss should be non-negative: {infoResult}");
         Assert.True(ntxentResult >= 0, $"NT-Xent loss should be non-negative: {ntxentResult}");
@@ -828,9 +828,9 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var negKeys = new Tensor<double>(new double[] { 0.1, -0.9, -0.6, 0.3 }, [2, 2]);
 
         double infoResult = infonce.ComputeLoss(z1, z2, negKeys);
-        double ntxentResult = ntxent.ComputeLoss(z1, z2);
-        double barlowResult = barlow.ComputeLoss(z1, z2);
-        double byolResult = byol.ComputeLoss(z1, z2);
+        double ntxentResult = ntxent.ComputeLoss(z1, z2)[0];
+        double barlowResult = barlow.ComputeLoss(z1, z2)[0];
+        double byolResult = byol.ComputeLoss(z1, z2)[0];
 
         Assert.True(infoResult >= 0, $"InfoNCE loss should be non-negative: {infoResult}");
         Assert.True(ntxentResult >= 0, $"NT-Xent loss should be non-negative: {ntxentResult}");
@@ -849,7 +849,7 @@ public class SelfSupervisedLearningLossesDeepMathIntegrationTests
         var pred = new Tensor<double>(new double[] { 1.5, 2.5 }, [1, 2]);
         var target = new Tensor<double>(new double[] { -0.5, 1.5 }, [1, 2]);
 
-        double cosineLoss = loss.ComputeLoss(pred, target);
+        double cosineLoss = loss.ComputeLoss(pred, target)[0];
         double mseLoss = loss.ComputeMSELoss(pred, target);
 
         // cosineLoss = 2 - 2*cos
