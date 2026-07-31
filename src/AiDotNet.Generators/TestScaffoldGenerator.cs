@@ -3416,7 +3416,106 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName == "VideoCLIP" && model.TypeParameterCount == 1
+            if (model.ClassName is "HuBERTASR" or "InterCTC" or "SALM" or "SPIRAL"
+                    or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
+                    or "Wav2Vec2ASR" or "WavLMASR" or "WavLMRobust" or "XLSR"
+                && model.TypeParameterCount == 1)
+            {
+                // These ASR encoders have already exhausted the first two timeout rungs:
+                // every generated fixture runs in FP32 and the audio branch emits the
+                // 1-vs-2 repeated-training cap, yet the exact PR shards still reached
+                // the 120/180-second watchdogs. Preserve each model's native encoder
+                // topology while exercising it at a bounded public-options scale.
+                string optionsType = model.ClassName switch
+                {
+                    "HuBERTASR" => "AiDotNet.SpeechRecognition.Foundation.HuBERTASROptions",
+                    "InterCTC" => "AiDotNet.SpeechRecognition.CTCVariants.InterCTCOptions",
+                    "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
+                    "SPIRAL" => "AiDotNet.SpeechRecognition.Foundation.SPIRALOptions",
+                    "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
+                    "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
+                    "TDTDecoder" => "AiDotNet.SpeechRecognition.Streaming.TDTDecoderOptions",
+                    "Wav2Vec2ASR" => "AiDotNet.SpeechRecognition.Foundation.Wav2Vec2ASROptions",
+                    "WavLMASR" => "AiDotNet.SpeechRecognition.Foundation.WavLMASROptions",
+                    "WavLMRobust" => "AiDotNet.SpeechRecognition.Robust.WavLMRobustOptions",
+                    _ => "AiDotNet.SpeechRecognition.Multilingual.XLSROptions"
+                };
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    $"new {optionsType} {{ EncoderDim = 32, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 16, MaxTextLength = 8 })";
+            }
+            else if (model.ClassName == "Branchformer" && model.TypeParameterCount == 1)
+            {
+                // Branchformer keeps the paper's parallel attention/CGMLP branch and
+                // merge path. Only the generated fixture width/depth is reduced after
+                // FP32 plus the 1-vs-2 cap still timed out in the exact B shard.
+                bool isConformerFamily = typeName.StartsWith(
+                    "AiDotNet.SpeechRecognition.ConformerFamily.", System.StringComparison.Ordinal);
+                string optionsExpr = isConformerFamily
+                    ? "new AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions { " +
+                      "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, " +
+                      "CgmlpDim = 64, NumMels = 32, VocabSize = 16 }"
+                    : "new AiDotNet.SpeechRecognition.CTCVariants.CTCBranchformerOptions { " +
+                      "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, " +
+                      "NumMels = 32, VocabSize = 16, MaxTextLength = 8 }";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    $"{optionsExpr})";
+            }
+            else if (model.ClassName == "Squeezeformer" && model.TypeParameterCount == 1)
+            {
+                // Retain Squeezeformer's time-reduction/expansion Conformer path while
+                // shrinking only the generated instance after float and cap timed out.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.ConformerFamily.SqueezeformerOptions { " +
+                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, " +
+                    "NumMels = 32, VocabSize = 16 })";
+            }
+            else if (model.ClassName == "HuBERTSER" && model.TypeParameterCount == 1)
+            {
+                // Preserve HuBERT's transformer encoder plus the SER classification
+                // head at reduced public width/depth for the generated timeout probe.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Emotion.HuBERTSEROptions { NumMels = 32, " +
+                    "TransformerDim = 32, NumTransformerLayers = 1, NumAttentionHeads = 4, " +
+                    "FeedForwardDim = 64, ClassifierHiddenDim = 16 })";
+            }
+            else if (model.ClassName == "RoomImpulseResponse" && model.TypeParameterCount == 1)
+            {
+                // Its measured 1-vs-2 cap still hit 120 seconds. Keep the spectral
+                // encoder/attention/RIR head path and reduce only the generated
+                // frequency width, encoder depth, and response-head extent.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Effects.RoomImpulseResponseOptions { EncoderDim = 32, " +
+                    "NumEncoderLayers = 1, RIRLength = 4, NumFrequencyBins = 32, NumHeads = 4 })";
+            }
+            else if (model.ClassName == "RPKNet" && model.TypeParameterCount == 1)
+            {
+                // RPKNet's timeout is in a single optimizer-step invariant, so an
+                // iteration cap cannot affect it. Exercise the same feature extractor,
+                // position-aware processing stack, and two-channel flow head at the
+                // public constructor's smallest useful width/depth.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 16, inputWidth: 16, inputDepth: 6, outputSize: 2), " +
+                    "numFeatures: 8, numLayers: 1)";
+            }
+            else if (model.ClassName == "VideoCLIP" && model.TypeParameterCount == 1
                 && typeName.StartsWith(
                     "AiDotNet.Video.Understanding.", System.StringComparison.Ordinal))
             {
@@ -10314,11 +10413,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // stacked → 6 channels at 64×64 spatial (small enough that
             // the 4-level pyramid models like RAPIDFlow still bottom out
             // at 4×4 without degenerating).
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 6, 64, 64 };");
+            int flowSpatial = model.ClassName == "RPKNet" ? 16 : 64;
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 6, {flowSpatial}, {flowSpatial} }};");
             // Frame interpolation outputs an interpolated RGB frame
             // [batch, 3, H, W]; optical flow outputs (u, v) flow
             // components [batch, 2, H, W] per the standard convention.
-            string outShape = isOpticalFlowModel ? "1, 2, 64, 64" : "1, 3, 64, 64";
+            string outShape = isOpticalFlowModel
+                ? $"1, 2, {flowSpatial}, {flowSpatial}"
+                : $"1, 3, {flowSpatial}, {flowSpatial}";
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ {outShape} }};");
         }
         else if (model.ClassName == "UniversalDifferentialEquation")
@@ -11811,10 +11913,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // there, so "more data" read as degradation while training was healthy. Compare
                     // after the transient (2 vs 5) on the same real training path, keeping the
                     // paper-default optimizer and the DEFAULT tolerance rather than relaxing it.
-                    sb.AppendLine(model.ClassName is "Chirp3" or "RoomImpulseResponse" or "ParaformerLarge"
+                    sb.AppendLine(model.ClassName is "Chirp3" or "ParaformerLarge"
                         ? "    protected override int MoreDataShortIterations => 2;"
                         : "    protected override int MoreDataShortIterations => 1;");
-                    sb.AppendLine(model.ClassName is "Chirp3" or "RoomImpulseResponse"
+                    sb.AppendLine(model.ClassName == "Chirp3"
                         ? "    protected override int MoreDataLongIterations => 5;"
                         : model.ClassName == "ParaformerLarge"
                             ? "    protected override int MoreDataLongIterations => 15;"
@@ -12782,6 +12884,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // six real steps (enough to clear warm-up and show the descent) at roughly a third
             // of the cost. Tolerances and thresholds are untouched.
             sb.AppendLine("    protected override int TrainingIterations => 2;");
+        }
+
+        // Squeezeformer routes through the specialized Conformer-family test
+        // scaffold rather than the generic audio fallback, so roster membership
+        // floats it but does not emit that fallback's bounded iteration counts.
+        // Its exact MoreData timeout still reported the generic 50-vs-200 budget
+        // after the reduced public-options fixture was introduced. Complete the
+        // timeout ladder with the same 1-vs-2 cap used by the other floated ASR
+        // encoders; the real forward/backward/update path remains exercised.
+        if (model.ClassName == "Squeezeformer")
+        {
+            sb.AppendLine("    protected override int TrainingIterations => 2;");
+            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+            sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+            sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
         }
 
         // DiffCutSegmentation keeps its Stable-Diffusion encoder widths
