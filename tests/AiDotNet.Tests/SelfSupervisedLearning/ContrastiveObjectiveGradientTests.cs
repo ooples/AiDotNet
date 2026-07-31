@@ -70,7 +70,8 @@ public class ContrastiveObjectiveGradientTests
         double magnitude = 0;
         for (int i = 0; i < g.Length; i++)
         {
-            Assert.True(double.IsFinite(g[i]), $"{name} gradient[{i}] is not finite: {g[i]}");
+            Assert.True(!double.IsNaN(g[i]) && !double.IsInfinity(g[i]),
+                $"{name} gradient[{i}] is not finite: {g[i]}");
             magnitude += Math.Abs(g[i]);
         }
 
@@ -138,7 +139,7 @@ public class ContrastiveObjectiveGradientTests
         var value = new InfoNCELoss<double>(temperature: temperature, normalize: false)
             .ComputeLoss(view1, view2)[0];
 
-        Assert.True(double.IsFinite(value),
+        Assert.True(!double.IsNaN(value) && !double.IsInfinity(value),
             $"InfoNCE overflowed at temperature {temperature}: {value}.");
     }
 }
