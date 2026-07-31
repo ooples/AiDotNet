@@ -362,7 +362,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective with GP)
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
         var trainableGen = (NeuralNetworkBase<T>)Generator;
-        T generatorLoss = trainableGen.TrainWithCustomLoss(newNoise, genOutput =>
+        T generatorLoss = trainableGen.TrainWithCustomLoss(ShapeAsGeneratorInput(newNoise), genOutput =>
         {
             // Keep the critic forward on the generator's active tape. Predict() is an
             // inference API and deliberately suppresses gradient recording; using it here
@@ -664,7 +664,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     public Tensor<T> GenerateImages(Tensor<T> noise)
     {
         Generator.SetTrainingMode(false);
-        return ShapeAsCriticInput(Generator.Predict(noise));
+        return ShapeAsCriticInput(Generator.Predict(ShapeAsGeneratorInput(noise)));
     }
 
     /// <summary>
@@ -681,9 +681,32 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     /// Tensors that already match, or whose element count cannot be divided into whole images, are
     /// returned unchanged rather than forced.
     /// </remarks>
-    private Tensor<T> ShapeAsCriticInput(Tensor<T> images)
+    private Tensor<T> ShapeAsCriticInput(Tensor<T> images) => ShapeForArchitecture(images, Critic.Architecture);
+
+    /// <summary>
+    /// Presents a noise tensor in the layout the generator consumes.
+    /// </summary>
+    /// <remarks>
+    /// The mirror of <see cref="ShapeAsCriticInput"/>, for the other end of the pipeline.
+    /// <see cref="GenerateRandomNoiseTensor"/> emits a FLAT <c>[batch, noiseSize]</c> vector, but when
+    /// the generator is convolutional it needs an image-shaped input just as the critic does. Every
+    /// call site shaped the generator's OUTPUT for the critic and left its INPUT untouched, so a
+    /// convolutional generator read the flat vector's trailing dimension as a channel count and threw
+    /// "Expected input depth 1, but got 64" — the same defect the critic side already had fixed,
+    /// surviving on the input side because nothing bridged it there.
+    /// </remarks>
+    private Tensor<T> ShapeAsGeneratorInput(Tensor<T> noise) => ShapeForArchitecture(noise, Generator.Architecture);
+
+    /// <summary>
+    /// Reshapes a tensor into the <c>[batch, depth, height, width]</c> layout an architecture declares.
+    /// </summary>
+    /// <remarks>
+    /// Returns the tensor unchanged when the architecture does not describe an image, when it already
+    /// matches, or when its element count cannot be divided into whole samples — reshaping is a
+    /// recorded op, so a tensor that passes through here still trains.
+    /// </remarks>
+    private Tensor<T> ShapeForArchitecture(Tensor<T> images, NeuralNetworkArchitecture<T> arch)
     {
-        var arch = Critic.Architecture;
         int depth = arch.InputDepth;
         int height = arch.InputHeight;
         int width = arch.InputWidth;
@@ -806,7 +829,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
 
         // A GAN predicts by generating, so hand back an IMAGE rather than the generator's flat
         // projection — the same shape the critic and the training targets use.
-        return ShapeAsCriticInput(Generator.Predict(input));
+        return ShapeAsCriticInput(Generator.Predict(ShapeAsGeneratorInput(input)));
     }
 
     /// <inheritdoc/>
