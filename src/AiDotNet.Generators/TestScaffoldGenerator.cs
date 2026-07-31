@@ -8174,6 +8174,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1))";
             }
+            else if (model.ClassName == "RAPIDFlow" && model.TypeParameterCount == 1)
+            {
+                // Same defect as XMem above. RAPIDFlow's parameterless constructor hardcodes a
+                // 256x256 architecture, and its whole pyramid resolves its declared shapes from
+                // THOSE dimensions, while the two-frame fixture feeds 64x64. Every layer then
+                // declared exactly 4x the spatial extent it computes — the first convolution
+                // reported [32, 128, 128] against an actual [1, 32, 32, 32], and the final
+                // deconvolution [2, 256, 256] against [1, 2, 64, 64] — so VerifyReportedOutputShape
+                // failed 11 of its invariants.
+                //
+                // inputDepth is 3 because the architecture describes ONE RGB frame; the fixture's
+                // 6-channel InputShape is the two frames concatenated, which is
+                // OpticalFlowBase.Predict's contract rather than the architecture's.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 2))";
+            }
             else if (model.ClassName == "WGANGP" && model.TypeParameterCount == 1)
             {
                 // Its single-architecture constructor forwards architecture.InputType into the
