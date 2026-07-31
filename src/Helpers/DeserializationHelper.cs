@@ -2991,7 +2991,11 @@ public static class DeserializationHelper
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".MambaBlock`1"))
         {
             // MambaBlock(int sequenceLength, int modelDimension, int stateDimension, int expandFactor, int convKernelSize, int dtRank)
-            int sequenceLength = inputShape.Length > 0 ? inputShape[0] : 1;
+            // Mamba publishes the sequence axis as -1 because sequence length is not an
+            // architectural parameter (Falcon Mamba, Zuo et al. 2024, section 3.1).
+            // The constructor still requires a positive value for validation, so use a
+            // harmless one-token reconstruction sentinel; no parameter shape depends on it.
+            int sequenceLength = inputShape.Length > 0 && inputShape[0] > 0 ? inputShape[0] : 1;
             int modelDimension = inputShape.Length > 1 ? inputShape[1] : 256;
             int stateDimension = TryGetInt(additionalParams, "StateDimension") ?? 16;
             int expandFactor = TryGetInt(additionalParams, "ExpandFactor") ?? 2;
@@ -3109,7 +3113,15 @@ public static class DeserializationHelper
             //             int chunkSize = 64, IActivationFunction?, IInitializationStrategy?)
             // Both take (sequenceLength, modelDimension) derived from the 2D input shape,
             // with remaining positional int parameters matched from metadata by parameter name.
-            int sequenceLength = inputShape.Length > 0 ? inputShape[0] : 1;
+            int serializedSequenceLength = inputShape.Length > 0 ? inputShape[0] : 1;
+            // RWKV's recurrent weights are independent of sequence length. Its published
+            // input shape therefore carries -1 on the sequence axis, while its legacy
+            // constructor requires a positive validation value during reconstruction.
+            // Keep Mamba2 behavior unchanged here because this issue targets RWKV only.
+            int sequenceLength = openGenericType.FullName.EndsWith(".RWKVLayer`1")
+                && serializedSequenceLength <= 0
+                    ? 1
+                    : serializedSequenceLength;
             int modelDimension = inputShape.Length > 1 ? inputShape[1] : 256;
 
             var ctor = type.GetConstructors()
