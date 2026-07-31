@@ -35,9 +35,9 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
-public class NTXentLoss<T> : IContrastiveLoss<T>
+public class NTXentLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
 
     private readonly double _temperature;
     private readonly bool _normalize;
@@ -67,7 +67,45 @@ public class NTXentLoss<T> : IContrastiveLoss<T>
     /// <param name="z1">First view embeddings [batch_size, embedding_dim].</param>
     /// <param name="z2">Second view embeddings [batch_size, embedding_dim].</param>
     /// <returns>The computed loss value.</returns>
-    public T ComputeLoss(Tensor<T> z1, Tensor<T> z2)
+    /// <remarks>
+    /// Differentiable NT-Xent (Chen et al. 2020). The 2N x 2N similarity matrix is built with
+    /// IEngine ops; self-similarities are removed by adding a large negative constant on the
+    /// diagonal (masking by indexing would sever the tape), and the positive for anchor i is its
+    /// augmented partner at i +/- N.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> z1, Tensor<T> z2)
+    {
+        if (z1 is null) throw new ArgumentNullException(nameof(z1));
+        if (z2 is null) throw new ArgumentNullException(nameof(z2));
+
+        int n = z1.Shape[0];
+        var a = _normalize ? ObjectiveOps.L2NormalizeRows(z1) : z1;
+        var b = _normalize ? ObjectiveOps.L2NormalizeRows(z2) : z2;
+
+        var combined = Engine.Concat(new[] { a, b }, 0);              // [2N, D]
+        var logits = ObjectiveOps.SimilarityMatrix(combined, combined, _temperature, normalize: false);
+
+        // Remove self-comparisons without indexing: -inf on the diagonal via a constant mask.
+        var negInf = ObjectiveOps.Identity<T>(2 * n);
+        logits = Engine.TensorAdd(
+            logits, Engine.TensorMultiplyScalar(negInf, NumOps.FromDouble(-1e9)));
+
+        var logProbs = ObjectiveOps.LogSoftmax(logits, axis: 1);
+
+        // Positive of anchor i is i+N (and i-N for the second half): a constant permutation mask.
+        var positive = new Tensor<T>(new[] { 2 * n, 2 * n });
+        for (int i = 0; i < n; i++)
+        {
+            positive[i, i + n] = NumOps.One;
+            positive[i + n, i] = NumOps.One;
+        }
+
+        var picked = Engine.ReduceSum(Engine.TensorMultiply(logProbs, positive), null, keepDims: false);
+        return Engine.TensorNegate(
+            Engine.TensorDivideScalar(picked, NumOps.FromDouble(2 * n)));
+    }
+
+    private T ComputeLossScalarLegacy(Tensor<T> z1, Tensor<T> z2)
     {
         if (z1 is null) throw new ArgumentNullException(nameof(z1));
         if (z2 is null) throw new ArgumentNullException(nameof(z2));
