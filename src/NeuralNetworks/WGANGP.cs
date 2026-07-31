@@ -820,6 +820,72 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         Layers.AddRange(Critic.Layers);
     }
 
+    /// <summary>
+    /// Resolves each subnetwork against its OWN architecture instead of walking the composite list.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Layers"/> is a composite VIEW of two PARALLEL subnetworks, not a feed-forward
+    /// chain. The base walk documents itself as "the architecture's input shape feeds the first
+    /// layer; each layer's resolved output shape feeds the next", which is exactly wrong here: it
+    /// ran off the end of the generator and into the critic, so the critic's first convolution
+    /// resolved against a generator feature map instead of an image. With the shared 8x8x1 image
+    /// architecture that produced a critic stem of <c>[32, 32, 3, 3]</c> — 32 input channels for
+    /// 1-channel images — and every later call threw "Input channels (1) must match kernel
+    /// in_channels (32)".
+    /// </para>
+    /// <para>
+    /// Resolving each subnetwork from its own declared input leaves nothing lazy for the composite
+    /// walk to mis-resolve. This mirrors <c>GenerativeAdversarialNetwork.EnsureMaterialized</c>,
+    /// which exists for the same reason; WGANGP derives from <see cref="NeuralNetworkBase{T}"/>
+    /// rather than that class and so never inherited the treatment.
+    /// </para>
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        EnsureSubnetworkMaterialized(Generator);
+        EnsureSubnetworkMaterialized(Critic);
+    }
+
+    /// <summary>
+    /// Walks one subnetwork's chain from its architecture's input shape, materializing lazy layers.
+    /// </summary>
+    /// <remarks>
+    /// Per-layer failures are swallowed so a single layer wanting richer shape metadata does not
+    /// abandon the rest of the walk — the first real forward picks those up through the normal
+    /// <c>OnFirstForward</c> path.
+    /// </remarks>
+    private static void EnsureSubnetworkMaterialized(NeuralNetworkBase<T> subnet)
+    {
+        var archShape = subnet?.Architecture?.GetInputShape();
+        if (subnet is null || archShape is null || archShape.Length == 0
+            || !Array.TrueForAll(archShape, d => d > 0))
+        {
+            return;
+        }
+
+        int[] currentShape = archShape;
+        foreach (var layer in subnet.Layers)
+        {
+            if (layer is null) continue;
+            try
+            {
+                if (layer is Layers.LayerBase<T> lb && !lb.IsShapeResolved)
+                    lb.ResolveFromShape(currentShape);
+
+                var outShape = layer.GetOutputShape();
+                if (outShape is { Length: > 0 } && Array.TrueForAll(outShape, d => d > 0))
+                    currentShape = outShape;
+                else
+                    break;
+            }
+            catch
+            {
+                break;
+            }
+        }
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
