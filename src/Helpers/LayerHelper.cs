@@ -32585,7 +32585,9 @@ public static class LayerHelper<T>
         // Flow decoder (3 layers)
         yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1);
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);
+        // RIFE IFBlocks emit two 2-D intermediate flows plus a learned
+        // one-channel fusion mask (Huang et al., ECCV 2022, Sec. 3.2).
+        yield return new ConvolutionalLayer<T>(5, 3, 1, 1);
 
         // Context encoder (2 layers)
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
@@ -32598,7 +32600,7 @@ public static class LayerHelper<T>
         }
 
         // Fusion layer
-        int fusionInputChannels = channels * 2 + numFeatures + 4;
+        int fusionInputChannels = channels * 2 + numFeatures + 4 + 1;
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Output convolution
