@@ -821,6 +821,39 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Collects activations by running each subnetwork in turn, not by walking the composite list.
+    /// </summary>
+    /// <remarks>
+    /// The base implementation forwards <see cref="Layers"/> sequentially, which for this composite
+    /// view means handing the generator's flat projection to the critic's first convolution — hence
+    /// "ConvolutionalLayer expects rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank 2". The real
+    /// data flow is z to generator to image to critic, and the two shape bridges this class already
+    /// owns are what connect the stages, so both are applied here.
+    /// <see cref="GenerativeAdversarialNetwork{T}"/> overrides this method for the same reason.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var current = ShapeAsGeneratorInput(input);
+        for (int i = 0; i < Generator.Layers.Count; i++)
+        {
+            current = Generator.Layers[i].Forward(current);
+            activations[$"Generator_Layer_{i}_{Generator.Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        // The critic consumes an image, which is exactly what the generator's output becomes here.
+        var criticInput = ShapeAsCriticInput(current);
+        for (int i = 0; i < Critic.Layers.Count; i++)
+        {
+            criticInput = Critic.Layers[i].Forward(criticInput);
+            activations[$"Critic_Layer_{i}_{Critic.Layers[i].GetType().Name}"] = criticInput.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <summary>
     /// Resolves each subnetwork against its OWN architecture instead of walking the composite list.
     /// </summary>
     /// <remarks>
