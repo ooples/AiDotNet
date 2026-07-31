@@ -10121,71 +10121,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // because the two must agree: the ctor declares inputHeight: 64, inputWidth: 32, inputDepth: 1,
         // which the default audio fixture does not match. Emitted here, right after the ctor, because
         // this model reaches none of the per-family shape chains below.
-        if (model.ClassName == "PANNsModel")
-        {
-            // LossStrictlyDecreasesOnMemorizationTask wants a 1% reduction and PANNsModel reached only
-            // ~0.34% at the default 100 steps (0.724477 -> 0.721986). It IS learning, just under-trained
-            // for its depth and learning rate, so it gets more steps and the 1% assertion stays strict.
-            // 400 completes inside the 180 s gate; SALMONN at the same count does not, which is why the
-            // two are pinned separately rather than together.
-            sb.AppendLine("    protected override int MemorizationTaskIterations => 400;");
-        }
-        if (model.ClassName == "SALMONN")
-        {
-            // SALMONN's memorization run TIMED OUT at the default 100 steps — the failure was cost, not
-            // convergence, so raising the step count makes it worse. This is the same bound the generator
-            // already applies to other models whose per-step cost dominates the 180 s gate (GraFPrint,
-            // VideoCLIP, DeepgramNova2): fewer steps, paired with a threshold that still requires the
-            // loss to STRICTLY DECREASE rather than by a fixed percentage. Real optimizer updates are
-            // still exercised; only the repetition is bounded.
-            sb.AppendLine("    protected override int MemorizationTaskIterations => 3;");
-            sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
-        }
-        if (model.ClassName == "PANNsModel")
-        {
-            // LossStrictlyDecreasesOnMemorizationTask wants a 1% reduction and PANNsModel reached only
-            // ~0.34% at the default 100 steps (0.724477 -> 0.721986). It IS learning, just under-trained
-            // for its depth and learning rate, so it gets more steps and the 1% assertion stays strict.
-            // 400 completes inside the 180 s gate; SALMONN at the same count does not, which is why the
-            // two are pinned separately.
-            sb.AppendLine("    protected override int MemorizationTaskIterations => 400;");
-        }
-        if (model.ClassName == "PANNs")
-        {
-            // PANNs' fixture input is [depth, time, mels] = [1, 64, 32] and the MEL axis is last.
-            // AudioNNModelTestBase.VariableLengthAxis defaults to the last axis, so
-            // DifferentInputLengths_ShouldNotCrash halved the mel count to 16 while the CNN14 front end's
-            // per-mel BatchNorm still expects 32, giving "Tensors with shapes [1, 16, 32, 1] and
-            // [1, 32, 1, 1] cannot be broadcast". A shorter CLIP is fewer FRAMES, so the variable-length
-            // axis is time (axis 1); the mel count is a fixed property of the front end.
-            sb.AppendLine("    protected override int VariableLengthAxis => 1;");
-            // Training_ShouldReduceLoss runs TrainingIterations * 3 steps, so the default 10 gives only
-            // 30 Adam steps at this fixture's LearningRate = 1e-4 — far too few for the CNN14 stack to
-            // move its BCE measurably, and the run came out marginally WORSE (0.715793 -> 0.716948) on
-            // noise. Its sibling PANNsModel needed 400 memorization steps for the same reason. The
-            // suite is fast (~13 s for all 28 tests), so the steps are affordable.
-            sb.AppendLine("    protected override int TrainingIterations => 60;");
-        }
-        if (model.ClassName == "Pengi")
-        {
-            // Pengi is an audio-language transformer: its input is [batch, tokens, embedDim] and the
-            // embedDim is FIXED by the attention projection weights (AudioEncoderDim = LLMHiddenDim = 128
-            // in the generated fixture). AudioNNModelTestBase.VariableLengthAxis defaults to the LAST
-            // axis, so DifferentInputLengths_ShouldNotCrash halved the embedding width instead of the
-            // sequence and MultiHeadAttentionLayer rejected it: "Input embedding dimension (64) does not
-            // match weight dimension (128). Query shape: [1, 1, 64], Weights shape: [128, 128]".
-            //
-            // That base property's own documentation names Pengi as the model that must override it. The
-            // input also needs a real token axis for the halving to mean anything, so both are pinned
-            // together: 4 tokens halve to 2 while the embedding width stays 128.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 4, 128 };");
-            sb.AppendLine("    protected override int VariableLengthAxis => 1;");
-        }
-        if (model.ClassName == "GraFPrint")
-        {
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
-        }
         if (GradientCheckOptOutClassNames.Contains(model.ClassName))
             sb.AppendLine("    protected override bool GradientCheckApplicable => false;");
 
@@ -12051,7 +11986,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // NeuralNoiseReducer) keep the default counts.
                 if (Fp32TestClassNames.Contains(model.ClassName) || model.ClassName == "FRCRN")
                 {
-                    sb.AppendLine("    protected override int TrainingIterations => 2;");
+                    // PANNs needs real steps here, not the shared cost cap. Training_ShouldReduceLoss
+                    // runs TrainingIterations * 3, so 2 gives only SIX Adam steps at this fixture's
+                    // LearningRate = 1e-4 and the measured loss moved on noise (0.715793 -> 0.716948).
+                    // Its whole 28-test suite runs in ~13 s, so it can afford the steps that the heavier
+                    // members of this list cannot; every other model keeps the cap.
+                    sb.AppendLine(model.ClassName == "PANNs"
+                        ? "    protected override int TrainingIterations => 60;"
+                        : "    protected override int TrainingIterations => 2;");
                     // Chirp3 and ParaformerLarge have a measured Adam warm-up transient: the loss rises
                     // at step 2 before its normal descent begins. Compare after that transient while
                     // keeping the same real training path, paper-default optimizer, and customizable model.
