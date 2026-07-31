@@ -95,10 +95,20 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     private readonly double _temperature;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    // Video encoder components
+    // Video encoder components.
+    //
+    // These are VIEWS into Layers, not a second ownership graph: the constructor builds the layers,
+    // adds them to Layers, and then binds these fields by index. Deserialization REPLACES every
+    // entry in Layers with a restored instance, so the single-layer views below cannot be readonly —
+    // BindLayerViewsFromLayers() re-points them at the restored instances. Leaving them bound to the
+    // constructor's now-orphaned layers made the explicit forward run on fresh random weights while
+    // Layers held the trained ones, so a trained clone predicted differently from its original with
+    // provably identical parameters (measured: 48173/48173 parameters and both embedding tables
+    // equal to the last bit, outputs differing by 1.7e+00, and gradients on Layers pinned at zero
+    // because the backward flowed through the orphans instead).
     private readonly List<ConvolutionalLayer<T>> _videoEncoder;
     private readonly List<ConvolutionalLayer<T>> _temporalTransformer;
-    private readonly ConvolutionalLayer<T> _videoProjection;
+    private ConvolutionalLayer<T> _videoProjection;
 
     // Text encoder components
     // Proper CLIP-style token embedding: embedding lookup table [vocab_size, hidden_dim]
@@ -108,7 +118,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     private readonly List<ConvolutionalLayer<T>> _textTransformerAttnProj; // Attention output
     private readonly List<ConvolutionalLayer<T>> _textTransformerFFN1;     // FFN expand
     private readonly List<ConvolutionalLayer<T>> _textTransformerFFN2;     // FFN contract
-    private readonly ConvolutionalLayer<T> _textProjection;
+    private ConvolutionalLayer<T> _textProjection;
     private readonly int _textHiddenDim;
 
     /// <summary>
@@ -118,7 +128,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     private readonly int _hiddenDim;
 
     // Shared components
-    private readonly ConvolutionalLayer<T> _logitScale;
+    private ConvolutionalLayer<T> _logitScale;
 
     // Tokenizer for text encoding
     private readonly BpeTokenizer? _tokenizer;
@@ -276,33 +286,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         }
 
         // Distribute layers to sub-lists for forward pass
-        int idx = 0;
-        // Video encoder: 1 patch embed + numSpatialBlocks * 2
-        int videoEncoderCount = 1 + numSpatialBlocks * 2;
-        for (int i = 0; i < videoEncoderCount; i++)
-            _videoEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
-
-        // Temporal transformer
-        for (int i = 0; i < numTemporalBlocks; i++)
-            _temporalTransformer.Add((ConvolutionalLayer<T>)Layers[idx++]);
-
-        // Video projection
-        _videoProjection = (ConvolutionalLayer<T>)Layers[idx++];
-
-        // Text transformer: 4 layers per block (QKV, AttnProj, FFN1, FFN2)
-        for (int i = 0; i < numTextBlocks; i++)
-        {
-            _textTransformerQKV.Add((ConvolutionalLayer<T>)Layers[idx++]);
-            _textTransformerAttnProj.Add((ConvolutionalLayer<T>)Layers[idx++]);
-            _textTransformerFFN1.Add((ConvolutionalLayer<T>)Layers[idx++]);
-            _textTransformerFFN2.Add((ConvolutionalLayer<T>)Layers[idx++]);
-        }
-
-        // Text projection
-        _textProjection = (ConvolutionalLayer<T>)Layers[idx++];
-
-        // Logit scale
-        _logitScale = (ConvolutionalLayer<T>)Layers[idx++];
+        BindLayerViewsFromLayers();
 
         // Initialize embedding tables (not part of layer list)
         _tokenEmbeddingTable = new Tensor<T>([_vocabSize, hiddenDim]);
@@ -1222,6 +1206,16 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         writer.Write(_textMaxLength);
         writer.Write(_vocabSize);
         writer.Write(_temperature);
+
+        // The learned embedding tables. They are trainable (see GetExtraTrainableTensors) and live
+        // outside Layers, so the layer-by-layer weight sections of the stream do not carry them and
+        // a reload rebuilt them from InitializeEmbeddingTable's RNG instead — dropping trained text
+        // -tower weights on every save/load. Same element-by-element idiom VisionTransformer uses
+        // for its CLS and positional tokens.
+        for (int i = 0; i < _tokenEmbeddingTable.Length; i++)
+            writer.Write(Convert.ToDouble(_tokenEmbeddingTable[i]));
+        for (int i = 0; i < _positionalEmbeddingTable.Length; i++)
+            writer.Write(Convert.ToDouble(_positionalEmbeddingTable[i]));
     }
 
     /// <inheritdoc/>
@@ -1235,9 +1229,118 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadDouble();
+
+        // Restore the learned embedding tables written above. The geometry fields are discarded
+        // because they are readonly and the constructor has already rebuilt this instance at the
+        // right sizes; these tensors, by contrast, carry trained values that only the stream has.
+        for (int i = 0; i < _tokenEmbeddingTable.Length; i++)
+            _tokenEmbeddingTable[i] = NumOps.FromDouble(reader.ReadDouble());
+        for (int i = 0; i < _positionalEmbeddingTable.Length; i++)
+            _positionalEmbeddingTable[i] = NumOps.FromDouble(reader.ReadDouble());
+
+        // The base deserializer has just replaced Layers with the restored instances. Rebind the
+        // per-stage views so the explicit forward and the tape both consume those restored weights
+        // rather than the constructor-fresh layers they were bound to.
+        BindLayerViewsFromLayers();
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Surfaces the token and positional embedding tables, which are learned parameters the model
+    /// owns OUTSIDE <c>Layers</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In CLIP (Radford et al. 2021 §2.4) the text encoder's token embedding and positional
+    /// embedding are both learned — <c>nn.Embedding(vocab_size, width)</c> and an
+    /// <c>nn.Parameter</c> respectively — so they appear in <c>state_dict()</c>, receive gradients,
+    /// and survive a module copy. Here they are plain tensors built in the constructor, so without
+    /// this hook the <c>Layers</c>-only parameter walk never saw them and they were frozen at their
+    /// random initialization for the model's entire lifetime, never trained and never persisted.
+    /// </para>
+    /// <para>
+    /// The clone consequence was the sharper one. A copy re-runs the constructor, which
+    /// re-initializes both tables to FRESH random values, and nothing afterwards overwrote them:
+    /// the clone's text tower therefore computed a different function from the original's while
+    /// every tensor in <c>Layers</c> matched bit-for-bit (measured: 22/22 chunks and 48173/48173
+    /// parameters identical, parameter L2 equal to 17 digits, yet the outputs differed by 1.6e+00
+    /// on identical input, and MoreData_ShouldNotDegrade failed on the clone).
+    /// </para>
+    /// <para>
+    /// Yielding them here opts into the three base paths that already handle model-owned tensors:
+    /// the tape optimizer's step, the serialization round-trip, and the copy-on-write clone. Same
+    /// mechanism <see cref="AiDotNet.NeuralNetworks.VisionTransformer{T}"/> uses for its CLS and
+    /// positional tokens.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+    {
+        yield return _tokenEmbeddingTable;
+        yield return _positionalEmbeddingTable;
+    }
+
+    /// <summary>
+    /// (Re)binds the per-stage layer views to the current contents of <c>Layers</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Layers</c> is the single ownership graph; <c>_videoEncoder</c>, <c>_temporalTransformer</c>,
+    /// <c>_videoProjection</c>, the four text-transformer lists, <c>_textProjection</c> and
+    /// <c>_logitScale</c> are ordered views into it that the explicit forward walks. The constructor
+    /// calls this after populating <c>Layers</c>; <see cref="DeserializeNetworkSpecificData"/> calls
+    /// it again because the base deserializer REPLACES every entry in <c>Layers</c> with a restored
+    /// instance, which orphans any view still bound to the constructor's layers.
+    /// </para>
+    /// <para>
+    /// Idempotent, so the copy-on-write clone path — which calls
+    /// <c>DeserializeNetworkSpecificData</c> without replacing <c>Layers</c> — simply re-binds each
+    /// view to the object it already referenced.
+    /// </para>
+    /// <para>
+    /// Same contract <c>MusicSourceSeparator.TryBindDemucsTopologyFromLayers</c> maintains for its
+    /// Demucs encoder/decoder views, and the reason it exists there too.
+    /// </para>
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_videoProjection), nameof(_textProjection), nameof(_logitScale))]
+    private void BindLayerViewsFromLayers()
+    {
+        _videoEncoder.Clear();
+        _temporalTransformer.Clear();
+        _textTransformerQKV.Clear();
+        _textTransformerAttnProj.Clear();
+        _textTransformerFFN1.Clear();
+        _textTransformerFFN2.Clear();
+
+        int idx = 0;
+        // Video encoder: 1 patch embed + NumSpatialBlocks * 2
+        int videoEncoderCount = 1 + _options.NumSpatialBlocks * 2;
+        for (int i = 0; i < videoEncoderCount; i++)
+            _videoEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Temporal transformer
+        for (int i = 0; i < _options.NumTemporalBlocks; i++)
+            _temporalTransformer.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Video projection
+        _videoProjection = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Text transformer: 4 layers per block (QKV, AttnProj, FFN1, FFN2)
+        for (int i = 0; i < _options.NumTextBlocks; i++)
+        {
+            _textTransformerQKV.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textTransformerAttnProj.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textTransformerFFN1.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textTransformerFFN2.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        }
+
+        // Text projection
+        _textProjection = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Logit scale
+        _logitScale = (ConvolutionalLayer<T>)Layers[idx++];
+    }
+
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new VideoCLIP<T>(
