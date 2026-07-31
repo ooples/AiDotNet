@@ -1342,6 +1342,25 @@ public static class DeserializationHelper
             int padding = TryGetInt(additionalParams, "Padding") ?? ((kernelSize - 1) / 2);
             instance = new DepthwiseConv1DLayer<T>(channels, kernelSize, multiplier, stride, padding);
         }
+        else if (genericDef == typeof(ContextNetBlockLayer<>))
+        {
+            // ContextNetBlockLayer is fully reconstructable from its paper-defined block state;
+            // SetParameters and ILayerSerializationExtras restore trainable weights and BN state.
+            int inputChannels = TryGetInt(additionalParams, "InputChannels")
+                ?? (inputShape.Length > 0 ? inputShape[0] : 1);
+            int outputChannels = TryGetInt(additionalParams, "OutputChannels")
+                ?? (outputShape.Length > 0 ? outputShape[0] : 1);
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 5;
+            int numConvolutions = TryGetInt(additionalParams, "NumConvolutions") ?? 5;
+            int seReductionRatio = TryGetInt(additionalParams, "SeReductionRatio") ?? 8;
+            double dropoutRate = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            bool useResidual = TryGetBool(additionalParams, "UseResidual") ?? true;
+            int seed = TryGetInt(additionalParams, "Seed") ?? 2027;
+            instance = new ContextNetBlockLayer<T>(
+                inputChannels, outputChannels, kernelSize, numConvolutions,
+                seReductionRatio, dropoutRate, stride, useResidual, seed);
+        }
         else if (genericDef == typeof(CitrinetBlockLayer<>))
         {
             // CitrinetBlockLayer(channels, kernelSize, numSubBlocks, seReductionRatio, dropoutRate,
