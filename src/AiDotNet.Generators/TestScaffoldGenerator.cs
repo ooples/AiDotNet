@@ -667,6 +667,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "SpeechBrain",
         "QueryMeldNet",       // OptimizerStep / OutputDimension timeout
         "SpeakerDiarizedASR", // diarized ASR — DifferentInputs timeout
+        // TransUNet's paper-scale CNN/Transformer/U-Net segmentation path hit the 120-second
+        // MoreData watchdog in the exact T shard while still emitted as <double>. Apply the
+        // agreed precision-first timeout rung only; its production topology and defaults remain
+        // unchanged. If the measured FP32 fixture still overruns, cap repetitions next.
+        "TransUNet",
         "StyleTTSZS",         // zero-shot style TTS — DifferentInputs / Metadata timeout
         "SceneLLM",           // 3D scene LLM — LossStrictlyDecreases timeout
         "RealisVSR",          // realistic video super-resolution — ScaledInput timeout
@@ -3416,7 +3421,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName is "HuBERTASR" or "InterCTC" or "SALM" or "SPIRAL"
+            if (model.ClassName is "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
+                    or "SpeakerDiarizedASR" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
                     or "Wav2Vec2ASR" or "WavLMASR" or "WavLMRobust" or "XLSR"
                 && model.TypeParameterCount == 1)
@@ -3430,7 +3436,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 {
                     "HuBERTASR" => "AiDotNet.SpeechRecognition.Foundation.HuBERTASROptions",
                     "InterCTC" => "AiDotNet.SpeechRecognition.CTCVariants.InterCTCOptions",
+                    "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
+                    "SpeakerDiarizedASR" => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
                     "SPIRAL" => "AiDotNet.SpeechRecognition.Foundation.SPIRALOptions",
                     "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
                     "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
