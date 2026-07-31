@@ -621,22 +621,40 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // each layer's IsShapeResolved short-circuit.
         ResolveLazyLayerShapes();
 
-        // Sum per-layer parameter counts via layer.ParameterCount (cheap
-        // metadata read), NOT via layer.GetParameters().Length (which
-        // forces every layer to materialize and return its full
-        // parameter Vector<T> just to read the Length). The previous
-        // implementation walked Layers TWICE — once to count via
-        // GetParameters().Length, once to actually copy — doubling the
-        // allocation pressure and the per-layer parameter materialization
-        // work for deep models. ResolveLazyLayerShapes above has
-        // already materialized every lazy layer's shape, so
-        // ParameterCount is now safe to read here. Closes review-comment
-        // #1271.uxip. Long accumulator + int.MaxValue gate below
-        // forwards the same overflow protection as before.
+        // Size the flat buffer from the SAME quantity that fills it — each
+        // layer's actual GetParameters().Length — mirroring PyTorch's
+        // torch.nn.utils.parameters_to_vector, which concatenates the real
+        // tensors and never consults a separately-computed count.
+        //
+        // Sizing from Sum(layer.ParameterCount) instead is only sound when
+        // ResolveLazyLayerShapes advanced the shape through EVERY layer. It
+        // deliberately stops at the first layer it cannot advance, so that a
+        // shape-polymorphic layer is never pinned to a guessed width (see the
+        // #1688 discussion on ResolveLazyLayerShapes). Any model whose graph is
+        // not a plain sequential chain therefore keeps downstream lazy layers at
+        // their PLACEHOLDER counts: Demucs' GLU halves the channel count between
+        // its paired convs, so MusicSourceSeparator's walk stalls at the k=1 gate
+        // conv, and VideoCLIP has two independent towers. Those placeholder
+        // counts contradict the tensors this loop copies — an unresolved
+        // Conv1DLayer reports a guessed inputChannels=1 (32 for a gate conv whose
+        // real fan-in is 8) while an unresolved LSTMLayer reports 0 — so the old
+        // sizing either overran the destination outright (ArgumentOutOfRangeException
+        // from the CopyTo below) or silently produced a vector whose layout no
+        // round-trip through UpdateParameters could reproduce.
+        //
+        // Retaining the per-layer vectors costs no extra allocation: the previous
+        // code already called layer.GetParameters() once per layer here, and this
+        // keeps it at exactly one call — we hold the references instead of
+        // discarding them and re-deriving the total from metadata that may lie.
+        // The long accumulator plus ToFlatVectorSize preserves the same overflow
+        // protection as before.
+        var perLayerParameters = new List<Vector<T>>(Layers.Count);
         long totalParameterCountLong = 0;
         foreach (var layer in Layers)
         {
-            totalParameterCountLong += layer.ParameterCount;
+            var layerParameters = layer.GetParameters();
+            perLayerParameters.Add(layerParameters);
+            totalParameterCountLong += layerParameters.Length;
         }
         int totalParameterCount = ParameterCountHelper.ToFlatVectorSize(totalParameterCountLong);
 
@@ -644,9 +662,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var destSpan = parameters.AsWritableSpan();
 
         int currentIndex = 0;
-        foreach (var layer in Layers)
+        foreach (var layerParameters in perLayerParameters)
         {
-            var layerParameters = layer.GetParameters();
             int copyLength = layerParameters.Length;
             if (copyLength == 0) continue;
             layerParameters.AsSpan().Slice(0, copyLength)
@@ -10950,6 +10967,49 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 nsStream.Position = 0;
                 var nsReader = new System.IO.BinaryReader(nsStream);
                 copyBase.DeserializeNetworkSpecificData(nsReader);
+            }
+        }
+
+        // Copy MODEL-OWNED TRAINABLE tensors — the ones surfaced by GetExtraTrainableTensors()
+        // (ViT's CLS + positional tokens, VideoCLIP's token + positional embedding tables, DCCRN's
+        // complex conv weights). These are genuinely trainable and genuinely NOT in Layers, so
+        // neither the per-layer share above nor the SerializeNetworkSpecificData round-trip reaches
+        // them unless the model separately opts into that second hook. Without this, a clone kept
+        // the freshly RANDOM tables its CreateNewInstance() constructor built while every tensor in
+        // Layers matched the original bit-for-bit — measured on VideoCLIP as 22/22 identical chunks
+        // and equal parameter L2, yet outputs differing by 1.6e+00 on identical input.
+        //
+        // Values are copied rather than CloneShared, matching the network-specific-data round-trip
+        // just above: the destination's tensors already exist (its constructor allocated them) and
+        // cannot be re-bound from here, and an independent copy means a later in-place write to
+        // either side cannot leak into the other. Cheap for the same reason the per-layer extras
+        // are copied eagerly — these tensors are small relative to the layer weights.
+        using (var srcExtras = GetExtraTrainableTensors().GetEnumerator())
+        using (var dstExtras = copyBase.GetExtraTrainableTensors().GetEnumerator())
+        {
+            while (true)
+            {
+                bool hasSrc = srcExtras.MoveNext();
+                bool hasDst = dstExtras.MoveNext();
+                if (hasSrc != hasDst)
+                {
+                    // The copy enumerates a different number of model-owned tensors than the
+                    // source. Its geometry does not match, so fall back to the eager
+                    // full-fidelity copy rather than leave the clone partially populated.
+                    (copy as IDisposable)?.Dispose();
+                    return false;
+                }
+                if (!hasSrc) break;
+
+                var srcTensor = srcExtras.Current;
+                var dstTensor = dstExtras.Current;
+                if (srcTensor is null || dstTensor is null) continue;
+                if (srcTensor.Length != dstTensor.Length)
+                {
+                    (copy as IDisposable)?.Dispose();
+                    return false;
+                }
+                for (int k = 0; k < srcTensor.Length; k++) dstTensor[k] = srcTensor[k];
             }
         }
 

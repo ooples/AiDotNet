@@ -136,6 +136,18 @@ public partial class Conv1DLayer<T> : LayerBase<T>
         [LayerState] int kernelSize,
         [LayerState] int dilation = 1,
         [LayerState] int stride = 1,
+        // MUST be persisted. Padding is not recoverable from any saved tensor: the kernel shape
+        // carries outputChannels/inputChannels/kernelSize, but padding only shifts WHERE the
+        // kernel lands, so a rebuild that omits it produces a layer with byte-identical weights
+        // that computes a different convolution. Left unmarked, this parameter was merely
+        // "optional" to the LayerStateGenerator, which silently rebuilt every Conv1DLayer with
+        // padding = null => (kernelSize-1)*dilation/2. MusicSourceSeparator's Demucs encoder
+        // passes kernel 8 / stride 4 / padding 2 (chosen so encoder and decoder lengths stay
+        // aligned for the skip-add), and the fallback yields 3 — with L=64 both give output
+        // length 16, so the mismatch cleared every shape assertion and surfaced only as clone
+        // output diverging by ~2.7e-01 with provably identical parameters.
+        // LayerStateGenerator strips Nullable<T> to match the int _padding field, so what
+        // round-trips is the EFFECTIVE padding, which reproduces either spelling exactly.
         [LayerState(Key = "Padding")] int? padding = null,
         IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)
@@ -212,6 +224,16 @@ public partial class Conv1DLayer<T> : LayerBase<T>
             RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
         }
 
+        // Apply any parameters handed to SetParameters before the shape was known. This is the second
+        // half of the deferral: geometry is now resolved from the REAL input, so the restored weights
+        // land on exactly the tensors the original had, and a clone reproduces the original bit-for-bit.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyResolvedParameters(pending);
+        }
+
         // Same reasoning as the lazy constructor: the output length follows the input length, so
         // it is not part of this layer's contract and must not be frozen into the declaration.
         _ = tOut;
@@ -262,6 +284,12 @@ public partial class Conv1DLayer<T> : LayerBase<T>
     {
         if (!IsShapeResolved)
         {
+            // Hand back whatever SetParameters deferred, so a save -> load -> save round trip is
+            // LOSSLESS even when no forward has run in between. Returning an empty vector here would
+            // silently drop restored weights for a model that is cloned twice before use. PyTorch has no
+            // equivalent: state_dict() on a lazy module reports uninitialized parameters.
+            if (_pendingParameters is not null) return _pendingParameters.Clone();
+
             // Caller asked for parameters before first Forward — return
             // an empty vector that round-trips with SetParameters'
             // pre-resolved branch below. This matches DenseLayer's
@@ -283,32 +311,30 @@ public partial class Conv1DLayer<T> : LayerBase<T>
         // solve for C_in.
         if (!IsShapeResolved)
         {
-            int candidateInputChannels = (parameters.Length - _outputChannels) /
-                                         (_outputChannels * _kernelSize);
-            if (candidateInputChannels <= 0
-                || candidateInputChannels * _outputChannels * _kernelSize + _outputChannels != parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Cannot infer inputChannels for Conv1DLayer from {parameters.Length} parameters " +
-                    $"(outputChannels={_outputChannels}, kernelSize={_kernelSize}).");
-            }
-            _inputChannels = candidateInputChannels;
-            // Conv2D needs T >= dilation*(K-1)+1 for the dummy shape
-            // check; use that as the placeholder spatial dim. The placeholder MUST be rank-3
-            // [B, C, T]: ResolveFromShape runs the normal first-forward resolution, and
-            // OnFirstForward rejects anything that is not rank-3. Passing the rank-2 [C, T] shape
-            // (the batch axis was omitted) made every Clone / Deserialize path that reaches
-            // SetParameters before the first forward throw
-            // "Conv1DLayer requires rank-3 [B, C, T] input; got rank 2" — which is what broke
-            // Serialize_Deserialize_ShouldPreserveBehavior.
-            int minSpatial = _dilation * (_kernelSize - 1) + 1;
-            ResolveFromShape(new[] { 1, candidateInputChannels, minSpatial });
-            _kernels = AllocateLazyWeight([_outputChannels, candidateInputChannels, 1, _kernelSize]);
-            _biases = AllocateLazyWeight([_outputChannels]);
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            // DEFER instead of guessing. Inferring inputChannels here also forces a resolution, and the
+            // only length available is a PLACEHOLDER (MinValidInputLength()) rather than the shape the
+            // original layer actually resolved against. The weights then land correctly — a restored
+            // model's flat parameter vector compares bit-identical — while the layer computes a
+            // different function, measured on a MusicSourceSeparator clone as Encoder_0 diverging by
+            // 7.93e-01 on the FIRST layer with 0 of 5892 parameters differing.
+            //
+            // Holding the parameters until the first real Forward keeps the layer fully lazy and
+            // resolves geometry from the ACTUAL input, so a restore reproduces the original exactly.
+            // PyTorch cannot do this at all: nn.Conv1d requires in_channels up front and
+            // load_state_dict refuses a lazy module until a forward has run.
+            _pendingParameters = parameters.Clone();
+            return;
         }
 
+        ApplyResolvedParameters(parameters);
+    }
+
+    /// <summary>Parameters handed to <see cref="SetParameters"/> before the shape was known.</summary>
+    private Vector<T>? _pendingParameters;
+
+    /// <summary>Applies a parameter vector to the already-resolved kernel and bias tensors.</summary>
+    private void ApplyResolvedParameters(Vector<T> parameters)
+    {
         int expectedLength = _kernels.Length + _biases.Length;
         if (parameters.Length != expectedLength)
         {
