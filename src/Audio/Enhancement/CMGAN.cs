@@ -62,6 +62,7 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields
 
+    private const double ExponentComparisonTolerance = 1e-12;
     private readonly CMGANOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -346,7 +347,7 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private Tensor<T> ApplyPowerLaw(Tensor<T> values, double exponent)
     {
-        if (exponent == 1.0) return values;
+        if (Math.Abs(exponent - 1.0) <= ExponentComparisonTolerance) return values;
 
         var result = new Tensor<T>(values._shape);
         for (int i = 0; i < values.Length; i++)
@@ -414,7 +415,7 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             var maskedOnly = ApplyMask(noisyMagnitude, decoded);
             // noisyMagnitude is power-law compressed, so expand before the inverse transform.
             double fallbackExponent = _options.PowerLawCompressionExponent;
-            if (fallbackExponent != 0.0)
+            if (Math.Abs(fallbackExponent) > ExponentComparisonTolerance)
                 maskedOnly = ApplyPowerLaw(maskedOnly, 1.0 / fallbackExponent);
             return ComputeISTFT(maskedOnly, originalLength);
         }
@@ -450,7 +451,8 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         // trained against compressed targets), so the magnitude must be expanded by 1/c before
         // the inverse transform while the phase angle is left untouched.
         double c = _options.PowerLawCompressionExponent;
-        if (c != 1.0 && c != 0.0)
+        if (Math.Abs(c - 1.0) > ExponentComparisonTolerance &&
+            Math.Abs(c) > ExponentComparisonTolerance)
         {
             double inverseExponent = 1.0 / c;
             for (int i = 0; i < spectrogram.Length; i++)

@@ -857,15 +857,14 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
             // code then ALSO called UpdateParameters(CollectGradients()) — a SECOND, manual gradient-descent
             // step (lr=1e-4) on top of the tape's optimizer step, double-updating the weights (and reading
             // per-layer gradients that TrainWithTape had already consumed). One tape step is the correct,
-            // complete update. Pass the constructor-supplied optimizer so a user-configured optimizer
-            // actually drives the update (it is gradient-based — e.g. the default AdamOptimizer); when it is
-            // not gradient-based the `as` yields null and TrainWithTape falls back to its default optimizer.
+            // complete update. Pass the constructor-supplied gradient-based optimizer directly so a
+            // user-configured optimizer actually drives the update.
             // PredictCore evaluates ImageNet-normalized pages, so train on that same representation rather
             // than fitting raw pixels and measuring the objective on a different input distribution.
             TrainWithTape(
                 PreprocessDocument(input),
                 expectedOutput,
-                _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+                _optimizer);
         }
         finally
         {
