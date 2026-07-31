@@ -461,14 +461,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // so the whole DOVETests class runs in the nightly heavy lane at full scale like its VSR
         // siblings (MIAVSR / MGLDVSR), keeping it off the default per-test-timeout gate.
         "DOVE",
-        // Paraformer (Gao et al. 2022) exhausted every rung of the timeout ladder in the
-        // CI-matched Generated P shard: it already runs in FP32, the audio fixture caps
-        // MoreData at 1-vs-2 steps, and its generated constructor already shrinks the
-        // public Conformer/CIF controls to 32-wide / 2 layers over a 64x32 input. Even
-        // that bounded paper-faithful topology hit the 120000 ms MoreData watchdog on
-        // run 30607196895. Keep production defaults untouched and run the generated
-        // class in the nightly HeavyTimeout lane.
-        "Paraformer",
     };
 
     /// <summary>
@@ -6339,16 +6331,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Paraformer" && model.TypeParameterCount == 1)
             {
-                // Paraformer retains the paper's 512-wide, 12-layer production defaults.
-                // Generated invariants exercise its public Conformer/CIF sizing controls
-                // at a scale that fits the 16 GB runner and permits repeated training.
+                // Paraformer retains its existing 512-wide, 12-layer production defaults.
+                // Generated invariants exercise its public Conformer/CIF/parallel-decoder controls
+                // at a scale that fits the 16 GB runner and permits repeated training. Keep a real
+                // encoder block, CIF alignment and a real decoder block; only widths/depths shrink.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
                     "new AiDotNet.SpeechRecognition.AlibabaASR.ParaformerOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 16, DecoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
+                    "FeedForwardDim = 32, NumMels = 32, VocabSize = 64, " +
                     "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\", " +
                     "LearningRate = 1e-5, WeightDecay = 0.01 }) " +
                     "{ StreamingTraining = AiDotNet.Enums.StreamingTrainingMode.ForceOn }";
@@ -6356,15 +6350,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "ParaformerLarge" && model.TypeParameterCount == 1)
             {
                 // Paraformer-Large retains the paper's 1024-wide, 50-layer, 16-head production
-                // defaults. Generated invariants exercise the same public Conformer/CIF sizing
-                // controls at CI smoke scale after the precision-first and iteration-cap steps.
+                // defaults. Generated invariants exercise the same public Conformer/CIF/parallel-
+                // decoder controls at CI smoke scale after the precision-first and iteration-cap
+                // steps, retaining one real encoder block, CIF alignment and one decoder block.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
                     "new AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 16, DecoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
+                    "FeedForwardDim = 32, NumMels = 32, VocabSize = 64, " +
                     "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
             }
             else if (model.ClassName == "NoiseRobustASR" && model.TypeParameterCount == 1)
@@ -6975,20 +6971,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "ContextNet" && model.TypeParameterCount == 1)
             {
-                // ContextNet retains the paper's 512-wide, 23-block squeeze-and-excitation
-                // encoder and 5,000-entry vocabulary in production. 37 s across its training
+                // ContextNet retains the paper's 23-block, alpha=1 channel schedule with
+                // squeeze-and-excitation and a 1,024-entry wordpiece vocabulary in production.
+                // 37 s across its training
                 // probes in the A-C shard, on top of the FP32 audio branch's existing
-                // repetition caps. Exercise the same mel -> SE-convolution encoder -> CTC head
-                // topology at CI-smoke scale. SqueezeExcitationRatio is kept at its paper value
-                // of 8, which still divides the reduced 32-wide encoder evenly. Production
-                // defaults are unchanged.
+                // repetition caps. Exercise the same mel -> depthwise-separable convolution ->
+                // BN/Swish -> SE -> projected-residual topology at CI-smoke scale. Three blocks
+                // retain both no-residual endpoint blocks and one residual interior block;
+                // WidthScaling=0.125 produces the documented 32-channel fixture, and the paper's
+                // SE ratio of 8 still divides it evenly. Production defaults are unchanged.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.SpeechRecognition.ConformerFamily.ContextNetOptions { SampleRate = 16000, " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumBlocks = 2, " +
-                    "SqueezeExcitationRatio = 8, NumMels = 64, VocabSize = 64, DropoutRate = 0.0 })";
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumBlocks = 3, NumSubBlocks = 2, " +
+                    "KernelSize = 5, WidthScaling = 0.125, SqueezeExcitationRatio = 8, " +
+                    "NumMels = 64, VocabSize = 64, DropoutRate = 0.0 })";
             }
             // NOTE (A-C tier-3, not yet done): AudioPaLM is still unbounded at 24 s of training
             // probes. There are TWO AudioPaLM types — AiDotNet.SpeechRecognition.LLMIntegrated
@@ -10088,11 +10087,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // FoundationScaleSerial collection. Emit the trait once regardless of source.
         bool heavyTimeout = HeavyTimeoutTestClassNames.Contains(model.ClassName);
         // ELECTRA's bounded fixture passes repeatably in isolation, but its loss trajectory is
-        // corrupted when another ModelFamily test invalidates the process-wide compiled-training
-        // plan while MoreData is stepping the original and its clone. The existing non-parallel
-        // convergence collection protects that shared-state boundary without serializing D-F's
-        // other classes or weakening the loss assertion.
-        if (model.ClassName == "ELECTRANER")
+        // corrupted when another ModelFamily test invalidates process-wide training state while
+        // MoreData is stepping the original and its clone. ContextNet's paper-faithful BN/Swish/SE
+        // composite showed the same signature in the #1934 seven-class run: 26/26 alone, but its
+        // one-step clone became NaN while 181 sibling tests passed concurrently. The existing
+        // non-parallel convergence collection protects that shared-state boundary without moving
+        // either class to HeavyTimeout or weakening the finite-loss assertion.
+        if (model.ClassName is "ELECTRANER" or "ContextNet")
             sb.AppendLine("[Xunit.Collection(\"ConvergenceSensitive\")]");
         if (IsHeavyTimeoutGeneratedModel(model.ClassName))
         {

@@ -23972,9 +23972,7 @@ public static class LayerHelper<T>
         double widthScaling = 1.0,
         double dropoutRate = 0.1)
     {
-        var swish = (IActivationFunction<T>)new SwishActivation<T>();
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
-        var sigmoid = (IActivationFunction<T>)new SigmoidActivation<T>();
 
         // Paper channel groups, scaled by alpha and floored at 1 channel.
         int Width(int block)
@@ -23983,44 +23981,39 @@ public static class LayerHelper<T>
             return Math.Max(1, (int)Math.Round(baseWidth * widthScaling));
         }
 
-        // 8x total downsampling via stride-2 at C3, C7 and C14 (paper §3).
+        if (numBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numBlocks));
+        if (numSubBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numSubBlocks));
+        if (numMels <= 0) throw new ArgumentOutOfRangeException(nameof(numMels));
+
+        // 8x total downsampling via stride-2 at C3, C7 and C14 (paper Table 1).
         static bool IsDownsampling(int block) => block is 3 or 7 or 14;
 
+        int inputChannels = numMels;
         for (int block = 0; block < numBlocks; block++)
         {
-            int channels = Width(block);
-            // C0 and the final block are single-convolution blocks; the rest are numSubBlocks deep.
+            int outputChannels = Width(block);
+            // C0 and C22 are single-convolution blocks without residuals. They still retain the
+            // paper's squeeze-and-excitation path; "No residual" is the only Table 1 exception.
             bool isSingle = block == 0 || block == numBlocks - 1;
-            int subBlocks = isSingle ? 1 : numSubBlocks;
-
-            for (int sub = 0; sub < subBlocks; sub++)
-            {
-                // Only the last convolution of a downsampling block carries the stride, so the
-                // reduction happens once per block rather than once per sub-block.
-                int stride = IsDownsampling(block) && sub == subBlocks - 1 ? 2 : 1;
-                yield return new Conv1DLayer<T>(
-                    outputChannels: channels,
-                    kernelSize: kernelSize,
-                    dilation: 1,
-                    stride: stride,
-                    padding: null,
-                    activation: swish);
-                yield return new LayerNormalizationLayer<T>();
-            }
-
-            // Squeeze-and-excitation: the global-context gate the paper is named for. Skipped on
-            // the single-convolution end blocks, matching the paper's block structure.
-            if (!isSingle)
-            {
-                yield return new SqueezeAndExcitationLayer<T>(
-                    channels, squeezeExcitationRatio, swish, sigmoid);
-
-                if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            }
+            yield return new ContextNetBlockLayer<T>(
+                inputChannels: inputChannels,
+                outputChannels: outputChannels,
+                kernelSize: kernelSize,
+                numConvolutions: isSingle ? 1 : numSubBlocks,
+                seReductionRatio: squeezeExcitationRatio,
+                dropoutRate: dropoutRate,
+                stride: IsDownsampling(block) ? 2 : 1,
+                useResidual: !isSingle,
+                seed: 2027 + block * 149);
+            inputChannels = outputChannels;
         }
 
-        // CTC vocabulary head — linear, so the logits stay unbounded for the CTC loss.
-        yield return new DenseLayer<T>(vocabSize, identity);
+        // ContextNet's encoder is channels-first; the vocabulary projection consumes the channel
+        // representation on the last axis and therefore emits [B, T, vocab].
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
+        var vocabularyHead = new DenseLayer<T>(vocabSize, identity);
+        vocabularyHead.ResolveShapesOnly(new[] { inputChannels });
+        yield return vocabularyHead;
     }
 
     public static IEnumerable<ILayer<T>> CreateDefaultDeepCNNCTCLayers(
