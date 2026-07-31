@@ -913,8 +913,8 @@ public partial class GRULayer<T> : LayerBase<T>
         // another. That broke Clone-after-training parity (a freshly-cloned model
         // starts from zeros while the trained original carried leftover state) and
         // repeated-Predict determinism. Reset to a zero hidden state at the start of
-        // every pass (TensorAllocator.Rent returns zero-initialized, engine-managed
-        // storage — the same call the original first-pass init used).
+        // every pass. TensorAllocator.Rent returns pooled memory that is not
+        // zero-initialized, so the rented state must be cleared before t=0.
         //
         // When _stateful is set (Keras-style stateful=True), the hidden state is
         // instead carried over from the previous Forward call — reset only on the
@@ -925,6 +925,7 @@ public partial class GRULayer<T> : LayerBase<T>
             || _lastHiddenState.Shape[0] != batchSize)
         {
             _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
+            _lastHiddenState.Fill(NumOps.Zero);
         }
 
         // Initialize list to store all hidden states if returning sequences
