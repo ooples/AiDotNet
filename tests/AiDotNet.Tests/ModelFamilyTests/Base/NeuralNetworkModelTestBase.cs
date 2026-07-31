@@ -1982,6 +1982,27 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             var lossTensor = ce.ComputeTapeLoss(predicted, target);
             return ConvertToDouble(lossTensor[0]);
         }
+
+        // Same reasoning for SIGMOID cross-entropy. A multi-label head trains on
+        // BinaryCrossEntropyWithLogitsLoss, and falling through to MSE measured a DIFFERENT objective
+        // than the optimizer descends: MSE is computed on the post-sigmoid probabilities Predict
+        // returns, so a step that legitimately lowers BCE on the logits can RAISE it. PANNs showed
+        // this as Training_ShouldReduceLoss failing with 0.010371 -> 0.014672 while training was
+        // working correctly — and it stayed at ~0.0147 no matter how many extra steps it was given,
+        // which is what ruled out slow convergence and pointed at the metric itself.
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> bceNet
+            && bceNet.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T> bce)
+        {
+            if (output.Length == 0 || target.Length == 0) return double.NaN;
+            var predicted = output;
+            var outShape = output.Shape.ToArray();
+            var tgtShape = target.Shape.ToArray();
+            if (!outShape.SequenceEqual(tgtShape) && output.Length == target.Length)
+                predicted = output.Reshape(tgtShape);
+            var lossTensor = bce.ComputeTapeLoss(predicted, target);
+            return ConvertToDouble(lossTensor[0]);
+        }
+
         return ComputeMSE(output, target);
     }
 

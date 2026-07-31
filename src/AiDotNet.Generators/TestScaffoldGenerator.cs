@@ -10150,6 +10150,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // [1, 32, 1, 1] cannot be broadcast". A shorter CLIP is fewer FRAMES, so the variable-length
             // axis is time (axis 1); the mel count is a fixed property of the front end.
             sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+            // Training_ShouldReduceLoss runs TrainingIterations * 3 steps, so the default 10 gives only
+            // 30 Adam steps at this fixture's LearningRate = 1e-4 — far too few for the CNN14 stack to
+            // move its BCE measurably, and the run came out marginally WORSE (0.715793 -> 0.716948) on
+            // noise. Its sibling PANNsModel needed 400 memorization steps for the same reason. The
+            // suite is fast (~13 s for all 28 tests), so the steps are affordable.
+            sb.AppendLine("    protected override int TrainingIterations => 60;");
         }
         if (model.ClassName == "Pengi")
         {
