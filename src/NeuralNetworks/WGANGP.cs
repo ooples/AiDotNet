@@ -174,9 +174,24 @@ public class WGANGP<T> : NeuralNetworkBase<T>
                 outputSize: 1);
         }
 
-        // Image callers that want distinct latent and image shapes should use the full
-        // generator/critic constructor. Preserve the historical shared image architecture here.
-        return generatorArchitecture;
+        // The critic is a real-valued scalar function, never another image classifier.
+        // Reusing the generator architecture here gave the critic the generic CNN helper's
+        // Softmax output (64 probabilities in the generated fixture). A one-class Softmax is
+        // constant and a multi-class Softmax is still not a Wasserstein score; either choice can
+        // leave the entire first critic step with zero gradients. Gulrajani et al. Algorithm 1
+        // requires D(x) to be an unrestricted scalar and applies the penalty to its input gradient.
+        return new NeuralNetworkArchitecture<T>(
+            inputType: generatorArchitecture.InputType,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: generatorArchitecture.Complexity,
+            inputSize: generatorArchitecture.InputSize,
+            inputHeight: generatorArchitecture.InputHeight,
+            inputWidth: generatorArchitecture.InputWidth,
+            inputDepth: generatorArchitecture.InputDepth,
+            outputSize: 1,
+            layers: LayerHelper<T>.CreateDefaultWGANGPCriticLayers(
+                generatorArchitecture.InputType).ToList(),
+            inputFrames: generatorArchitecture.InputFrames);
     }
 
     /// <summary>
@@ -250,6 +265,12 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         {
             throw new ArgumentNullException(nameof(criticArchitecture), "Critic architecture cannot be null.");
         }
+        if (criticArchitecture.OutputSize != 1)
+        {
+            throw new ArgumentException(
+                $"WGAN-GP critic output size must be 1 (an unrestricted Wasserstein score), but was {criticArchitecture.OutputSize}.",
+                nameof(criticArchitecture));
+        }
         if (gradientPenaltyCoefficient <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(gradientPenaltyCoefficient), gradientPenaltyCoefficient, "Gradient penalty coefficient must be positive.");
@@ -263,7 +284,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         _criticIterations = criticIterations;
 
         Generator = CreateNetworkForArchitecture(generatorArchitecture);
-        Critic = CreateNetworkForArchitecture(criticArchitecture);
+        Critic = CreateNetworkForArchitecture(EnsureDefaultCriticLayers(criticArchitecture));
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
@@ -285,6 +306,30 @@ public class WGANGP<T> : NeuralNetworkBase<T>
                 new ConvolutionalNeuralNetwork<T>(architecture),
             _ => new FeedForwardNeuralNetwork<T>(architecture),
         };
+    }
+
+    /// <summary>
+    /// Supplies the paper-correct default critic when the caller did not provide custom layers.
+    /// Custom critic layers remain untouched.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> EnsureDefaultCriticLayers(
+        NeuralNetworkArchitecture<T> architecture)
+    {
+        if (architecture.Layers is { Count: > 0 })
+            return architecture;
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: architecture.InputType,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: architecture.Complexity,
+            inputSize: architecture.InputSize,
+            inputHeight: architecture.InputHeight,
+            inputWidth: architecture.InputWidth,
+            inputDepth: architecture.InputDepth,
+            outputSize: 1,
+            layers: LayerHelper<T>.CreateDefaultWGANGPCriticLayers(
+                architecture.InputType).ToList(),
+            inputFrames: architecture.InputFrames);
     }
 
     private AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreatePaperAdamOptions()
@@ -481,47 +526,73 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             }
         }
 
-        // Forward pass on real images to compute scores using vectorized reduction
-        var realScores = Critic.Predict(realImages);
-        T realScore = NumOps.Divide(Engine.TensorSum(realScores), NumOps.FromDouble(batchSize));
+        // Eager fallback: optimize the same single differentiable objective as Algorithm 1.
+        // The previous path created real/fake output-gradient tensors but never backpropagated
+        // either one, and returned an all-zero placeholder for the GP parameter gradients. Its
+        // optimizer therefore received an all-zero vector and every critic iteration was a no-op.
+        T gradientPenalty = NumOps.Zero;
+        var trainableCritic = (NeuralNetworkBase<T>)Critic;
+        T criticLoss = trainableCritic.TrainWithCustomLoss(realImages, realScores =>
+        {
+            var fakeScores = Critic.ForwardForTraining(fakeImages);
+            var realAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+            var fakeAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+            var wasserstein = Engine.TensorSubtract(
+                Engine.ReduceMean(fakeScores, fakeAxes, keepDims: false),
+                Engine.ReduceMean(realScores, realAxes, keepDims: false));
 
-        // Forward pass on fake images to compute scores using vectorized reduction
-        var fakeScores = Critic.Predict(fakeImages);
-        T fakeScore = NumOps.Divide(Engine.TensorSum(fakeScores), NumOps.FromDouble(batchSize));
+            // x-hat = epsilon * real + (1 - epsilon) * fake, with one epsilon per sample.
+            var epsilonShape = new int[realImages.Shape.Length];
+            epsilonShape[0] = batchSize;
+            for (int d = 1; d < epsilonShape.Length; d++) epsilonShape[d] = 1;
+            var epsilonBase = Engine.TensorRandomUniform<T>(epsilonShape);
+            var tileFactors = new int[realImages.Shape.Length];
+            tileFactors[0] = 1;
+            for (int d = 1; d < tileFactors.Length; d++) tileFactors[d] = realImages.Shape[d];
+            var epsilon = Engine.TensorTile(epsilonBase, tileFactors);
+            var ones = new Tensor<T>(epsilon._shape);
+            Engine.TensorFill(ones, NumOps.One);
+            var interpolated = Engine.TensorAdd(
+                Engine.TensorMultiply(epsilon, realImages),
+                Engine.TensorMultiply(Engine.TensorSubtract(ones, epsilon), fakeImages));
 
-        // Compute gradient penalty (this calls Predict on interpolated images which overwrites cache)
-        var (gradientPenalty, gpParameterGradients) = ComputeGradientPenaltyWithGradients(realImages, fakeImages, batchSize);
+            // createGraph=true is essential: the outer critic tape must differentiate the
+            // input-gradient norm back into the critic weights, just as PyTorch's autograd.grad
+            // and the paper's official TensorFlow implementation do.
+            Tensor<T> inputGradients;
+            using (var innerTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
+            {
+                var interpolatedScores = Critic.ForwardForTraining(interpolated);
+                var scoreAxes = Enumerable.Range(0, interpolatedScores.Shape.Length).ToArray();
+                var summedScores = Engine.ReduceSum(interpolatedScores, scoreAxes, keepDims: false);
+                var innerGradients = innerTape.ComputeGradients(
+                    summedScores, [interpolated], createGraph: true);
+                inputGradients = innerGradients.TryGetValue(interpolated, out var gradient)
+                    ? gradient
+                    : new Tensor<T>(interpolated._shape);
+            }
 
-        // Wasserstein loss with gradient penalty: -E[D(real)] + E[D(fake)] + lambda * GP
-        T wassersteinDistance = NumOps.Subtract(realScore, fakeScore);
-        T gpTerm = NumOps.Multiply(NumOps.FromDouble(_gradientPenaltyCoefficient), gradientPenalty);
-        T criticLoss = NumOps.Add(NumOps.Negate(wassersteinDistance), gpTerm);
+            int elementsPerSample = inputGradients.Length / batchSize;
+            var flattenedGradients = Engine.Reshape(inputGradients, [batchSize, elementsPerSample]);
+            var squaredGradients = Engine.TensorMultiply(flattenedGradients, flattenedGradients);
+            var squaredNorm = Engine.ReduceSum(squaredGradients, [1], keepDims: false);
+            var stabilizedSquaredNorm = Engine.TensorAddScalar(squaredNorm, NumOps.FromDouble(1e-12));
+            var gradientNorm = Engine.TensorSqrt(stabilizedSquaredNorm);
+            var normOnes = new Tensor<T>(gradientNorm._shape);
+            Engine.TensorFill(normOnes, NumOps.One);
+            var normDeviation = Engine.TensorSubtract(gradientNorm, normOnes);
+            var perSamplePenalty = Engine.TensorMultiply(normDeviation, normDeviation);
+            var penaltyAxes = Enumerable.Range(0, perSamplePenalty.Shape.Length).ToArray();
+            var penalty = Engine.ReduceMean(perSamplePenalty, penaltyAxes, keepDims: false);
+            gradientPenalty = penalty.Length > 0 ? penalty[0] : NumOps.Zero;
 
-        // Create gradients for real images (maximize score) using vectorized fill
-        var realGradients = new Tensor<T>(realScores._shape);
-        Engine.TensorFill(realGradients, NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize)));
-
-        // IMPORTANT: Re-run forward pass on real images before backprop
-        // The GP computation called Predict(interpolated) which overwrote the cached activations
-        Critic.Predict(realImages);
-        var realParameterGradients = Critic.GetParameterGradients().Clone();
-
-        // Create gradients for fake images (minimize score) using vectorized fill
-        var fakeGradients = new Tensor<T>(fakeScores._shape);
-        Engine.TensorFill(fakeGradients, NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize)));
-
-        // IMPORTANT: Re-run forward pass on fake images before backprop
-        Critic.Predict(fakeImages);
-        var fakeParameterGradients = Critic.GetParameterGradients().Clone();
-
-        // Combine all gradients using vectorized operations: real + fake + scaled GP
-        T gpScale = NumOps.FromDouble(_gradientPenaltyCoefficient);
-        var scaledGpGradients = Engine.Multiply(gpParameterGradients, gpScale);
-        var realPlusFake = Engine.Add(realParameterGradients, fakeParameterGradients);
-        var combinedGradients = Engine.Add(realPlusFake, scaledGpGradients);
-
-        // Update critic parameters with combined gradients using optimizer
-        UpdateCriticWithOptimizer(combinedGradients);
+            var weightedPenalty = Engine.TensorMultiplyScalar(
+                penalty, NumOps.FromDouble(_gradientPenaltyCoefficient));
+            var alignedPenalty = weightedPenalty._shape.SequenceEqual(wasserstein._shape)
+                ? weightedPenalty
+                : Engine.Reshape(weightedPenalty, wasserstein._shape);
+            return Engine.TensorAdd(wasserstein, alignedPenalty);
+        }, _criticOptimizer);
 
         return (criticLoss, gradientPenalty);
     }

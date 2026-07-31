@@ -813,6 +813,44 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates the default WGAN-GP critic: LeakyReLU feature extraction followed by one
+    /// unrestricted scalar score. No Softmax, Sigmoid, BatchNorm, or Dropout is used.
+    /// </summary>
+    /// <remarks>
+    /// Gulrajani et al. (2017) optimize <c>E[D(fake)] - E[D(real)]</c> and penalize
+    /// <c>(||grad D(x-hat)||2 - 1)^2</c>. Consequently the critic head must be linear;
+    /// a probability activation changes the objective, while a one-class Softmax is the
+    /// constant one function and has identically zero gradients. The paper's image critics
+    /// use non-saturating feature blocks and omit batch normalization in the critic because
+    /// the gradient penalty is defined independently for each sample.
+    /// </remarks>
+    /// <param name="inputType">Dimensionality of the samples scored by the critic.</param>
+    /// <returns>Default paper-compatible critic layers.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultWGANGPCriticLayers(InputType inputType)
+    {
+        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        if (inputType is InputType.ThreeDimensional or InputType.FourDimensional)
+        {
+            yield return new ConvolutionalLayer<T>(
+                outputDepth: 32, kernelSize: 3, stride: 2, padding: 1,
+                activationFunction: leakyRelu);
+            yield return new ConvolutionalLayer<T>(
+                outputDepth: 64, kernelSize: 3, stride: 2, padding: 1,
+                activationFunction: leakyRelu);
+            yield return new FlattenLayer<T>();
+        }
+        else
+        {
+            yield return new FlattenLayer<T>();
+            yield return new DenseLayer<T>(64, leakyRelu);
+        }
+
+        yield return new DenseLayer<T>(1, identity);
+    }
+
+    /// <summary>
     /// Creates layers for a VGG network based on the specified configuration.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
