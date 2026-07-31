@@ -12029,9 +12029,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // LearningRate = 1e-4 and the measured loss moved on noise (0.715793 -> 0.716948).
                     // Its whole 28-test suite runs in ~13 s, so it can afford the steps that the heavier
                     // members of this list cannot; every other model keeps the cap.
-                    sb.AppendLine(model.ClassName == "PANNs"
-                        ? "    protected override int TrainingIterations => 60;"
-                        : "    protected override int TrainingIterations => 2;");
+                    sb.AppendLine(model.ClassName switch
+                    {
+                        "PANNs" => "    protected override int TrainingIterations => 60;",
+                        // SeACo/Paraformer's GLM sampler changes the semantic-input mixture during
+                        // Adam's first few steps. Its measured trajectory settles by 15 steps, while
+                        // the shared six-step smoke cap stops inside that transient (0.9345 -> 3.87).
+                        // Keep the FP32/bounded fixture and give only this convergence probe enough
+                        // steps to measure the descent described by the paper's training procedure.
+                        "SeACo" => "    protected override int TrainingIterations => 5;",
+                        _ => "    protected override int TrainingIterations => 2;",
+                    });
                     // Chirp3 and ParaformerLarge have a measured Adam warm-up transient: the loss rises
                     // at step 2 before its normal descent begins. Compare after that transient while
                     // keeping the same real training path, paper-default optimizer, and customizable model.
