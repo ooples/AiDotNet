@@ -135,6 +135,13 @@ public static class DeserializationHelper
                 TryRestoreVectorActivation<T>(additionalParams),
                 out var generatedLayer))
         {
+            // [LayerState] reconstructs constructor arguments, but some layers also have
+            // behavior-affecting post-construction configuration. Restore it before returning;
+            // otherwise the generated factory bypasses the explicit legacy branches below.
+            if (generatedLayer is EmbeddingLayer<T> generatedEmbedding)
+                RestoreEmbeddingConfiguration(generatedEmbedding, additionalParams);
+            else if (generatedLayer is MultiHeadAttentionLayer<T> generatedAttention)
+                RestoreMultiHeadAttentionConfiguration(generatedAttention, additionalParams);
             return (ILayer<T>)generatedLayer;
         }
 
@@ -556,37 +563,8 @@ public static class DeserializationHelper
                 throw new MissingLayerCtorException("Cannot find EmbeddingLayer constructor with (int, int).");
             }
             instance = ctor.Invoke(new object[] { vocabSize, embeddingDim });
-            // Restore config properties set via object-initializer at build time
-            // (the ctor only takes vocab/dim). Without this the transformer embedding
-            // loses its forced Indices mode and the Vaswani §3.4 sqrt(d) scale on
-            // deserialization, so a round-tripped model would behave differently.
             if (instance is EmbeddingLayer<T> embInstance)
-            {
-                // Restore InputMode / ScaleBySqrtDimension from metadata. A key that is ABSENT
-                // keeps the ctor default (older models serialized before these knobs existed). A
-                // key that is PRESENT but unparseable is a corrupt/incompatible stream — reject it
-                // loudly rather than silently falling back to a default, which would round-trip the
-                // model into DIFFERENT behavior (e.g. losing the Vaswani §3.4 sqrt(d) embedding
-                // scale) with no error.
-                if (additionalParams != null && additionalParams.TryGetValue("InputMode", out var modeObj))
-                {
-                    var modeStr = modeObj?.ToString();
-                    if (!Enum.TryParse<EmbeddingInputMode>(modeStr, out var mode))
-                        throw new InvalidOperationException(
-                            $"EmbeddingLayer metadata 'InputMode' has an unparseable value '{modeStr}'. " +
-                            $"Expected one of: {string.Join(", ", Enum.GetNames(typeof(EmbeddingInputMode)))}.");
-                    embInstance.InputMode = mode;
-                }
-                if (additionalParams != null && additionalParams.TryGetValue("ScaleBySqrtDimension", out var scaleObj))
-                {
-                    var scaleStr = scaleObj?.ToString();
-                    if (!bool.TryParse(scaleStr, out var scaleVal))
-                        throw new InvalidOperationException(
-                            $"EmbeddingLayer metadata 'ScaleBySqrtDimension' has an unparseable value " +
-                            $"'{scaleStr}'. Expected 'true' or 'false'.");
-                    embInstance.ScaleBySqrtDimension = scaleVal;
-                }
-            }
+                RestoreEmbeddingConfiguration(embInstance, additionalParams);
         }
         else if (genericDef == typeof(PatchEmbeddingLayer<>))
         {
@@ -3354,20 +3332,7 @@ public static class DeserializationHelper
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
         var attention = (MultiHeadAttentionLayer<T>)ctor.Invoke(
             new object?[] { headCount, headDimension, activation, null });
-        attention.UseCausalMask = TryGetBool(additionalParams, "UseCausalMask") ?? false;
-
-        string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
-        if (!string.IsNullOrWhiteSpace(positionalEncoding)
-            && Enum.TryParse<Enums.PositionalEncodingType>(
-                positionalEncoding, ignoreCase: true, out var positionalType)
-            && positionalType != Enums.PositionalEncodingType.None)
-        {
-            double ropeTheta = TryGetDouble(additionalParams, "RopeTheta") ?? 10000.0;
-            int maxSequenceLength =
-                TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
-            attention.ConfigurePositionalEncoding(
-                positionalType, ropeTheta, maxSequenceLength);
-        }
+        RestoreMultiHeadAttentionConfiguration(attention, additionalParams);
 
         return attention;
     }
@@ -3892,37 +3857,68 @@ public static class DeserializationHelper
     /// </summary>
     private static object? TryRestoreActivation<T>(Dictionary<string, object>? additionalParams)
     {
-        if (additionalParams == null) return null;
-
-        string? typeName = null;
-        if (additionalParams.TryGetValue("ScalarActivationType", out var atVal))
-            typeName = atVal as string;
-
-        if (string.IsNullOrEmpty(typeName)) return null;
-
-        var activationType = Type.GetType(typeName);
-        if (activationType == null) return null;
-
-        if (activationType.IsGenericTypeDefinition)
-            activationType = activationType.MakeGenericType(typeof(T));
-
-        return Activator.CreateInstance(activationType);
+        return TryCreateActivationInstance(
+            additionalParams,
+            "ScalarActivationType",
+            typeof(IActivationFunction<>).MakeGenericType(typeof(T)));
     }
 
     private static object? TryRestoreVectorActivation<T>(Dictionary<string, object>? additionalParams)
     {
-        if (additionalParams == null) return null;
+        return TryCreateActivationInstance(
+            additionalParams,
+            "VectorActivationType",
+            typeof(IVectorActivationFunction<>).MakeGenericType(typeof(T)));
+    }
 
-        if (!additionalParams.TryGetValue("VectorActivationType", out var atVal)) return null;
-        if (atVal as string is not { Length: > 0 } typeName) return null;
+    private static void RestoreEmbeddingConfiguration<T>(
+        EmbeddingLayer<T> embedding,
+        Dictionary<string, object>? additionalParams)
+    {
+        // These settings are applied through object initializers, not constructor arguments, so
+        // [LayerState] cannot restore them. A missing key preserves the constructor default for
+        // legacy payloads; a malformed present value is rejected rather than silently changing
+        // the layer's input interpretation or transformer embedding scale.
+        if (additionalParams != null && additionalParams.TryGetValue("InputMode", out var modeObj))
+        {
+            var modeStr = modeObj?.ToString();
+            if (!Enum.TryParse<EmbeddingInputMode>(modeStr, out var mode))
+                throw new InvalidOperationException(
+                    $"EmbeddingLayer metadata 'InputMode' has an unparseable value '{modeStr}'. " +
+                    $"Expected one of: {string.Join(", ", Enum.GetNames(typeof(EmbeddingInputMode)))}.");
+            embedding.InputMode = mode;
+        }
 
-        var activationType = Type.GetType(typeName);
-        if (activationType == null) return null;
+        if (additionalParams != null && additionalParams.TryGetValue("ScaleBySqrtDimension", out var scaleObj))
+        {
+            var scaleStr = scaleObj?.ToString();
+            if (!bool.TryParse(scaleStr, out var scaleVal))
+                throw new InvalidOperationException(
+                    $"EmbeddingLayer metadata 'ScaleBySqrtDimension' has an unparseable value " +
+                    $"'{scaleStr}'. Expected 'true' or 'false'.");
+            embedding.ScaleBySqrtDimension = scaleVal;
+        }
+    }
 
-        if (activationType.IsGenericTypeDefinition)
-            activationType = activationType.MakeGenericType(typeof(T));
+    private static void RestoreMultiHeadAttentionConfiguration<T>(
+        MultiHeadAttentionLayer<T> attention,
+        Dictionary<string, object>? additionalParams)
+    {
+        attention.UseCausalMask = TryGetBool(additionalParams, "UseCausalMask") ?? false;
 
-        return Activator.CreateInstance(activationType);
+        string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
+        if (string.IsNullOrWhiteSpace(positionalEncoding)
+            || !Enum.TryParse<Enums.PositionalEncodingType>(
+                positionalEncoding, ignoreCase: true, out var positionalType)
+            || positionalType == Enums.PositionalEncodingType.None)
+        {
+            return;
+        }
+
+        double ropeTheta = TryGetDouble(additionalParams, "RopeTheta") ?? 10000.0;
+        int maxSequenceLength =
+            TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
+        attention.ConfigurePositionalEncoding(positionalType, ropeTheta, maxSequenceLength);
     }
 
     private static int? TryGetInt(Dictionary<string, object>? parameters, string key)
