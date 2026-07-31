@@ -12163,6 +12163,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             }
 
+            // PR #1789 / issue #1933 timeout ladder, rung 2: RecurrentGemma was already
+            // emitted in FP32 (rung 1), but TrainingError_ShouldNotExceedTestError still
+            // hit its 120-second gate because the base fixture performs 3 * 10 updates.
+            // Cap that shared training count at five (15 real optimizer steps). The model
+            // width, Griffin recurrence/local-attention topology, and production defaults
+            // remain unchanged; no fixture shrink or HeavyTimeout opt-out is needed.
+            if (model.ClassName == "RecurrentGemmaLanguageModel")
+            {
+                sb.AppendLine("    protected override int TrainingIterations => 5;");
+            }
+
             // Raw-logit-head CE LMs (RWKV4/Eagle/Finch): pin a deterministic per-layer init seed around
             // construction so the training-trajectory invariants (Training_ShouldReduceLoss / MoreData)
             // are order-INDEPENDENT — without it, weight init falls back to the process-shared

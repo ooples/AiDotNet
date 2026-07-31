@@ -86,6 +86,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     private readonly List<Conv3DLayer<T>> _decConvs = new();
     private readonly List<InstanceNormalizationLayer<T>> _decNorms = new();
     private Conv3DLayer<T>? _outConv;
+    private bool _nativeShapesResolved;
     #endregion
 
     private sealed class GscModule
@@ -497,6 +498,76 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 
         _outConv = new Conv3DLayer<T>(_numClasses, 1, 1, 0, identity);
         Layers.Add(_outConv);
+    }
+
+    /// <summary>
+    /// Resolves lazy convolution weights through SegMamba's real U-shaped topology.
+    /// </summary>
+    /// <remarks>
+    /// The base resolver treats <see cref="NeuralNetworkBase{T}.Layers"/> as a flat chain. That is
+    /// incorrect for SegMamba: each decoder stage concatenates the upsampled feature with an encoder
+    /// skip (Xing et al. 2024, section 2), so its convolution consumes the sum of both channel counts.
+    /// Resolving the decoder as a flat chain pins, for example, the finest fusion kernel to 64 input
+    /// channels although the real graph supplies 64 + 32 = 96. Resolve the convolution shapes here in
+    /// the same encoder/skip/decoder order as <see cref="Forward(Tensor{T})"/>.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_nativeShapesResolved || !_useNativeMode || Layers.Count == 0 || _stem is null || _outConv is null)
+            return;
+
+        int depth = Architecture.InputHeight;
+        int height = Architecture.InputHeight;
+        int width = Architecture.InputWidth;
+        if (depth <= 0 || height <= 0 || width <= 0)
+            return; // Dynamic volumes resolve from their first real forward.
+
+        static int ConvOutput(int size, int kernel, int stride, int padding)
+            => (size + 2 * padding - kernel) / stride + 1;
+
+        _stem.ResolveFromShape([_inChannels, depth, height, width]);
+        depth = ConvOutput(depth, _stem.KernelSize, _stem.Stride, _stem.Padding);
+        height = ConvOutput(height, _stem.KernelSize, _stem.Stride, _stem.Padding);
+        width = ConvOutput(width, _stem.KernelSize, _stem.Stride, _stem.Padding);
+
+        var skipSpatial = new (int Depth, int Height, int Width)[_channelDims.Length];
+        for (int stage = 0; stage < _channelDims.Length; stage++)
+        {
+            if (stage > 0)
+            {
+                var down = _downConvs[stage - 1];
+                down.ResolveFromShape([_channelDims[stage - 1], depth, height, width]);
+                depth = ConvOutput(depth, down.KernelSize, down.Stride, down.Padding);
+                height = ConvOutput(height, down.KernelSize, down.Stride, down.Padding);
+                width = ConvOutput(width, down.KernelSize, down.Stride, down.Padding);
+            }
+
+            int channels = _channelDims[stage];
+            var gsc = _gsc[stage];
+            gsc.Proj.ResolveFromShape([channels, depth, height, width]);
+            gsc.Proj2.ResolveFromShape([channels, depth, height, width]);
+            gsc.Proj3.ResolveFromShape([channels, depth, height, width]);
+            skipSpatial[stage] = (depth, height, width);
+        }
+
+        int currentChannels = _channelDims[^1];
+        int convIdx = 0;
+        for (int stage = _channelDims.Length - 2; stage >= 0; stage--)
+        {
+            (depth, height, width) = skipSpatial[stage];
+            int concatChannels = currentChannels + _channelDims[stage];
+            _decConvs[convIdx].ResolveFromShape([concatChannels, depth, height, width]);
+            currentChannels = _channelDims[stage];
+            convIdx++;
+        }
+
+        // The final upsample returns to the input volume without another skip concat.
+        depth = Architecture.InputHeight;
+        height = Architecture.InputHeight;
+        width = Architecture.InputWidth;
+        _decConvs[convIdx].ResolveFromShape([currentChannels, depth, height, width]);
+        _outConv.ResolveFromShape([_channelDims[0], depth, height, width]);
+        _nativeShapesResolved = true;
     }
 
     /// <summary>
