@@ -3464,6 +3464,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new {optionsType} {{ EncoderDim = 32, NumEncoderLayers = 1, " +
                     "NumAttentionHeads = 4, NumMels = 32, VocabSize = 16, MaxTextLength = 8 })";
             }
+            else if (model.ClassName == "REBFormer" && model.TypeParameterCount == 1)
+            {
+                // REBFormer exhausted FP32 plus the audio fixture's 1-vs-2 MoreData
+                // and two-step memorization caps in CI run 30613315686 (120 s and
+                // 180 s respectively). Exercise the same public Branchformer sizing
+                // controls at smoke scale; production defaults remain 512-wide /
+                // 12-layer. The model's separate REB-former architecture/citation
+                // fidelity debt is intentionally outside this timeout-only change.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.ConformerFamily.REBFormerOptions { " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 4, CgmlpDim = 64, NumMels = 32, " +
+                    "VocabSize = 16, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "RNNTransducer" && model.TypeParameterCount == 1)
+            {
+                // Graves' RNN-T keeps its encoder -> prediction network -> joint
+                // network topology. FP32 and the 1-vs-2 audio cap still hit the
+                // 120 s MoreData watchdog in run 30613315686, so bound only the
+                // generated fixture's public widths/depths and vocabulary.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
+                    "new AiDotNet.Audio.SpeechRecognition.RNNTransducerOptions { " +
+                    "EncoderDim = 32, NumEncoderLayers = 1, NumEncoderHeads = 4, " +
+                    "PredictionDim = 32, NumPredictionLayers = 1, EmbeddingDim = 16, " +
+                    "JointDim = 32, NumMels = 32, VocabSize = 16, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "Branchformer" && model.TypeParameterCount == 1)
             {
                 // Branchformer keeps the paper's parallel attention/CGMLP branch and
