@@ -133,6 +133,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// </summary>
     public override bool SupportsTraining => true;
 
+
     /// <summary>
     /// Gets the video frame height.
     /// </summary>
@@ -1241,13 +1242,30 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     {
         return new VideoCLIP<T>(
             Architecture, _numFrames, _embeddingDim, _textMaxLength, _vocabSize, _temperature,
+            // EVERY option that affects training must be carried, not just the topology ones. This
+            // copied five fields and dropped Beta1, Beta2, MaxGradientNorm, WarmupSteps,
+            // TotalTrainingSteps and DecayPower, so a clone silently rebuilt its optimizer from the
+            // DEFAULTS — including the paper's 1000-step warm-up, which the caller may deliberately have
+            // turned off. A clone that warms up when the original does not is not the same model.
+            //
+            // Measured: MoreData_ShouldNotDegrade clones the network and trains the clone, and the
+            // clone's loss came back byte-identical (0.7257835234621279) at 2, 4 and 12 iterations with
+            // its parameter L2 unchanged to 16 digits — the LR sat at ~5e-8 on the first rung of a ramp
+            // the original had disabled, so no step could move anything. The invariant was reporting a
+            // real defect, not task-to-task variance.
             options: new VideoCLIPVideoOptions
             {
                 HiddenDimension = _options.HiddenDimension,
                 NumSpatialBlocks = _options.NumSpatialBlocks,
                 NumTemporalBlocks = _options.NumTemporalBlocks,
                 NumTextBlocks = _options.NumTextBlocks,
-                LearningRate = _options.LearningRate
+                LearningRate = _options.LearningRate,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                MaxGradientNorm = _options.MaxGradientNorm,
+                WarmupSteps = _options.WarmupSteps,
+                TotalTrainingSteps = _options.TotalTrainingSteps,
+                DecayPower = _options.DecayPower
             });
     }
 
