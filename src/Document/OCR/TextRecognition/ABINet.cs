@@ -759,14 +759,13 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         // Nothing carries across calls: every input restarts from its own vision prediction,
         // matching the paper's "each new text instance starts fresh".
         var languageInput = visionLogits;
-        Tensor<T> languageFeatures = visionLogits;
         Tensor<T> languageLogits = visionLogits;
         Tensor<T> fused = visionFeatures;
 
         int iterations = _numIterations > 0 ? _numIterations : 1;
         for (int iteration = 0; iteration < iterations; iteration++)
         {
-            languageFeatures = languageInput;
+            var languageFeatures = languageInput;
             foreach (var layer in _languageModelLayers)
                 languageFeatures = layer.Forward(languageFeatures);
 
