@@ -461,6 +461,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // so the whole DOVETests class runs in the nightly heavy lane at full scale like its VSR
         // siblings (MIAVSR / MGLDVSR), keeping it off the default per-test-timeout gate.
         "DOVE",
+        // Paraformer (Gao et al. 2022) exhausted every rung of the timeout ladder in the
+        // CI-matched Generated P shard: it already runs in FP32, the audio fixture caps
+        // MoreData at 1-vs-2 steps, and its generated constructor already shrinks the
+        // public Conformer/CIF controls to 32-wide / 2 layers over a 64x32 input. Even
+        // that bounded paper-faithful topology hit the 120000 ms MoreData watchdog on
+        // run 30607196895. Keep production defaults untouched and run the generated
+        // class in the nightly HeavyTimeout lane.
+        "Paraformer",
     };
 
     /// <summary>
@@ -3421,7 +3429,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName is "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
+            if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
                     or "Wav2Vec2ASR" or "WavLMASR" or "WavLMRobust" or "XLSR"
@@ -3434,6 +3442,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // topology while exercising it at a bounded public-options scale.
                 string optionsType = model.ClassName switch
                 {
+                    "FunASRNano" => "AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions",
                     "HuBERTASR" => "AiDotNet.SpeechRecognition.Foundation.HuBERTASROptions",
                     "InterCTC" => "AiDotNet.SpeechRecognition.CTCVariants.InterCTCOptions",
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
