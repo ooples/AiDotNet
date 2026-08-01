@@ -49,6 +49,17 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
     // [frame, bins] basis pair every training step would cost more than the loss itself.
     private readonly Dictionary<int, (Tensor<T> Window, Tensor<T> Cos, Tensor<T> Sin)> _bases = new();
 
+    // Every constant this loss feeds into the graph is cached and reused, never rebuilt per call.
+    // The fused compiled training path TRACES the graph on the first step and REPLAYS it on every
+    // step after, capturing the tensor references it saw. A constant allocated fresh inside each
+    // ComputeTapeLoss is therefore captured once and then replayed against a tensor the caller has
+    // moved on from — and with pooled allocation that buffer can be recycled underneath the plan,
+    // which is how the fused step ended up reading NaN while eager evaluation of the same loss
+    // stayed finite in both precisions.
+    private readonly Dictionary<int, Tensor<T>[]> _cosColumns = new();
+    private readonly Dictionary<int, Tensor<T>[]> _sinColumns = new();
+    private readonly Dictionary<string, Tensor<T>> _constants = new();
+
     /// <summary>
     /// Creates the loss over the given STFT frame sizes.
     /// </summary>
@@ -173,7 +184,7 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
             Engine.TensorSqrt(AddEpsilon(targetSquared)));
 
         // L_SM = mean |log magT - log magP| over the whole spectrogram.
-        var count = ConstantLike(logAbsolute, Math.Max(1, numFrames * bins));
+        var count = Constant(logAbsolute, Math.Max(1, numFrames * bins));
         var logMagnitude = Engine.TensorDivide(logAbsolute, count);
 
         return Engine.TensorAdd(spectralConvergence, logMagnitude);
@@ -212,20 +223,37 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
     /// gradient needs to flow through them, and building the vector here keeps Reshape away from
     /// the tape entirely.
     /// </remarks>
-    private static Tensor<T> FlatColumn(Tensor<T> basis, int k, int frameSize)
+    private Tensor<T> FlatColumn(Tensor<T> basis, int k, int frameSize)
     {
-        var column = new Tensor<T>([frameSize]);
-        for (int n = 0; n < frameSize; n++) column[n] = basis[n, k];
-        return column;
+        bool isCos = ReferenceEquals(basis, _bases[frameSize].Cos);
+        var cache = isCos ? _cosColumns : _sinColumns;
+        if (!cache.TryGetValue(frameSize, out var columns))
+        {
+            int bins = frameSize / 2 + 1;
+            columns = new Tensor<T>[bins];
+            for (int b = 0; b < bins; b++)
+            {
+                var column = new Tensor<T>([frameSize]);
+                for (int n = 0; n < frameSize; n++) column[n] = basis[n, b];
+                columns[b] = column;
+            }
+            cache[frameSize] = columns;
+        }
+        return columns[k];
     }
 
     /// <summary>A constant shaped like <paramref name="like"/>, filled with <paramref name="value"/>.</summary>
-    private Tensor<T> ConstantLike(Tensor<T> like, double value)
+    /// <summary>A cached constant shaped like <paramref name="like"/>, filled with <paramref name="value"/>.</summary>
+    private Tensor<T> Constant(Tensor<T> like, double value)
     {
+        string key = string.Join("x", like.Shape.ToArray()) + "@" + value.ToString("R");
+        if (_constants.TryGetValue(key, out var cached)) return cached;
+
         var ops = MathHelper.GetNumericOperations<T>();
         var t = new Tensor<T>(like.Shape.ToArray());
         T v = ops.FromDouble(value);
         for (int i = 0; i < t.Length; i++) t[i] = v;
+        _constants[key] = t;
         return t;
     }
 
@@ -237,14 +265,7 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
     /// [1]-shaped epsilon against a [frames, bins] magnitude throws
     /// "Tensor shapes must match. Got [1, 17] and [1]".
     /// </remarks>
-    private Tensor<T> AddEpsilon(Tensor<T> x)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var floor = new Tensor<T>(x.Shape.ToArray());
-        T value = ops.FromDouble(_epsilon);
-        for (int i = 0; i < floor.Length; i++) floor[i] = value;
-        return Engine.TensorAdd(x, floor);
-    }
+    private Tensor<T> AddEpsilon(Tensor<T> x) => Engine.TensorAdd(x, Constant(x, _epsilon));
 
 
     private static int[] AllAxes(Tensor<T> x) => Enumerable.Range(0, x.Shape.Length).ToArray();

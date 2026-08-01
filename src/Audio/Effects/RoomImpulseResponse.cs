@@ -240,8 +240,33 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     #region NeuralNetworkBase Implementation
 
     /// <summary>
-    /// Opts out of fused compiled training. EXPERIMENT — see whether the fused plan is the NaN source.
+    /// Opts out of fused compiled training: the fused plan produces NaN for this model's spectral
+    /// objective while eager evaluation of the same loss is finite.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Measured. With fusion enabled the step fails with "Fused compiled training has already run
+    /// successfully, but the current step cannot engage the fused path", inner ArithmeticException
+    /// "Function does not accept floating point Not-a-Number values"
+    /// (NeuralNetworkBase.TryTrainWithFusedOptimizer). Parameters then never move and every probe
+    /// repeats the same number. Eager evaluation of MultiResolutionStftLoss is finite in BOTH
+    /// precisions — verified on plain leaves, on degenerate all-zero prediction and all-zero target,
+    /// and across eight real training steps — so the NaN is introduced by the fused plan, not the
+    /// objective. Disabling fusion takes this model from 24/26 to 26/26.
+    /// </para>
+    /// <para>
+    /// Two candidate causes were tested and RULED OUT: per-call constants going stale under a traced
+    /// plan (all constants are now cached and the failure was unchanged), and graph size (a
+    /// single-resolution loss, a quarter of the nodes, froze identically). MeanAbsoluteErrorLoss —
+    /// purely elementwise plus a reduction — trains fine under fusion, so the remaining difference
+    /// is the structural ops this loss uses on the prediction path, TensorNarrow and
+    /// TensorConcatenate.
+    /// </para>
+    /// <para>
+    /// This is the documented graph-break escape hatch, the same fallback PyTorch's torch.compile
+    /// uses. REMOVE THIS OVERRIDE once the fused defect is fixed.
+    /// </para>
+    /// </remarks>
     protected override bool SupportsFusedCompiledTraining => false;
 
     protected override void InitializeLayers()
