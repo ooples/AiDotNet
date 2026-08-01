@@ -23365,8 +23365,16 @@ public static class LayerHelper<T>
         yield return new Conv1DLayer<T>(outputChannels: numNoiseBands + 1, kernelSize: 1,
             stride: 1, padding: 0, activation: identity);
         // Trainable filterbank: M FIR filters of order P applied to the noise signal.
-        yield return new Conv1DLayer<T>(outputChannels: numNoiseBands, kernelSize: noiseFilterOrder + 1,
-            stride: 1, padding: noiseFilterOrder / 2, activation: identity);
+        //
+        // EAGER constructor (explicit inputChannels: 1) on purpose. This layer is the one place in
+        // the stack whose input is the single-channel noise signal rather than the preceding
+        // layer's output, so the lazy overload would let a sequential shape walk resolve its fan-in
+        // against the decoder's multi-channel activation instead — observed as
+        // "Input channels (64) must match kernel in_channels (1)" on the first real forward.
+        // Pinning the fan-in makes the layer's contract independent of walk order.
+        yield return new Conv1DLayer<T>(inputChannels: 1, outputChannels: numNoiseBands,
+            kernelSize: noiseFilterOrder + 1, dilation: 1, stride: 1,
+            padding: noiseFilterOrder / 2, activation: identity);
         // 1x1 mix of the M late bands and the early component into the monophonic RIR.
         yield return new Conv1DLayer<T>(outputChannels: 1, kernelSize: 1,
             stride: 1, padding: 0, activation: identity);

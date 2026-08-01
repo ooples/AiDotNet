@@ -328,9 +328,82 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     }
 
     /// <summary>
+    /// Routes TRAINING through the same explicit FiNS graph the inference path uses.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this the tape walks <c>Layers</c> sequentially, which hands the noise filterbank the
+    /// decoder's multi-channel activation instead of the single-channel noise signal — observed as
+    /// "Input channels (64) must match kernel in_channels (1)" in every training invariant while the
+    /// inference tests passed. Any model whose forward is explicit must override BOTH entry points
+    /// or it trains a different function from the one it evaluates.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A network has to compute the same thing when it is learning as when it
+    /// is answering. This makes the training path reuse the exact custom wiring described above.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        return _bound ? FiNSForward(input) : base.ForwardForTraining(input);
+    }
+
+    /// <summary>
+    /// Exposes the FiNS stage activations, which a flat layer walk cannot produce for this graph.
+    /// </summary>
+    public override System.Collections.Generic.Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_bound) return base.GetNamedLayerActivations(input);
+
+        var activations = new System.Collections.Generic.Dictionary<string, Tensor<T>>();
+        var eng = Engine;
+        int totalSamples = 1;
+        for (int d = 0; d < input.Rank; d++) totalSamples *= input.Shape[d];
+        var x = eng.Reshape(input, [1, 1, totalSamples]);
+
+        for (int i = 0; i < _encoderConv.Count; i++)
+        {
+            var main = _encoderAct[i].Forward(_encoderNorm[i].Forward(_encoderConv[i].Forward(x)));
+            var residual = _encoderResNorm[i].Forward(_encoderResConv[i].Forward(x));
+            x = AddOverCommonLength(eng, main, residual);
+            activations[$"Encoder_{i}"] = x.Clone();
+        }
+
+        var z = _mlp3!.Forward(_mlp2!.Forward(_mlp1!.Forward(MeanOverTime(eng, x))));
+        activations["Latent"] = z.Clone();
+        activations["RIR"] = FiNSForwardSingle(input).Clone();
+        return activations;
+    }
+
+    /// <summary>
     /// The explicit FiNS graph: time-domain encoder, latent, filtered noise shaping decoder.
     /// </summary>
     private Tensor<T> FiNSForward(Tensor<T> input)
+    {
+        // A batched call is B independent recordings, each producing its own impulse response.
+        // Flattening them into one signal would estimate a single response for the concatenation,
+        // which is why BatchConsistency compares a batched call against per-item calls.
+        int batch = input.Rank >= 2 ? input.Shape[0] : 1;
+        if (batch <= 1) return FiNSForwardSingle(input);
+
+        int perItem = 1;
+        for (int d = 1; d < input.Rank; d++) perItem *= input.Shape[d];
+
+        var stacked = new Tensor<T>([batch, _options.RIRLength]);
+        var item = new Tensor<T>([perItem]);
+        for (int b = 0; b < batch; b++)
+        {
+            int itemOffset = b * perItem;
+            for (int n = 0; n < perItem; n++) item[n] = input[itemOffset + n];
+            var response = FiNSForwardSingle(item);
+            for (int n = 0; n < _options.RIRLength; n++) stacked[b, n] = response[n];
+        }
+        return stacked;
+    }
+
+    /// <summary>Runs the FiNS graph for a single recording, returning a response of RIRLength.</summary>
+    private Tensor<T> FiNSForwardSingle(Tensor<T> input)
     {
         var eng = Engine;
         int totalSamples = 1;
@@ -445,8 +518,27 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     }
 
     /// <summary>Adaptive average pooling over the time axis: [1, C, L] -> [1, C].</summary>
+    /// <remarks>
+    /// Reduced explicitly rather than through <c>ReduceMean</c>: the engine's axis/keepDims
+    /// convention did not collapse the trailing axis as assumed here (a [1, 16, 16] input came back
+    /// with all 256 elements), and this pooling is over a channels-by-frames plane small enough
+    /// that an explicit loop costs nothing and cannot be misread.
+    /// </remarks>
     private static Tensor<T> MeanOverTime(IEngine eng, Tensor<T> x)
-        => eng.Reshape(eng.ReduceMean(x, [2], false), [1, x.Shape[1]]);
+    {
+        int channels = x.Shape[1];
+        int length = x.Shape[2];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var pooled = new Tensor<T>([1, channels]);
+        T inverseLength = numOps.FromDouble(1.0 / Math.Max(1, length));
+        for (int c = 0; c < channels; c++)
+        {
+            T sum = numOps.Zero;
+            for (int n = 0; n < length; n++) sum = numOps.Add(sum, x[0, c, n]);
+            pooled[0, c] = numOps.Multiply(sum, inverseLength);
+        }
+        return pooled;
+    }
 
     /// <summary>Broadcasts the latent into the decoder's seed sequence [1, channels, length].</summary>
     private Tensor<T> SeedFromLatent(IEngine eng, Tensor<T> z, int channels, int length)

@@ -3534,15 +3534,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "RoomImpulseResponse" && model.TypeParameterCount == 1)
             {
-                // Its measured 1-vs-2 cap still hit 120 seconds. Keep the spectral
-                // encoder/attention/RIR head path and reduce only the generated
-                // frequency width, encoder depth, and response-head extent.
+                // FiNS is a TIME-DOMAIN model (Steinmetz et al. 2021): the encoder consumes the raw
+                // waveform, so the fixture is 1-D, not the 2-D spectrogram the previous spectral
+                // implementation took. Every stage of the paper topology is still exercised —
+                // strided encoder blocks with their residual branch, the pooled latent and MLP, the
+                // FiLM-conditioned decoder, the M-band trainable filterbank, the early/late split
+                // and the 1x1 mix — at the smallest sizes that keep the graph well formed.
+                //
+                // Paper values are 14 encoder blocks, 512 channels, z of 128, M = 10 bands, filter
+                // order 1023 and a 48,000-sample response; a single forward at that scale is far
+                // outside the per-test budget. RIRLength must stay >= 2^NumDecoderBlocks so the
+                // decoder seed is at least one sample, and EarlyResponseLength <= RIRLength.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.Audio.Effects.RoomImpulseResponseOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, RIRLength = 4, NumFrequencyBins = 32, NumHeads = 4 })";
+                    "inputSize: 64, outputSize: 32), " +
+                    "new AiDotNet.Audio.Effects.RoomImpulseResponseOptions { " +
+                    "NumEncoderBlocks = 2, EncoderMaxChannels = 16, LatentDim = 8, " +
+                    "NumDecoderBlocks = 2, NumNoiseBands = 3, NoiseFilterOrder = 15, " +
+                    "RIRLength = 32, EarlyResponseLength = 8 })";
             }
             else if (model.ClassName == "RPKNet" && model.TypeParameterCount == 1)
             {
