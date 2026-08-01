@@ -577,7 +577,14 @@ public class ResidualLayer<T> : LayerBase<T>
             // DenseLayer still deserialize via the fallback path below.
             metadata["InnerLayerType"] = _innerLayer.GetType().AssemblyQualifiedName ?? _innerLayer.GetType().FullName ?? string.Empty;
             metadata["InnerInputSize"] = _innerLayer.GetInputShape()[0].ToString();
-            metadata["InnerOutputSize"] = _innerLayer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0].ToString();
+            var innerOutputShape = _innerLayer.GetOutputLayerShape();
+            if (innerOutputShape.Rank > 0 && innerOutputShape[0] > 0)
+            {
+                // This legacy field represents only axis 0. Requiring every trailing axis
+                // to be concrete rejects valid lazy spatial layers such as [64, ?, ?], even
+                // though the scalar value needed by the old Dense-only fallback is known.
+                metadata["InnerOutputSize"] = innerOutputShape[0].ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
         return metadata;
     }
