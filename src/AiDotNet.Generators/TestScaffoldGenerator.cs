@@ -9506,6 +9506,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
                     $"options: new AiDotNet.Video.Options.{model.ClassName}Options {{ LearningRate = 1e-4 }})";
             }
+            else if ((model.ClassName is "NeuFlowV2" or "VideoFlow" or "UniMatch" or
+                                          "SKFlow" or "SEARAFT" or "RoMa")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Motion.", System.StringComparison.Ordinal))
+            {
+                // #1950: These OpticalFlowBase models expose parameterless constructors whose
+                // production defaults declare 256x256 geometry. The generated two-frame fixture
+                // supplies [1, 6, 64, 64], so using those constructors resolves every convolution's
+                // reported shape at four times the spatial extent it actually computes. Construct
+                // only the generated fixture with its public architecture overload at matching
+                // geometry. The six input channels are the concatenated RGB frame pair consumed by
+                // EstimateFlow; public defaults, native layers, topology and options remain unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2))";
+            }
             else if (model.ClassName == "DIFRINT"
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Stabilization.", System.StringComparison.Ordinal))
