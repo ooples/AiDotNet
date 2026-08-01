@@ -2852,7 +2852,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         => className == "FlamingoNeuralNetwork" ? 32
          : className == "MiniGPT4" ? 28
          : className is "DEVA" or "DepthAnythingV2" or "FLIP" or "GeminiVision" or "Gemma3" or "ImageBindNeuralNetwork" or "InternVL" or "InternVL2" or "InternVL25" or "InternVL3"
-             or "OneFormer" or "OpenCLIP" or "Pix2Struct" or "SEEM" or "ShowO" or "ShowO2" or "SigLIP2" or "MetaCLIP" ? 32
+             or "Mask2Former" or "MaskAdapter" or "OneFormer" or "OpenCLIP" or "Pix2Struct"
+             or "SAM" or "SAM21" or "SEEM" or "ShowO" or "ShowO2" or "SigLIP2" or "SlimSAM" or "MetaCLIP" ? 32
          // Shard M MedS-Meta: these three are already <float> AND already carry iteration caps from
          // their family branches, and their probes still overran the 120/180 s gate (MetaCLIP alone
          // failed 8 invariants). Neither exposes a usable width knob — MedSAMModelSize declares only
@@ -6700,6 +6701,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Video.Options.PSRTOptions { NumFeatures = 8, NumSTABs = 1, " +
                     "ScaleFactor = 2, WindowSize = 4, TemporalRadius = 1, NumHeads = 2 })";
             }
+            else if (model.ClassName == "RVM" && model.TypeParameterCount == 1)
+            {
+                // RVM is resolution-flexible recurrent video matting. The temporal-video fixture
+                // feeds four 32x32 RGB frames, so construct its public native architecture at that
+                // same geometry instead of selecting the parameterless 256x256 default.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1))";
+            }
             else if (model.ClassName == "OuteTTS" && model.TypeParameterCount == 1)
             {
                 // OuteTTS defaults to a 1024-wide, 12-layer codec LM with a 4096-token acoustic head.
@@ -10257,6 +10268,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // and a 2x pixel-shuffle restoration head.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+        }
+        else if (model.ClassName == "RVM")
+        {
+            // Four RGB frames in, with a same-resolution alpha + foreground RGB output per frame.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 4, 32, 32 };");
+        }
+        else if (model.ClassName == "PSRT")
+        {
+            // Matches the bounded public-options fixture: four 8x8 RGB frames and 2x reconstruction.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 3, 16, 16 };");
         }
         else if (model.ClassName == "E3TTS")
         {
