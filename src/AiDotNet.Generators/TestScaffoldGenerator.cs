@@ -11760,6 +11760,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1600 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 51865 };");
             }
+            else if (model.ClassName == "RoomImpulseResponse")
+            {
+                // FiNS (Steinmetz et al. 2021) consumes a raw waveform and RETURNS an impulse
+                // response of RIRLength samples. The generic [1,64,32] audio-feature fixture is a
+                // spectrogram, not a waveform, and the generic four-value regression target is not
+                // an impulse response — that pairing was inherited from the spectral model this
+                // replaced, and it survived the rebuild because the constructor pin and these shape
+                // pins live in different branches of the generator.
+                //
+                // Left unfixed it fed 64*32 = 2048 samples to a model configured for 64 and then
+                // scored a 32-sample response against a 4-element target, which is what made
+                // Training_ShouldReduceLoss unsatisfiable regardless of the optimizer.
+                //
+                // Must match the constructor pinned above: inputSize 64, RIRLength 32.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 64 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 32 };");
+            }
             else if (model.ClassName == "VITSModel")
             {
                 // VITSModel is a HiFi-GAN-style waveform generator. Its native compatibility
