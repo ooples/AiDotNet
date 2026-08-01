@@ -11776,6 +11776,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Must match the constructor pinned above: inputSize 64, RIRLength 32.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 64 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 32 };");
+
+                // This branch DIVERTS the model out of the generic audio fallthrough, which is
+                // where it previously picked up its iteration counts, so they must be restated here
+                // or the model silently reverts to the base defaults (that is how the memorization
+                // probe ended up running to step 100).
+                //
+                // FiNS descends the multi-resolution STFT objective, which has a MEASURED warm-up
+                // transient: from 6.548054 the loss dips to 6.5216 by step 3, humps back to 6.5578
+                // around step 10, then descends steadily to 6.2569 by step 60 — well below its
+                // start. A six-step probe lands inside that hump, so whether the invariant reads a
+                // rise depends on the data draw. Thirty steps (10 x 3) clears it with margin, on the
+                // same real training path, paper-default optimizer and DEFAULT tolerance. Same
+                // remedy already granted to PANNs (60), SeACo (5) and the 15-step memorization group.
+                sb.AppendLine("    protected override int TrainingIterations => 10;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 100;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 30;");
             }
             else if (model.ClassName == "VITSModel")
             {
