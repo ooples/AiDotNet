@@ -665,7 +665,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // resource-bound-shard rule, but without roster membership it kept the generic 50 + 200
         // MoreData probe and reported "Test execution timed out after 120000 milliseconds".
         "SpeechBrain",
-        "QueryMeldNet",       // OptimizerStep / OutputDimension timeout
+        "MixedQueryTransformer",       // OptimizerStep / OutputDimension timeout
         "SpeakerDiarizedASR", // diarized ASR — DifferentInputs timeout
         // TransUNet's paper-scale CNN/Transformer/U-Net segmentation path hit the 120-second
         // MoreData watchdog in the exact T shard while still emitted as <double>. Apply the
@@ -1278,11 +1278,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // generic 50+200-step MoreData probe exceeded 120 seconds. Bound repeated generated
         // training only; retain the paper architecture and production defaults unchanged.
         "RIFE",
-        // QueryMeldNet's generated FP32 fixture preserves its ResNet-50 bottleneck encoder.
+        // MixedQueryTransformer's generated FP32 fixture preserves its ResNet-50 bottleneck encoder.
         // Single-forward and ordinary training invariants complete, but the generic 50+200
         // MoreData repetition exceeded the 120-second gate in isolation. Keep the topology
         // and strict training assertions; trim only the repeated convergence probes.
-        "QueryMeldNet",
+        "MixedQueryTransformer",
         // Segmentation foundation models (Swin/ViT encoder + transformer mask decoder) — 250-iter
         // MoreData / 100-iter memorization overrun 120 s on CPU (verified: solo timeout).
         // kMaX-DeepLab (Yu et al. 2022, arXiv:2207.04044 — k-means Mask Transformer for panoptic

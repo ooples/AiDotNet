@@ -1,11 +1,11 @@
 namespace AiDotNet.Enums;
 
 /// <summary>
-/// Defines the backbone size variants for QueryMeldNet (MQ-Former).
+/// Defines the backbone size variants for MixedQueryTransformer (MQ-Former).
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> QueryMeldNet uses dynamic query melding to scale across diverse
+/// <b>For Beginners:</b> MixedQueryTransformer uses dynamic query melding to scale across diverse
 /// datasets. Instance queries and stuff queries are fused via cross-attention, enabling
 /// strong generalization across multiple segmentation benchmarks.
 /// </para>
@@ -15,10 +15,10 @@ namespace AiDotNet.Enums;
 /// both panoptic and instance segmentation quality.
 /// </para>
 /// <para>
-/// <b>Reference:</b> "QueryMeldNet: Dynamic Query Melding for Multi-Dataset Segmentation", CVPR 2025.
+/// <b>Reference:</b> "MixedQueryTransformer: Dynamic Query Melding for Multi-Dataset Segmentation", CVPR 2025.
 /// </para>
 /// </remarks>
-public enum QueryMeldNetModelSize
+public enum MixedQueryTransformerModelSize
 {
     /// <summary>
     /// ResNet-50 backbone. Efficient baseline variant.

@@ -28157,21 +28157,21 @@ public static class LayerHelper<T>
 
     #endregion
 
-    #region QueryMeldNet Layers
+    #region MixedQueryTransformer Layers
 
     /// <summary>
-    /// Creates the backbone encoder layers for QueryMeldNet.
+    /// Creates the backbone encoder layers for MixedQueryTransformer.
     /// </summary>
-    // QueryMeldNet uses a ResNet-50 backbone — paper-faithful ResNet bottleneck.
-    public static IEnumerable<ILayer<T>> CreateQueryMeldNetEncoderLayers(
+    // MixedQueryTransformer uses a ResNet-50 backbone — paper-faithful ResNet bottleneck.
+    public static IEnumerable<ILayer<T>> CreateMixedQueryTransformerEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
         => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
-    /// Creates the query-meld decoder layers for QueryMeldNet.
+    /// Creates the query-meld decoder layers for MixedQueryTransformer.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateQueryMeldNetDecoderLayers(
+    public static IEnumerable<ILayer<T>> CreateMixedQueryTransformerDecoderLayers(
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight = 16, int featureWidth = 16)
     {

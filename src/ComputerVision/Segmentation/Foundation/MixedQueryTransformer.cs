@@ -12,12 +12,12 @@ using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 
 /// <summary>
-/// QueryMeldNet (MQ-Former): Dynamic Query Melding for Multi-Dataset Segmentation.
+/// MixedQueryTransformer (MQ-Former): Dynamic Query Melding for Multi-Dataset Segmentation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> QueryMeldNet scales mask-based segmentation across multiple diverse datasets
+/// <b>For Beginners:</b> MixedQueryTransformer scales mask-based segmentation across multiple diverse datasets
 /// by dynamically melding (fusing) instance queries and stuff queries through cross-attention. This
 /// allows the model to generalize well across different segmentation benchmarks without dataset-specific
 /// fine-tuning.
@@ -36,36 +36,39 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// - Built on Mask2Former architecture with query interaction extensions
 /// </para>
 /// <para>
-/// <b>Reference:</b> "QueryMeldNet: Dynamic Query Melding for Multi-Dataset Segmentation", CVPR 2025.
+/// <b>Reference:</b> "MixedQueryTransformer: Dynamic Query Melding for Multi-Dataset Segmentation", CVPR 2025.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a QueryMeldNet model for multi-dataset panoptic segmentation
+/// // Create a MixedQueryTransformer model for multi-dataset panoptic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
-/// var model = new QueryMeldNet&lt;double&gt;(architecture, numClasses: 133);
+/// var model = new MixedQueryTransformer&lt;double&gt;(architecture, numClasses: 133);
 ///
 /// // Or load a pre-trained ONNX model for cross-dataset segmentation
-/// var onnxModel = new QueryMeldNet&lt;double&gt;(architecture, "querymeldnet.onnx", numClasses: 133);
+/// var onnxModel = new MixedQueryTransformer&lt;double&gt;(architecture, "querymeldnet.onnx", numClasses: 133);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
-[ResearchPaper("QueryMeldNet: Learning Query Representations for Dense Prediction", "https://arxiv.org/abs/2312.15600")]
+[ResearchPaper("Mixed-Query Transformer: A Unified Image Segmentation Architecture",
+    "https://arxiv.org/abs/2404.04469",
+    Year = 2024,
+    Authors = "Pei Wang, Zhaowei Cai, Hao Yang, Ashwin Swaminathan, R. Manmatha, Stefano Soatto")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
+public class MixedQueryTransformer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
-    private readonly QueryMeldNetOptions _options;
+    private readonly MixedQueryTransformerOptions _options;
 
     /// <summary>
-    /// Gets the configuration options for this QueryMeldNet model.
+    /// Gets the configuration options for this MixedQueryTransformer model.
     /// </summary>
-    /// <returns>The <see cref="QueryMeldNetOptions"/> for this model instance.</returns>
+    /// <returns>The <see cref="MixedQueryTransformerOptions"/> for this model instance.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
@@ -80,7 +83,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     private readonly int _channels;
     private readonly int _numClasses;
     private readonly int _numQueries;
-    private readonly QueryMeldNetModelSize _modelSize;
+    private readonly MixedQueryTransformerModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
@@ -97,7 +100,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     #region Properties
 
     /// <summary>
-    /// Gets whether this QueryMeldNet instance supports training.
+    /// Gets whether this MixedQueryTransformer instance supports training.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -106,7 +109,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </remarks>
     public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
-    internal QueryMeldNetModelSize ModelSize => _modelSize;
+    internal MixedQueryTransformerModelSize ModelSize => _modelSize;
     internal int NumClasses => _numClasses;
 
     #endregion
@@ -114,7 +117,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     #region Constructors
 
     /// <summary>
-    /// Initializes QueryMeldNet in native (trainable) mode.
+    /// Initializes MixedQueryTransformer in native (trainable) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
@@ -126,23 +129,23 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Creates a trainable QueryMeldNet. The 200 queries are split between
+    /// <b>For Beginners:</b> Creates a trainable MixedQueryTransformer. The 200 queries are split between
     /// instance queries (for countable objects) and stuff queries (for uncountable regions like sky),
     /// and then melded via cross-attention for improved multi-dataset performance.
     /// </para>
     /// </remarks>
-    public QueryMeldNet(
+    public MixedQueryTransformer(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         int numClasses = 133,
         int numQueries = 200,
-        QueryMeldNetModelSize modelSize = QueryMeldNetModelSize.R50,
+        MixedQueryTransformerModelSize modelSize = MixedQueryTransformerModelSize.R50,
         double dropRate = 0.1,
-        QueryMeldNetOptions? options = null)
+        MixedQueryTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new QueryMeldNetOptions();
+        _options = options ?? new MixedQueryTransformerOptions();
         Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
@@ -160,7 +163,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     }
 
     /// <summary>
-    /// Initializes QueryMeldNet in ONNX (inference-only) mode.
+    /// Initializes MixedQueryTransformer in ONNX (inference-only) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
@@ -170,28 +173,28 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Loads a pre-trained QueryMeldNet from ONNX for inference.
+    /// <b>For Beginners:</b> Loads a pre-trained MixedQueryTransformer from ONNX for inference.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public QueryMeldNet(
+    public MixedQueryTransformer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int numClasses = 133,
         int numQueries = 200,
-        QueryMeldNetModelSize modelSize = QueryMeldNetModelSize.R50,
-        QueryMeldNetOptions? options = null)
+        MixedQueryTransformerModelSize modelSize = MixedQueryTransformerModelSize.R50,
+        MixedQueryTransformerOptions? options = null)
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new QueryMeldNetOptions();
+        _options = options ?? new MixedQueryTransformerOptions();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"QueryMeldNet ONNX model not found: {onnxModelPath}");
+            throw new FileNotFoundException($"MixedQueryTransformer ONNX model not found: {onnxModelPath}");
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
@@ -207,7 +210,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
 
         try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load QueryMeldNet ONNX model: {ex.Message}", ex); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load MixedQueryTransformer ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -217,7 +220,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     #region Public Methods
 
     /// <summary>
-    /// Runs a forward pass through QueryMeldNet for multi-dataset segmentation.
+    /// Runs a forward pass through MixedQueryTransformer for multi-dataset segmentation.
     /// </summary>
     /// <param name="input">The input image tensor [C, H, W] or [B, C, H, W].</param>
     /// <returns>Per-pixel segmentation logits tensor.</returns>
@@ -263,12 +266,12 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     #region Private Methods
 
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(QueryMeldNetModelSize modelSize)
+    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(MixedQueryTransformerModelSize modelSize)
     {
         return modelSize switch
         {
-            QueryMeldNetModelSize.R50 => ([256, 512, 1024, 2048], [3, 4, 6, 3], 256),
-            QueryMeldNetModelSize.SwinLarge => ([192, 384, 768, 1536], [2, 2, 18, 2], 256),
+            MixedQueryTransformerModelSize.R50 => ([256, 512, 1024, 2048], [3, 4, 6, 3], 256),
+            MixedQueryTransformerModelSize.SwinLarge => ([192, 384, 768, 1536], [2, 2, 18, 2], 256),
             _ => ([256, 512, 1024, 2048], [3, 4, 6, 3], 256)
         };
     }
@@ -324,7 +327,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     #region Abstract Implementation
 
     /// <summary>
-    /// Initializes the encoder and decoder layers for QueryMeldNet.
+    /// Initializes the encoder and decoder layers for MixedQueryTransformer.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -342,13 +345,13 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateQueryMeldNetEncoderLayers(
+            var encoderLayers = LayerHelper<T>.CreateMixedQueryTransformerEncoderLayers(
                 _channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count;
             Layers.AddRange(encoderLayers);
             int featureH = _height / 32;
             int featureW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateQueryMeldNetDecoderLayers(
+            var decoderLayers = LayerHelper<T>.CreateMixedQueryTransformerDecoderLayers(
                 _channelDims[^1], _decoderDim, _numClasses, featureH, featureW);
             Layers.AddRange(decoderLayers);
         }
@@ -387,7 +390,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     }
 
     /// <summary>
-    /// Collects metadata describing this QueryMeldNet model's configuration.
+    /// Collects metadata describing this MixedQueryTransformer model's configuration.
     /// </summary>
     /// <returns>Model metadata.</returns>
     /// <remarks>
@@ -401,7 +404,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "ModelName", "QueryMeldNet" }, { "InputHeight", _height }, { "InputWidth", _width },
+                { "ModelName", "MixedQueryTransformer" }, { "InputHeight", _height }, { "InputWidth", _width },
                 { "InputChannels", _channels }, { "NumClasses", _numClasses },
                 { "NumQueries", _numQueries }, { "ModelSize", _modelSize.ToString() },
                 { "DecoderDim", _decoderDim }, { "UseNativeMode", _useNativeMode },
@@ -412,7 +415,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     }
 
     /// <summary>
-    /// Writes QueryMeldNet configuration to a binary stream.
+    /// Writes MixedQueryTransformer configuration to a binary stream.
     /// </summary>
     /// <param name="writer">The binary writer.</param>
     /// <remarks>
@@ -434,7 +437,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     }
 
     /// <summary>
-    /// Reads QueryMeldNet configuration from a binary stream.
+    /// Reads MixedQueryTransformer configuration from a binary stream.
     /// </summary>
     /// <param name="reader">The binary reader.</param>
     /// <remarks>
@@ -455,9 +458,9 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     }
 
     /// <summary>
-    /// Creates a new QueryMeldNet instance with the same configuration but fresh weights.
+    /// Creates a new MixedQueryTransformer instance with the same configuration but fresh weights.
     /// </summary>
-    /// <returns>A new <see cref="QueryMeldNet{T}"/> model.</returns>
+    /// <returns>A new <see cref="MixedQueryTransformer{T}"/> model.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
@@ -466,8 +469,8 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return _useNativeMode
-            ? new QueryMeldNet<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new QueryMeldNet<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
+            ? new MixedQueryTransformer<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
+            : new MixedQueryTransformer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
     }
 
     /// <summary>
