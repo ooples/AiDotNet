@@ -1983,6 +1983,22 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return ConvertToDouble(lossTensor[0]);
         }
 
+        // Same reasoning for the multi-resolution STFT objective. A waveform model such as FiNS
+        // (RoomImpulseResponse) descends spectral convergence + log-magnitude over several STFT
+        // resolutions; MSE on the raw samples is a DIFFERENT objective, and a step that legitimately
+        // lowers the spectral loss can raise it — a small time shift barely changes the spectrogram
+        // while changing every sample. Measured on RoomImpulseResponse as Training_ShouldReduceLoss
+        // failing 0.490618 -> 0.492577 while GradientFlow_ShouldBeNonZeroAndFinite and
+        // Training_ShouldChangeParameters both PASSED, i.e. training was demonstrably working and
+        // only the metric disagreed.
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> stftNet
+            && stftNet.DefaultLossFunction is AiDotNet.LossFunctions.MultiResolutionStftLoss<T> stft)
+        {
+            if (output.Length == 0 || target.Length == 0) return double.NaN;
+            var lossTensor = stft.ComputeTapeLoss(output, target);
+            return lossTensor.Length > 0 ? ConvertToDouble(lossTensor[0]) : double.NaN;
+        }
+
         // Same reasoning for SIGMOID cross-entropy. A multi-label head trains on
         // BinaryCrossEntropyWithLogitsLoss, and falling through to MSE measured a DIFFERENT objective
         // than the optimizer descends: MSE is computed on the post-sigmoid probabilities Predict

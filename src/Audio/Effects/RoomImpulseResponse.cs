@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -108,7 +109,7 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
 
     /// <summary>Creates an RIR estimation model in ONNX inference mode.</summary>
     public RoomImpulseResponse(NeuralNetworkArchitecture<T> architecture, string modelPath, RoomImpulseResponseOptions? options = null)
-        : base(architecture)
+        : base(architecture, new MultiResolutionStftLoss<T>((options ?? new RoomImpulseResponseOptions()).StftFrameSizes))
     {
         _options = options ?? new RoomImpulseResponseOptions();
         _useNativeMode = false;
@@ -121,7 +122,12 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     /// <summary>Creates an RIR estimation model in native training mode.</summary>
     public RoomImpulseResponse(NeuralNetworkArchitecture<T> architecture, RoomImpulseResponseOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        // FiNS trains on the multi-resolution STFT loss, which the paper reports worked best ALONE
+        // (no time-domain term). Passing it here replaces the audio base's MeanSquaredErrorLoss
+        // default: sample-wise MSE is a poor objective for an impulse response, where a small time
+        // shift changes every sample while sounding identical, and it cannot express the per-band
+        // decay behaviour the filtered-noise-shaping decoder exists to model.
+        : base(architecture, new MultiResolutionStftLoss<T>((options ?? new RoomImpulseResponseOptions()).StftFrameSizes))
     {
         _options = options ?? new RoomImpulseResponseOptions();
         _useNativeMode = true;
@@ -232,6 +238,11 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     #endregion
 
     #region NeuralNetworkBase Implementation
+
+    /// <summary>
+    /// Opts out of fused compiled training. EXPERIMENT — see whether the fused plan is the NaN source.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
 
     protected override void InitializeLayers()
     {
