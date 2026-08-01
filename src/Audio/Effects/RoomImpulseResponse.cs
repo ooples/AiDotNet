@@ -239,33 +239,6 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
 
     #region NeuralNetworkBase Implementation
 
-    /// <summary>
-    /// Opts out of fused compiled training: this forward is not a traceable static graph.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The FiNS forward computes several stages with element-wise loops over tensor VALUES rather
-    /// than engine ops — FiLM conditioning, broadcasting the latent into the decoder seed, adaptive
-    /// average pooling, resizing the time axis and zeroing the early component past E. The eager
-    /// autograd tape re-runs those loops every step, so they are always current. A TRACING compiler
-    /// cannot: it records the op graph once and replays it, so values read by a raw loop are baked
-    /// in as constants and the replayed plan stops depending on the parameters that produced them.
-    /// </para>
-    /// <para>
-    /// Measured, and the symptom is nastier than a crash: with fusion enabled the persistence probe
-    /// keeps passing — parameters genuinely do move — while the OUTPUT never changes, so the loss is
-    /// bit-identical across 100 steps (36.935169) and the model silently never learns. Disabling
-    /// fusion takes this model from 24/26 to 26/26.
-    /// </para>
-    /// <para>
-    /// This is the documented graph-break classification the property exists for, the same fallback
-    /// PyTorch's torch.compile makes for a forward it cannot trace — NOT a workaround for a
-    /// framework defect. Making this model fused-eligible means re-expressing those five helpers in
-    /// engine ops; until then the eager tape is the correct and only sound path.
-    /// </para>
-    /// </remarks>
-    protected override bool SupportsFusedCompiledTraining => false;
-
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
@@ -397,8 +370,8 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
 
         for (int i = 0; i < _encoderConv.Count; i++)
         {
-            var main = _encoderAct[i].Forward(_encoderNorm[i].Forward(_encoderConv[i].Forward(x)));
-            var residual = _encoderResNorm[i].Forward(_encoderResConv[i].Forward(x));
+            var main = _encoderAct[i].Forward(ApplyChannelNorm(eng, _encoderNorm[i], _encoderConv[i].Forward(x)));
+            var residual = ApplyChannelNorm(eng, _encoderResNorm[i], _encoderResConv[i].Forward(x));
             x = AddOverCommonLength(eng, main, residual);
             activations[$"Encoder_{i}"] = x.Clone();
         }
@@ -462,16 +435,18 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
 
         for (int i = 0; i < _encoderConv.Count; i++)
         {
-            var main = _encoderAct[i].Forward(_encoderNorm[i].Forward(_encoderConv[i].Forward(x)));
-            var residual = _encoderResNorm[i].Forward(_encoderResConv[i].Forward(x));
+            var main = _encoderAct[i].Forward(ApplyChannelNorm(eng, _encoderNorm[i], _encoderConv[i].Forward(x)));
+            var residual = ApplyChannelNorm(eng, _encoderResNorm[i], _encoderResConv[i].Forward(x));
             // Strided conv and strided 1x1 can differ by one frame depending on padding; add over
             // the common span so the residual never dictates the main branch's length.
             x = AddOverCommonLength(eng, main, residual);
         }
 
         // --- Adaptive average pooling over time, then the 3-layer MLP producing z ---
-        var pooled = MeanOverTime(eng, x);                       // [1, C]
-        var z = _mlp3!.Forward(_mlp2!.Forward(_mlp1!.Forward(pooled)));   // [1, latentDim]
+        var pooled = MeanOverTime(eng, x);
+        System.Console.Error.WriteLine($"[RIRTRACE] pooled=[{string.Join(",", pooled.Shape)}]");                       // [1, C]
+        var z = _mlp3!.Forward(_mlp2!.Forward(_mlp1!.Forward(pooled)));
+        System.Console.Error.WriteLine($"[RIRTRACE] z=[{string.Join(",", z.Shape)}]");   // [1, latentDim]
 
         // --- Decoder: upsample from a seed, FiLM-conditioned on z at both stages ---
         int blocks = _decoderUpsample.Count;
@@ -544,6 +519,35 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
 
     #region FiNS forward helpers
 
+    /// <summary>
+    /// Applies a <see cref="BatchNormalizationLayer{T}"/> to a <c>[B, C, L]</c> activation with
+    /// per-channel statistics pooled over time — BatchNorm1d semantics.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BatchNormalizationLayer resolves RANK-3 input as <c>[C, H, W]</c> with channels in AXIS 0.
+    /// These activations are <c>[B, C, L]</c>, so passing them straight in does not merely mis-pool
+    /// statistics — it corrupts the shape: a <c>[1, 16, 32]</c> conv output came back as a 16-BATCH,
+    /// and the encoder emitted <c>[16, 16, 16]</c> instead of <c>[1, 16, 16]</c>. That went unnoticed
+    /// while the surrounding helpers read elements with <c>x[0, c, n]</c> loops, which silently
+    /// consume only the first slice.
+    /// </para>
+    /// <para>
+    /// Presented instead as rank-2 <c>[L, C]</c> — time on the batch axis, channels as features in
+    /// axis 1 — the layout the layer documents for rank 2, giving exactly BatchNorm1d's per-channel
+    /// statistics pooled over time with no degenerate axis.
+    /// </para>
+    /// </remarks>
+    private static Tensor<T> ApplyChannelNorm(IEngine eng, ILayer<T> norm, Tensor<T> x)
+    {
+        int batch = x.Shape[0], channels = x.Shape[1], length = x.Shape[2];
+        var plane = eng.Reshape(x, [channels, length]);
+        var timeMajor = eng.TensorPermute(plane, [1, 0]);        // [L, C]
+        var normalized = norm.Forward(timeMajor);
+        var channelMajor = eng.TensorPermute(normalized, [1, 0]); // [C, L]
+        return eng.Reshape(channelMajor, [batch, channels, length]);
+    }
+
     /// <summary>Adds two rank-3 tensors over the time span they share.</summary>
     /// <remarks>
     /// A strided kernel-15 convolution and a strided 1x1 convolution do not always agree on the
@@ -568,78 +572,82 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
 
     /// <summary>Adaptive average pooling over the time axis: [1, C, L] -> [1, C].</summary>
     /// <remarks>
-    /// Reduced explicitly rather than through <c>ReduceMean</c>: the engine's axis/keepDims
-    /// convention did not collapse the trailing axis as assumed here (a [1, 16, 16] input came back
-    /// with all 256 elements), and this pooling is over a channels-by-frames plane small enough
-    /// that an explicit loop costs nothing and cannot be misread.
+    /// An engine reduction, not an element loop. Everything in this forward must be expressible as
+    /// engine ops or the fused compiled path cannot trace it: a tracing compiler records the graph
+    /// once and replays it, so any value read by a raw C# loop is baked in as a constant and the
+    /// replayed plan silently stops depending on the parameters behind it.
     /// </remarks>
     private static Tensor<T> MeanOverTime(IEngine eng, Tensor<T> x)
-    {
-        int channels = x.Shape[1];
-        int length = x.Shape[2];
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var pooled = new Tensor<T>([1, channels]);
-        T inverseLength = numOps.FromDouble(1.0 / Math.Max(1, length));
-        for (int c = 0; c < channels; c++)
-        {
-            T sum = numOps.Zero;
-            for (int n = 0; n < length; n++) sum = numOps.Add(sum, x[0, c, n]);
-            pooled[0, c] = numOps.Multiply(sum, inverseLength);
-        }
-        return pooled;
-    }
+        => eng.ReduceMean(x, [2], keepDims: false);
 
     /// <summary>Broadcasts the latent into the decoder's seed sequence [1, channels, length].</summary>
+    /// <remarks>
+    /// Pure engine ops so the graph stays traceable. When the decoder is narrower than the latent
+    /// the leading channels are taken; when it is wider the latent is repeated to cover them, which
+    /// is the tiling the previous element loop expressed with a modulo index.
+    /// </remarks>
     private Tensor<T> SeedFromLatent(IEngine eng, Tensor<T> z, int channels, int length)
     {
-        var seed = new Tensor<T>([1, channels, length]);
         int latent = z.Shape[^1];
-        for (int c = 0; c < channels; c++)
+
+        var widened = z;
+        if (channels > latent)
         {
-            // Tile the latent across channels so every decoder channel is conditioned on z.
-            T value = z[0, c % latent];
-            for (int n = 0; n < length; n++) seed[0, c, n] = value;
+            int copies = (channels + latent - 1) / latent;
+            var tiled = new Tensor<T>[copies];
+            for (int c = 0; c < copies; c++) tiled[c] = z;
+            widened = eng.TensorConcatenate(tiled, 1);
         }
-        return seed;
+        if (widened.Shape[^1] != channels) widened = eng.TensorNarrow(widened, 1, 0, channels);
+
+        // [1, channels] -> [1, channels, 1] -> [1, channels, length]
+        return eng.TensorBroadcastTo(eng.TensorExpandDims(widened, 2), [1, channels, length]);
     }
 
     /// <summary>
     /// FiLM conditioning (Perez et al. 2018): a per-channel scale and shift predicted from z.
     /// </summary>
+    /// <remarks>
+    /// The prediction is split as [scale | shift] — the standard FiLM layout — and applied with
+    /// broadcast engine ops. The previous version read individual elements in a C# loop with an
+    /// interleaved index, which a tracing compiler bakes in as constants, freezing the decoder's
+    /// dependence on z in the compiled plan.
+    /// </remarks>
     private static Tensor<T> ApplyFilm(IEngine eng, Tensor<T> h, Tensor<T> filmParams)
     {
         int channels = h.Shape[1];
-        int length = h.Shape[2];
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>([1, channels, length]);
         int available = filmParams.Shape[^1];
-        for (int c = 0; c < channels; c++)
+        int half = Math.Min(channels, available / 2);
+        if (half <= 0) return h;
+
+        var scale = eng.TensorExpandDims(eng.TensorNarrow(filmParams, 1, 0, half), 2);        // [1, half, 1]
+        var shift = eng.TensorExpandDims(eng.TensorNarrow(filmParams, 1, half, half), 2);     // [1, half, 1]
+
+        if (half < channels)
         {
-            // First half of the prediction is the scale, second half the shift.
-            T scale = filmParams[0, (2 * c) % available];
-            T shift = filmParams[0, (2 * c + 1) % available];
-            for (int n = 0; n < length; n++)
-                result[0, c, n] = numOps.Add(numOps.Multiply(h[0, c, n], scale), shift);
+            // Condition the leading channels and pass the remainder through unchanged, all with
+            // engine ops so the graph stays static.
+            var head = eng.TensorNarrow(h, 1, 0, half);
+            var tail = eng.TensorNarrow(h, 1, half, channels - half);
+            var conditioned = eng.TensorBroadcastAdd(eng.TensorBroadcastMultiply(head, scale), shift);
+            return eng.TensorConcatenate([conditioned, tail], 1);
         }
-        return result;
+
+        return eng.TensorBroadcastAdd(eng.TensorBroadcastMultiply(h, scale), shift);
     }
 
     /// <summary>Trims or zero-pads the time axis to exactly <paramref name="length"/>.</summary>
     /// <remarks>
     /// The decoder's upsampling factors need not land exactly on RIRLength for every configuration,
     /// so the response is squared up here rather than constraining the option to a power of two.
+    /// Uses Engine.Pad rather than an element copy so the graph stays traceable.
     /// </remarks>
     private static Tensor<T> ResizeTime(IEngine eng, Tensor<T> x, int length)
     {
         int current = x.Shape[2];
         if (current == length) return x;
         if (current > length) return eng.TensorNarrow(x, 2, 0, length);
-        var padded = new Tensor<T>([x.Shape[0], x.Shape[1], length]);
-        for (int b = 0; b < x.Shape[0]; b++)
-            for (int c = 0; c < x.Shape[1]; c++)
-                for (int n = 0; n < current; n++)
-                    padded[b, c, n] = x[b, c, n];
-        return padded;
+        return eng.Pad(x, 0, 0, 0, length - current, MathHelper.GetNumericOperations<T>().Zero);
     }
 
     /// <summary>Zeroes every sample past <paramref name="keep"/> (paper: h_d(n) = 0 for n &gt; E).</summary>
