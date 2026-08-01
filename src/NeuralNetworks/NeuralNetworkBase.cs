@@ -8307,6 +8307,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     private bool _fusedPersistenceVerified;
 
+    /// <summary>Steps taken since the fused plan's parameter-persistence probe last ran.</summary>
+    private int _fusedStepsSincePersistenceCheck;
+
+    /// <summary>
+    /// How often the fused plan is re-checked for actually persisting parameter updates.
+    /// </summary>
+    /// <remarks>
+    /// A silent no-op costs the entire remainder of the run, so this is cheap insurance: the probe
+    /// is a strided checksum bounded to ~<see cref="FusedChecksumTargetSamples"/> samples however
+    /// large the model, and at this interval it adds well under 1% to a training step.
+    /// </remarks>
+    private const int FusedPersistenceRecheckInterval = 16;
+
     /// <summary>
     /// Reason string set by <see cref="EmitFusedMissAndFallback"/> when
     /// <see cref="TryTrainWithFusedOptimizer"/> bails out early, consumed
@@ -8592,7 +8605,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // #1822: on the first fused step for this model, snapshot a checksum of
         // the live trainable parameters so we can verify AFTER the step that the
         // fused kernel actually persisted its update (see _fusedPersistenceVerified).
-        bool verifyFusedPersistence = !_fusedPersistenceVerified && !_fusedTrainingCommitted;
+        // Persistence probe. Runs on every step until the plan has proven itself once, and then
+        // PERIODICALLY forever after.
+        //
+        // It used to be strictly one-shot ("proven to persist for this model — never re-run the
+        // check"), which assumed persistence is a property of the model. It is not: it is a
+        // property of the CURRENT PLAN, and a plan can persist on its first step and then silently
+        // stop. That is a total training freeze with no error — Train() returns, the loss is
+        // recorded, and not a single parameter moves. It was found on a model whose objective
+        // slices and concatenates the prediction, where the loss stayed bit-identical over 100
+        // steps while GradientFlow and Training_ShouldChangeParameters still passed.
+        //
+        // Re-checking costs one strided checksum, already bounded to ~FusedChecksumTargetSamples
+        // regardless of model size, amortized over FusedPersistenceRecheckInterval steps.
+        bool verifyFusedPersistence =
+            (!_fusedPersistenceVerified && !_fusedTrainingCommitted)
+            || (++_fusedStepsSincePersistenceCheck >= FusedPersistenceRecheckInterval);
         double fusedParamChecksumBefore = verifyFusedPersistence
             ? FusedTrainableParamChecksum(trainableLayers)
             : 0.0;
@@ -8662,6 +8690,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // init would commit the decoupled path unverified (ooples/AiDotNet#1822 review).
                 if (!persisted && !NumOps.IsNaN(lossValue))
                 {
+                    if (_fusedTrainingCommitted)
+                    {
+                        // The plan persisted earlier and has now stopped. Its Adam/AdamW moments
+                        // cannot be handed to the eager optimizer, so the committed-failure reset is
+                        // the only way back — the same graceful degradation the OOM and GPU-transient
+                        // paths already use, and for the same reason: a one-time trajectory
+                        // perturbation is enormously better than a model that silently never learns
+                        // again.
+                        _pendingFusedMissReason =
+                            "fused compiled plan STOPPED persisting parameter updates after " +
+                            "previously succeeding (loss " + NumOps.ToDouble(lossValue).ToString("G6") +
+                            "); reset to the eager tape so Train() keeps learning";
+                        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+                        {
+                            System.Diagnostics.Trace.TraceWarning(
+                                "[AiDotNet] " + _pendingFusedMissReason + " (model: " + GetType().Name + ").");
+                        }
+                        ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
+                        return false; // fall through to the eager tape path in TrainWithTape
+                    }
+
                     _fusedTrainingDisabled = true;
                     _pendingFusedMissReason =
                         "fused compiled step ran (loss " + NumOps.ToDouble(lossValue).ToString("G6") +
@@ -8675,8 +8724,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     }
                     return false; // fall through to the eager tape path in TrainWithTape
                 }
-                // Proven to persist for this model — never re-run the check.
+                // Proven to persist for THIS PLAN, for now. Re-armed rather than latched off, so a
+                // plan that later decouples from the live parameter tensors is still caught.
                 _fusedPersistenceVerified = true;
+                _fusedStepsSincePersistenceCheck = 0;
             }
 
             LastLoss = lossValue;

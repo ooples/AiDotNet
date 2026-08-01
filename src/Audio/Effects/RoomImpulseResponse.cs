@@ -240,31 +240,28 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     #region NeuralNetworkBase Implementation
 
     /// <summary>
-    /// Opts out of fused compiled training: the fused plan produces NaN for this model's spectral
-    /// objective while eager evaluation of the same loss is finite.
+    /// Opts out of fused compiled training: this forward is not a traceable static graph.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Measured. With fusion enabled the step fails with "Fused compiled training has already run
-    /// successfully, but the current step cannot engage the fused path", inner ArithmeticException
-    /// "Function does not accept floating point Not-a-Number values"
-    /// (NeuralNetworkBase.TryTrainWithFusedOptimizer). Parameters then never move and every probe
-    /// repeats the same number. Eager evaluation of MultiResolutionStftLoss is finite in BOTH
-    /// precisions — verified on plain leaves, on degenerate all-zero prediction and all-zero target,
-    /// and across eight real training steps — so the NaN is introduced by the fused plan, not the
-    /// objective. Disabling fusion takes this model from 24/26 to 26/26.
+    /// The FiNS forward computes several stages with element-wise loops over tensor VALUES rather
+    /// than engine ops — FiLM conditioning, broadcasting the latent into the decoder seed, adaptive
+    /// average pooling, resizing the time axis and zeroing the early component past E. The eager
+    /// autograd tape re-runs those loops every step, so they are always current. A TRACING compiler
+    /// cannot: it records the op graph once and replays it, so values read by a raw loop are baked
+    /// in as constants and the replayed plan stops depending on the parameters that produced them.
     /// </para>
     /// <para>
-    /// Two candidate causes were tested and RULED OUT: per-call constants going stale under a traced
-    /// plan (all constants are now cached and the failure was unchanged), and graph size (a
-    /// single-resolution loss, a quarter of the nodes, froze identically). MeanAbsoluteErrorLoss —
-    /// purely elementwise plus a reduction — trains fine under fusion, so the remaining difference
-    /// is the structural ops this loss uses on the prediction path, TensorNarrow and
-    /// TensorConcatenate.
+    /// Measured, and the symptom is nastier than a crash: with fusion enabled the persistence probe
+    /// keeps passing — parameters genuinely do move — while the OUTPUT never changes, so the loss is
+    /// bit-identical across 100 steps (36.935169) and the model silently never learns. Disabling
+    /// fusion takes this model from 24/26 to 26/26.
     /// </para>
     /// <para>
-    /// This is the documented graph-break escape hatch, the same fallback PyTorch's torch.compile
-    /// uses. REMOVE THIS OVERRIDE once the fused defect is fixed.
+    /// This is the documented graph-break classification the property exists for, the same fallback
+    /// PyTorch's torch.compile makes for a forward it cannot trace — NOT a workaround for a
+    /// framework defect. Making this model fused-eligible means re-expressing those five helpers in
+    /// engine ops; until then the eager tape is the correct and only sound path.
     /// </para>
     /// </remarks>
     protected override bool SupportsFusedCompiledTraining => false;
