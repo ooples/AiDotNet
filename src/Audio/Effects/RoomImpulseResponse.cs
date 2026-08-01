@@ -411,6 +411,24 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         var x = eng.Reshape(input, [1, 1, totalSamples]);
 
         // --- Encoder: main branch + parallel 1x1 residual at the same stride (paper Fig. 1) ---
+        //
+        // KNOWN DEFECT, deliberately left in place — it is not this model's to fix.
+        // BatchNormalizationLayer documents rank-3 input as [C, H, W] with channels in AXIS 0. These
+        // activations are [B, C, L], so BN normalizes over the BATCH axis and treats the whole
+        // C-by-L plane as a single channel: the per-channel statistics FiNS wants are never
+        // computed, and the running averages track one meaningless channel. Consequence, measured:
+        // training-mode loss descends monotonically (0.5709495 -> 0.5697264 over 12 steps) while the
+        // EVAL-mode output — the only one that consults running averages — sits 2.154E-001 away and
+        // drifts for tens of steps, which is why Training_ShouldReduceLoss reads a healthy model as
+        // failing. Not overshoot: dropping the rate 10x moves the minimum from step 3 to step 6
+        // without removing the rise, and over 60 steps the eval loss peaks near step 40 and never
+        // returns below its start, so more iterations cannot fix it either.
+        // Two local workarounds were tried and MEASURED WORSE, so do not retry them: rank-4 NCHW
+        // [B, C, 1, L] gave 25/26 -> 20/26 with NaN after training (degenerate height of 1), and
+        // rank-2 [L, C] — true BatchNorm1d semantics — gave 21/26 with the same NaN family. The real
+        // fix is a documented rank-3 [B, C, L] path inside BatchNormalizationLayer that normalizes
+        // per channel over batch and time with no degenerate axis; that is framework-wide and needs
+        // its own regression baseline.
         for (int i = 0; i < _encoderConv.Count; i++)
         {
             var main = _encoderAct[i].Forward(_encoderNorm[i].Forward(_encoderConv[i].Forward(x)));
