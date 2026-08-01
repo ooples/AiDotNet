@@ -4345,6 +4345,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 8 })";
             }
+            else if (model.ClassName == "SAM2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Segmentation.", System.StringComparison.Ordinal))
+            {
+                // The video fixture below supplies [4, 3, 32, 32], but the parameterless SAM2
+                // constructor declares 256x256. SAM2 upsamples its low-resolution mask to the
+                // architecture dimensions, so the generated fixture exercised a different output
+                // geometry than the image it supplied. Keep the production Base model-size default
+                // and align only the generated architecture with its existing 32x32 input geometry.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1))";
+            }
             else if (model.ClassName == "SAM21" && model.TypeParameterCount == 1)
             {
                 // SAM 2.1 retains the paper-large Hiera backbone by default. Its generated
