@@ -23268,34 +23268,125 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
-    /// <summary>Creates default layers for Neural Room Impulse Response estimation.</summary>
+    /// <summary>
+    /// Creates the FiNS layer stack for time-domain room impulse response estimation
+    /// (Steinmetz et al., WASPAA 2021, arXiv:2107.07503).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// EMISSION ORDER IS A CONTRACT. <c>RoomImpulseResponse&lt;T&gt;</c> binds per-stage views into
+    /// <c>Layers</c> by index against exactly this order, because the FiNS graph is not a
+    /// sequential chain — the encoder has a parallel residual branch per block, the decoder is
+    /// FiLM-conditioned on a latent produced by pooling, and the noise filterbank is driven by
+    /// noise rather than by the previous layer's output. Changing the order or count here without
+    /// updating that binding silently mis-wires the model, so the model asserts on the total count.
+    /// </para>
+    /// <para>
+    /// Per encoder block (5 layers): main conv, main batch norm, PReLU, residual 1x1 conv,
+    /// residual batch norm. Paper: "1-D convolution with a kernel size of 15 and a stride 2,
+    /// followed by batch normalization, and a parameterized ReLU (PReLU) activation", with
+    /// residual connections that are "1x1 convolutions using the same stride, followed by batch
+    /// normalization".
+    /// </para>
+    /// <para>
+    /// Then the 3-layer MLP that maps the pooled 512-d encoder output to the latent z (paper:
+    /// "three-layer MLP to produce z, of 128 dimensions"), the decoder blocks (each: FiLM dense,
+    /// transposed-conv upsample, FiLM dense, dilated refinement conv — following the GAN-TTS
+    /// generator), and finally the three output layers: the (M+1)-channel head producing M noise
+    /// masks plus the early component, the trainable FIR filterbank of M filters of order P, and
+    /// the 1x1 convolution that mixes the M late bands and the early component into the RIR.
+    /// </para>
+    /// </remarks>
+    /// <param name="numEncoderBlocks">Strided encoder blocks. Paper: 14.</param>
+    /// <param name="encoderKernelSize">Encoder conv kernel size. Paper: 15.</param>
+    /// <param name="encoderStride">Encoder conv stride. Paper: 2.</param>
+    /// <param name="encoderMaxChannels">Channels at the final encoder block. Paper: 512.</param>
+    /// <param name="latentDim">Latent embedding width. Paper: 128.</param>
+    /// <param name="numDecoderBlocks">Decoder blocks; count is an implementation choice.</param>
+    /// <param name="numNoiseBands">Noise bands M. Paper: 10.</param>
+    /// <param name="noiseFilterOrder">FIR order P of each band filter. Paper: 1023.</param>
     public static IEnumerable<ILayer<T>> CreateDefaultRoomImpulseResponseLayers(
-        int encoderDim = 256, int numEncoderLayers = 6,
-        int numHeads = 4, int numFrequencyBins = 257,
-        int rirLength = 16000, double dropoutRate = 0.1)
+        int numEncoderBlocks = 14,
+        int encoderKernelSize = 15,
+        int encoderStride = 2,
+        int encoderMaxChannels = 512,
+        int latentDim = 128,
+        int numDecoderBlocks = 5,
+        int numNoiseBands = 10,
+        int noiseFilterOrder = 1023)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        // Spectral encoder with self-attention
-        yield return new DenseLayer<T>(encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-        for (int i = 1; i < numEncoderLayers; i++)
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+
+        // --- Encoder: 5 layers per block, channels ramping geometrically to encoderMaxChannels ---
+        const int baseChannels = 32;
+        // "same" padding keeps the halving driven by the stride alone rather than by edge losses.
+        int encoderPadding = (encoderKernelSize - 1) / 2;
+        for (int i = 0; i < numEncoderBlocks; i++)
         {
-            // Spectral self-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward
-            yield return new DenseLayer<T>(encoderDim * 4, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            // Hits encoderMaxChannels EXACTLY at the final block, which is what the paper reports.
+            int channels = numEncoderBlocks == 1
+                ? encoderMaxChannels
+                : (int)Math.Round(baseChannels * Math.Pow(
+                    (double)encoderMaxChannels / baseChannels, i / (double)(numEncoderBlocks - 1)));
+            channels = Math.Max(1, Math.Min(encoderMaxChannels, channels));
+
+            yield return new Conv1DLayer<T>(outputChannels: channels, kernelSize: encoderKernelSize,
+                stride: encoderStride, padding: encoderPadding, activation: identity);
+            yield return new BatchNormalizationLayer<T>(numFeatures: channels);
+            yield return new ActivationLayer<T>((IActivationFunction<T>)new PReLUActivation<T>());
+            // Residual projection: 1x1 at the SAME stride so it lines up with the main branch.
+            yield return new Conv1DLayer<T>(outputChannels: channels, kernelSize: 1,
+                stride: encoderStride, padding: 0, activation: identity);
+            yield return new BatchNormalizationLayer<T>(numFeatures: channels);
         }
-        // RIR decoder - project to temporal domain
-        int intermediateSize = Math.Min(rirLength, 4096);
-        yield return new DenseLayer<T>(intermediateSize, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(rirLength, (IActivationFunction<T>?)null);
+
+        // --- Three-layer MLP: pooled encoder output -> latent z ---
+        yield return new DenseLayer<T>(encoderMaxChannels, (IActivationFunction<T>)new PReLUActivation<T>());
+        yield return new DenseLayer<T>(Math.Max(latentDim, encoderMaxChannels / 2), (IActivationFunction<T>)new PReLUActivation<T>());
+        yield return new DenseLayer<T>(latentDim, identity);
+
+        // --- Decoder: 4 layers per block (FiLM, upsample, FiLM, dilated refine) ---
+        int decoderChannels = Math.Max(numNoiseBands + 1, encoderMaxChannels / 8);
+        for (int j = 0; j < numDecoderBlocks; j++)
+        {
+            // FiLM produces a scale and a shift per channel, hence 2x width (Perez et al. 2018).
+            yield return new DenseLayer<T>(decoderChannels * 2, identity);
+            // Stage 1: transposed convolution upsampling (stride 2 doubles the length).
+            yield return new Conv1DTransposeLayer<T>(outputChannels: decoderChannels, kernelSize: 4,
+                stride: 2, padding: 1, activation: identity);
+            yield return new DenseLayer<T>(decoderChannels * 2, identity);
+            // Stage 2: refinement with a larger dilation factor, growing with depth.
+            yield return new Conv1DLayer<T>(outputChannels: decoderChannels, kernelSize: 3,
+                dilation: 1 << j, stride: 1, padding: 1 << j, activation: identity);
+        }
+
+        // --- Output heads ---
+        // M noise masks plus one extra channel for the early/direct component.
+        yield return new Conv1DLayer<T>(outputChannels: numNoiseBands + 1, kernelSize: 1,
+            stride: 1, padding: 0, activation: identity);
+        // Trainable filterbank: M FIR filters of order P applied to the noise signal.
+        yield return new Conv1DLayer<T>(outputChannels: numNoiseBands, kernelSize: noiseFilterOrder + 1,
+            stride: 1, padding: noiseFilterOrder / 2, activation: identity);
+        // 1x1 mix of the M late bands and the early component into the monophonic RIR.
+        yield return new Conv1DLayer<T>(outputChannels: 1, kernelSize: 1,
+            stride: 1, padding: 0, activation: identity);
     }
+
+    /// <summary>
+    /// Layers emitted per encoder block by <see cref="CreateDefaultRoomImpulseResponseLayers"/>.
+    /// </summary>
+    public const int RoomImpulseResponseLayersPerEncoderBlock = 5;
+
+    /// <summary>
+    /// Layers emitted per decoder block by <see cref="CreateDefaultRoomImpulseResponseLayers"/>.
+    /// </summary>
+    public const int RoomImpulseResponseLayersPerDecoderBlock = 4;
+
+    /// <summary>
+    /// Layers emitted by <see cref="CreateDefaultRoomImpulseResponseLayers"/> outside the encoder
+    /// and decoder blocks: the 3-layer MLP plus the three output heads.
+    /// </summary>
+    public const int RoomImpulseResponseFixedLayers = 6;
 
     #endregion
 
