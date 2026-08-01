@@ -102,6 +102,11 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly FactorVAEOptions<T> _options;
 
+    /// <summary>
+    /// Routes finance-base training through the optimizer configured for this FactorVAE instance.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
@@ -435,6 +440,13 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
+        // This override drives the paper's prior/posterior branches directly instead of calling
+        // NeuralNetworkBase.ForwardForTraining. Preserve the base training contract explicitly:
+        // a seeded architecture must give each stochastic layer a deterministic stream. Without
+        // this, the short and long clone trajectories consume unrelated Dropout masks and their
+        // convergence comparison depends on process-global RNG order.
+        EnsureLayerRandomSeedsWired();
+
         if (!HasFactorSpans) return base.ForwardForTraining(input);
 
         var features = RunSpan(input, FeatureSpanStart, FeatureSpanEnd);
@@ -747,7 +759,9 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             PredictionHorizon = _predictionHorizon,
             Beta = _beta,
             Gamma = _gamma,
-            DropoutRate = _dropoutRate
+            DropoutRate = _dropoutRate,
+            KlWeight = _options.KlWeight,
+            Seed = _options.Seed
         };
 
         return new FactorVAE<T>(Architecture, optionsCopy);
