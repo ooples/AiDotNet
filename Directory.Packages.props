@@ -287,8 +287,11 @@
 
          Bumped 0.120.5 -> 0.120.6: brings the newly released autodiff/GradientTape fixes,
          data-derived compiled-plan identity fix (#913), differentiable MelSpectrogram and corrected
-         Spectrogram adjoint (#911), plus the net471 compatibility completion (#910). -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.120.6" />
+         Spectrogram adjoint (#911), plus the net471 compatibility completion (#910).
+
+         Bumped 0.120.6 -> 0.121.0: brings AiDotNet.Tensors #925, which prevents full-span
+         autodiff views from being returned to the tensor pool while the graph still owns them. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.121.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.120.6" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.120.6" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.120.6" />
