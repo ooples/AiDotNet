@@ -23,7 +23,7 @@ namespace AiDotNet.MetaLearning;
 /// <item><b>Meta-RL:</b> PEARL, DREAM, DiscoRL, InContextRL, HyperNetMetaRL, ContextMetaRL</item>
 /// <item><b>Continual/Online:</b> ACL, iTAML, MetaContinualAL, MbPA, OML, MOCA</item>
 /// <item><b>Task Augmentation:</b> MetaTask, ATAML, MPTS, DynamicTaskSampling, UnsupervisedMetaLearn</item>
-/// <item><b>Transductive:</b> GCDPLNet, BayTransProto, JMP, ETPN, ActiveTransFSL</item>
+/// <item><b>Cross-domain / Transductive:</b> LFT, BayTransProto, JMP, ETPN, ActiveTransFSL</item>
 /// <item><b>Hypernetwork:</b> TaskCondHyperNet, HyperCLIP, RecurrentHyperNet, HyperNeRFMeta</item>
 /// </list>
 /// </para>
@@ -1323,15 +1323,19 @@ public enum MetaLearningAlgorithmType
     // ===== Transductive Few-Shot =====
 
     /// <summary>
-    /// GCDPLNet - Graph-based Class Distribution Propagation and Label Network (2024).
-    /// Uses graph neural networks with class distribution propagation for transductive FSL.
+    /// LFT - Learned Feature-Wise Transformation (Tseng et al., ICLR 2020).
     /// </summary>
     /// <remarks>
-    /// <b>Key Idea:</b> Build a graph over all examples and propagate both features and class
-    /// distribution information through message passing for joint classification.
-    /// <para><b>Use When:</b> You want graph-based transductive inference with distribution modeling.</para>
+    /// <b>Key Idea:</b> Metric-based few-shot learners generalize poorly across domains because the
+    /// feature distribution shifts. Insert affine feature-wise transformation layers after the
+    /// encoder's normalization during TRAINING ONLY, sampling their scale and bias from learned
+    /// hyper-parameters, so the metric function is exposed to many simulated feature distributions.
+    /// The hyper-parameters themselves are learned by a learning-to-learn split: update the model on
+    /// a pseudo-seen domain WITH the transformations, then update the transformation
+    /// hyper-parameters against the pseudo-unseen loss measured WITHOUT them.
+    /// <para><b>Use When:</b> Your few-shot task will be evaluated on a domain you did not train on.</para>
     /// </remarks>
-    GCDPLNet,
+    LFT,
 
     /// <summary>
     /// BayTransProto - Bayesian Transductive Prototypical Networks (2024).

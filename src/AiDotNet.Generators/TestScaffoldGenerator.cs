@@ -2337,6 +2337,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
+                // Fourth instance, and this one is a THREE-way collision: SAM exists as
+                // AiDotNet.ComputerVision.Segmentation.Foundation.SAM (the promptable segmenter the
+                // constructor pin below is written for, taking numClasses and modelSize),
+                // AiDotNet.VisionLanguage.Encoders.SAM, and
+                // AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SAM (Significance Analysis
+                // of Microarrays — an entirely unrelated method that merely shares the acronym).
+                // When emission order handed the name to the VisionLanguage encoder, the pin's
+                // numClasses argument produced CS1739 in generated code.
+                if (model.FullyQualifiedName.IndexOf(
+                        "AiDotNet.VisionLanguage.Encoders.SAM", System.StringComparison.Ordinal) >= 0
+                    || model.FullyQualifiedName.IndexOf(
+                        "AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SAM", System.StringComparison.Ordinal) >= 0)
+                {
+                    continue;
+                }
+
                 var family = ResolveTestBaseClass(model);
                 if (family is null)
                     continue;
@@ -4560,7 +4576,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options " +
                     "{ MemoryBankSize = 2 })";
             }
-            else if (model.ClassName == "SAM" && model.TypeParameterCount == 1)
+            else if (model.ClassName == "SAM" && model.TypeParameterCount == 1 &&
+                     model.FullyQualifiedName.IndexOf(
+                         "AiDotNet.ComputerVision.Segmentation.Foundation.", System.StringComparison.Ordinal) >= 0)
             {
                 // SAM keeps ViT-H and the paper AdamW settings as production defaults.
                 // Exercise the published ViT-B variant in generated CPU CI, with a lower
