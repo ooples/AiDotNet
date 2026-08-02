@@ -25,3 +25,5 @@ ADN0051 | AiDotNet.Serialization | Error | LayerStateGenerator
 ADN0052 | AiDotNet.Serialization | Error | LayerStateGenerator
 ADN0053 | AiDotNet.Serialization | Error | LayerStateGenerator
 ADN0054 | AiDotNet.Serialization | Warning | LayerStateGenerator
+ADNTEST001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Float test scaffold rewrite was a no-op
+ADNTEST002 | AiDotNet.TestScaffold | Disabled | TestScaffoldGenerator, Generated scaffold architecture size disagrees with its InputShape

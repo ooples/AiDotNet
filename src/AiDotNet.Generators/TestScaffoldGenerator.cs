@@ -280,6 +280,44 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     //
     // Diagnostic raised when a model is selected for a <float> scaffold but the rewrite changed
     // nothing (no generic <double> found) — see EmitGeneratedTestClass.
+    // Diagnostic raised when a generated scaffold's ARCHITECTURE spatial size disagrees with the
+    // InputShape the same scaffold feeds it. Six separate instances of this shipped undetected
+    // (XMem, RAPIDFlow, SAM, Mask2Former, SlimSAM, RoMa/VideoFlow): the model resolves every
+    // declared layer shape from the architecture while the forward runs on the fixture, so each
+    // layer reports a fixed multiple of what it computes and VerifyReportedOutputShape fails most
+    // of the class. Nothing caught it at build time - each one cost a full shard run to find.
+    private static readonly DiagnosticDescriptor ArchitectureFixtureSizeMismatchDescriptor = new DiagnosticDescriptor(
+        id: "ADNTEST002",
+        title: "Generated scaffold architecture size disagrees with its InputShape",
+        messageFormat: "Model '{0}' builds its architecture at {1}x{2} but the generated fixture " +
+                       "feeds InputShape [.., {3}, {4}]. Every layer will resolve its DECLARED shape " +
+                       "from the architecture while the forward runs on the fixture, so declared and " +
+                       "actual shapes differ by a constant factor and VerifyReportedOutputShape fails. " +
+                       "Make the constructor pin's inputHeight/inputWidth match the emitted InputShape.",
+        category: "AiDotNet.TestScaffold",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        // OFF BY DEFAULT, and the reason is measured rather than cautious. Enabled, this fires on 46
+        // models, and reviewing them showed most are NOT defects:
+        //   - audio models whose fixture is a mel spectrogram, not an image: HiFiGAN / MelGAN /
+        //     UnivNet / WaveGlow / ParallelWaveGAN / ISTFTNet all read "arch 64x32 vs fixture 80x1",
+        //     which compares spectrogram axes against inputHeight/inputWidth;
+        //   - patch-grid vision-language models, where the architecture legitimately describes the
+        //     TOKEN grid and is therefore smaller than the image by the patch size: BLIP3 /
+        //     InstructBLIP / MiniGPTv2 / Phi4Multimodal at 28x28 for a 112px image (patch 4),
+        //     DeepSeekVL2 / EVACLIP at 8x8 for 112px (patch 14).
+        // Restricting to "architecture LARGER than fixture" was considered and rejected: it catches
+        // only the RoMa / VideoFlow / XMem / RAPIDFlow half of the known instances, and its one new
+        // candidate here (MedSAM2, 128 vs 64) turned out to fail a TRAINING invariant rather than a
+        // shape check, so that refinement is unvalidated.
+        //
+        // Nothing in the emitted text separates "the architecture describes the input image" from
+        // "the architecture describes a token grid or spectrogram", so an enabled version would add
+        // ~90 mostly-false warnings and train people to ignore it. Kept available deliberately:
+        // enable it (editorconfig / -warnaserror:ADNTEST002) when adding or resizing a spatial model
+        // and check whether the new entry is real. It DOES catch the real defect - verified against a
+        // deliberately reintroduced SlimSAM 32x32-vs-128x128 mismatch, which it reported.
+        isEnabledByDefault: false);
+
     private static readonly DiagnosticDescriptor FloatScaffoldNoOpDescriptor = new DiagnosticDescriptor(
         id: "ADNTEST001",
         title: "Float test scaffold rewrite was a no-op",
@@ -536,6 +574,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // against 20 (3.91 against 0.26) measures the real trajectory with a ~15x margin.
             {
                 "RoMa",
+                new WarmupIterationOverride(moreDataShort: 10, moreDataLong: 20)
+            },
+
+            // VideoFlow is RoMa's twin numerically as well as structurally: at the corrected 64x64 it
+            // reports the SAME 300098 parameters, the SAME 23.8627 -> 100.6624 across iterations 1
+            // and 2, and the same near-static L2 (24.0634 -> 24.0641). Same fixture, same overshoot,
+            // same remedy.
+            {
+                "VideoFlow",
                 new WarmupIterationOverride(moreDataShort: 10, moreDataLong: 20)
             },
 
@@ -8342,6 +8389,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 2))";
             }
+            else if (model.ClassName == "VideoFlow" && model.TypeParameterCount == 1)
+            {
+                // RoMa's twin, same folder and the same defect: no constructor pin, so it fell back
+                // to a parameterless constructor hardcoding 256x256 while the fixture feeds 64x64.
+                // Identical symptom too - the first convolution declared [64, 256, 256] against an
+                // actual [1, 64, 64, 64], failing ten invariants. inputDepth 6 for the same reason:
+                // the architecture describes the channel-wise concatenated frame PAIR.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2))";
+            }
             else if (model.ClassName == "RoMa" && model.TypeParameterCount == 1)
             {
                 // Same defect as XMem and RAPIDFlow directly above, and for the same reason: RoMa had
@@ -13680,6 +13739,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             Override("TrainingIterations", warmupOverride.Training);
             Override("MoreDataShortIterations", warmupOverride.MoreDataShort);
             Override("MoreDataLongIterations", warmupOverride.MoreDataLong);
+        }
+
+        // Architecture-vs-fixture consistency (ADNTEST002). Both facts are present verbatim in
+        // the emitted text, so compare them here rather than waiting for a shard run to surface
+        // the shape error. Only fires when BOTH are unambiguously spatial - a 3-element InputShape
+        // AND an inputHeight/inputWidth pair - so 1-D, sequence and token fixtures never trip it.
+        var archMatch = System.Text.RegularExpressions.Regex.Match(
+            generated, @"inputHeight:\s*(\d+)[\s\S]{0,80}?inputWidth:\s*(\d+)");
+        var shapeMatch = System.Text.RegularExpressions.Regex.Match(
+            generated,
+            // The terminator is REQUIRED. With it optional this matched a PREFIX of a longer
+            // shape - a 4-element [B, C, H, W] fixture matched its first three entries, so the
+            // comparison used [C, H] instead of [H, W] and reported nonsense such as "AVID
+            // fixture [.., 3, 32]". Anchoring to the close brace/bracket restricts this to
+            // genuine 3-element [C, H, W] fixtures, which is the only form the check is valid for.
+            @"InputShape\s*=>\s*(?:new\s*\[\]\s*\{|\[)\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:\}|\])");
+        if (archMatch.Success && shapeMatch.Success)
+        {
+            int archH = int.Parse(archMatch.Groups[1].Value);
+            int archW = int.Parse(archMatch.Groups[2].Value);
+            int fixtureH = int.Parse(shapeMatch.Groups[1].Value);
+            int fixtureW = int.Parse(shapeMatch.Groups[2].Value);
+            if (archH != fixtureH || archW != fixtureW)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ArchitectureFixtureSizeMismatchDescriptor, Location.None,
+                    model.ClassName, archH, archW, fixtureH, fixtureW));
+            }
         }
 
         generated = DropDuplicateOverrides(generated);
