@@ -577,6 +577,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 new WarmupIterationOverride(moreDataShort: 10, moreDataLong: 20)
             },
 
+            // MedSAM2: training works and works WELL - the training loss falls 0.508 -> 0.005 over 25
+            // steps on a fixed pair. The evaluation loss simply rises before it falls, from an
+            // untrained 0.619212:
+            //   0.621, 0.665, 0.663, 0.655, 0.643, 0.624, 0.607, 0.591, 0.572, 0.555, 0.539, 0.519,
+            //   0.497, 0.462, 0.415, 0.366, 0.323, 0.285, 0.246, 0.208, 0.172, 0.138, 0.109, 0.089,
+            //   0.073
+            // It crosses back under the untrained value at step 7. The probe measured at 2, inside
+            // the rise, and reported "training did not reduce loss: 0.619212 -> 0.623634" for a model
+            // that reduces it by 88 % given the chance. Fifteen steps lands at 0.415, a 33 % genuine
+            // reduction. Tolerance unchanged.
+            {
+                "MedSAM2",
+                new WarmupIterationOverride(training: 15)
+            },
+
             // VideoFlow is RoMa's twin numerically as well as structurally: at the corrected 64x64 it
             // reports the SAME 300098 parameters, the SAME 23.8627 -> 100.6624 across iterations 1
             // and 2, and the same near-static L2 (24.0634 -> 24.0641). Same fixture, same overshoot,
@@ -2307,6 +2322,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
+                // Third instance of the same collision, and this one was a KNOWN risk: the AudioPaLM
+                // constructor pin below already carries the comment "there are TWO classes with this
+                // name, and the generated test targets this one", relying on emission order to pick
+                // AiDotNet.TextToSpeech.MultiModal.AudioPaLM over
+                // AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM. That order is not stable - an
+                // unrelated fixture-size edit elsewhere in this file flipped it, and the pin then fed
+                // TextToSpeech AudioPaLMOptions to the SpeechRecognition overload (CS1503 in generated
+                // code). Make the choice explicit, as for LayoutLMv3 and GLaMM above. The speech
+                // -recognition namesake stays in untestedModels so AIDN040 still reports it.
+                if (model.FullyQualifiedName.IndexOf(
+                        "AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM", System.StringComparison.Ordinal) >= 0)
+                {
+                    continue;
+                }
+
                 var family = ResolveTestBaseClass(model);
                 if (family is null)
                     continue;
@@ -3853,7 +3883,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    // 64, matching GetFixtureSpatialSize, which pins MedSAM2 to 64 as a MEASURED
+                    // choice ("MedSAM2 and MetaCLIP both improved at 64px"). This said 128, so the
+                    // architecture was a stale 2x of the fixture. Unlike the SAM/Mask2Former family
+                    // this did not crash on a declared-shape check - it degraded training instead,
+                    // failing Training_ShouldReduceLoss with 0.619212 -> 0.623634.
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2Options { " +
                     "ChannelDims = new[] { 16, 32, 48, 64 }, Depths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDim = 32 })";
@@ -7095,7 +7130,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ConvNeXtChannels = 32, ConvNeXtIntermediateChannels = 96, " +
                     "NumConvNeXtBlocks = 2 })";
             }
-            else if (model.ClassName == "AudioPaLM" && model.TypeParameterCount == 1)
+            else if (model.ClassName == "AudioPaLM" && model.TypeParameterCount == 1 &&
+                     model.FullyQualifiedName.IndexOf(
+                         "AiDotNet.TextToSpeech.MultiModal.", System.StringComparison.Ordinal) >= 0)
             {
                 // 177 s of training probes, again with repetition already floored. Note this is
                 // the TextToSpeech.MultiModal AudioPaLM — there are TWO classes with this name,
