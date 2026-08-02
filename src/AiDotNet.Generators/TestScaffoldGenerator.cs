@@ -526,6 +526,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // iterations was judging the rise. Twelve steps clear it with ~30 % margin. No tolerance
             // is relaxed - only the measurement point moves, the remedy E2TTS / SpeechT5 / AudioLM
             // already use in this file.
+            // RoMa: a violently oscillating start that DAMPS, measured on a fixed pair from
+            // untrained 0.80 -
+            //   23.86, 100.66, 0.54, 46.15, 1.91, 12.81, 1.17, 5.78, 0.83, 3.91, 2.29, 0.32, 0.94,
+            //   0.20, 1.24, 0.87, 0.36, 0.50, 0.28, 0.26
+            // The probe compared iteration 1 against iteration 2 - 23.86 against 100.66 - which is
+            // the very peak of the overshoot and says nothing about whether training works. By step
+            // 20 the oscillation has damped to 0.26, well under the untrained 0.80. Comparing 10
+            // against 20 (3.91 against 0.26) measures the real trajectory with a ~15x margin.
+            {
+                "RoMa",
+                new WarmupIterationOverride(moreDataShort: 10, moreDataLong: 20)
+            },
+
             {
                 "NaturalSpeech",
                 new WarmupIterationOverride(
@@ -4509,7 +4522,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
+                    // 128, matching the emitted fixture. At 32 the four stride-2/4 stages resolved
+                    // every declared shape to a quarter of what the forward computes - the stage-0
+                    // BatchNorm declared [8, 8, 8] against an actual [1, 8, 32, 32] - and nine
+                    // invariants died on VerifyReportedOutputShape. Same defect as XMem, RAPIDFlow,
+                    // SAM and Mask2Former. The forward already ran at 128, so this changes what the
+                    // layers claim, not what they compute; the bounded ChannelDimensions /
+                    // StageDepths that keep this off the OOM path are untouched.
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 1), " +
                     "numClasses: 1, dropRate: 0.0, options: " +
                     "new AiDotNet.ComputerVision.Segmentation.Efficient.SlimSAMOptions { " +
                     "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
@@ -8321,6 +8341,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 2))";
+            }
+            else if (model.ClassName == "RoMa" && model.TypeParameterCount == 1)
+            {
+                // Same defect as XMem and RAPIDFlow directly above, and for the same reason: RoMa had
+                // NO constructor pin, so it fell back to its parameterless constructor, which
+                // hardcodes a 256x256 architecture while the fixture feeds 64x64. Every layer then
+                // declared four times the extent it computes - the first convolution reported
+                // [64, 256, 256] against an actual [1, 64, 64, 64].
+                //
+                // inputDepth stays 6, unlike RAPIDFlow's 3: RoMa's own parameterless constructor
+                // documents that its single lazy _featureExtract conv is sized from InputDepth and is
+                // fed the channel-wise concatenated frame PAIR, so 6 is the architecture RoMa
+                // actually describes. Only the spatial size was wrong.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2))";
             }
             else if (model.ClassName == "WGANGP" && model.TypeParameterCount == 1)
             {
