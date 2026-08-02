@@ -7,15 +7,15 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the REBFormer model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
 /// </remarks>
-public class REBFormerOptions : ModelOptions
+public class RWKVTransducerOptions : ModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public REBFormerOptions() { }
+    public RWKVTransducerOptions() { }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public REBFormerOptions(REBFormerOptions other)
+    public RWKVTransducerOptions(RWKVTransducerOptions other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
@@ -31,6 +31,10 @@ public class REBFormerOptions : ModelOptions
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
+        TimeDecay = other.TimeDecay;
+        CurrentTokenBonus = other.CurrentTokenBonus;
+        TokenShiftMix = other.TokenShiftMix;
+        BoundaryAware = other.BoundaryAware;
         Language = other.Language;
         Vocabulary = other.Vocabulary;
     }
@@ -44,6 +48,42 @@ public class REBFormerOptions : ModelOptions
     public int NumMels { get; set; } = 80;
     public int VocabSize { get; set; } = 5000;
     public string? ModelPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets w, the per-step time-decay exponent of the RWKV recurrence.
+    /// </summary>
+    /// <remarks>
+    /// Past frames are scaled by e^(-w) each step, so influence falls off geometrically instead of
+    /// being truncated at a chunk boundary. Must be non-negative: a negative w would amplify the
+    /// past every step and diverge over a long utterance.
+    /// </remarks>
+    /// <value>Defaults to 0.5.</value>
+    public double TimeDecay { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets u, the extra weight the CURRENT frame carries relative to the decayed history.
+    /// </summary>
+    /// <value>Defaults to 1.0.</value>
+    public double CurrentTokenBonus { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets mu, the token-shift mix: how much of the current frame the shifted input uses,
+    /// the remainder coming from the previous frame. 1.0 disables the shift.
+    /// </summary>
+    /// <value>Defaults to 0.7.</value>
+    public double TokenShiftMix { get; set; } = 0.7;
+
+    /// <summary>
+    /// Gets or sets whether to use the boundary-aware transducer variant.
+    /// </summary>
+    /// <remarks>
+    /// The paper evaluates both "RWKV-Transducer and RWKV-Boundary-Aware-Transducer". The
+    /// boundary-aware arm adds an explicit emission-boundary signal; the plain transducer is the
+    /// default.
+    /// </remarks>
+    /// <value>False by default.</value>
+    public bool BoundaryAware { get; set; } = false;
+
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
     public string Language { get; set; } = "en";

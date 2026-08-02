@@ -775,7 +775,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // additionally pick up their family branch's smoke-iteration caps automatically. Re-verified per
         // model; any that still overrun get a family-appropriate cap afterwards. ---
         "RAFT",               // optical-flow recurrent GRU update — TemporalDim / ScaledInput timeout
-        "REBFormer",          // 512-wide/12-layer ASR — 250-step MoreData timed out after FP32 alone.
+        "RWKVTransducer",          // 512-wide/12-layer ASR — 250-step MoreData timed out after FP32 alone.
                               // Explicit audio roster membership activates smoke-level training repetitions.
         "RoomImpulseResponse",// neural room-response estimator — 250-step MoreData timed out after FP32 alone.
                               // Keep its production topology; cap generated audio training repetitions only.
@@ -3653,9 +3653,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new {optionsType} {{ EncoderDim = 32, NumEncoderLayers = 1, " +
                     "NumAttentionHeads = 4, NumMels = 32, VocabSize = 16, MaxTextLength = 8 })";
             }
-            else if (model.ClassName == "REBFormer" && model.TypeParameterCount == 1)
+            else if (model.ClassName == "RWKVTransducer" && model.TypeParameterCount == 1)
             {
-                // REBFormer exhausted FP32 plus the audio fixture's 1-vs-2 MoreData
+                // RWKVTransducer exhausted FP32 plus the audio fixture's 1-vs-2 MoreData
                 // and two-step memorization caps in CI run 30613315686 (120 s and
                 // 180 s respectively). Exercise the same public Branchformer sizing
                 // controls at smoke scale; production defaults remain 512-wide /
@@ -3665,7 +3665,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
-                    "new AiDotNet.SpeechRecognition.ConformerFamily.REBFormerOptions { " +
+                    "new AiDotNet.SpeechRecognition.ConformerFamily.RWKVTransducerOptions { " +
                     "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
                     "NumAttentionHeads = 4, CgmlpDim = 64, NumMels = 32, " +
                     "VocabSize = 16, DropoutRate = 0.0 })";
@@ -8864,7 +8864,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // ImageSize 448. Every one of its 32 generated tests failed, and the two genuine
                 // failures were System.OutOfMemoryException in Metadata_ShouldExist (23 s) and
                 // MoreData_ShouldNotDegrade (1 m 16 s); the rest were the 1 ms xunit cascade that
-                // follows a process-level OOM - which also poisoned REBFormer in the same run.
+                // follows a process-level OOM - which also poisoned RWKVTransducer in the same run.
                 // The OOM happens in Metadata_ShouldExist, a test that only CONSTRUCTS the model
                 // and runs zero training iterations, so an iteration cap
                 // (BoundedGeneratedTrainingClassNames) provably cannot fix it and shrinking is the
