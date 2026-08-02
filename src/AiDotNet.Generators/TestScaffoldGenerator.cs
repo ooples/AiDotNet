@@ -4517,7 +4517,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
+                    // 112, matching the emitted fixture. ADNTEST002 PREDICTED this one before it
+                    // failed: at 32 the stride-4 stem declared [96, 8, 8] against an actual
+                    // [96, 28, 28] (32/4 vs 112/4), taking out nine invariants. Seventh instance.
+                    "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 1), " +
                     "numClasses: 1, modelSize: AiDotNet.Enums.SAM21ModelSize.Tiny, " +
                     "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options " +
                     "{ MemoryBankSize = 2 })";
