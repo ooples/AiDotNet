@@ -4954,7 +4954,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), numClasses: 4)";
+                    // 128, matching the emitted fixture. Also predicted by ADNTEST002: at 32 the
+                    // stride-4 stem declared [64, 8, 8] against an actual [64, 32, 32]. Eighth instance.
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4)";
             }
             else if (model.ClassName == "Mask2Former" && model.TypeParameterCount == 1)
             {
