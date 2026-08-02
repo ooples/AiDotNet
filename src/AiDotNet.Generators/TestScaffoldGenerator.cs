@@ -7188,6 +7188,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions { SampleRate = 16000, " +
                     "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
                     "NumAttentionHeads = 2, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
+                    // The hybrid CTC/attention rebuild (#51) adds an attention decoder and an LID
+                    // head alongside the CTC head. DecoderDim must be bounded here too — it
+                    // defaults to the paper's 320, which would dwarf the 32-wide smoke encoder.
+                    "DecoderDim = 32, NumDecoderLayers = 1, " +
                     "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "AudioSep" && model.TypeParameterCount == 1)
