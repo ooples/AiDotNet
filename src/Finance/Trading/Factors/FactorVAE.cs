@@ -260,7 +260,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         InitializeLayers();
         InstallFactorVAEObjective();
@@ -309,7 +309,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         InitializeLayers();
         InstallFactorVAEObjective();
@@ -318,6 +318,19 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     #endregion
 
     #region Initialization
+
+    /// <summary>
+    /// Creates the model-owned optimizer used when the caller does not provide one.
+    /// </summary>
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        var optimizerOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            UseAMSGrad = _options.UseAMSGrad
+        };
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, optimizerOptions);
+    }
 
     /// <summary>
     /// Initializes the neural network layers for FactorVAE.
@@ -761,7 +774,8 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             Gamma = _gamma,
             DropoutRate = _dropoutRate,
             KlWeight = _options.KlWeight,
-            Seed = _options.Seed
+            Seed = _options.Seed,
+            UseAMSGrad = _options.UseAMSGrad
         };
 
         return new FactorVAE<T>(Architecture, optionsCopy);
