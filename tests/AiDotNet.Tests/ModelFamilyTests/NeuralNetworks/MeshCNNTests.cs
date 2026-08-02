@@ -4,6 +4,15 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
+// Core-contention casualty. Measured in isolation this class is comfortable — its memorization
+// probe is 34 s against a 180 s budget and MoreData is 59 s — yet LossStrictlyDecreases blew the
+// 180 s gate in the full shard with a reported duration of ~1 ms, i.e. starved while queued rather
+// than slow. That is exactly what FoundationScaleSerialCollection documents: at the default
+// maxParallelThreads (all 16 logical cores) N classes x N managed BLAS threads far exceeds the
+// cores. Serializing gives each forward the whole machine. Deliberately NOT marked HeavyTimeout —
+// MeshCNN is not foundation-scale and belongs in the default PR shard, it just must not run
+// sixteen-wide against other heavy classes.
+[Xunit.Collection("FoundationScaleSerial")]
 public class MeshCNNTests : NeuralNetworkModelTestBase<float>
 {
     // Default MeshCNN: InputFeatures=5, NumClasses=40, PoolTargets=[1800,1350,600]
