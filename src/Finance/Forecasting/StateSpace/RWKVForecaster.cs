@@ -74,7 +74,8 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
 
     #region Native Mode Fields
     private DenseLayer<T>? _inputEmbedding;
-    private List<RWKV7Block<T>>? _rwkvLayers;
+    /// <summary>The RWKV-7 stack. One layer owning N blocks, because the value residual is cross-layer.</summary>
+    private Rwkv7Stack<T>? _rwkvStack;
     private List<DenseLayer<T>>? _outputProjectionLayers;
     #endregion
 
@@ -273,7 +274,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     private void ExtractLayerReferences()
     {
         _inputEmbedding = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
-        _rwkvLayers = Layers.OfType<RWKV7Block<T>>().ToList();
+        _rwkvStack = Layers.OfType<Rwkv7Stack<T>>().FirstOrDefault();
         _outputProjectionLayers = Layers.OfType<DenseLayer<T>>().Skip(1).ToList();
     }
 
@@ -506,8 +507,11 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
 
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
-        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
-        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        // Implicit broadcasting: the explicit TensorBroadcast* entry points were removed in
+        // AiDotNet.Tensors 0.121.0, and [batch, n] against [batch, 1] broadcasts on its own.
+        var scaled = Engine.TensorMultiply(work, stdT);
+        var shifted = Engine.TensorAdd(scaled, meanT);
+        // Clone the shape: Reshape must not alias the source tensor's shape array.
         return reshaped ? Engine.Reshape(shifted, (int[])forecast._shape.Clone()) : shifted;
     }
 
@@ -558,11 +562,10 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         }
 
         // RWKV layers: [batch, seqLen, modelDim] -> [batch, seqLen, modelDim]
-        if (_rwkvLayers is not null)
-        {
-            foreach (var layer in _rwkvLayers)
-                current = layer.Forward(current);
-        }
+        // One call: the stack threads v_first across its blocks internally. Looping the blocks here
+        // would bypass that and silently drop the value residual.
+        if (_rwkvStack is not null)
+            current = _rwkvStack.Forward(current);
 
         // Output projection: take the last timestep's hidden state instead of flattening
         // [seqLen × modelDim]. RWKV is a causal recurrence whose final state has
@@ -626,13 +629,12 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
             activations["InputEmbedding"] = current.Clone();
         }
 
-        if (_rwkvLayers is not null)
+        // Per-block activations are no longer separable here: the stack must run as a unit so
+        // v_first is threaded, so the whole stack reports under one name.
+        if (_rwkvStack is not null)
         {
-            for (int i = 0; i < _rwkvLayers.Count; i++)
-            {
-                current = _rwkvLayers[i].Forward(current);
-                activations[$"RWKVLayer_{i}"] = current.Clone();
-            }
+            current = _rwkvStack.Forward(current);
+            activations["RWKVStack"] = current.Clone();
         }
 
         // Mirror Forward: take the last timestep's hidden state rather than flattening.
