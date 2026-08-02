@@ -498,6 +498,77 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "SeACo",
         };
 
+    /// <summary>
+    /// Models whose <c>LossStrictlyDecreasesOnMemorizationTask</c> probe must run past a MEASURED
+    /// Adam warm-up hump, mapped to the step count that clears it.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="OptimizerWarmupClassNames"/>, which moves the MoreData probe: a
+    /// model can need one without the other, and forcing both on the existing MoreData entries
+    /// would change probes that currently pass. No tolerance is relaxed by either — the default
+    /// strict-decrease threshold still applies, only the measurement point moves past the hump.
+    /// </remarks>
+    private static readonly System.Collections.Generic.Dictionary<string, WarmupIterationOverride> MemorizationWarmupIterations =
+        new System.Collections.Generic.Dictionary<string, WarmupIterationOverride>(System.StringComparer.Ordinal)
+        {
+            // MusicTaggingTransformer: measured on a fixed (input, target) pair, the loss rises on
+            // step 2 and then falls monotonically -
+            //   1.111, 1.300, 1.056, 0.474, 0.456, 0.318, 0.212, 0.186, 0.174, 0.149, 0.145, 0.140
+            // The probe's two iterations landed exactly on the hump. Twelve steps sit an order of
+            // magnitude below the step-1 baseline, so the invariant judges the real trajectory.
+            // Only the memorization probe is affected; its other probes already pass.
+            { "MusicTaggingTransformer", new WarmupIterationOverride(memorization: 12) },
+
+            // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
+            // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
+            //   0.253 | 0.267, 0.292, 0.294, 0.281, 0.294, 0.301, 0.279, 0.249, 0.207, 0.175, 0.173
+            // It rises for six steps before descending, so every probe that measured at two to six
+            // iterations was judging the rise. Twelve steps clear it with ~30 % margin. No tolerance
+            // is relaxed - only the measurement point moves, the remedy E2TTS / SpeechT5 / AudioLM
+            // already use in this file.
+            {
+                "NaturalSpeech",
+                new WarmupIterationOverride(
+                    memorization: 12, training: 12, moreDataShort: 1, moreDataLong: 12,
+                    // NaturalSpeech's TRAINING forward is stochastic (DropoutRate = 0.1), so
+                    // GetLastLoss() is one draw whose spread swamps the trend: over twelve steps on
+                    // a fixed pair it wandered 0.246, 0.100, 0.282, 0.295, 0.262, 0.190, 0.417,
+                    // 0.210, 0.057 with no visible direction, while the evaluation loss at the SAME
+                    // parameters was bit-reproducible across repeat calls and fell 0.267 -> 0.173.
+                    deterministicMemorizationLoss: true)
+            },
+        };
+
+    /// <summary>
+    /// Iteration counts that move a generated probe past a MEASURED optimizer warm-up. A null field
+    /// leaves that probe's emitted value alone.
+    /// </summary>
+    private readonly struct WarmupIterationOverride
+    {
+        internal WarmupIterationOverride(
+            int? memorization = null, int? training = null, int? moreDataShort = null, int? moreDataLong = null,
+            bool deterministicMemorizationLoss = false)
+        {
+            Memorization = memorization;
+            Training = training;
+            MoreDataShort = moreDataShort;
+            MoreDataLong = moreDataLong;
+            DeterministicMemorizationLoss = deterministicMemorizationLoss;
+        }
+
+        internal int? Memorization { get; }
+        internal int? Training { get; }
+        internal int? MoreDataShort { get; }
+        internal int? MoreDataLong { get; }
+
+        /// <summary>
+        /// Judge the memorization probe on the deterministic evaluation loss. For models whose
+        /// TRAINING forward is stochastic (dropout, VAE sampling), GetLastLoss() is one draw from a
+        /// distribution and the probe otherwise compares two draws.
+        /// </summary>
+        internal bool DeterministicMemorizationLoss { get; }
+    }
+
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
@@ -11638,12 +11709,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 {
                     // Paper-scale text-to-mel models such as E2TTS already run in FP32, but their
                     // default repeated training probes still exceed the per-test CI budget.
-                    sb.AppendLine($"    protected override int TrainingIterations => {(model.ClassName is "FastSpeech" or "FastSpeech2" ? 1 : 2)};");
+                    // NaturalSpeech's AdamW warm-up is LONGER than the two steps recorded here
+                    // previously, and its measured evaluation trajectory on a fixed (input, target)
+                    // pair rises before it falls: 0.267, 0.292, 0.294, 0.281, 0.294, 0.301, then
+                    // 0.279, 0.249, 0.207, 0.175, 0.173. Two iterations land inside the RISE, so
+                    // Training_ShouldReduceLoss and MoreData_ShouldNotDegrade were judging the
+                    // warm-up rather than the trajectory. Twelve steps clear it with ~30 % margin.
+                    // No tolerance is relaxed; only the measurement point moves past the hump, the
+                    // same remedy E2TTS / SpeechT5 / AudioLM already use in this file.
+                    bool naturalSpeechWarmup = model.ClassName == "NaturalSpeech";
+                    int ttsSmokeIterations = model.ClassName is "FastSpeech" or "FastSpeech2" ? 1
+                                           : naturalSpeechWarmup ? 12 : 2;
+                    sb.AppendLine($"    protected override int TrainingIterations => {ttsSmokeIterations};");
                     sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-                    sb.AppendLine($"    protected override int MoreDataLongIterations => {(model.ClassName is "FastSpeech" or "FastSpeech2" ? 1 : 2)};");
-                    // NaturalSpeech's bounded AdamW trajectory has a two-step warm-up;
-                    // five real steps consistently clear it while retaining strict decrease.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "E2TTS" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MoreDataLongIterations => {ttsSmokeIterations};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "E2TTS" ? 15 : naturalSpeechWarmup ? 12 : 2)};");
+                    if (naturalSpeechWarmup)
+                    {
+                        // NaturalSpeech's TRAINING forward is stochastic (DropoutRate = 0.1), so
+                        // GetLastLoss() is one draw from a distribution whose spread swamps the
+                        // trend: measured over twelve steps on a fixed pair it wandered 0.246,
+                        // 0.100, 0.282, 0.295, 0.262, 0.190, 0.417, 0.210, 0.057 with no visible
+                        // direction, while the evaluation loss at the SAME parameters was
+                        // bit-reproducible across repeat calls and fell 0.267 -> 0.173. Judge the
+                        // probe on the deterministic path so it measures the training pipeline
+                        // instead of the dropout mask.
+                        sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
+                    }
                 }
                 else if (model.ClassName == "FastSpeech")
                 {
@@ -13459,6 +13551,53 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "\n    protected override int MoreDataShortIterations => 5;"
                     + "\n    protected override int MoreDataLongIterations => 15;");
             }
+        }
+
+        // Memorization warm-up group: same STRIP-THEN-INSERT discipline and the same reason — the
+        // iteration count is emitted from many per-class and per-family branches, so replacing in
+        // place is unreliable while removing every declaration and inserting exactly one cannot
+        // duplicate.
+        if (MemorizationWarmupIterations.TryGetValue(model.ClassName, out var warmupOverride))
+        {
+            // STRIP-THEN-INSERT for each overridden knob, in that order and for the same reason
+            // the MoreData warm-up group above uses it: these counts are emitted from ~52
+            // per-class and per-family branches with varying indentation, and a later duplicate
+            // loses to DropDuplicateOverrides (which keeps the FIRST). Removing every existing
+            // declaration and inserting exactly one is the only form that reliably wins.
+            void Override(string memberName, int? value)
+            {
+                if (value is null) return;
+
+                generated = System.Text.RegularExpressions.Regex.Replace(
+                    generated,
+                    @"[ \t]*protected override int " + memberName + @" => \d+;[ \t]*\r?\n",
+                    string.Empty,
+                    System.Text.RegularExpressions.RegexOptions.Multiline);
+
+                int brace = generated.IndexOf('{', generated.IndexOf("class ", System.StringComparison.Ordinal));
+                if (brace >= 0)
+                {
+                    generated = generated.Insert(
+                        brace + 1,
+                        $"\n    protected override int {memberName} => {value.Value};");
+                }
+            }
+
+            if (warmupOverride.DeterministicMemorizationLoss)
+            {
+                int flagBrace = generated.IndexOf('{', generated.IndexOf("class ", System.StringComparison.Ordinal));
+                if (flagBrace >= 0)
+                {
+                    generated = generated.Insert(
+                        flagBrace + 1,
+                        "\n    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
+                }
+            }
+
+            Override("MemorizationTaskIterations", warmupOverride.Memorization);
+            Override("TrainingIterations", warmupOverride.Training);
+            Override("MoreDataShortIterations", warmupOverride.MoreDataShort);
+            Override("MoreDataLongIterations", warmupOverride.MoreDataLong);
         }
 
         generated = DropDuplicateOverrides(generated);

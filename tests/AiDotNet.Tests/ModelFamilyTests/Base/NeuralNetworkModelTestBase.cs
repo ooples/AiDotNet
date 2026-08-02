@@ -1758,6 +1758,46 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual double MemorizationTaskLossThreshold => 0.99;
 
     /// <summary>
+    /// Judge <see cref="LossStrictlyDecreasesOnMemorizationTask"/> on the DETERMINISTIC evaluation
+    /// loss (<c>Predict</c> + <see cref="MeasureLoss"/>) instead of the training-mode
+    /// <c>GetLastLoss()</c>. Default <c>false</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>GetLastLoss()</c> is the loss of the forward pass that ran INSIDE <c>Train</c>, i.e. in
+    /// training mode. For a model with dropout or any other stochastic training path, that value is
+    /// a single draw from a distribution, and the invariant then compares two draws. When the
+    /// distribution's spread exceeds the trend being asserted, the comparison measures noise: the
+    /// probe fails or passes depending on which samples it happened to draw, which is neither a
+    /// pass nor a failure of the training pipeline.
+    /// </para>
+    /// <para>
+    /// Measured example — NaturalSpeech, identical (input, target) pair, twelve steps: the training
+    /// loss wandered 0.246, 0.100, 0.282, 0.295, 0.262, 0.190, 0.417, 0.210, 0.057 … with no trend
+    /// visible over a ±0.15 spread, while the evaluation loss at the SAME parameters was
+    /// bit-reproducible across repeat calls and descended 0.267 → 0.173.
+    /// </para>
+    /// <para>
+    /// Setting this does not weaken the invariant — arguably it strengthens it. The bug class the
+    /// probe exists to catch (gradient sign error, oscillation, first-step explosion) shows up in
+    /// the evaluation loss just as plainly, and the evaluation loss cannot be passed by a lucky
+    /// dropout mask. Leave it <c>false</c> for models whose training forward is deterministic, so
+    /// the probe keeps measuring the training path directly.
+    /// </para>
+    /// </remarks>
+    protected virtual bool MemorizationTaskUsesDeterministicEvalLoss => false;
+
+    /// <summary>
+    /// The loss the memorization probe compares, honouring
+    /// <see cref="MemorizationTaskUsesDeterministicEvalLoss"/>.
+    /// </summary>
+    private double MemorizationProbeLoss(
+        INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
+        => MemorizationTaskUsesDeterministicEvalLoss
+            ? MeasureLoss(network, network.Predict(input), target)
+            : ConvertToDouble(network.GetLastLoss());
+
+    /// <summary>
     /// Absolute-loss floor under which the memorization invariant
     /// considers training "converged" and passes regardless of
     /// the relative-decrease check. Models that memorize a single
@@ -1797,12 +1837,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         // First step establishes the baseline loss.
         network.Train(input, target);
-        double lossStep1 = ConvertToDouble(network.GetLastLoss());
+        double lossStep1 = MemorizationProbeLoss(network, input, target);
 
         // (MemorizationTaskIterations - 1) more steps on the same pair.
         int followOnSteps = System.Math.Max(0, MemorizationTaskIterations - 1);
         for (int s = 0; s < followOnSteps; s++) network.Train(input, target);
-        double lossFinal = ConvertToDouble(network.GetLastLoss());
+        double lossFinal = MemorizationProbeLoss(network, input, target);
 
         Assert.False(double.IsNaN(lossStep1) || double.IsInfinity(lossStep1),
             $"Loss after step 1 is non-finite: {lossStep1}");
