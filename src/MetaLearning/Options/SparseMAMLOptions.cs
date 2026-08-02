@@ -5,14 +5,20 @@ using AiDotNet.Validation;
 namespace AiDotNet.MetaLearning.Options;
 
 /// <summary>
-/// Configuration options for sparse-MAML (Meta-Continual Active Learning) algorithm.
+/// Configuration options for sparse-MAML, von Oswald et al., "Learning where to learn: Gradient
+/// sparsity in meta and continual learning" (NeurIPS 2021, arXiv:2110.14402).
 /// </summary>
 /// <remarks>
+/// <para>
 /// sparse-MAML meta-learns WHICH weights the inner loop may change, rather than adapting all of
 /// them, so that "patterned sparsity emerges" and tasks interfere less.
-/// It uses gradient-norm-based uncertainty estimation to identify the most informative
-/// parameter dimensions, focusing adaptation on high-uncertainty regions while maintaining
-/// a running calibration of uncertainty statistics.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Learning from a handful of examples by changing every weight is a good way
+/// to memorize those examples and learn nothing general. These settings control a switch per weight
+/// saying whether it may change at all, and how fast those switches are tuned. They all start ON, so
+/// whichever ones end up off were turned off because that generalized better.
+/// </para>
 /// </remarks>
 public class SparseMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
