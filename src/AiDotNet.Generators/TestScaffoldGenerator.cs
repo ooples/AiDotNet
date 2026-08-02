@@ -3659,7 +3659,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // and two-step memorization caps in CI run 30613315686 (120 s and
                 // 180 s respectively). Exercise the same public Branchformer sizing
                 // controls at smoke scale; production defaults remain 512-wide /
-                // 12-layer. The model's separate REB-former architecture/citation
+                // 12-layer. The model's separate RWKV architecture/citation
                 // fidelity debt is intentionally outside this timeout-only change.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
