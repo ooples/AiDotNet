@@ -10252,6 +10252,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // either class to HeavyTimeout or weakening the finite-loss assertion.
         if (model.ClassName is "ELECTRANER" or "ContextNet")
             sb.AppendLine("[Xunit.Collection(\"ConvergenceSensitive\")]");
+        // Core-contention casualties. Each of these passes comfortably in isolation but blew its
+        // [Fact(Timeout)] in the full shard, with a reported duration of ~1 ms - i.e. the test was
+        // starved while queued, not slow. Measured in isolation against their budgets:
+        //   PartitionMCMCAlgorithm.IndependentVariablesHaveWeakEdges  13 s / 60 s
+        //   PartitionMCMCAlgorithm.MoreDataDoesNotDegradeQuality      14 s / 60 s
+        //   VFIMamba.MoreData_ShouldNotDegrade                        15 s / 120 s
+        //   ISTFTNet.TrainingError_ShouldNotExceedTestError           18 s / 120 s
+        // Four to eight times of headroom, still exceeded - which is the contention FoundationScale
+        // -SerialCollection documents: with maxParallelThreads at all 16 logical cores, N classes x
+        // N managed BLAS threads far exceeds the cores. Serializing gives each the whole machine.
+        //
+        // Deliberately NOT routed through IsHeavyTimeoutGeneratedModel: that also stamps the
+        // HeavyTimeout trait, which would move these out of the default PR shard into the nightly
+        // lane. They are not foundation-scale and belong in the PR gate; they only need to not run
+        // sixteen-wide against other heavy classes. Same split the ConvergenceSensitive entries
+        // above use - serialize without relegating.
+        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba")
+            sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
         if (IsHeavyTimeoutGeneratedModel(model.ClassName))
         {
             sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
