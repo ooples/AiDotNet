@@ -3,9 +3,14 @@ using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
 
-/// <summary>Options for REBFormer (RWKV-Enhanced E-Branchformer, Song et al., 2025).</summary>
+/// <summary>
+/// Options for the RWKV streaming transducer, An and Zhang, "Exploring RWKV for Memory Efficient
+/// and Low Latency Streaming ASR" (arXiv:2309.14758).
+/// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the REBFormer model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para><b>For Beginners:</b> These options configure the RWKV streaming recognizer. The three that
+/// matter most control its running summary: how fast older audio fades, how much extra weight the
+/// current frame gets, and how much each frame is blended with the one before it. Defaults follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
 /// </remarks>
 public class RWKVTransducerOptions : ModelOptions
 {
