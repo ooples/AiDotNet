@@ -60,6 +60,26 @@ internal static class TestModuleInitializer
         System.Environment.SetEnvironmentVariable("MKL_NUM_THREADS",      "1");
         System.Environment.SetEnvironmentVariable("OPENBLAS_NUM_THREADS", "1");
 
+        // The same pinning, for the MANAGED engine — which the three env vars above do not reach.
+        // #1166 removed native BLAS oversubscription but CpuParallelSettings.MaxDegreeOfParallelism
+        // still defaulted to ProcessorCount, so managed BlasManaged GEMMs re-created exactly the
+        // pathology #1166 describes: 16 xUnit workers x 16 managed threads = 256 threads on 16
+        // cores. That matters most for the ModelFamily shard, whose tests are almost entirely
+        // managed-engine model forwards.
+        //
+        // Measured symptom: tests reporting a ~1 ms duration alongside a [Fact(Timeout)] failure —
+        // starved while queued, never executing. In isolation the victims had four to eight times
+        // of headroom (13 s/60 s, 14 s/60 s, 15 s/120 s, 18 s/120 s, 34 s/180 s). The victim SET
+        // also shifted between runs, which is what marks it as contention rather than any
+        // individual test being marginal: serializing one round's casualties simply starved a
+        // different five the next round.
+        //
+        // Heavy classes that genuinely want the whole machine are unaffected:
+        // FoundationScaleCpuFixture raises this back to ProcessorCount for the serialized
+        // FoundationScaleSerial collection and restores it on dispose — its "defensive: restore the
+        // all-cores default in case an earlier test capped it" branch is written for exactly this.
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = 1;
+
         // Force CPU-only mode for all tests
         // This prevents GPU/OpenCL errors on systems without proper GPU support
         try

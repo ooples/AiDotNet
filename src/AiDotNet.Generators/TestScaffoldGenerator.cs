@@ -4889,12 +4889,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "Mask2Former" && model.TypeParameterCount == 1)
             {
                 // Mask2Former (Cheng et al. 2022): masked-attention mask transformer — production 150-class /
-                // 100-query decoder over a large pixel decoder OOMs. Exercise the full transformer at a 32x32
-                // input, 4 classes, 8 queries. Paper defaults unchanged. (#1789)
+                // 100-query decoder over a large pixel decoder OOMs. Exercise the full transformer at
+                // 4 classes and 8 queries. Paper defaults unchanged. (#1789)
+                //
+                // The architecture MUST state 128, the same size the emitted fixture feeds (the generic
+                // vision InputShape is [3, 128, 128]). It said 32, and the same defect XMem and RAPIDFlow
+                // hit above followed: every layer resolved its declared shape from the architecture while
+                // the forward ran on the fixture, so each reported exactly a quarter of the extent it
+                // computed — the stage-0 patch convolution declared [96, 8, 8] against an actual
+                // [1, 96, 32, 32] — and VerifyReportedOutputShape failed five invariants.
+                //
+                // This costs nothing: the forward was ALREADY running at 128x128, since that is what the
+                // fixture feeds. Only the declarations were sized for 32, so aligning them changes what
+                // the layers claim, not what they compute. The 4-class / 8-query reduction that keeps
+                // this off the OOM path is untouched.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), numClasses: 4, numQueries: 8)";
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4, numQueries: 8)";
             }
             else if (model.ClassName == "MedicalASR" && model.TypeParameterCount == 1)
             {
@@ -10268,7 +10280,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // lane. They are not foundation-scale and belong in the PR gate; they only need to not run
         // sixteen-wide against other heavy classes. Same split the ConvergenceSensitive entries
         // above use - serialize without relegating.
-        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba")
+        // Mask2Former joins them for a DIFFERENT reason and the distinction matters: the three above
+        // are innocent bystanders with 4-8x headroom, whereas Mask2Former is genuinely heavy. Once
+        // its declared shapes were corrected to the 128x128 the fixture actually feeds, its probes
+        // measure 57 s, 57 s and 58 s against 120/120/180 s gates - real work at only ~2.1x, which
+        // will not survive sixteen-wide execution. It stays in the PR gate (no HeavyTimeout) because
+        // it passes comfortably given dedicated cores.
+        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former")
             sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
         if (IsHeavyTimeoutGeneratedModel(model.ClassName))
         {
