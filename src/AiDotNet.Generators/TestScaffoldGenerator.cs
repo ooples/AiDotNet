@@ -4468,10 +4468,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Exercise the published ViT-B variant in generated CPU CI, with a lower
                 // user-configured fine-tuning rate for random-data invariants. The public
                 // model-size selector and optimizer options preserve full customization.
+                //
+                // The spatial size MUST be 112, matching what GetPatchVisionSpatialSize returns for
+                // s_patchVisionFamilies (which lists SAM). These two pins disagreed: the model was
+                // built for 32x32 while the fixture fed it 112x112. SAM's patch embedding is a
+                // kernel-16 stride-16 convolution, so the decoder was sized for 32/16 = 2x2 features
+                // while the encoder actually produced 112/16 = 7x7, and every training-path test
+                // died on "BatchNormalizationLayer reports an output shape of [768, 2, 2] but its
+                // forward produced [1, 768, 7, 7]". 112 is also a multiple of 16, so the patch grid
+                // stays exact.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
+                    "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 1), " +
                     "numClasses: 1, modelSize: AiDotNet.Enums.SAMModelSize.ViTBase, " +
                     "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAMOptions " +
                     "{ LearningRate = 1e-5 })";
