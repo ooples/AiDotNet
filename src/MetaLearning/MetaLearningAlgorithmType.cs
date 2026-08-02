@@ -21,7 +21,7 @@ namespace AiDotNet.MetaLearning;
 /// <item><b>Bayesian Extensions:</b> PACOH, MetaPACOH, BMAML, BayProNet, FlexPACBayes</item>
 /// <item><b>Cross-Domain:</b> MetaFDMixup, FreqPrior, MetaCollaborative, SDCL, FreqPrompt, OpenMAMLPlus</item>
 /// <item><b>Meta-RL:</b> PEARL, DREAM, DiscoRL, InContextRL, HyperNetMetaRL, ContextMetaRL</item>
-/// <item><b>Continual/Online:</b> ACL, iTAML, MetaContinualAL, MbPA, OML, MOCA</item>
+/// <item><b>Continual/Online:</b> ACL, iTAML, SparseMAML, MbPA, OML, MOCA</item>
 /// <item><b>Task Augmentation:</b> MetaTask, ATAML, MPTS, DynamicTaskSampling, UnsupervisedMetaLearn</item>
 /// <item><b>Cross-domain / Transductive:</b> LFT, BayTransProto, JMP, ETPN, ActiveTransFSL</item>
 /// <item><b>Hypernetwork:</b> TaskCondHyperNet, HyperCLIP, RecurrentHyperNet, HyperNeRFMeta</item>
@@ -1217,15 +1217,18 @@ public enum MetaLearningAlgorithmType
     iTAML,
 
     /// <summary>
-    /// MetaContinualAL - Meta-learning for Continual Active Learning (2024).
-    /// Combines active learning with continual meta-learning for efficient data selection.
+    /// SparseMAML - Learning where to learn: gradient sparsity in meta and continual learning
+    /// (von Oswald et al., NeurIPS 2021).
     /// </summary>
     /// <remarks>
-    /// <b>Key Idea:</b> Meta-learn an acquisition function that selects the most informative
-    /// examples for continual learning, maximizing learning efficiency over time.
-    /// <para><b>Use When:</b> You have a labeling budget and need to select examples wisely over time.</para>
+    /// <b>Key Idea:</b> Rather than adapting every weight in the inner loop, LEARN which weights to
+    /// change. A meta-learned gate per parameter decides where adaptation is allowed, and the paper
+    /// finds that "patterned sparsity emerges from this process", giving better generalization and
+    /// less interference between tasks.
+    /// <para><b>Use When:</b> Few-shot or continual learning where adapting everything overfits the
+    /// support set or lets new tasks trample old ones.</para>
     /// </remarks>
-    MetaContinualAL,
+    SparseMAML,
 
     /// <summary>
     /// MbPA - Memory-based Parameter Adaptation (Sprechmann et al., ICLR 2018).
