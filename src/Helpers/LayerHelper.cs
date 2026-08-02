@@ -19226,83 +19226,96 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default MLP layers for MedSynth medical synthetic data generation.
+    /// Creates ALL layers for a medGAN medical record generator, in the fixed order the model's
+    /// reference extractor walks: autoencoder encoder, autoencoder decoder, generator, discriminator.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// MedSynth uses a VAE/GAN hybrid with clinical validity constraints.
-    /// The encoder/decoder follow standard VAE architecture.
+    /// Topology per Choi et al., "Generating Multi-label Discrete Patient Records using Generative
+    /// Adversarial Networks" (arXiv:1703.06490):
     /// </para>
+    /// <list type="bullet">
+    /// <item><description><b>Encoder</b>: feedforward down to <paramref name="embeddingDim"/>. Empty
+    /// <paramref name="autoencoderDims"/> gives the paper's single-layer autoencoder.</description></item>
+    /// <item><description><b>Decoder</b>: the encoder mirrored, back up to the record width. It is
+    /// pre-trained with the encoder and then fine-tuned adversarially with the generator.</description></item>
+    /// <item><description><b>Generator</b>: one layer per entry of <paramref name="generatorDims"/>,
+    /// each followed by batch normalization, plus a final projection to
+    /// <paramref name="embeddingDim"/> also followed by batch normalization. Every one of these
+    /// carries a shortcut connection, which the model applies as
+    /// <c>x_k = ReLU(BN_k(W_k x_(k-1))) + x_(k-1)</c>. The addition is why all these widths must
+    /// match.</description></item>
+    /// <item><description><b>Discriminator</b>: plain feedforward with NO batch normalization and NO
+    /// shortcut connections, which the paper states explicitly. Its input width is doubled when
+    /// minibatch averaging is on, because each sample arrives concatenated with the batch
+    /// average.</description></item>
+    /// </list>
     /// <para>
-    /// Reference: "Privacy-Preserving Medical Tabular Synthesis" (2024)
+    /// All layers use the identity activation; the model applies ReLU/tanh/sigmoid itself through
+    /// tape-tracked engine ops so the shortcut additions and the activation choices that depend on
+    /// <c>MedGANDataType</c> stay visible to autodiff.
     /// </para>
     /// </remarks>
-    /// <param name="inputDim">Input dimension.</param>
-    /// <param name="outputDim">Output dimension.</param>
-    /// <param name="hiddenDims">Hidden layer dimensions.</param>
-    /// <param name="dropoutRate">Dropout rate.</param>
-    /// <returns>A collection of layers.</returns>
-    /// <summary>
-    /// Creates ALL layers for MedSynth VAE-GAN medical tabular data generator.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Architecture per "Privacy-Preserving Medical Tabular Synthesis" (2024):
-    /// - Encoder: FC layers reducing to latent space
-    /// - VAE heads: mean and log-variance projections
-    /// - Decoder: FC layers with BatchNorm expanding from latent
-    /// - Decoder output: FC projection to data width
-    /// - Discriminator: FC layers with dropout for adversarial training
-    /// - Discriminator output: FC projection to 1 (real/fake)
-    ///
-    /// All layers are returned in a single list so InitializeLayers
-    /// can register them all via Layers.AddRange.
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultMedSynthLayers(
+    /// <param name="dataWidth">Width of one transformed record.</param>
+    /// <param name="embeddingDim">Autoencoder embedding width, and the generator's output width.</param>
+    /// <param name="autoencoderDims">Encoder hidden widths before the embedding layer; empty for the paper's single-layer autoencoder.</param>
+    /// <param name="generatorDims">Generator hidden widths, each equal to <paramref name="embeddingDim"/>.</param>
+    /// <param name="discriminatorDims">Discriminator hidden widths.</param>
+    /// <param name="useMinibatchAveraging">When true the discriminator's input width is doubled.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultMedGANLayers(
         int dataWidth,
-        int latentDim,
-        int[] encoderDims,
+        int embeddingDim,
+        int[] autoencoderDims,
+        int[] generatorDims,
         int[] discriminatorDims,
-        double discriminatorDropout = 0.2)
+        bool useMinibatchAveraging = true)
     {
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
 
-        // Encoder layers
-        for (int i = 0; i < encoderDims.Length; i++)
+        // Every width is stated EXPLICITLY rather than left to the lazy single-argument constructor.
+        // That constructor infers a layer's input from the previous entry in the Layers list, which
+        // is correct only for a straight-through stack. medGAN's is not: the generator's input is
+        // the prior, not the decoder's output, and the discriminator's is a record (doubled by
+        // minibatch averaging), not the generator's embedding. Inference would size both wrong.
+        int encoderInput = dataWidth;
+
+        // --- Autoencoder: encoder (hidden widths, then the embedding projection) ---
+        for (int i = 0; i < autoencoderDims.Length; i++)
         {
-            int layerInput = i == 0 ? dataWidth : encoderDims[i - 1];
-            yield return new FullyConnectedLayer<T>(encoderDims[i], identity);
+            yield return new FullyConnectedLayer<T>(encoderInput, autoencoderDims[i], identity);
+            encoderInput = autoencoderDims[i];
         }
+        yield return new FullyConnectedLayer<T>(encoderInput, embeddingDim, identity);
 
-        // VAE heads (mean + log-variance)
-        int lastEncoderDim = encoderDims.Length > 0 ? encoderDims[^1] : dataWidth;
-        yield return new FullyConnectedLayer<T>(latentDim, identity); // mean
-        yield return new FullyConnectedLayer<T>(latentDim, identity); // logvar
-
-        // Decoder layers (reverse of encoder) with BatchNorm
-        for (int i = encoderDims.Length - 1; i >= 0; i--)
+        // --- Autoencoder: decoder, the encoder mirrored, ending at the record width ---
+        int decoderInput = embeddingDim;
+        for (int i = autoencoderDims.Length - 1; i >= 0; i--)
         {
-            int layerInput = i == encoderDims.Length - 1 ? latentDim : encoderDims[i + 1];
-            yield return new FullyConnectedLayer<T>(encoderDims[i], identity);
-            yield return new BatchNormalizationLayer<T>();
+            yield return new FullyConnectedLayer<T>(decoderInput, autoencoderDims[i], identity);
+            decoderInput = autoencoderDims[i];
         }
+        yield return new FullyConnectedLayer<T>(decoderInput, dataWidth, identity);
 
-        // Decoder output
-        int lastDecoderDim = encoderDims.Length > 0 ? encoderDims[0] : latentDim;
-        yield return new FullyConnectedLayer<T>(dataWidth, identity);
+        // --- Generator: hidden shortcut layers, each FC paired 1:1 with a BatchNorm ---
+        // All widths equal embeddingDim; the shortcut addition is what requires that.
+        for (int i = 0; i < generatorDims.Length; i++)
+        {
+            yield return new FullyConnectedLayer<T>(embeddingDim, generatorDims[i], identity);
+            yield return new BatchNormalizationLayer<T>(generatorDims[i]);
+        }
+        // Final generator projection into the embedding space; also batch-normed, also shortcut.
+        yield return new FullyConnectedLayer<T>(embeddingDim, embeddingDim, identity);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
 
-        // Discriminator layers
+        // --- Discriminator: no BatchNorm, no shortcuts (stated by the paper) ---
+        // Minibatch averaging concatenates the batch mean onto each sample, doubling the input.
+        int discInput = useMinibatchAveraging ? dataWidth * 2 : dataWidth;
         for (int i = 0; i < discriminatorDims.Length; i++)
         {
-            int layerInput = i == 0 ? dataWidth : discriminatorDims[i - 1];
-            yield return new FullyConnectedLayer<T>(discriminatorDims[i], identity);
-            yield return new DropoutLayer<T>(discriminatorDropout);
+            yield return new FullyConnectedLayer<T>(discInput, discriminatorDims[i], identity);
+            discInput = discriminatorDims[i];
         }
-
-        // Discriminator output
-        int lastDiscDim = discriminatorDims.Length > 0 ? discriminatorDims[^1] : dataWidth;
-        yield return new FullyConnectedLayer<T>(1, identity);
+        yield return new FullyConnectedLayer<T>(discInput, 1, identity);
     }
 
     /// <summary>
