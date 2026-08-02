@@ -37,7 +37,7 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
         }
     }
 
-    public Vector<double> Predict(Matrix<double> input)
+    public virtual Vector<double> Predict(Matrix<double> input)
     {
         var output = new Vector<double>(input.Rows);
         for (int r = 0; r < input.Rows; r++)
@@ -495,4 +495,45 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 
     public void Dispose() { /* test mock holds no resources */ }
+}
+
+/// <summary>
+/// A <see cref="LinearVectorModel"/> that returns a SINGLE example's raw features instead of a
+/// scalar, so it can stand in for MbPA's embedding network f_gamma.
+/// </summary>
+/// <remarks>
+/// MbPA keys its episodic memory on embeddings and retrieves by Euclidean distance between them.
+/// Collapsing each example to one scalar, as the base model does, would flatten that geometry to a
+/// line and make a nearest-neighbour test unable to distinguish a correct implementation from
+/// several incorrect ones. Returning the features verbatim keeps the retrieval geometry something
+/// the test can reason about exactly.
+///
+/// Multi-row inputs keep the base behaviour (one value per row), because that is what the loss and
+/// gradient paths inherited from the base class expect. The algorithm embeds one example at a time,
+/// so the single-row branch is the one MbPA actually exercises.
+/// </remarks>
+internal sealed class IdentityEmbeddingModel : LinearVectorModel
+{
+    private readonly int _featureCount;
+
+    public IdentityEmbeddingModel(int inputFeatures) : base(inputFeatures)
+    {
+        _featureCount = inputFeatures;
+    }
+
+    public override Vector<double> Predict(Matrix<double> input)
+    {
+        if (input.Rows != 1) return base.Predict(input);
+
+        var embedding = new Vector<double>(_featureCount);
+        for (int j = 0; j < _featureCount && j < input.Columns; j++) embedding[j] = input[0, j];
+        return embedding;
+    }
+
+    public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
+    {
+        var copy = new IdentityEmbeddingModel(_featureCount);
+        copy.SetParameters(GetParameters());
+        return copy;
+    }
 }

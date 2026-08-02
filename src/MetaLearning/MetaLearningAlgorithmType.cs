@@ -21,7 +21,7 @@ namespace AiDotNet.MetaLearning;
 /// <item><b>Bayesian Extensions:</b> PACOH, MetaPACOH, BMAML, BayProNet, FlexPACBayes</item>
 /// <item><b>Cross-Domain:</b> MetaFDMixup, FreqPrior, MetaCollaborative, SDCL, FreqPrompt, OpenMAMLPlus</item>
 /// <item><b>Meta-RL:</b> PEARL, DREAM, DiscoRL, InContextRL, HyperNetMetaRL, ContextMetaRL</item>
-/// <item><b>Continual/Online:</b> ACL, iTAML, MetaContinualAL, MePo, OML, MOCA</item>
+/// <item><b>Continual/Online:</b> ACL, iTAML, MetaContinualAL, MbPA, OML, MOCA</item>
 /// <item><b>Task Augmentation:</b> MetaTask, ATAML, MPTS, DynamicTaskSampling, UnsupervisedMetaLearn</item>
 /// <item><b>Transductive:</b> GCDPLNet, BayTransProto, JMP, ETPN, ActiveTransFSL</item>
 /// <item><b>Hypernetwork:</b> TaskCondHyperNet, HyperCLIP, RecurrentHyperNet, HyperNeRFMeta</item>
@@ -1228,15 +1228,18 @@ public enum MetaLearningAlgorithmType
     MetaContinualAL,
 
     /// <summary>
-    /// MePo - Meta-learning for Policy optimization in continual RL (2024).
-    /// Meta-learns policy optimization strategies for continual reinforcement learning.
+    /// MbPA - Memory-based Parameter Adaptation (Sprechmann et al., ICLR 2018).
     /// </summary>
     /// <remarks>
-    /// <b>Key Idea:</b> Learn update rules that enable a policy to adapt to new tasks while
-    /// maintaining performance on previously learned tasks, in an RL setting.
-    /// <para><b>Use When:</b> You need continual RL where new tasks arrive sequentially.</para>
+    /// <b>Key Idea:</b> Store (embedding, target) pairs in an episodic memory. At prediction time,
+    /// look up the K nearest neighbours of the query's embedding and take a few gradient steps that
+    /// fit the output network to those neighbours, regularized toward the trained parameters. The
+    /// adapted parameters are used for that one output and then DISCARDED.
+    /// <para><b>Use When:</b> The test distribution shifts away from the training distribution, or
+    /// classes are imbalanced, and you need the network to absorb new evidence immediately rather
+    /// than after many low-learning-rate passes.</para>
     /// </remarks>
-    MePo,
+    MbPA,
 
     /// <summary>
     /// OML - Online Meta-Learning (Javed &amp; White, 2019).

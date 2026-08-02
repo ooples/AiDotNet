@@ -2156,6 +2156,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
+                // Same collision, second instance: AiDotNet.ComputerVision.Segmentation.Referring.GLaMM
+                // and AiDotNet.VisionLanguage.Grounding.GLaMM share a simple name, so only one can own
+                // "GLaMMTests". Which one won used to fall out of the enumeration order of
+                // untestedModels, which is NOT stable — adding an unrelated model elsewhere in the
+                // library flipped it, and the GLaMM constructor pin below (hardcoded to
+                // VisionLanguage.Grounding.GLaMMOptions) then fed that options object to the
+                // ComputerVision overload, whose second parameter is an optimizer. That surfaced as a
+                // CS1503 in generated code from a change that touched neither model.
+                //
+                // The grounding model is the one every GLaMM entry in this generator was written for
+                // (the float list, the HeavyTimeout entry, GetGroundingVisionDim and the pin), so it
+                // owns the name explicitly. The referring-segmentation namesake stays in
+                // untestedModels, so AIDN040 keeps reporting it as needing a manual scaffold rather
+                // than it being silently dropped.
+                if (model.FullyQualifiedName.IndexOf(
+                        "AiDotNet.ComputerVision.Segmentation.Referring.GLaMM", System.StringComparison.Ordinal) >= 0)
+                {
+                    continue;
+                }
+
                 var family = ResolveTestBaseClass(model);
                 if (family is null)
                     continue;
@@ -3786,7 +3806,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 4, VocabSize = 64, MaxSequenceLength = 16, MaxGenerationLength = 8, " +
                     "MaxContextLength = 16, MaxContextTokens = 16, NumExperts = 2, DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "GLaMM" && model.TypeParameterCount == 1)
+            else if (model.ClassName == "GLaMM" && model.TypeParameterCount == 1 &&
+                     model.FullyQualifiedName.IndexOf(
+                         "AiDotNet.VisionLanguage.Grounding.", System.StringComparison.Ordinal) >= 0)
             {
                 // GLaMM's production options retain the paper-scale 1024-wide, 24-layer vision
                 // encoder. MoreData clones that graph and needs two AdamW state sets, which cannot
