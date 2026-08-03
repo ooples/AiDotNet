@@ -246,6 +246,31 @@ public class TimestepDependentLoraTests
     }
 
     [Fact]
+    public void CopyStateFromCarriesTheFrozenInitializationToo()
+    {
+        // The adapter's output is B S M_t A - B_init S_init M_t A_init, so "untrained" means the two
+        // products CANCEL, not that anything is zero. Copying only A, B and S into an adapter whose
+        // _init came from a different draw leaves them unequal, and the adapter then applies the
+        // difference between two unrelated initializations. That is a large update masquerading as a
+        // fresh adapter, and it made a cloned model's output differ from its source by 69.
+        var source = Adapter(seed: 11);
+        var target = Adapter(seed: 99);   // deliberately a DIFFERENT draw
+
+        var input = new Vector<double>(Width);
+        for (int i = 0; i < Width; i++) input[i] = i + 1.0;
+
+        // Move the source off its initialization so the copy has something real to carry.
+        for (int r = 0; r < Rank; r++) source.SingularValues[r] += 0.25;
+        source.InvalidateCache();
+
+        target.CopyStateFrom(source);
+
+        var expected = source.Apply(input, timestep: Horizon / 3);
+        var actual = target.Apply(input, timestep: Horizon / 3);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 10);
+    }
+
+    [Fact]
     public void SeededInitializationIsReproducible()
     {
         var a = Adapter(seed: 42).DownProjection;

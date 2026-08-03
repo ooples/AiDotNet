@@ -99,7 +99,13 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
     public override IVAEModel<T> VAE => _vae;
     public override IConditioningModule<T>? Conditioner => _conditioner;
     public override int LatentChannels => _latentChannels;
-    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    /// <remarks>
+    /// Includes the adapters, so this stays equal to <c>GetParameters().Length</c>. They are real
+    /// trainable parameters of this model, and a count that excluded them would disagree with the
+    /// vector that carries them.
+    /// </remarks>
+    public override long ParameterCount =>
+        _predictor.ParameterCount + _vae.ParameterCount + TotalAdapterParameterCount;
 
     public TLoRAModel(
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
@@ -244,13 +250,54 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
             baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }
 
+    /// <summary>
+    /// Total adapter parameters across every injected block.
+    /// </summary>
+    private int TotalAdapterParameterCount
+    {
+        get
+        {
+            // Null during construction: InitializeLayers runs before injection, and ParameterCount is
+            // reachable from there. Zero is the honest answer at that point — no adapters exist yet.
+            if (_adapters is null) return 0;
+
+            int total = 0;
+            for (int i = 0; i < _adapters.Count; i++) total += _adapters[i].AdapterParameterCount;
+            return total;
+        }
+    }
+
+    /// <summary>
+    /// Predictor parameters, then VAE parameters, then every adapter's state in injection order.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The adapter block is appended HERE, at the model, because the adapters are deliberately
+    /// transparent at the LAYER level — a decorator that changed a layer's parameter count broke the
+    /// positional, length-checked pairing that every parameter-copy path in this library relies on.
+    /// The model is the serialization unit, so it is the right place to own full state.
+    /// </para>
+    /// <para>
+    /// Without this, a save/load round-trip silently discarded trained adapter weights: the reloaded
+    /// model would carry the correct base network and freshly-initialized adapters, which look
+    /// harmless because a fresh adapter is the identity — the model would simply have forgotten
+    /// everything T-LoRA had learned, with no error anywhere.
+    /// </para>
+    /// </remarks>
     public override Vector<T> GetParameters()
     {
         var pp = _predictor.GetParameters();
         var vp = _vae.GetParameters();
-        var combined = new Vector<T>(pp.Length + vp.Length);
+        var combined = new Vector<T>(pp.Length + vp.Length + TotalAdapterParameterCount);
         for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
         for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+
+        int index = pp.Length + vp.Length;
+        for (int a = 0; a < _adapters.Count; a++)
+        {
+            var state = _adapters[a].GetAdapterState();
+            for (int i = 0; i < state.Length; i++) combined[index++] = state[i];
+        }
         return combined;
     }
 
@@ -258,15 +305,28 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
     {
         int pc = checked((int)_predictor.ParameterCount);
         int vc = checked((int)_vae.ParameterCount);
-        long expectedTotal = (long)pc + vc;
+        int ac = TotalAdapterParameterCount;
+        long expectedTotal = (long)pc + vc + ac;
         if (parameters.Length != expectedTotal)
-            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters ({pc} predictor + {vc} VAE + {ac} T-LoRA adapter), " +
+                $"got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
         var vp = new Vector<T>(vc);
         for (int i = 0; i < pc; i++) pp[i] = parameters[i];
         for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
         _predictor.SetParameters(pp);
         _vae.SetParameters(vp);
+
+        // Adapter state, in the same injection order GetParameters wrote it.
+        int index = pc + vc;
+        for (int a = 0; a < _adapters.Count; a++)
+        {
+            int count = _adapters[a].AdapterParameterCount;
+            var state = new Vector<T>(count);
+            for (int i = 0; i < count; i++) state[i] = parameters[index++];
+            _adapters[a].SetAdapterState(state);
+        }
     }
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
