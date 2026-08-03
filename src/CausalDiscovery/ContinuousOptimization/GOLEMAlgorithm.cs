@@ -200,7 +200,10 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
             }
         }
 
-        double sigmaSquared = rss / (n * d);
+        // (double) on one operand FIRST: n * d is an int multiply that overflows
+        // before the division promotes it, so a large graph silently divides by a
+        // negative or wrapped count.
+        double sigmaSquared = rss / ((double)n * d);
         if (sigmaSquared < 1e-15) sigmaSquared = 1e-15;
 
         // I - W
@@ -215,7 +218,8 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
         double logDetImW = ComputeLogAbsDeterminant(ImW, d);
 
         // Score = (n*d/2) * log(sigma^2) - n * log|det(I-W)|
-        double score = (n * d / 2.0) * Math.Log(sigmaSquared) - n * logDetImW;
+        // Same overflow: n * d is evaluated in int before /2.0 promotes the result.
+        double score = ((double)n * d / 2.0) * Math.Log(sigmaSquared) - n * logDetImW;
 
         // Gradient
         var grad = new Matrix<T>(d, d);
