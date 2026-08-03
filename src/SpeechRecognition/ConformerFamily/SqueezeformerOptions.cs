@@ -91,6 +91,22 @@ public class SqueezeformerOptions : ModelOptions
     /// </value>
     public double WeightDecay { get; set; } = 5e-4;
 
+    /// <summary>
+    /// Gets or sets whether the native encoder normalises with LayerNorm rather
+    /// than BatchNorm. Defaults to true, which is what the paper specifies and
+    /// what every other normalisation stage in this encoder already uses.
+    /// </summary>
+    /// <remarks>
+    /// BatchNormalization needs a batch to have statistics. At batch size 1 it
+    /// falls back to an affine pass-through, so it damps nothing -- and the three
+    /// BatchNorm stages in this encoder were the only ones not already LayerNorm.
+    /// Measured: the generated fixture trains to a NaN forward pass
+    /// (DifferentInputs_AfterTraining reported "L2 distance = NaN", the collapse
+    /// signature). The sibling EfficientConformer threads the same flag and does
+    /// not fail. Set false to restore the previous BatchNorm topology.
+    /// </remarks>
+    public bool UseLayerNormalization { get; set; } = true;
+
     public string Language { get; set; } = "en";
     public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
     private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
