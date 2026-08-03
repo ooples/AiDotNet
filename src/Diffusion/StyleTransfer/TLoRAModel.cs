@@ -76,7 +76,20 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
     private const int DEFAULT_LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 7.5;
 
+    /// <summary>
+    /// The adapter rank used when the caller does not specify one: the paper's primary setting.
+    /// </summary>
+    /// <remarks>
+    /// "Rank r=64 (primary experiments)", with r_min derived as 50% of it. Ranks of 4, 8, 16 and 32
+    /// are also reported, so this is a default rather than a requirement; pass <c>adapterRank</c> to
+    /// choose another. Narrow blocks clamp it down to their own width, since a rank above the ambient
+    /// dimension cannot have independent directions.
+    /// </remarks>
+    private const int DEFAULT_ADAPTER_RANK = 64;
+
     private readonly int _latentChannels;
+    private readonly int _adapterRank;
+    private readonly IReadOnlyList<TLoRAAttentionAdapter<T>> _adapters;
 
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -91,7 +104,8 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
     public TLoRAModel(
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null, UNetNoisePredictor<T>? predictor = null,
-        StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
+        StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null,
+        int? adapterRank = null)
         : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
     {
@@ -118,7 +132,89 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
         _latentChannels = vae?.LatentChannels ?? requested;
         _conditioner = conditioner;
         InitializeLayers(predictor, vae, seed);
+
+        _adapterRank = adapterRank ?? DEFAULT_ADAPTER_RANK;
+        if (_adapterRank <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(adapterRank), _adapterRank,
+                "The T-LoRA adapter rank must be positive.");
+        }
+
+        _adapters = InjectAdapters(seed);
     }
+
+    /// <summary>
+    /// Wraps every self- and cross-attention block in the predictor with a
+    /// <see cref="TLoRAAttentionAdapter{T}"/>, which is what actually puts the paper's mechanism on
+    /// the forward path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The paper injects into "self-attention and cross-attention layers", so both are wrapped. The
+    /// adapters contribute exactly zero until trained, so injection does not change what an untrained
+    /// model computes — it only gives training somewhere to go.
+    /// </para>
+    /// <para>
+    /// The horizon handed to each adapter is the SCHEDULER's TrainTimesteps, not the options' value.
+    /// The scheduler is what the denoising loop and the noise-prediction path actually consult, and
+    /// the two can differ; taking the schedule from anywhere else would mask at timesteps the model
+    /// never visits.
+    /// </para>
+    /// </remarks>
+    private IReadOnlyList<TLoRAAttentionAdapter<T>> InjectAdapters(int? seed)
+    {
+        var adapters = new List<TLoRAAttentionAdapter<T>>();
+        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        int horizon = Math.Max(1, Scheduler.TrainTimesteps);
+
+        _predictor.DecorateAttentionBlocks((block, isCrossAttention) =>
+        {
+            // The adapter acts on the block's output width. The output shape's channel axis is the
+            // last non-unit dimension for sequence format and index 1 for image format; the block
+            // reports its own output shape, so take the width from there rather than assuming.
+            var shape = block.GetOutputShape();
+            int channels = shape.Length == 4 ? shape[1] : shape[shape.Length - 1];
+            if (channels <= 0) return block;
+
+            var adapter = new TLoRAAttentionAdapter<T>(
+                inner: block, channels: channels, rank: _adapterRank,
+                totalTimesteps: horizon, random: random);
+            adapters.Add(adapter);
+            return adapter;
+        });
+
+        return adapters;
+    }
+
+    /// <summary>
+    /// Points every injected adapter at <paramref name="timestep"/> before the network is walked.
+    /// </summary>
+    /// <remarks>
+    /// The rank mask is a function of the timestep, and <c>ILayer.Forward</c> does not carry one, so
+    /// the value is pushed to the adapters here. Called from <see cref="PredictNoise"/>, which is the
+    /// single point every training step and every sampling step passes through.
+    /// </remarks>
+    private void SetAdapterTimestep(int timestep)
+    {
+        for (int i = 0; i < _adapters.Count; i++) _adapters[i].CurrentTimestep = timestep;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Overridden solely to publish the current timestep to the adapters. Without this the mask would
+    /// be evaluated at whatever timestep happened to be set last, which for a fresh model is zero —
+    /// full rank everywhere, i.e. plain LoRA, and the paper's contribution silently absent.
+    /// </remarks>
+    public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep)
+    {
+        SetAdapterTimestep(timestep);
+        return base.PredictNoise(noisySample, timestep);
+    }
+
+    /// <summary>
+    /// Gets the injected adapters, one per wrapped attention block.
+    /// </summary>
+    public IReadOnlyList<TLoRAAttentionAdapter<T>> Adapters => _adapters;
 
     [MemberNotNull(nameof(_predictor), nameof(_vae))]
     private void InitializeLayers(UNetNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
@@ -171,7 +267,10 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
             predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
-            seed: null);
+            seed: null,
+            // Carry the rank across, or the clone would silently fall back to the default and end up
+            // with a different adapter shape than the source — which SetParameters would then reject.
+            adapterRank: _adapterRank);
         if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
