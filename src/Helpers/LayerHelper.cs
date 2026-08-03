@@ -24046,23 +24046,42 @@ public static class LayerHelper<T>
 
         // Input projection
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Residual CNN blocks (each with sub-blocks of Conv + BN + ReLU)
+        // Residual CNN blocks (each with sub-blocks of Conv + BN + ReLU).
+        //
+        // These were previously emitted as a PLAIN stack: numBlocks * numSubBlocks
+        // Dense+BN+Dropout with no skip connection, despite the name. At the default
+        // 10x5 that is a 50-layer feedforward chain whose end-to-end gain is the
+        // product of 50 per-layer gains sitting near 1.0, so a 0.02% parameter change
+        // swung the output nine orders of magnitude (measured on the generated
+        // fixture: max|output| 3.0e-4 -> 6.5e5 -> 4.0e-1 across three updates at
+        // batch 1, and monotone divergence to 1.2e7 at batch 2). Skip connections
+        // are also what the paper specifies. Same defect and same remedy as the ViT
+        // factories that were missing their skip-add.
+        //
+        // The inner DenseLayer must report matching input/output shapes for
+        // ResidualLayer.ValidateInnerLayer to succeed -- its ctor reports input as
+        // [-1] (lazy) until the first forward, so resolve eagerly to [encoderDim].
         for (int b = 0; b < numBlocks; b++)
         {
             for (int s = 0; s < numSubBlocks; s++)
             {
-                yield return new DenseLayer<T>(encoderDim, reluActivation);
-                yield return new BatchNormalizationLayer<T>();
+                var inner = new DenseLayer<T>(encoderDim, reluActivation);
+                inner.ResolveFromShape(new[] { encoderDim });
+                yield return new ResidualLayer<T>(
+                    innerLayer: inner,
+                    activationFunction: identityActivation
+                );
+                yield return new LayerNormalizationLayer<T>();
                 if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             }
         }
 
         // CTC head
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 
