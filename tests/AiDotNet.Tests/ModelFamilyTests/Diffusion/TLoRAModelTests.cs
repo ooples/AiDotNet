@@ -38,11 +38,18 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 //   cap              TrainingIterations = 1. Still overran, which RULES OUT per-step training cost:
 //                    one iteration at that size cannot take two minutes.
 //
-// The remaining suspect is the schedule length (TrainTimesteps), reduced to 10 below, and that
-// change is UNVERIFIED — its verification run was cut off before reporting. Until someone measures
-// it green, the trait stays so a possibly-failing test is not promoted into the PR gate; shipping a
-// newly-red gate to chase a cleaner fixture is not a good trade. Remove the trait in the same change
-// that demonstrates the probe passing.
+//   schedule         TrainTimesteps = 10 (from the model default of 1000). MEASURED, and it did
+//                    NOT fix it either — still "timed out after 120000 milliseconds". So the
+//                    schedule hypothesis is REFUTED alongside the other three.
+//
+// All four candidate costs are therefore eliminated: network size, iteration count, precision and
+// schedule length. Whatever this is, it is not proportional to any of them, which points at
+// something structural in the training path rather than at fixture scale — the next person should
+// profile a single Train call rather than tune the fixture further, because tuning has been
+// exhausted here.
+//
+// The trait stays until the probe is measured green; promoting a red test into the PR gate to chase
+// a cleaner fixture is not a good trade. Remove it in the same change that demonstrates it passing.
 [Xunit.Trait("Category", "HeavyTimeout")]
 [Xunit.Collection("FoundationScaleSerial")]
 public class TLoRAModelTests : DiffusionModelTestBase<float>
@@ -59,12 +66,11 @@ public class TLoRAModelTests : DiffusionModelTestBase<float>
 
     protected override IDiffusionModel<float> CreateModel()
         => new TLoRAModel<float>(
-            // The dominant cost is the SCHEDULE, not the network and not the iteration count.
-            // Measured: with the shrunken predictor/VAE below AND TrainingIterations capped to one,
-            // the probe still overran 120 s — which cannot be per-step training cost at that size.
-            // What remained was the model's default TrainTimesteps = 1000, walked per probe. Ten
-            // steps exercise the identical scheduler code path at a length this budget can afford.
-            // Production defaults are untouched.
+            // Ten timesteps instead of the model's default 1000. This was tried as the remaining
+            // suspect after network size and iteration count were eliminated, and it did NOT fix the
+            // probe either (see the class comment) — so it is NOT the dominant cost. It is kept only
+            // because a 100x shorter schedule is strictly cheaper for a smoke fixture and exercises
+            // the identical scheduler path. Production defaults are untouched.
             options: new AiDotNet.Models.Options.DiffusionModelOptions<float>
             {
                 TrainTimesteps = 10,
