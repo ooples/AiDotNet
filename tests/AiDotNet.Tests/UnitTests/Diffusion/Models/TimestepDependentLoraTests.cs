@@ -12,10 +12,20 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// (arXiv:2507.05964).
 /// </summary>
 /// <remarks>
+/// <para>
 /// The paper's two innovations are a rank schedule that tightens as the diffusion timestep rises and
-/// an orthogonal parametrization that makes that schedule meaningful. Both are asserted here — a
-/// uniform-rank adapter, which is what plain LoRA is, would fail the first, and a correlated
+/// an orthogonal (Ortho-LoRA) parametrization that makes that schedule meaningful. Both are asserted
+/// here — a uniform-rank adapter, which is what plain LoRA is, would fail the first, and a correlated
 /// initialization would silently defeat the second while still passing the first.
+/// </para>
+/// <para>
+/// These assertions were TIGHTENED after checking the implementation against the paper line by line.
+/// Three of them previously encoded a schedule the paper does not use: the floor is r_min = 50% of r,
+/// not 1; the interpolation is <c>floor((r - r_min)(T - t)/T) + r_min</c>, not
+/// <c>ceil(r(1 - t/T))</c>; and the identity-at-initialization property comes from subtracting the
+/// frozen initial product, NOT from B = 0, which is the standard-LoRA convention this paper
+/// specifically replaces in order to train a non-zero S.
+/// </para>
 /// </remarks>
 public class TimestepDependentLoraTests
 {
@@ -32,6 +42,32 @@ public class TimestepDependentLoraTests
         // Low timesteps refine detail and are not the overfitting-prone regime, so the adapter keeps
         // all its capacity there.
         Assert.Equal(Rank, Adapter().EffectiveRank(0));
+    }
+
+    [Fact]
+    public void MinimumRankIsHalfTheFullRank()
+    {
+        // "r_min is set to 50% of r." This is the paper's floor, and it is the assertion that
+        // distinguishes the published schedule from an arbitrary decay to a single direction.
+        var adapter = Adapter();
+        Assert.Equal(Rank / 2, adapter.MinRank);
+        Assert.Equal(adapter.MinRank, adapter.EffectiveRank(Horizon));
+    }
+
+    [Fact]
+    public void ScheduleMatchesThePublishedFormula()
+    {
+        // r(t) = floor((r - r_min) * (T - t) / T) + r_min, checked pointwise across the horizon
+        // rather than only at the endpoints, so a formula that happens to agree at t=0 and t=T but
+        // interpolates differently in between cannot pass.
+        var adapter = Adapter();
+        int rMin = adapter.MinRank;
+
+        for (int t = 0; t <= Horizon; t += 10)
+        {
+            int expected = (int)Math.Floor((double)(Rank - rMin) * (Horizon - t) / Horizon) + rMin;
+            Assert.Equal(expected, adapter.EffectiveRank(t));
+        }
     }
 
     [Fact]
@@ -55,14 +91,14 @@ public class TimestepDependentLoraTests
     }
 
     [Fact]
-    public void RankNeverReachesZero()
+    public void RankNeverFallsBelowTheFloor()
     {
-        // A zero-rank adapter is not maximally constrained, it is DISCONNECTED: the update vanishes
-        // and the most overfitting-prone timesteps would get no adaptation at all.
+        // Beyond the horizon the schedule is clamped, never decayed further. A zero-rank adapter is
+        // not "maximally constrained", it is DISCONNECTED.
         var adapter = Adapter();
         foreach (int t in new[] { Horizon, Horizon * 2, int.MaxValue })
         {
-            Assert.True(adapter.EffectiveRank(t) >= 1, $"Rank collapsed to zero at timestep {t}.");
+            Assert.Equal(adapter.MinRank, adapter.EffectiveRank(t));
         }
     }
 
@@ -77,11 +113,11 @@ public class TimestepDependentLoraTests
     [Fact]
     public void DownProjectionRowsAreOrthonormal()
     {
-        // The paper's second innovation. Without independence, masking the tail removes no capacity
-        // because the surviving directions still span what was masked — the schedule would look
-        // right and do nothing.
-        var adapter = Adapter();
-        var a = adapter.DownProjection;
+        // The paper's second innovation: A_init = V_r^T, whose rows are orthonormal by construction
+        // of the SVD. Without independence, masking the tail removes no capacity because the
+        // surviving directions still span what was masked — the schedule would look right and do
+        // nothing.
+        var a = Adapter().DownProjection;
 
         for (int i = 0; i < Rank; i++)
         {
@@ -99,23 +135,61 @@ public class TimestepDependentLoraTests
     }
 
     [Fact]
+    public void UpProjectionColumnsAreOrthonormal()
+    {
+        // B_init = U_r, the matching half of the same SVD. Asserted separately because an
+        // implementation could easily orthogonalize one factor and not the other.
+        var b = Adapter().UpProjection;
+
+        for (int i = 0; i < Rank; i++)
+        {
+            double selfDot = 0.0;
+            for (int o = 0; o < b.Rows; o++) selfDot += b[o, i] * b[o, i];
+            Assert.Equal(1.0, selfDot, 9);
+
+            for (int j = i + 1; j < Rank; j++)
+            {
+                double dot = 0.0;
+                for (int o = 0; o < b.Rows; o++) dot += b[o, i] * b[o, j];
+                Assert.Equal(0.0, dot, 9);
+            }
+        }
+    }
+
+    [Fact]
+    public void SingularValuesStartNonZero()
+    {
+        // The distinguishing feature of this paper's parametrization. Standard LoRA sets B = 0 to get
+        // an identity adapter; T-LoRA keeps S = S_init non-zero and trainable, recovering the
+        // identity by subtracting the frozen initial product instead. If S started at zero, the next
+        // test would pass trivially and the reparametrization would be untested.
+        var s = Adapter().SingularValues;
+        Assert.Contains(true, Enumerable.Range(0, s.Length).Select(i => Math.Abs(s[i]) > 1e-9));
+    }
+
+    [Fact]
     public void AdapterStartsAsTheIdentity()
     {
-        // B is zero at initialization, the standard LoRA convention: customization must not perturb
-        // the base model before it has learned anything.
+        // Customization must not perturb the base model before it has learned anything. Here that
+        // holds because B S M_t A and B_init S_init M_t A_init are the same product at init and
+        // cancel — NOT because any factor is zero (see SingularValuesStartNonZero). Checked at both
+        // ends of the schedule so the cancellation cannot depend on the mask width.
         var adapter = Adapter();
         var input = new Vector<double>(Width);
         for (int i = 0; i < Width; i++) input[i] = i + 1.0;
 
-        var output = adapter.Apply(input, timestep: 0);
-        for (int i = 0; i < output.Length; i++) Assert.Equal(0.0, output[i], 12);
+        foreach (int t in new[] { 0, Horizon / 2, Horizon })
+        {
+            var output = adapter.Apply(input, t);
+            for (int i = 0; i < output.Length; i++) Assert.Equal(0.0, output[i], 12);
+        }
     }
 
     [Fact]
     public void MaskingActuallyRemovesCapacity()
     {
-        // With a trained (non-zero) B, a high timestep must produce a DIFFERENT update than a low
-        // one — otherwise the mask is decorative.
+        // With a trained (moved) B, a high timestep must produce a DIFFERENT update than a low one —
+        // otherwise the mask is decorative.
         var adapter = Adapter();
         var rng = new Random(3);
         for (int o = 0; o < adapter.UpProjection.Rows; o++)
@@ -134,19 +208,30 @@ public class TimestepDependentLoraTests
     }
 
     [Fact]
-    public void RankBeyondTheAmbientWidthDoesNotFabricateDirections()
+    public void TrainingTheAdapterMovesItAwayFromTheIdentity()
     {
-        // Asking for more directions than the space has cannot produce independent ones. The extra
-        // rows stay zero rather than being normalized noise that merely looks orthogonal.
-        var adapter = new TimestepDependentLora<double>(rank: 6, inputDim: 3, outputDim: 3, Horizon, new Random(1));
-        var a = adapter.DownProjection;
+        // The flip side of AdapterStartsAsTheIdentity: the subtraction must not cancel FOREVER, or
+        // the adapter could never learn. Moving S alone (the factor plain LoRA does not have) has to
+        // be enough to produce a non-zero update.
+        var adapter = Adapter();
+        for (int r = 0; r < Rank; r++) adapter.SingularValues[r] += 0.5;
 
-        for (int r = 3; r < 6; r++)
-        {
-            double norm = 0.0;
-            for (int c = 0; c < 3; c++) norm += a[r, c] * a[r, c];
-            Assert.Equal(0.0, norm, 9);
-        }
+        var input = new Vector<double>(Width);
+        for (int i = 0; i < Width; i++) input[i] = i + 1.0;
+
+        var output = adapter.Apply(input, timestep: 0);
+        bool moved = Enumerable.Range(0, output.Length).Any(i => Math.Abs(output[i]) > 1e-9);
+        Assert.True(moved, "Training S produced no change; the reparametrization cancels unconditionally.");
+    }
+
+    [Fact]
+    public void RankBeyondTheAmbientWidthIsRejected()
+    {
+        // Asking for more directions than the space has cannot produce independent ones, and the
+        // paper's SVD initialization has no trailing triplet of that size to draw from. Rejected at
+        // construction rather than silently yielding zero rows that merely look orthogonal.
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new TimestepDependentLora<double>(rank: 6, inputDim: 3, outputDim: 3, Horizon, new Random(1)));
     }
 
     [Fact]

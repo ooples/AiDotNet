@@ -78,7 +78,21 @@ internal static class TestModuleInitializer
         // FoundationScaleCpuFixture raises this back to ProcessorCount for the serialized
         // FoundationScaleSerial collection and restores it on dispose — its "defensive: restore the
         // all-cores default in case an earlier test capped it" branch is written for exactly this.
-        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = 1;
+        //
+        // AIDOTNET_TEST_CPU_MDOP exists so the COST of this cap can be A/B measured without a
+        // rebuild between arms — a rebuild in the middle of a timing run changes what is warm and
+        // makes the two arms incomparable. It is a measurement hook only: unset, malformed, or
+        // non-positive all fall through to 1, so the shipped default is exactly as it was and no CI
+        // configuration can weaken it by accident.
+        int managedDop = 1;
+        string? dopOverride = System.Environment.GetEnvironmentVariable("AIDOTNET_TEST_CPU_MDOP");
+        if (!string.IsNullOrWhiteSpace(dopOverride)
+            && int.TryParse(dopOverride, out int parsedDop)
+            && parsedDop > 0)
+        {
+            managedDop = parsedDop;
+        }
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = managedDop;
 
         // Force CPU-only mode for all tests
         // This prevents GPU/OpenCL errors on systems without proper GPU support

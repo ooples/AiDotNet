@@ -589,6 +589,61 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
+    /// Replaces every self- and cross-attention block with the result of <paramref name="decorator"/>,
+    /// so an adapter (LoRA and friends) can be injected without this class knowing about it.
+    /// </summary>
+    /// <param name="decorator">
+    /// Receives each attention block and a flag that is <c>true</c> for cross-attention, and returns
+    /// the layer to use in its place. Returning the block unchanged is allowed and is a no-op.
+    /// </param>
+    /// <returns>The number of blocks replaced.</returns>
+    /// <remarks>
+    /// <para>
+    /// This exists so parameter-efficient fine-tuning methods that target attention — T-LoRA
+    /// (arXiv:2507.05964) is the first caller — do not have to modify
+    /// <see cref="AiDotNet.Diffusion.Attention.DiffusionAttention{T}"/>, <c>MultiHeadAttentionLayer</c>
+    /// or <c>FlashAttentionLayer</c>, all of which are shared by every other diffusion model in the
+    /// library. Putting one model's mechanism in those would place it on everyone's hot path.
+    /// </para>
+    /// <para>
+    /// Replacements land in the same block slots, so <c>EnumerateAllLayers</c> continues to see them
+    /// in the same order and the index-identical <c>GetParameters</c>/<c>SetParameters</c> contract
+    /// still holds — provided the decorator's own parameter vector concatenates the wrapped block's
+    /// parameters ahead of its own, which is the contract a decorator must honour.
+    /// </para>
+    /// <para>
+    /// Call this BEFORE any forward pass. It changes the network's shape-resolved graph, so a plan
+    /// compiled by <see cref="CompileForward"/> beforehand would replay the undecorated network.
+    /// </para>
+    /// </remarks>
+    public int DecorateAttentionBlocks(Func<ILayer<T>, bool, ILayer<T>> decorator)
+    {
+        if (decorator is null) throw new ArgumentNullException(nameof(decorator));
+
+        int replaced = 0;
+        foreach (var block in _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks))
+        {
+            if (block.AttentionBlock is not null)
+            {
+                block.AttentionBlock = decorator(block.AttentionBlock, false)
+                    ?? throw new InvalidOperationException(
+                        "The attention-block decorator returned null; return the original block to skip it.");
+                replaced++;
+            }
+
+            if (block.CrossAttentionBlock is not null)
+            {
+                block.CrossAttentionBlock = decorator(block.CrossAttentionBlock, true)
+                    ?? throw new InvalidOperationException(
+                        "The cross-attention-block decorator returned null; return the original block to skip it.");
+                replaced++;
+            }
+        }
+
+        return replaced;
+    }
+
+    /// <summary>
     /// Eagerly compiles the UNet forward pass for the given sample input shape,
     /// storing the plan in the per-instance cache. Addresses the
     /// "UNetNoisePredictor compiled forward" checklist item on
