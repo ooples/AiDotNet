@@ -316,6 +316,42 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Three-way: also VisionLanguage.Encoders.SAM, and a Bioinformatics SAM (Significance
             // Analysis of Microarrays) that shares only the acronym.
             { "SAM", "AiDotNet.ComputerVision.Segmentation.Foundation." },
+
+            // ---------------------------------------------------------------------------------
+            // The 22 below were found by ADNTEST003 the first time it ran. Every one is the same
+            // latent bug as the four above — two models claiming one generated test class, winner
+            // decided by discovery order — and none was known before the diagnostic existed.
+            //
+            // Each owner is the ORDINALLY FIRST fully-qualified name, i.e. exactly what the sort
+            // in the emission loop selects. Registry and sort therefore agree, so adding these
+            // entries cannot itself move a generated class to a different model. Where the more
+            // famous namesake is the OTHER one (WaveNet is canonically the TTS vocoder; DINO is
+            // canonically the self-supervised method), the entry is still the incumbent — moving
+            // ownership changes which model gets scaffolded and is a deliberate, separate change,
+            // not a side effect of registering what already happens.
+            // ---------------------------------------------------------------------------------
+            { "AudioLM", "AiDotNet.Audio.Generation." },
+            { "FishSpeech", "AiDotNet.Audio.Generation." },
+            { "VALLE", "AiDotNet.Audio.Generation." },
+            { "VoiceCraft", "AiDotNet.Audio.Generation." },
+            { "CosyVoice2", "AiDotNet.Audio.TextToSpeech." },
+            { "MatchaTTS", "AiDotNet.Audio.TextToSpeech." },
+            { "StyleTTS2", "AiDotNet.Audio.TextToSpeech." },
+            { "DINO", "AiDotNet.ComputerVision.Detection.ObjectDetection.DETR." },
+            { "CRAFT", "AiDotNet.ComputerVision.Detection.TextDetection." },
+            { "DBNet", "AiDotNet.ComputerVision.Detection.TextDetection." },
+            { "EAST", "AiDotNet.ComputerVision.Detection.TextDetection." },
+            { "CRNN", "AiDotNet.ComputerVision.OCR.Recognition." },
+            { "TrOCR", "AiDotNet.ComputerVision.OCR.Recognition." },
+            { "GroundedSAM2", "AiDotNet.ComputerVision.Segmentation.OpenVocabulary." },
+            { "Nougat", "AiDotNet.Document.PixelToSequence." },
+            { "Pix2Struct", "AiDotNet.Document.PixelToSequence." },
+            { "CSDI", "AiDotNet.Finance.Forecasting.Foundation." },
+            { "TSDiff", "AiDotNet.Finance.Forecasting.Foundation." },
+            { "TimeGrad", "AiDotNet.Finance.Forecasting.Foundation." },
+            { "WaveNet", "AiDotNet.Finance.Forecasting.Neural." },
+            { "Branchformer", "AiDotNet.SpeechRecognition.CTCVariants." },
+            { "EBranchformer", "AiDotNet.SpeechRecognition.CTCVariants." },
         };
 
     /// <summary>
