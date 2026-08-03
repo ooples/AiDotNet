@@ -1610,6 +1610,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         //   AudioPaLM           24s — emits counts + memorization
         //   AudioEventDetector  18s — emits MoreDataTolerance
     };
+    // Fixtures whose MoreData probe lands INSIDE the optimizer warm-up hump at the
+    // 1-vs-2 window, so the invariant measures a transient rather than a training
+    // trend and its verdict flips with the seed.
+    //
+    // Measured on VideoFlow's generated fixture (64x64, float, seed 42) -- the whole
+    // curve, not just the two points the assertion prints:
+    //
+    //     iter  0: 0.3126 (untrained)   iter  9: 0.5196
+    //     iter  1: 5.0345 <- 16x spike  iter 10: 0.8037
+    //     iter  2: 0.6341               iter 12: 0.1363
+    //     iter  8: 0.0962               iter 40: 0.0830 (converged)
+    //
+    // The first update overshoots 16x above the UNTRAINED loss, with a second
+    // excursion at 9-11. CI read 23.86 -> 100.66 here while a local run of the same
+    // fixture read 5.03 -> 0.63: same code, opposite verdict, because 1-vs-2 samples
+    // the hump. 10/40 clears it with ~10x margin (0.8037 -> 0.0830) and costs 50
+    // updates rather than the base 250 -- a MoreData probe measured at 102 s for the
+    // default 50/200 comes in around 20 s.
+    //
+    // This is the same warm-up reasoning the HeavyTrainingTimeout branch already
+    // applies to TrainingIterations (1 -> 5); it was simply never applied to MoreData.
+    private static readonly System.Collections.Generic.HashSet<string> WarmUpClearingMoreDataClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        "VideoFlow", "NeuFlowV2", "RoMa", "SEARAFT",
+    };
+
 
     // These #1789 fixtures already use FP32 and public scaffold-scale model options, but the
     // base class's 50/200-step and 100-step convergence probes still exceed the CI timeout.
@@ -13151,14 +13178,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
         }
 
-        // VideoFlow is already FP32 in the T-Z resource shard, but its optical-flow/video
-        // backbone still exceeded the 120-second default 50+200 comparison. Preserve the
-        // generated architecture and cap only the repeated MoreData updates before considering
-        // any test-fixture shrinkage.
-        if (model.ClassName == "VideoFlow")
+        // Optical-flow fixtures whose MoreData window has to clear the optimizer warm-up
+        // hump (see WarmUpClearingMoreDataClassNames for the measured curve). The Heavy
+        // branch below applies the same window to the members that carry a timeout cap,
+        // so this fires only for the ones that do not -- the two conditions are mutually
+        // exclusive and cannot double-emit the property.
+        if (WarmUpClearingMoreDataClassNames.Contains(model.ClassName)
+            && !HeavyTrainingTimeoutClassNames.Contains(model.ClassName))
         {
-            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+            sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 40;");
         }
 
         // xLSTM keeps its residual sLSTM/mLSTM block stack and exponential-gating memory
@@ -13179,8 +13208,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // fixture intact and cap only optimizer-step counts before considering any fixture shrink.
         if (model.ClassName == "Upscale4KAgent")
         {
-            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+            // 1-vs-2 was too tight to be stable: measured on this fixture (4x3x32x32,
+            // float, seed 42) the first update rises 0.2564 -> 0.3307 and the second
+            // returns to 0.2612, so the verdict rests on a ~0.07 gap either side of one
+            // transient -- it passed locally and failed on CI. Unlike the optical-flow
+            // fixtures this model costs ~2.8 s per update, so the 10/40 window used there
+            // would need ~140 s and overrun the 120 s budget. 5/15 sits past the transient
+            // on the clean part of the curve (0.1854 -> 0.1133, a 0.072 gap against a 1e-4
+            // tolerance) for ~57 s, and reuses the 5/15 step budget this generator already
+            // applies to TrainingIterations and MemorizationTaskIterations.
+            sb.AppendLine("    protected override int MoreDataShortIterations => 5;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 15;");
             // Fifteen real updates retain the strict memorization-loss decrease invariant while
             // avoiding the default 100-step timeout; the super-resolution architecture is unchanged.
             sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
@@ -13206,8 +13244,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // these generated properties twice while retaining the universal cap.
             if (model.ClassName != "XTTSv2Clone")
             {
-                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                // The warm-up hump described above applies to MoreData as well, and for
+                // the optical-flow fixtures 1-vs-2 lands INSIDE it. See the set's own
+                // comment for the measured curve.
+                if (WarmUpClearingMoreDataClassNames.Contains(model.ClassName))
+                {
+                    sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
+                    sb.AppendLine("    protected override int MoreDataLongIterations => 40;");
+                }
+                else
+                {
+                    sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                    sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                }
             }
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             // Memorization needs enough steps for a heavy model's Adam moments to warm up past the
