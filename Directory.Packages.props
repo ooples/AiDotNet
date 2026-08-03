@@ -277,7 +277,7 @@
          packages are coreleased in lockstep. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.119.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.119.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.121.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.119.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
