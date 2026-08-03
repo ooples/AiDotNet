@@ -219,74 +219,90 @@ public sealed class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionBlockDeco
     /// where the adapter's block begins so an optimizer can restrict itself to it.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetParameters()
+    public override Vector<T> GetParameters() => _inner.GetParameters();
+
+    /// <summary>
+    /// The adapter's own trainable state — A, then B, then S — kept OUT of
+    /// <see cref="GetParameters"/> on purpose.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wrapping a layer must not change its parameter COUNT. Every parameter-copy path in this library
+    /// pairs a source layer with a target layer positionally and checks the lengths match:
+    /// <c>UNetNoisePredictor.Clone</c> builds a bare predictor and immediately pushes the source's
+    /// chunks into it, so a decorated source and a not-yet-decorated clone mismatched with
+    /// "chunk length 24704 does not match layer parameter length 16448" — and that copy happens INSIDE
+    /// the predictor's clone, before the owning model can inject anything.
+    /// </para>
+    /// <para>
+    /// Rather than trying to order decoration around that copy, the decorator is now structurally
+    /// transparent: it reports exactly what the block it wraps reports, so every existing clone,
+    /// chunk, share and round-trip path behaves identically whether or not the block is decorated.
+    /// The adapter's state travels through this pair instead, copied explicitly by the owning model.
+    /// </para>
+    /// </remarks>
+    public Vector<T> GetAdapterState()
     {
-        var innerParameters = _inner.GetParameters();
         var down = _adapter.DownProjection;
         var up = _adapter.UpProjection;
         var singular = _adapter.SingularValues;
 
-        var parameters = new Vector<T>(innerParameters.Length + AdapterParameterCount);
+        var state = new Vector<T>(AdapterParameterCount);
         int index = 0;
-        for (int i = 0; i < innerParameters.Length; i++) parameters[index++] = innerParameters[i];
         for (int r = 0; r < down.Rows; r++)
         {
-            for (int c = 0; c < down.Columns; c++) parameters[index++] = down[r, c];
+            for (int c = 0; c < down.Columns; c++) state[index++] = down[r, c];
         }
         for (int r = 0; r < up.Rows; r++)
         {
-            for (int c = 0; c < up.Columns; c++) parameters[index++] = up[r, c];
+            for (int c = 0; c < up.Columns; c++) state[index++] = up[r, c];
         }
-        for (int s = 0; s < singular.Length; s++) parameters[index++] = singular[s];
-        return parameters;
+        for (int s = 0; s < singular.Length; s++) state[index++] = singular[s];
+        return state;
     }
 
     /// <summary>
-    /// Gets the index in <see cref="GetParameters"/> at which the adapter's parameters begin.
+    /// Restores state produced by <see cref="GetAdapterState"/>.
     /// </summary>
-    /// <remarks>
-    /// Everything before this offset is the frozen base block; everything from it on is A, B then S.
-    /// This is how a caller honours the paper's freeze without the state vector having to lie about
-    /// what the layer contains.
-    /// </remarks>
-    public int TrainableParameterOffset => _inner.GetParameters().Length;
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetAdapterState(Vector<T> state)
     {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-
-        var innerParameters = _inner.GetParameters();
-        int expected = innerParameters.Length + AdapterParameterCount;
-        if (parameters.Length != expected)
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (state.Length != AdapterParameterCount)
         {
             throw new ArgumentException(
-                $"Expected {expected} parameters ({innerParameters.Length} for the wrapped attention " +
-                $"block plus {AdapterParameterCount} for the adapter), got {parameters.Length}.",
-                nameof(parameters));
+                $"Expected {AdapterParameterCount} adapter parameters, got {state.Length}. A mismatch " +
+                "means the source and target adapters were built with different ranks or widths.",
+                nameof(state));
         }
-
-        var forInner = new Vector<T>(innerParameters.Length);
-        for (int i = 0; i < innerParameters.Length; i++) forInner[i] = parameters[i];
-        _inner.SetParameters(forInner);
 
         var down = _adapter.DownProjection;
         var up = _adapter.UpProjection;
         var singular = _adapter.SingularValues;
 
-        int index = innerParameters.Length;
+        int index = 0;
         for (int r = 0; r < down.Rows; r++)
         {
-            for (int c = 0; c < down.Columns; c++) down[r, c] = parameters[index++];
+            for (int c = 0; c < down.Columns; c++) down[r, c] = state[index++];
         }
         for (int r = 0; r < up.Rows; r++)
         {
-            for (int c = 0; c < up.Columns; c++) up[r, c] = parameters[index++];
+            for (int c = 0; c < up.Columns; c++) up[r, c] = state[index++];
         }
-        for (int s = 0; s < singular.Length; s++) singular[s] = parameters[index++];
+        for (int s = 0; s < singular.Length; s++) singular[s] = state[index++];
 
-        // The cached delta was computed from the weights we just replaced.
         _adapter.InvalidateCache();
+    }
+
+
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Forwards straight to the wrapped block, so the decorator consumes exactly the vector the bare
+    /// block would. Adapter state goes through <see cref="SetAdapterState"/>.
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _inner.SetParameters(parameters);
     }
 
     /// <inheritdoc/>

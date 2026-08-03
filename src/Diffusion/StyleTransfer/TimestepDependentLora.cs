@@ -247,6 +247,62 @@ public sealed class TimestepDependentLora<T>
     }
 
     /// <summary>
+    /// Copies the COMPLETE state of <paramref name="source"/> — the trainable A, B and S and the frozen
+    /// A_init, B_init and S_init — into this adapter.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The frozen triplet has to travel too, and that is easy to miss. The adapter's output is
+    /// <c>B S M_t A - B_init S_init M_t A_init</c>, so "untrained" does not mean "zero parameters", it
+    /// means the two products CANCEL. Copying only A, B and S into an adapter whose _init came from a
+    /// different random draw leaves those products unequal, and the adapter then applies the difference
+    /// between two unrelated initializations — a large update, not the identity.
+    /// </para>
+    /// <para>
+    /// That is exactly how a freshly cloned model diverged from its source: identical base weights,
+    /// identical A/B/S, and output differing by 69 in absolute terms because each side subtracted its
+    /// own initialization.
+    /// </para>
+    /// </remarks>
+    public void CopyStateFrom(TimestepDependentLora<T> source)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (source._rank != _rank
+            || source.DownProjection.Columns != DownProjection.Columns
+            || source.UpProjection.Rows != UpProjection.Rows)
+        {
+            throw new ArgumentException(
+                "Adapter shapes differ, so state cannot be copied: this adapter is rank " +
+                $"{_rank} over [{UpProjection.Rows}, {DownProjection.Columns}] and the source is rank " +
+                $"{source._rank} over [{source.UpProjection.Rows}, {source.DownProjection.Columns}].",
+                nameof(source));
+        }
+
+        CopyMatrix(source.DownProjection, DownProjection);
+        CopyMatrix(source.UpProjection, UpProjection);
+        CopyVector(source.SingularValues, SingularValues);
+
+        CopyMatrix(source._downInit, _downInit);
+        CopyMatrix(source._upInit, _upInit);
+        CopyVector(source._singularInit, _singularInit);
+
+        InvalidateCache();
+    }
+
+    private static void CopyMatrix(Matrix<T> from, Matrix<T> to)
+    {
+        for (int r = 0; r < to.Rows; r++)
+        {
+            for (int c = 0; c < to.Columns; c++) to[r, c] = from[r, c];
+        }
+    }
+
+    private static void CopyVector(Vector<T> from, Vector<T> to)
+    {
+        for (int i = 0; i < to.Length; i++) to[i] = from[i];
+    }
+
+    /// <summary>
     /// Drops the cached delta. Call after writing to <see cref="DownProjection"/>,
     /// <see cref="UpProjection"/> or <see cref="SingularValues"/>.
     /// </summary>
