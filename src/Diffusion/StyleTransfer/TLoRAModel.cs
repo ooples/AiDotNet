@@ -51,10 +51,32 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// adjustable directions during that stage and all of them later, when it is only adding detail.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+// Deliberately NOT ModelTask.StyleTransfer, which the pre-rebuild version claimed. T-LoRA is
+// single-image CONCEPT personalization — learning a new subject from one photo — not style transfer.
+// The class stays in the StyleTransfer folder only because moving it is a separate, wider change.
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("T-LoRA: Single Image Diffusion Model Customization Without Overfitting",
+    "https://arxiv.org/abs/2507.05964",
+    Year = 2025,
+    Authors = "Vera Soboleva, Aibek Alanov, Andrey Kuznetsov, Konstantin Sobolev")]
 public class TLoRAModel<T> : LatentDiffusionModelBase<T>
 {
-    private const int LATENT_CHANNELS = 4;
+    /// <summary>
+    /// The latent channel count used when the caller does not specify one: the Stable-Diffusion
+    /// value, which the default predictor and VAE below are both built around.
+    /// </summary>
+    /// <remarks>
+    /// A DEFAULT, not a constant of the model. Callers override it via
+    /// <see cref="DiffusionModelOptions{T}.LatentChannels"/>; see <see cref="_latentChannels"/>.
+    /// </remarks>
+    private const int DEFAULT_LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 7.5;
+
+    private readonly int _latentChannels;
 
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -63,7 +85,7 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
     public override INoisePredictor<T> NoisePredictor => _predictor;
     public override IVAEModel<T> VAE => _vae;
     public override IConditioningModule<T>? Conditioner => _conditioner;
-    public override int LatentChannels => LATENT_CHANNELS;
+    public override int LatentChannels => _latentChannels;
     public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public TLoRAModel(
@@ -73,6 +95,27 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
         : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
     {
+        int requested = options?.LatentChannels ?? DEFAULT_LATENT_CHANNELS;
+        if (requested <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), requested,
+                "DiffusionModelOptions.LatentChannels must be positive when specified.");
+        }
+
+        // An injected VAE has already fixed the latent width, so an override that disagrees with it
+        // cannot be honoured. Say so here rather than letting it surface as a shape mismatch deep
+        // inside the denoising loop, where the connection back to this option is not obvious.
+        if (vae is not null && options?.LatentChannels is int overridden && vae.LatentChannels != overridden)
+        {
+            throw new ArgumentException(
+                $"DiffusionModelOptions.LatentChannels was set to {overridden}, but the supplied VAE " +
+                $"produces {vae.LatentChannels} latent channels. Either omit the override or supply a " +
+                "VAE built for the same width.", nameof(options));
+        }
+
+        // A supplied VAE wins when no explicit override was given: it is the authority on the width
+        // the rest of the pipeline has to agree with.
+        _latentChannels = vae?.LatentChannels ?? requested;
         _conditioner = conditioner;
         InitializeLayers(predictor, vae, seed);
     }
@@ -81,10 +124,10 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
     private void InitializeLayers(UNetNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
         _predictor = predictor ?? new UNetNoisePredictor<T>(
-            architecture: Architecture, inputChannels: 4, outputChannels: LATENT_CHANNELS,
+            architecture: Architecture, inputChannels: _latentChannels, outputChannels: _latentChannels,
             baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2, attentionResolutions: new[] { 4, 2, 1 }, contextDim: 768, seed: seed);
-        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
+        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: _latentChannels,
             baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }
 
@@ -136,13 +179,15 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "T-LoRA", Version = "1.0",
-            Description = "Temporal LoRA-based style transfer with video consistency",
+            // Was "Temporal LoRA-based style transfer with video consistency" — the fabricated purpose
+            // this class carried before the rebuild. T-LoRA is single-image concept customization.
+            Description = "Timestep-dependent low-rank adaptation for single-image diffusion customization",
             FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount };
-        m.SetProperty("architecture", "temporal-lora-style");
-        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("architecture", "timestep-dependent-lora");
+        m.SetProperty("base_model", "Stable Diffusion XL");
         m.SetProperty("text_encoder", "CLIP ViT-L/14");
         m.SetProperty("context_dim", 768);
-        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("latent_channels", _latentChannels);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
