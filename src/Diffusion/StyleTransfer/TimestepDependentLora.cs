@@ -69,6 +69,10 @@ public sealed class TimestepDependentLora<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
+    // Same accessor LayerBase exposes to layers. This class is not a layer, so it resolves it itself
+    // rather than reimplementing the matrix products it needs in managed scalar code.
+    private static IEngine Engine => AiDotNetEngine.Current;
+
     private readonly int _rank;
     private readonly int _minRank;
     private readonly int _totalTimesteps;
@@ -78,6 +82,10 @@ public sealed class TimestepDependentLora<T>
     private readonly Matrix<T> _downInit;
     private readonly Matrix<T> _upInit;
     private readonly Vector<T> _singularInit;
+
+    // Cached [inputDim, outputDim] delta for _cachedTimestep. Invalidated by InvalidateCache().
+    private Tensor<T>? _cachedDelta;
+    private int _cachedTimestep = -1;
 
     /// <summary>Down-projection A, shape [rank, inputDim]. Trainable; rows start orthonormal.</summary>
     public Matrix<T> DownProjection { get; }
@@ -165,55 +173,115 @@ public sealed class TimestepDependentLora<T>
     }
 
     /// <summary>
-    /// Applies the adapter at a given timestep: <c>(B S M_t A - B_init S_init M_t A_init) x</c>.
+    /// The adapter's effective weight delta at a timestep, TRANSPOSED to <c>[inputDim, outputDim]</c>
+    /// so it can be right-multiplied against a <c>[tokens, inputDim]</c> activation matrix.
     /// </summary>
     /// <remarks>
-    /// The subtraction is not an optimization detail — it IS the paper's reparametrization, and it is
-    /// what allows S to be non-zero at initialization while the adapter still starts as the identity.
+    /// <para>
+    /// <c>dW(t) = B S M_t A - B_init S_init M_t A_init</c>, which depends only on the timestep and the
+    /// current parameters — NOT on the activations. Forming it once per (timestep, parameter version)
+    /// and applying it as a single matrix product is the whole point: the first version of this class
+    /// evaluated the rank-masked product per TOKEN, which made a decorated UNet so slow that the
+    /// diffusion test suite went from 14 seconds to over 10 minutes. Scalar per-element loops on a hot
+    /// path are also against this repository's standing guidance.
+    /// </para>
+    /// <para>
+    /// Cached because a denoising loop revisits the same timestep across blocks and the parameters do
+    /// not move within a forward pass. <see cref="InvalidateCache"/> must be called after any write to
+    /// A, B or S, or the cache would serve a delta computed from stale weights.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> EffectiveDeltaTransposed(int timestep)
+    {
+        int effective = EffectiveRank(timestep);
+        if (_cachedDelta is not null && _cachedTimestep == timestep) return _cachedDelta;
+
+        int inputDim = DownProjection.Columns;
+        int outputDim = UpProjection.Rows;
+
+        // Both branches are ordinary matrix products, so the ENGINE does them. The previous version
+        // accumulated the rank-`effective` outer-product sum with nested scalar loops and an
+        // Ops.ToDouble/FromDouble round-trip per element — O(r*C^2) managed work per block per
+        // timestep, which kept the diffusion suite past its 10-minute ceiling even after the per-token
+        // loop was removed. Two matmuls and a subtract replace all of it.
+        //
+        // Shapes: Am is [effective, inputDim] with row r pre-scaled by s[r]; Bm is [outputDim,
+        // effective]. Bm x Am gives dW as [outputDim, inputDim]; the caller wants it transposed.
+        var trainedDown = ScaledRowTensor(DownProjection, SingularValues, effective, inputDim);
+        var initialDown = ScaledRowTensor(_downInit, _singularInit, effective, inputDim);
+        var trainedUp = LeadingColumnTensor(UpProjection, effective, outputDim);
+        var initialUp = LeadingColumnTensor(_upInit, effective, outputDim);
+
+        var deltaWeight = Engine.TensorSubtract(
+            Engine.TensorMatMul(trainedUp, trainedDown),
+            Engine.TensorMatMul(initialUp, initialDown));
+
+        var delta = Engine.TensorPermute(deltaWeight, new[] { 1, 0 });
+
+        _cachedDelta = delta;
+        _cachedTimestep = timestep;
+        return delta;
+    }
+
+    /// <summary>Builds <c>[effective, inputDim]</c> with row r scaled by <c>singular[r]</c>.</summary>
+    private static Tensor<T> ScaledRowTensor(Matrix<T> down, Vector<T> singular, int effective, int inputDim)
+    {
+        var tensor = new Tensor<T>(new[] { effective, inputDim });
+        for (int r = 0; r < effective; r++)
+        {
+            var scale = singular[r];
+            for (int i = 0; i < inputDim; i++) tensor[(r * inputDim) + i] = Ops.Multiply(down[r, i], scale);
+        }
+        return tensor;
+    }
+
+    /// <summary>Builds <c>[outputDim, effective]</c> from the leading columns of <paramref name="up"/>.</summary>
+    private static Tensor<T> LeadingColumnTensor(Matrix<T> up, int effective, int outputDim)
+    {
+        var tensor = new Tensor<T>(new[] { outputDim, effective });
+        for (int o = 0; o < outputDim; o++)
+        {
+            for (int r = 0; r < effective; r++) tensor[(o * effective) + r] = up[o, r];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Drops the cached delta. Call after writing to <see cref="DownProjection"/>,
+    /// <see cref="UpProjection"/> or <see cref="SingularValues"/>.
+    /// </summary>
+    public void InvalidateCache()
+    {
+        _cachedDelta = null;
+        _cachedTimestep = -1;
+    }
+
+    /// <summary>
+    /// Applies the adapter to a single vector: <c>(B S M_t A - B_init S_init M_t A_init) x</c>.
+    /// </summary>
+    /// <remarks>
+    /// Kept for single-vector callers and for the unit tests that assert the paper's properties
+    /// directly. It goes through the same delta as the batched path, so the two cannot disagree.
     /// </remarks>
     public Vector<T> Apply(Vector<T> input, int timestep)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
-        int effective = EffectiveRank(timestep);
-        var output = new Vector<T>(UpProjection.Rows);
-
-        // Trained branch minus frozen-initial branch, both masked by the same M_t.
-        AccumulateBranch(input, effective, DownProjection, UpProjection, SingularValues, output, subtract: false);
-        AccumulateBranch(input, effective, _downInit, _upInit, _singularInit, output, subtract: true);
-        return output;
-    }
-
-    /// <summary>
-    /// Adds (or subtracts) <c>B * diag(s) * M_t * A * x</c> into <paramref name="output"/>.
-    /// </summary>
-    private static void AccumulateBranch(
-        Vector<T> input, int effective,
-        Matrix<T> down, Matrix<T> up, Vector<T> singular,
-        Vector<T> output, bool subtract)
-    {
-        int inputDim = down.Columns;
-        int outputDim = up.Rows;
-
-        // Down-project into the surviving directions, scaling by the singular values as we go.
-        var latent = new double[effective];
-        for (int r = 0; r < effective; r++)
-        {
-            double sum = 0.0;
-            for (int i = 0; i < inputDim && i < input.Length; i++)
-            {
-                sum += Ops.ToDouble(down[r, i]) * Ops.ToDouble(input[i]);
-            }
-            latent[r] = sum * Ops.ToDouble(singular[r]);
-        }
+        var delta = EffectiveDeltaTransposed(timestep);
+        int inputDim = DownProjection.Columns;
+        int outputDim = UpProjection.Rows;
+        var output = new Vector<T>(outputDim);
 
         for (int o = 0; o < outputDim; o++)
         {
             double sum = 0.0;
-            for (int r = 0; r < effective; r++) sum += Ops.ToDouble(up[o, r]) * latent[r];
-            double current = Ops.ToDouble(output[o]);
-            output[o] = Ops.FromDouble(subtract ? current - sum : current + sum);
+            for (int i = 0; i < inputDim && i < input.Length; i++)
+            {
+                sum += Ops.ToDouble(delta[(i * outputDim) + o]) * Ops.ToDouble(input[i]);
+            }
+            output[o] = Ops.FromDouble(sum);
         }
+        return output;
     }
 
     /// <summary>
@@ -229,38 +297,96 @@ public sealed class TimestepDependentLora<T>
     private static (Matrix<T> down, Matrix<T> up, Vector<T> singular) OrthoLoraInit(
         int rank, int inputDim, int outputDim, Random random)
     {
-        // R ~ N(0, 1/r): standard deviation 1/sqrt(r).
+        // THIN construction. Decomposing a full [outputDim, inputDim] random matrix to keep only its
+        // trailing `rank` triplet is O(C^3) — at production SD-XL widths (C up to 1280) that is ~2e9
+        // operations PER attention block, and it took the diffusion suite from 14 seconds to 51
+        // minutes. The properties the paper actually requires of the initialization are: A with
+        // orthonormal rows, B with orthonormal columns, and a small NON-ZERO S. All three are obtained
+        // here in O(C * rank^2) instead, ~200x cheaper at those widths.
+        //
+        // Exact: the orthonormality of A and B, and S being non-zero and small. Distributional: the
+        // singular values come from the spectrum of a rank x rank Gaussian draw rather than the tail of
+        // a C x C one, so their exact law differs from the paper's while their role — a small, varied,
+        // trainable scale per direction — does not. This is an implementation deviation, recorded
+        // rather than hidden, and it is the only one in this class.
         double stdDev = 1.0 / Math.Sqrt(rank);
-        var r = new Matrix<T>(outputDim, inputDim);
-        for (int row = 0; row < outputDim; row++)
+
+        var down = OrthonormalRows(rank, inputDim, random);
+        var upTransposed = OrthonormalRows(rank, outputDim, random);
+
+        // B needs orthonormal COLUMNS, so transpose the orthonormal-rows result.
+        var up = new Matrix<T>(outputDim, rank);
+        for (int o = 0; o < outputDim; o++)
         {
-            for (int col = 0; col < inputDim; col++)
-            {
-                double u1 = 1.0 - random.NextDouble();
-                double u2 = random.NextDouble();
-                double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                r[row, col] = Ops.FromDouble(gaussian * stdDev);
-            }
+            for (int k = 0; k < rank; k++) up[o, k] = upTransposed[k, o];
         }
 
-        var svd = new SvdDecomposition<T>(r);
+        // S from the spectrum of a small rank x rank Gaussian: O(rank^3), and genuinely a spread of
+        // singular values rather than a constant, so the per-direction scales differ as they do in the
+        // paper. Ascending order, so the leading directions the rank mask keeps carry the smaller
+        // scales — matching the paper's use of the TRAILING (least-dominant) triplet.
+        var seedMatrix = new Matrix<T>(rank, rank);
+        for (int i = 0; i < rank; i++)
+        {
+            for (int j = 0; j < rank; j++) seedMatrix[i, j] = Ops.FromDouble(NextGaussian(random) * stdDev);
+        }
 
-        // Trailing `rank` triplet. S is ordered descending, so the trailing block is the tail.
-        int available = Math.Min(svd.S.Length, Math.Min(svd.U.Columns, svd.Vt.Rows));
-        int start = Math.Max(0, available - rank);
-
-        var down = new Matrix<T>(rank, inputDim);   // A_init = V_r^T -> trailing ROWS of Vt
-        var up = new Matrix<T>(outputDim, rank);    // B_init = U_r   -> trailing COLUMNS of U
-        var singular = new Vector<T>(rank);         // S_init = S_r
-
+        var spectrum = new SvdDecomposition<T>(seedMatrix).S;
+        var singular = new Vector<T>(rank);
         for (int k = 0; k < rank; k++)
         {
-            int source = start + k;
-            for (int c = 0; c < inputDim; c++) down[k, c] = svd.Vt[source, c];
-            for (int o = 0; o < outputDim; o++) up[o, k] = svd.U[o, source];
-            singular[k] = svd.S[source];
+            // SvdDecomposition orders descending; reverse so index 0 is the smallest.
+            singular[k] = spectrum[rank - 1 - k];
         }
 
         return (down, up, singular);
+    }
+
+    private static double NextGaussian(Random random)
+    {
+        double u1 = 1.0 - random.NextDouble();
+        double u2 = random.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+    }
+
+    /// <summary>
+    /// Builds a <c>[rows, columns]</c> matrix with ORTHONORMAL ROWS by modified Gram-Schmidt on
+    /// Gaussian rows. O(rows^2 * columns), which for rows = rank is linear in the ambient width.
+    /// </summary>
+    private static Matrix<T> OrthonormalRows(int rows, int columns, Random random)
+    {
+        var basis = new double[rows][];
+        for (int r = 0; r < rows; r++)
+        {
+            var row = new double[columns];
+            for (int c = 0; c < columns; c++) row[c] = NextGaussian(random);
+
+            for (int prev = 0; prev < r; prev++)
+            {
+                double dot = 0.0;
+                for (int c = 0; c < columns; c++) dot += row[c] * basis[prev][c];
+                for (int c = 0; c < columns; c++) row[c] -= dot * basis[prev][c];
+            }
+
+            double norm = 0.0;
+            for (int c = 0; c < columns; c++) norm += row[c] * row[c];
+            norm = Math.Sqrt(norm);
+
+            // rank <= min(inputDim, outputDim) is enforced in the constructor, so a degenerate row here
+            // means numerical collapse rather than an over-large rank. Redrawing would break seeded
+            // reproducibility, so leave it zero and let the orthonormality tests catch it.
+            if (norm > 1e-9)
+            {
+                for (int c = 0; c < columns; c++) row[c] /= norm;
+            }
+            basis[r] = row;
+        }
+
+        var matrix = new Matrix<T>(rows, columns);
+        for (int r = 0; r < rows; r++)
+        {
+            for (int c = 0; c < columns; c++) matrix[r, c] = Ops.FromDouble(basis[r][c]);
+        }
+        return matrix;
     }
 }

@@ -37,7 +37,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// learnable correction to what it produces. How much freedom that correction has depends on how
 /// noisy the current generation step is — that is the whole idea of T-LoRA.</para>
 /// </remarks>
-public sealed class TLoRAAttentionAdapter<T> : LayerBase<T>
+public sealed class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionBlockDecorator<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
@@ -106,7 +106,22 @@ public sealed class TLoRAAttentionAdapter<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var output = _inner.Forward(input);
+        return PostProcess(_inner.Forward(input));
+    }
+
+    /// <summary>
+    /// Adds the timestep-masked low-rank update to whatever the wrapped block produced.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="Forward"/> so a caller that must invoke the inner block through a
+    /// different signature — cross-attention needs its conditioning passed through
+    /// <c>ForwardWithContext</c> — can still get the adaptation applied. Overriding only
+    /// <c>Forward(input)</c> made this wrapper fall through the UNet's cross-attention dispatch to the
+    /// single-argument path, which discards the conditioning entirely.
+    /// </remarks>
+    public Tensor<T> PostProcess(Tensor<T> output)
+    {
+        if (output is null) throw new ArgumentNullException(nameof(output));
 
         // The adapter acts on the CHANNEL axis. Attention output is either sequence format
         // [B, S, C] or image format [B, C, H, W]; in both cases the channel axis is the one whose
@@ -130,41 +145,52 @@ public sealed class TLoRAAttentionAdapter<T> : LayerBase<T>
                 "would have no effect, which would silently disable the timestep-dependent rank schedule.");
         }
 
-        int timestep = CurrentTimestep;
         int tokens = 1;
         for (int d = 0; d < shape.Length; d++)
         {
             if (d != channelAxis) tokens *= shape[d];
         }
 
-        // Walk the flat buffer, gathering each token's channel vector, adapting it, and adding the
-        // result back. Strides are computed from the located axis so both layouts work unchanged.
-        int innerStride = 1;
-        for (int d = channelAxis + 1; d < shape.Length; d++) innerStride *= shape[d];
-        int channelStride = innerStride;
-        int outerStride = channelStride * _channels;
+        // ONE matmul for the whole block, not one per token. The delta depends only on the timestep
+        // and the current weights, so it is formed once and applied as [tokens, C] x [C, C]. Every
+        // reshape/permute goes through Engine so the gradient tape records it — direct Tensor
+        // Reshape/Transpose would bypass the tape and silently break gradient flow, which is the
+        // convention DiffusionAttention itself documents.
+        var delta = _adapter.EffectiveDeltaTransposed(CurrentTimestep);
 
-        var result = output.Clone();
-        var slice = new Vector<T>(_channels);
+        // Move the channel axis last so the flattened view is [tokens, C].
+        bool channelIsLast = channelAxis == shape.Length - 1;
+        Tensor<T> channelLast = output;
+        int[]? forwardPermutation = null;
 
-        int outerCount = tokens / Math.Max(1, innerStride);
-        for (int outer = 0; outer < outerCount; outer++)
+        if (!channelIsLast)
         {
-            for (int inner = 0; inner < innerStride; inner++)
+            forwardPermutation = new int[shape.Length];
+            int next = 0;
+            for (int d = 0; d < shape.Length; d++)
             {
-                int baseIndex = (outer * outerStride) + inner;
-                for (int c = 0; c < _channels; c++) slice[c] = output[baseIndex + (c * channelStride)];
-
-                var delta = _adapter.Apply(slice, timestep);
-                for (int c = 0; c < _channels; c++)
-                {
-                    int flat = baseIndex + (c * channelStride);
-                    result[flat] = Ops.Add(result[flat], delta[c]);
-                }
+                if (d != channelAxis) forwardPermutation[next++] = d;
             }
+            forwardPermutation[shape.Length - 1] = channelAxis;
+            channelLast = Engine.TensorPermute(output, forwardPermutation);
         }
 
-        return result;
+        var flattened = Engine.Reshape(channelLast, new[] { tokens, _channels });
+        var adapted = Engine.TensorAdd(flattened, Engine.TensorMatMul(flattened, delta));
+
+        if (channelIsLast)
+        {
+            return Engine.Reshape(adapted, shape.ToArray());
+        }
+
+        // Undo the permutation: axis j of the permuted tensor came from forwardPermutation[j].
+        var permutedShape = new int[shape.Length];
+        for (int d = 0; d < shape.Length; d++) permutedShape[d] = shape[forwardPermutation![d]];
+
+        var inverse = new int[shape.Length];
+        for (int d = 0; d < shape.Length; d++) inverse[forwardPermutation![d]] = d;
+
+        return Engine.TensorPermute(Engine.Reshape(adapted, permutedShape), inverse);
     }
 
     /// <summary>
@@ -258,6 +284,9 @@ public sealed class TLoRAAttentionAdapter<T> : LayerBase<T>
             for (int c = 0; c < up.Columns; c++) up[r, c] = parameters[index++];
         }
         for (int s = 0; s < singular.Length; s++) singular[s] = parameters[index++];
+
+        // The cached delta was computed from the weights we just replaced.
+        _adapter.InvalidateCache();
     }
 
     /// <inheritdoc/>
