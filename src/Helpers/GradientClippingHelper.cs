@@ -103,23 +103,34 @@ public static class GradientClippingHelper
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        // Compute L2 norm
-        T sumSquares = numOps.Zero;
+        // ACCUMULATE IN DOUBLE, NOT IN T. Summing squares in T overflows for a
+        // large float gradient vector: norm becomes +Infinity, the threshold test
+        // below PASSES, scale becomes maxNorm/Infinity = 0, and any non-finite
+        // element then yields Infinity * 0 = NaN -- so enabling clipping POISONED
+        // the gradients that it was turned on to protect. Measured on
+        // TableTransformer: green without clipping, "L2 distance = NaN ... collapsed
+        // to a uniform-output state" with it. The tape-path clipper in
+        // GradientBasedOptimizerBase already accumulates in double and guards the
+        // non-finite cases; this is the same computation and needs the same care.
+        double sumSquares = 0.0;
         for (int i = 0; i < gradients.Length; i++)
         {
-            sumSquares = numOps.Add(sumSquares, numOps.Multiply(gradients[i], gradients[i]));
+            double v = numOps.ToDouble(gradients[i]);
+            sumSquares += v * v;
         }
-        T norm = numOps.Sqrt(sumSquares);
+        double norm = Math.Sqrt(sumSquares);
 
-        // If norm is below threshold, return unchanged
-        T maxNormT = numOps.FromDouble(maxNorm);
-        if (!numOps.GreaterThan(norm, maxNormT))
+        // A norm that is zero or non-finite has no meaningful direction to
+        // preserve, so scaling is skipped rather than applied with a degenerate
+        // factor. Returning the gradients untouched leaves the caller exactly as
+        // well off as clipping being disabled.
+        if (norm <= maxNorm || norm == 0.0 || double.IsNaN(norm) || double.IsInfinity(norm))
         {
             return gradients.Clone();
         }
 
         // Scale gradients
-        T scale = numOps.Divide(maxNormT, norm);
+        T scale = numOps.FromDouble(maxNorm / norm);
         var clipped = new Vector<T>(gradients.Length);
         for (int i = 0; i < gradients.Length; i++)
         {
@@ -142,23 +153,25 @@ public static class GradientClippingHelper
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        // Compute L2 norm
-        T sumSquares = numOps.Zero;
+        // Accumulated in double for the reason given in ClipByNorm above: a T-typed
+        // sum of squares overflows on large float gradients, and the resulting
+        // Infinity norm turns clipping into a NaN generator instead of a safeguard.
+        double sumSquares = 0.0;
         for (int i = 0; i < gradients.Length; i++)
         {
-            sumSquares = numOps.Add(sumSquares, numOps.Multiply(gradients[i], gradients[i]));
+            double v = numOps.ToDouble(gradients[i]);
+            sumSquares += v * v;
         }
-        T norm = numOps.Sqrt(sumSquares);
+        double norm = Math.Sqrt(sumSquares);
 
-        // If norm is below threshold, no clipping needed
-        T maxNormT = numOps.FromDouble(maxNorm);
-        if (!numOps.GreaterThan(norm, maxNormT))
+        // No meaningful direction to preserve -- leave the gradients alone.
+        if (norm <= maxNorm || norm == 0.0 || double.IsNaN(norm) || double.IsInfinity(norm))
         {
             return false;
         }
 
         // Scale gradients in place
-        T scale = numOps.Divide(maxNormT, norm);
+        T scale = numOps.FromDouble(maxNorm / norm);
         for (int i = 0; i < gradients.Length; i++)
         {
             gradients[i] = numOps.Multiply(gradients[i], scale);
