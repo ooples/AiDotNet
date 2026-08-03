@@ -12118,6 +12118,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         // Keep the FP32/bounded fixture and give only this convergence probe enough
                         // steps to measure the descent described by the paper's training procedure.
                         "SeACo" => "    protected override int TrainingIterations => 5;",
+                        // SileroVad fits its training data; the family default asked too
+                        // early. TrainingError_ShouldNotExceedTestError compares MSE on the
+                        // trained example against a different random draw, and 2 (=6 updates)
+                        // lands at a ratio of 3.49 against a 3.0 bound. Measured here:
+                        //   updates  0     3     6     12    20    30    45    60
+                        //   ratio    5.19  4.19  3.49  2.66  1.72  0.70  0.02  0.00
+                        // It is 5.19 BEFORE a single update -- the two random target draws
+                        // have different spreads, so the early numbers say nothing about fit.
+                        // The model does fit: train MSE falls monotonically to 0.000000 while
+                        // test MSE rises. 7 (=21 updates) sits at ~1.7, inside the bound
+                        // rather than straddling it.
+                        "SileroVad" => "    protected override int TrainingIterations => 7;",
                         _ => "    protected override int TrainingIterations => 2;",
                     });
                     // Chirp3 and ParaformerLarge have a measured Adam warm-up transient: the loss rises
@@ -13203,7 +13215,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
         }
 
-        // Upscale4KAgent is already FP32 in the U-Z resource shard, but its repeated
+      // Upscale4KAgent is already FP32 in the U-Z resource shard, but its repeated
         // super-resolution training probes still exceeded their watchdogs. Keep the agent/model
         // fixture intact and cap only optimizer-step counts before considering any fixture shrink.
         if (model.ClassName == "Upscale4KAgent")
