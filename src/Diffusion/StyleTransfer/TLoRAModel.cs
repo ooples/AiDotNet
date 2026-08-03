@@ -167,14 +167,31 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
         var random = seed.HasValue ? new Random(seed.Value) : new Random();
         int horizon = Math.Max(1, Scheduler.TrainTimesteps);
 
-        _predictor.DecorateAttentionBlocks((block, isCrossAttention) =>
+        _predictor.DecorateAttentionBlocks((block, channels, isCrossAttention) =>
         {
-            // The adapter acts on the block's output width. The output shape's channel axis is the
-            // last non-unit dimension for sequence format and index 1 for image format; the block
-            // reports its own output shape, so take the width from there rather than assuming.
-            var shape = block.GetOutputShape();
-            int channels = shape.Length == 4 ? shape[1] : shape[shape.Length - 1];
-            if (channels <= 0) return block;
+            // ADOPT, never re-wrap. Clone() hands the constructor an ALREADY-decorated predictor
+            // (cloning the resolved sub-models is what keeps clone shapes lined up), so wrapping again
+            // would stack an adapter on an adapter and double the predictor's parameter count —
+            // measured as "SetParameterChunks chunk length 16448 does not match layer parameter length
+            // 24704" from Clone_ShouldProduceIdenticalOutput. Injection has to be idempotent.
+            if (block is TLoRAAttentionAdapter<T> alreadyAdapted)
+            {
+                adapters.Add(alreadyAdapted);
+                return block;
+            }
+
+            // The width comes from the predictor, which recorded it when it built the block. It is
+            // NOT read from GetOutputShape(): that answers differently before and after lazy shape
+            // resolution, so a fresh model and its clone (built from a resolved predictor) decorated
+            // DIFFERENT sets of blocks, and every parameter chunk after the first divergence landed on
+            // the wrong layer — "chunk length 16448 does not match layer parameter length 24704".
+            if (channels <= 0)
+            {
+                throw new InvalidOperationException(
+                    "The predictor reported a non-positive attention width, so the T-LoRA adapter cannot " +
+                    "be sized. Skipping the block instead would decorate an inconsistent subset and " +
+                    "silently misalign parameter chunks between a model and its clone.");
+            }
 
             var adapter = new TLoRAAttentionAdapter<T>(
                 inner: block, channels: channels, rank: _adapterRank,
