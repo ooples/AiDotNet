@@ -13,37 +13,44 @@ using AiDotNet.NeuralNetworks;
 namespace AiDotNet.Diffusion.StyleTransfer;
 
 /// <summary>
-/// T-LoRA model for temporal LoRA-based style transfer with video-consistent stylization.
+/// T-LoRA: timestep-dependent low-rank adaptation for customizing a diffusion model from a SINGLE
+/// image without overfitting to it.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// T-LoRA extends LoRA-based style transfer to video by incorporating temporal consistency
-/// constraints. Style is applied uniformly across frames while respecting temporal coherence,
-/// preventing flickering artifacts common in frame-by-frame stylization.
+/// Soboleva, Alanov, Kuznetsov and Sobolev, "T-LoRA: Single Image Diffusion Model Customization
+/// Without Overfitting" (arXiv:2507.05964). Fine-tuning "frequently suffers from overfitting when
+/// training samples are limited, compromising both generalization capability and output diversity",
+/// and this paper takes the hardest version of that: adapting "using just a single concept image".
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> T-LoRA applies artistic styles to videos without flickering.
-/// Normal style transfer applied frame-by-frame causes shimmer and inconsistency.
-/// T-LoRA ensures each frame has the same style applied smoothly, making the video
-/// look like it was painted by the same artist throughout.
+/// <b>PURPOSE CHANGE.</b> This class previously described "temporal LoRA-based style transfer with
+/// video-consistent stylization" — applying an artistic style across video frames without flicker.
+/// The real T-LoRA is not that. It is single-image CONCEPT personalization: teaching a model a new
+/// object from one photo while keeping its diversity. The two share only the letters. The citation
+/// this replaced pointed at arXiv:2405.12345, which is a functional-analysis paper on the learning
+/// behaviour of paradise fish.
+/// </para>
+/// <para>
+/// <b>Two innovations, both implemented in <see cref="TimestepDependentLora{T}"/>.</b>
+/// </para>
+/// <list type="number">
+/// <item><description><b>A timestep-dependent rank schedule.</b> "Higher diffusion timesteps are
+/// more prone to overfitting than lower ones", so the adapter is given fewer directions exactly
+/// there and full rank at low timesteps where it is refining detail.</description></item>
+/// <item><description><b>Orthogonal initialization</b>, "a weight parametrization technique that
+/// ensures independence between adapter components". This is what makes the schedule bite: masking
+/// the tail of a set of CORRELATED directions removes no capacity, because the survivors still span
+/// what was masked.</description></item>
+/// </list>
+/// <para>
+/// <b>For Beginners:</b> Show a picture generator one photo of your dog and ask it to learn "your
+/// dog", and it will usually memorize that exact photo — same pose, same background, every time. The
+/// memorizing happens mainly in the noisy early stage of generation, so this gives the model fewer
+/// adjustable directions during that stage and all of them later, when it is only adding detail.
 /// </para>
 /// </remarks>
-/// <example>
-/// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 25 };
-/// var model = new TLoRAModel&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
-/// var stylized = model.Predict(input);
-/// </code>
-/// </example>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.Diffusion)]
-[ModelTask(ModelTask.StyleTransfer)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("T-LoRA: Text-to-Image Style Transfer with Low-Rank Adaptation", "https://arxiv.org/abs/2405.12345")]
 public class TLoRAModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
