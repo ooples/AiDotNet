@@ -3691,6 +3691,57 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Swaps a registered trainable tensor for a replacement, keeping its POSITION in the
+    /// registration order.
+    /// </summary>
+    /// <param name="existing">The currently-registered tensor to replace.</param>
+    /// <param name="replacement">The tensor taking its place.</param>
+    /// <param name="role">The role to register <paramref name="replacement"/> under.</param>
+    /// <returns>
+    /// <c>true</c> if <paramref name="existing"/> was registered and has been replaced;
+    /// <c>false</c> if it was not registered, in which case nothing changed.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Use this instead of <see cref="UnregisterTrainableParameter"/> followed by
+    /// <see cref="RegisterTrainableParameter"/> whenever a layer rebinds a parameter FIELD to a new
+    /// tensor (a resize or shape correction). Register appends, so the unregister/register pair
+    /// moves the parameter to the END of the list. That reordering is silently destructive:
+    /// <see cref="SetTrainableParameters"/> pairs the incoming list with <c>_registeredTensors</c>
+    /// BY INDEX against the order <see cref="GetTrainableParameters"/> returns, so a layer whose
+    /// registration order no longer matches its field order gets its parameters transposed on the
+    /// next copy-on-write clone — a DenseLayer would receive its biases as weights.
+    /// </para>
+    /// <para>
+    /// Rebinding a field without calling this leaves the engine holding a persistent handle on a
+    /// tensor no forward reads: on a GPU engine the live weights are never marked persistent,
+    /// disposal unregisters the wrong tensor, and the dead one stays reachable for the layer's
+    /// lifetime.
+    /// </para>
+    /// </remarks>
+    protected bool ReplaceTrainableParameter(
+        Tensor<T> existing, Tensor<T> replacement, PersistentTensorRole role)
+    {
+        if (existing is null || replacement is null || ReferenceEquals(existing, replacement))
+            return false;
+
+        for (int i = 0; i < _registeredTensors.Count; i++)
+        {
+            if (!ReferenceEquals(_registeredTensors[i], existing))
+                continue;
+
+            Engine.UnregisterPersistentTensor(existing);
+            Engine.RegisterPersistentTensor(replacement, role);
+            _registeredTensors[i] = replacement;
+            _registeredTensorRoles[i] = role;
+            _cachedParameterCount = -1;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Registers a child layer for automatic discovery by the recursive parameter collection system.
     /// This is the equivalent of assigning an <c>nn.Module</c> as an attribute in PyTorch —
     /// the framework automatically discovers it via <see cref="GetSubLayers"/>.
