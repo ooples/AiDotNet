@@ -18327,32 +18327,83 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for an AttentionAllocation model.
+    /// Shared cross-asset attention trunk for the portfolio allocators, WITHOUT an output head.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultAttentionAllocationLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 50,
-        int hiddenDimension = 128,
-        int numHeads = 4,
-        int numAssets = 100,
-        int sequenceLength = 60,
-        double dropoutRate = 0.1)
+    /// <remarks>
+    /// The head is left to the caller because the two allocators normalize differently and the choice
+    /// is load-bearing, not cosmetic — see
+    /// <see cref="CreateDefaultSignatureInformedTransformerLayers"/> and
+    /// <see cref="CreateDefaultGraphAttentionPortfolioLayers"/>.
+    /// </remarks>
+    private static IEnumerable<ILayer<T>> CreatePortfolioAttentionTrunk(
+        int hiddenDimension, int numHeads, double dropoutRate)
     {
         // Input embedding
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new LayerNormalizationLayer<T>();
 
         // Attention for cross-asset relationships
-        yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDimension) / (numHeads));
+        yield return new MultiHeadAttentionLayer<T>(numHeads, hiddenDimension / numHeads);
         yield return new LayerNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(hiddenDimension * 2, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
         yield return new LayerNormalizationLayer<T>();
+    }
 
-        // Allocation output
-        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    /// <summary>
+    /// Creates default layers for a SignatureInformedTransformer (arXiv:2510.03129).
+    /// </summary>
+    /// <remarks>
+    /// The output head is LINEAR, with no activation, because the model's own
+    /// <c>CVaRPortfolioObjective.Weights</c> applies the paper's tempered softmax
+    /// <c>softmax(scores / tau)</c>. A softmax in the head as well would apply it TWICE: tau would then
+    /// operate on values already squashed into (0, 1) and summing to 1, so the paper's reported interior
+    /// optimum near tau = 1.3 would no longer mean anything.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSignatureInformedTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 64,
+        int numHeads = 8,
+        int numAssets = 30,
+        int sequenceLength = 60,
+        double dropoutRate = 0.1)
+    {
+        foreach (var layer in CreatePortfolioAttentionTrunk(hiddenDimension, numHeads, dropoutRate))
+            yield return layer;
+
+        // Raw scores; the tempered softmax lives in the objective.
+        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a GraphAttentionPortfolio (arXiv:2407.15532).
+    /// </summary>
+    /// <remarks>
+    /// The output head uses ReLU, NOT softmax, and that is the point of the paper's allocation
+    /// mechanism. Its "Importance Layer" merely sum-normalizes (<c>w_u = s_u / sum_v s_v</c>), so the
+    /// sparsity has to come from the scores themselves: ReLU produces EXACT zeros, and a zero score
+    /// becomes a zero weight, dropping the firm from the portfolio. A softmax head cannot emit a zero,
+    /// so every asset would receive a sliver of capital — precisely the "many tiny holdings" the paper
+    /// rejected softmax to avoid.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphAttentionPortfolioLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 192,
+        int numHeads = 8,
+        int numAssets = 30,
+        int sequenceLength = 756,
+        double dropoutRate = 0.1)
+    {
+        foreach (var layer in CreatePortfolioAttentionTrunk(hiddenDimension, numHeads, dropoutRate))
+            yield return layer;
+
+        // Non-negative scores with exact zeros, which the sum-normalizing allocation layer turns into
+        // a sparse, long-only, fully invested portfolio.
+        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new ReLUActivation<T>());
     }
 
     /// <summary>
