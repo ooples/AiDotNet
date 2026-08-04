@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -545,11 +545,21 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         if (_embeddingSize < 0)
         {
-            _embeddingSize = input.Shape[input.Shape.Length - 1];
-            if (_embeddingSize % _numHeads != 0)
+            // Validate into a local and commit only on success. Assigning first and throwing after
+            // left the rejected value behind, and ResolveLazyLayerShapes swallows probe exceptions
+            // by design -- so a probe that was correctly refused still poisoned the layer. On the
+            // next, legitimate forward the `< 0` guard no longer held, the divisibility check was
+            // skipped entirely, and the bad size flowed into EnsureInitialized as
+            // _embeddingSize / _numHeads == 0. Nougat surfaced this as "headDimension must be
+            // positive, got 0" from deep inside MultiHeadAttentionLayer's constructor, six failures
+            // away from the readable message this method had already produced and discarded.
+            int probedEmbeddingSize = input.Shape[input.Shape.Length - 1];
+            if (probedEmbeddingSize % _numHeads != 0)
                 throw new ArgumentException(
-                    $"Resolved embeddingSize ({_embeddingSize}) must be evenly divisible by " +
-                    $"numHeads ({_numHeads}); got remainder {_embeddingSize % _numHeads}.");
+                    $"Resolved embeddingSize ({probedEmbeddingSize}) must be evenly divisible by " +
+                    $"numHeads ({_numHeads}); got remainder {probedEmbeddingSize % _numHeads}.");
+
+            _embeddingSize = probedEmbeddingSize;
         }
 
         // The encoder preserves its input's sequence length instead of fixing one, so committing to
