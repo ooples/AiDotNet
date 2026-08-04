@@ -467,6 +467,45 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 higherIsBetter: FitnessCalculator.IsHigherScoreBetter);
         }
 
+        // Nothing configured and no adaptive rule: install warmup-then-cosine-decay rather than
+        // leaving the run at a flat rate. Every modern recipe warms up and decays -- Transformer,
+        // BERT, GPT, ResNet/ViT -- and a beginner who passes no options should get that. A constant
+        // rate was never a considered default; it was what "null scheduler" happened to mean.
+        //
+        // The length is derived, not fixed, and that is the load-bearing part. A fixed warmup of a
+        // few hundred steps would hold the rate near zero for the WHOLE of a short run, so a model
+        // that trains for two steps would not train at all -- turning green assertions like
+        // "training changes parameters" red everywhere. Ten percent of the planned budget, floored
+        // at 1 and capped, scales with whatever the caller actually intends to run.
+        if (_learningRateScheduler is null && options.UseDefaultLearningRateSchedule)
+        {
+            int budget = Math.Max(1, options.MaxIterations);
+            int warmupSteps = (int)Math.Round(budget * options.DefaultWarmupFraction);
+            warmupSteps = Math.Max(1, Math.Min(warmupSteps, options.DefaultWarmupStepCap));
+
+            // Cosine needs somewhere to decay INTO; if the budget is all warmup there is no decay
+            // phase and LinearWarmupScheduler rejects totalSteps < warmupSteps for a non-constant
+            // mode. Hold flat after warmup in that case, which is also what the diffusion recipes do.
+            var decayMode = budget > warmupSteps
+                ? LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Cosine
+                : LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Constant;
+
+            // Start the ramp at base/warmupSteps, NOT at zero. LinearWarmupScheduler's default
+            // warmupInitLr of 0.0 makes ComputeLearningRate(0) return exactly 0, so the first
+            // optimizer step is a guaranteed no-op -- "No parameters changed after training" on any
+            // run short enough that step 0 is most of it, and a silently wasted iteration on every
+            // run that is not. PyTorch's usual warmup convention is (step + 1) / warmupSteps, whose
+            // first step is base/warmupSteps; this reproduces that shape.
+            double warmupInitLr = GradientOptions.InitialLearningRate / warmupSteps;
+
+            _learningRateScheduler = new LearningRateSchedulers.LinearWarmupScheduler(
+                baseLearningRate: GradientOptions.InitialLearningRate,
+                warmupSteps: warmupSteps,
+                totalSteps: Math.Max(budget, warmupSteps),
+                warmupInitLr: warmupInitLr,
+                decayMode: decayMode);
+        }
+
         _schedulerStepMode = options.SchedulerStepMode;
 
         // Use scheduler's current learning rate if available, otherwise use initial rate
