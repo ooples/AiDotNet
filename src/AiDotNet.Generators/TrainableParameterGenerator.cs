@@ -134,7 +134,19 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated ||
                                      field.Type.NullableAnnotation == NullableAnnotation.Annotated;
-                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable));
+                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: false));
+                }
+                // ...and sub-layers held in a COLLECTION. A composite that keeps its children in a
+                // List<> got no registration at all, so GetSubLayers() returned nothing for them and
+                // the recursive parameter walk never reached their weights: they were built, they ran
+                // in Forward, and they silently never trained. CitrinetBlockLayer reported 0 children
+                // while holding 9. This is what PyTorch's nn.ModuleList exists to prevent -- a plain
+                // Python list of modules is likewise invisible to .parameters().
+                else if (!field.IsStatic && IsLayerCollectionType(field.Type))
+                {
+                    var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated ||
+                                     field.Type.NullableAnnotation == NullableAnnotation.Annotated;
+                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: true));
                 }
             }
 
@@ -525,7 +537,20 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("        _subLayersRegistered = true;");
             foreach (var sl in subLayerFields)
             {
-                if (sl.IsNullable)
+                if (sl.IsCollection)
+                {
+                    // Null-guarded regardless of annotation: a collection field can legitimately be
+                    // left unassigned on a branch the constructor did not take, and RegisterSubLayer
+                    // is identity-based and idempotent, so re-walking a list is harmless.
+                    sb.AppendLine($"        if ({sl.Name} is not null)");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            foreach (var __sub in {sl.Name})");
+                    sb.AppendLine("            {");
+                    sb.AppendLine("                if (__sub is not null) RegisterSubLayer(__sub);");
+                    sb.AppendLine("            }");
+                    sb.AppendLine("        }");
+                }
+                else if (sl.IsNullable)
                     sb.AppendLine($"        if ({sl.Name} is not null) RegisterSubLayer({sl.Name});");
                 else
                     sb.AppendLine($"        RegisterSubLayer({sl.Name});");
@@ -608,6 +633,28 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 return true;
             current = current.BaseType;
         }
+        return false;
+    }
+
+    /// <summary>
+    /// True for a field holding MANY sub-layers: TLayer[], List&lt;TLayer&gt;, IReadOnlyList&lt;TLayer&gt;
+    /// and friends, where TLayer satisfies <see cref="IsLayerType"/>.
+    /// </summary>
+    private static bool IsLayerCollectionType(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol array)
+            return IsLayerType(array.ElementType);
+
+        if (type is INamedTypeSymbol named && named.IsGenericType && named.TypeArguments.Length == 1)
+        {
+            // Only walk types that are actually enumerable, so a Func<TLayer> or similar
+            // single-argument generic is not mistaken for a collection of layers.
+            var enumerable = named.AllInterfaces.Any(i =>
+                i.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>");
+            if (enumerable && IsLayerType(named.TypeArguments[0]))
+                return true;
+        }
+
         return false;
     }
 
@@ -709,5 +756,5 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     /// </summary>
     private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null, bool Optional = false);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
-    private record struct SubLayerFieldInfo(string Name, bool IsNullable);
+    private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection);
 }
