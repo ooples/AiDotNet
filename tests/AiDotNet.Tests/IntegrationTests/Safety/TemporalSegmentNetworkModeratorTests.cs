@@ -104,7 +104,7 @@ public class TemporalSegmentNetworkModeratorTests
     public void EveryConsensusFunction_IsAccepted_AndDeterministic()
     {
         var frames = Frames(60);
-        foreach (SegmentalConsensus consensus in Enum.GetValues<SegmentalConsensus>())
+        foreach (SegmentalConsensus consensus in (SegmentalConsensus[])Enum.GetValues(typeof(SegmentalConsensus)))
         {
             var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 4, consensus: consensus);
             var first = moderator.EvaluateVideo(frames, 30.0);
