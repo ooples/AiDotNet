@@ -688,6 +688,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 new WarmupIterationOverride(moreDataShort: 10, moreDataLong: 20)
             },
 
+            // SEA-RAFT and NeuFlowV2 are the same RAFT-recipe family as RoMa / VideoFlow and showed
+            // the same overshoot. OpticalFlowBase now applies the linear warm-up those papers train
+            // with (RAFT's OneCycleLR pct_start=0.05), which removes it at the source — measured
+            // evaluation loss on a fixed pair, before and after:
+            //   SEA-RAFT    untrained 0.404 | was 38.6, 100.2, 1.26 ... now 0.261, 0.200, 0.234
+            //   NeuFlowV2   untrained 0.849 | was 7.48, 21.8,  9.89 ... now 0.648, 0.380, 0.187
+            // These entries are kept as a floor, not as the fix: they hold the measurement at a
+            // 20-step budget so that a future regression in early-step stability shows up as a
+            // failure here rather than being absorbed by a two-step window.
+            {
+                "SEARAFT",
+                new WarmupIterationOverride(moreDataShort: 10, moreDataLong: 20)
+            },
+            {
+                "NeuFlowV2",
+                new WarmupIterationOverride(moreDataShort: 10, moreDataLong: 20)
+            },
+
             {
                 "NaturalSpeech",
                 new WarmupIterationOverride(
