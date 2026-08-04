@@ -85,8 +85,13 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         int[] baseChannels = { 64, 128, 256, 512 };
         OutputChannels = baseChannels.Select(c => c * expansion).ToArray();
 
-        // Stem 7×7 conv stride=2 — input depth resolves lazily.
-        _conv1 = new ConvolutionalLayer<T>(outputDepth: 64, kernelSize: 7, stride: 2, padding: 3);
+        // Stem 7×7 conv stride=2. The input channel count is a constructor argument, so give it to
+        // the layer instead of making it re-derive the same number from the first batch — this is
+        // torchvision's nn.Conv2d(in_channels, 64, kernel_size=7, ...). Sizing it here means
+        // ParameterCount and GetParameters are exact before any data flows, and the weights are
+        // allocated once rather than materialized mid-forward.
+        _conv1 = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: inChannels, outputDepth: 64, kernelSize: 7, stride: 2, padding: 3);
 
         int[] blockCounts = GetBlockCounts(variant);
         int currentChannels = 64;
@@ -380,20 +385,24 @@ internal class ResidualBlock<T>
         _activation = activation;
         int expansion = useBottleneck ? 4 : 1;
 
+        // Every fan-in here is already known from inChannels and the block's own widths, so size the
+        // convolutions up front rather than deferring to the first forward (torchvision's
+        // BasicBlock / Bottleneck pass in_channels explicitly for exactly these convs).
         if (useBottleneck)
         {
-            _conv1 = new ConvolutionalLayer<T>(outChannels, kernelSize: 1, stride: 1, padding: 0);
-            _conv2 = new ConvolutionalLayer<T>(outChannels, kernelSize: 3, stride: stride, padding: 1);
-            _conv3 = new ConvolutionalLayer<T>(outChannels * expansion, kernelSize: 1, stride: 1, padding: 0);
+            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 1, stride: 1, padding: 0);
+            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels, kernelSize: 3, stride: stride, padding: 1);
+            _conv3 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 1, stride: 1, padding: 0);
         }
         else
         {
-            _conv1 = new ConvolutionalLayer<T>(outChannels, kernelSize: 3, stride: stride, padding: 1);
-            _conv2 = new ConvolutionalLayer<T>(outChannels * expansion, kernelSize: 3, stride: 1, padding: 1);
+            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 3, stride: stride, padding: 1);
+            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 3, stride: 1, padding: 1);
         }
 
         if (downsample)
-            _downsample = new ConvolutionalLayer<T>(outChannels * expansion, kernelSize: 1, stride: stride, padding: 0);
+            _downsample = ConvolutionalLayer<T>.WithInputDepth(
+                inChannels, outChannels * expansion, kernelSize: 1, stride: stride, padding: 0);
     }
 
     public Tensor<T> Forward(Tensor<T> input)
