@@ -98,7 +98,7 @@ public class MedGANMechanismTests
         var augmented = model.ApplyMinibatchAveraging(records);
 
         // Width doubles: [x_i ; xbar].
-        Assert.Equal([5, Width * 2], augmented.Shape);
+        Assert.Equal([5, Width * 2], augmented.Shape.ToArray());
         Assert.Equal(Width * 2, model.DiscriminatorInputWidth);
 
         for (int j = 0; j < Width; j++)
@@ -151,7 +151,7 @@ public class MedGANMechanismTests
         var records = Batch(rows: 5, cols: Width);
 
         Assert.Equal(Width, model.DiscriminatorInputWidth);
-        Assert.Equal([5, Width], model.ApplyMinibatchAveraging(records).Shape);
+        Assert.Equal([5, Width], model.ApplyMinibatchAveraging(records).Shape.ToArray());
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public class MedGANMechanismTests
 
         var latent = model.GeneratorForwardBatched(z, isTraining: false);
 
-        Assert.Equal([6, Embedding], latent.Shape);
+        Assert.Equal([6, Embedding], latent.Shape.ToArray());
         Assert.Equal(Embedding, model.NoiseDimension);
     }
 
@@ -178,7 +178,7 @@ public class MedGANMechanismTests
             model.GeneratorForwardBatched(z, isTraining: false), applyOutputActivation: true);
         var synthesized = model.SynthesizeForDiscriminator(z, isTraining: false);
 
-        Assert.Equal([6, Width], synthesized.Shape);
+        Assert.Equal([6, Width], synthesized.Shape.ToArray());
         for (int i = 0; i < synthesized.Length; i++)
         {
             Assert.Equal(viaComposition[i], synthesized[i], 12);
@@ -220,7 +220,7 @@ public class MedGANMechanismTests
         var records = Batch(rows: 5, cols: Width);
 
         var scores = model.DiscriminatorForwardBatched(records);
-        Assert.Equal([5, 1], scores.Shape);
+        Assert.Equal([5, 1], scores.Shape.ToArray());
 
         // No BatchNorm: with parameters zeroed the logits are exactly zero. A BatchNorm would
         // normalize the zero pre-activations by their (zero) variance and produce something else.
