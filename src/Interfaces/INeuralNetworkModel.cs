@@ -33,6 +33,33 @@ namespace AiDotNet.Interfaces;
 public interface INeuralNetworkModel<T> : INeuralNetwork<T>, IDisposable
 {
     /// <summary>
+    /// Gets whether some layer will have trainable parameters but cannot size them until it sees
+    /// its first input.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Distinguishes "this model has no learnable parameters" from "this model's parameters are not
+    /// sized yet", without forcing a forward pass to find out. A convolution cannot size its kernels
+    /// before it knows the input depth, so a model built from deferred-shape layers legitimately
+    /// reports <c>ParameterCount == 0</c> until then.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Some layers work out how big their weights need to be from the first
+    /// piece of data they see, rather than when you build them. Until that happens the model cannot
+    /// tell you how many parameters it has — not because it has none, but because the answer does
+    /// not exist yet. This property is how you tell those two situations apart.
+    /// </para>
+    /// <para>
+    /// The equivalent of PyTorch's <c>LazyModuleMixin.has_uninitialized_params()</c>. PyTorch makes
+    /// the count itself unavailable in this state (<c>UninitializedParameter.numel()</c> raises);
+    /// reporting an exact count when it is knowable and this flag when it is not answers both
+    /// questions without ever returning a number that contradicts
+    /// <c>GetParameters()</c>.
+    /// </para>
+    /// </remarks>
+    bool HasUninitializedParameters { get; }
+
+    /// <summary>
     /// Gets the intermediate activations from each layer when processing the given input with named keys.
     /// </summary>
     /// <param name="input">The input tensor to process through the network.</param>

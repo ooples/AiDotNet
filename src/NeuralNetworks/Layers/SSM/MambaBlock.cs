@@ -836,6 +836,12 @@ internal partial class MambaBlock<T> : LayerBase<T>
         metadata["InnerDimension"] = _innerDimension.ToString();
         metadata["ConvKernelSize"] = _convKernelSize.ToString();
         metadata["DtRank"] = _dtRank.ToString();
+        // Publish the CONSTRUCTOR argument, not just the derived width. Reconstruction calls the
+        // ctor, whose parameter is expandFactor; it cannot use InnerDimension. Without this key the
+        // rebuilt block silently fell back to the ctor default of 2, so any model configured with a
+        // different factor came back double-width and rejected its own saved parameters
+        // ("Expected 40920 parameters, got 20472" restoring a TimeMachine, whose factor is 1).
+        metadata["ExpandFactor"] = (_modelDimension > 0 ? _innerDimension / _modelDimension : 1).ToString();
         return metadata;
     }
 

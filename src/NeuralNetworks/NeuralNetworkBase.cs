@@ -2010,6 +2010,52 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
     }
 
+    /// <summary>
+    /// <c>true</c> when some layer will have trainable parameters but cannot size them until it
+    /// sees its first input.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Lets callers tell "this model has no learnable parameters" apart from "this model's
+    /// parameters are not sized yet", without forcing a forward pass to find out. That distinction
+    /// is why <see cref="ConvolutionalLayer{T}.ParameterCount"/> no longer reports a guess for a
+    /// deferred convolution: the guess kept an existence check passing but contradicted
+    /// <see cref="GetParameters"/>, which returns nothing for the same layer.
+    /// </para>
+    /// <para>
+    /// PyTorch exposes the same question as <c>LazyModuleMixin.has_uninitialized_params()</c>; there
+    /// the count itself is unavailable (<c>UninitializedParameter.numel()</c> raises), so callers
+    /// have to branch on the predicate anyway. Answering both — an exact count when it is knowable,
+    /// and this flag when it is not — is strictly more informative and costs one walk of the layer
+    /// list.
+    /// </para>
+    /// </remarks>
+    public virtual bool HasUninitializedParameters
+    {
+        get
+        {
+            foreach (var layer in Layers)
+            {
+                if (LayerHasUninitializedParameters(layer)) return true;
+            }
+            return false;
+        }
+    }
+
+    private static bool LayerHasUninitializedParameters(ILayer<T> layer)
+    {
+        if (layer is Layers.LayerBase<T> lb && lb.HasUninitializedParameters) return true;
+
+        // Composite layers hold their children out of the top-level list, so the walk has to
+        // descend the same way parameter collection does.
+        var subLayers = layer.GetSubLayers();
+        for (int i = 0; i < subLayers.Count; i++)
+        {
+            if (LayerHasUninitializedParameters(subLayers[i])) return true;
+        }
+        return false;
+    }
+
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
