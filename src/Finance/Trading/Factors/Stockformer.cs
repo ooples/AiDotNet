@@ -1,4 +1,7 @@
 using AiDotNet.Attributes;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Optimizers;
+using AiDotNet.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
@@ -128,7 +131,30 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
                 InitialLearningRate = _options.LearningRate,
                 Beta1 = 0.9,
                 Beta2 = 0.999,
+                // Transformers are trained with a learning-rate warm-up essentially without
+                // exception — it is in the original "Attention Is All You Need" schedule and every
+                // descendant since, because the first updates land while the attention softmax is
+                // still near-uniform and the resulting steps are larger than the loss surface
+                // supports. This model took the full rate from step one.
+                //
+                // The instability was hidden rather than absent: BuildArchitecture applied no seed,
+                // so the initialisation differed on every construction and Training_ShouldReduceLoss
+                // sampled a fresh starting point each run. Seeding construction made the model
+                // reproducible and turned that into a deterministic failure (loss rising
+                // 0.0167 -> 0.1763). The warm-up removes the cause instead of re-hiding it behind an
+                // unseeded RNG.
+                LearningRateScheduler = new LinearWarmupScheduler(
+                    baseLearningRate: _options.LearningRate,
+                    warmupSteps: WarmupSteps,
+                    totalSteps: 0,
+                    // One step's worth rather than 0, so the first update is not a no-op.
+                    warmupInitLr: _options.LearningRate / WarmupSteps,
+                    decayMode: LinearWarmupScheduler.DecayMode.Constant),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             });
+
+    /// <summary>Linear warm-up length, in optimizer steps, before the full learning rate applies.</summary>
+    private const int WarmupSteps = 5;
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
 
@@ -474,11 +500,27 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// </para>
     /// </remarks>
     private static NeuralNetworkArchitecture<T> BuildArchitecture(StockformerOptions<T> options)
+        // BOTH halves of this are load-bearing and were found independently.
+        //
+        // TwoDimensional with inputHeight/inputWidth: the family derives the fed input shape from
+        // GetArchitecture().GetInputShape(), and TwoDimensional maps to [InputHeight, InputWidth], so
+        // this produces [batch, sequence, features]. The previous inputFeatures-only form described a
+        // flat vector with no time axis and callers were handed a SINGLE timestep, which no wavelet
+        // window can be built from.
+        //
+        // RandomSeed: NeuralNetworkBase reads it to give every layer a deterministic seed. Without it
+        // each layer initialised from an unseeded RNG and two models built from identical options
+        // disagreed from the first prediction, so StockformerOptions' documented "reference seed of 1"
+        // applied to nothing. Mirrors FactorVAE, the sibling in this folder.
         => new(inputType: InputType.TwoDimensional,
                taskType: NeuralNetworkTaskType.Regression,
                inputHeight: Math.Max(2, options.SequenceLength),
                inputWidth: Math.Max(1, options.NumFeatures),
-               outputSize: Math.Max(1, options.NumAssets));
+               outputSize: Math.Max(1, options.NumAssets))
+        {
+            RandomSeed = options.Seed ?? 1,
+        };
+
 
     /// <summary>Lifts each scalar band value to the model width through the lift layer.</summary>
     /// <summary>Projects the D input factors to the model width, through the lift layer.</summary>
