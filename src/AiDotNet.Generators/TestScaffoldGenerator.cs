@@ -1843,6 +1843,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         //   AudioPaLM           24s — emits counts + memorization
         //   AudioEventDetector  18s — emits MoreDataTolerance
     };
+    // Fixtures whose MoreData probe lands INSIDE the optimizer warm-up hump at the
+    // 1-vs-2 window, so the invariant measures a transient rather than a training
+    // trend and its verdict flips with the seed.
+    //
+    // Measured on VideoFlow's generated fixture (64x64, float, seed 42) -- the whole
+    // curve, not just the two points the assertion prints:
+    //
+    //     iter  0: 0.3126 (untrained)   iter  9: 0.5196
+    //     iter  1: 5.0345 <- 16x spike  iter 10: 0.8037
+    //     iter  2: 0.6341               iter 12: 0.1363
+    //     iter  8: 0.0962               iter 40: 0.0830 (converged)
+    //
+    // The first update overshoots 16x above the UNTRAINED loss, with a second
+    // excursion at 9-11. CI read 23.86 -> 100.66 here while a local run of the same
+    // fixture read 5.03 -> 0.63: same code, opposite verdict, because 1-vs-2 samples
+    // the hump. 10/40 clears it with ~10x margin (0.8037 -> 0.0830) and costs 50
+    // updates rather than the base 250 -- a MoreData probe measured at 102 s for the
+    // default 50/200 comes in around 20 s.
+    //
+    // This is the same warm-up reasoning the HeavyTrainingTimeout branch already
+    // applies to TrainingIterations (1 -> 5); it was simply never applied to MoreData.
+    private static readonly System.Collections.Generic.HashSet<string> WarmUpClearingMoreDataClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        "VideoFlow", "NeuFlowV2", "RoMa", "SEARAFT",
+    };
+
 
     // These #1789 fixtures already use FP32 and public scaffold-scale model options, but the
     // base class's 50/200-step and 100-step convergence probes still exceed the CI timeout.
@@ -3104,7 +3131,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         => className == "FlamingoNeuralNetwork" ? 32
          : className == "MiniGPT4" ? 28
          : className is "DEVA" or "DepthAnythingV2" or "FLIP" or "GeminiVision" or "Gemma3" or "ImageBindNeuralNetwork" or "InternVL" or "InternVL2" or "InternVL25" or "InternVL3"
-             or "OneFormer" or "OpenCLIP" or "Pix2Struct" or "SEEM" or "ShowO" or "ShowO2" or "SigLIP2" or "MetaCLIP" ? 32
+             or "Mask2Former" or "MaskAdapter" or "OneFormer" or "OpenCLIP" or "Pix2Struct"
+             or "SAM" or "SAM21" or "SEEM" or "ShowO" or "ShowO2" or "SigLIP2" or "SlimSAM" or "MetaCLIP" ? 32
          // Shard M MedS-Meta: these three are already <float> AND already carry iteration caps from
          // their family branches, and their probes still overran the 120/180 s gate (MetaCLIP alone
          // failed 8 invariants). Neither exposes a usable width knob — MedSAMModelSize declares only
@@ -4612,6 +4640,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "options: new AiDotNet.ComputerVision.Segmentation.Diffusion.DiffCutSegmentationOptions { " +
                     "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 8 })";
+            }
+            else if (model.ClassName == "SAM2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Segmentation.", System.StringComparison.Ordinal))
+            {
+                // The video fixture below supplies [4, 3, 32, 32], but the parameterless SAM2
+                // constructor declares 256x256. SAM2 upsamples its low-resolution mask to the
+                // architecture dimensions, so the generated fixture exercised a different output
+                // geometry than the image it supplied. Keep the production Base model-size default
+                // and align only the generated architecture with its existing 32x32 input geometry.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1))";
             }
             else if (model.ClassName == "SAM21" && model.TypeParameterCount == 1)
             {
@@ -7003,6 +7044,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
                     "new AiDotNet.Video.Options.PSRTOptions { NumFeatures = 8, NumSTABs = 1, " +
                     "ScaleFactor = 2, WindowSize = 4, TemporalRadius = 1, NumHeads = 2 })";
+            }
+            else if (model.ClassName == "RVM" && model.TypeParameterCount == 1)
+            {
+                // RVM is resolution-flexible recurrent video matting. The temporal-video fixture
+                // feeds four 32x32 RGB frames, so construct its public native architecture at that
+                // same geometry instead of selecting the parameterless 256x256 default.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1))";
             }
             else if (model.ClassName == "OuteTTS" && model.TypeParameterCount == 1)
             {
@@ -9845,6 +9896,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
                     $"options: new AiDotNet.Video.Options.{model.ClassName}Options {{ LearningRate = 1e-4 }})";
             }
+            else if ((model.ClassName is "NeuFlowV2" or "VideoFlow" or "UniMatch" or
+                                          "SKFlow" or "SEARAFT" or "RoMa")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Motion.", System.StringComparison.Ordinal))
+            {
+                // #1950: These OpticalFlowBase models expose parameterless constructors whose
+                // production defaults declare 256x256 geometry. The generated two-frame fixture
+                // supplies [1, 6, 64, 64], so using those constructors resolves every convolution's
+                // reported shape at four times the spatial extent it actually computes. Construct
+                // only the generated fixture with its public architecture overload at matching
+                // geometry. The six input channels are the concatenated RGB frame pair consumed by
+                // EstimateFlow; public defaults, native layers, topology and options remain unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2))";
+            }
             else if (model.ClassName == "DIFRINT"
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Stabilization.", System.StringComparison.Ordinal))
@@ -10603,6 +10671,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // and a 2x pixel-shuffle restoration head.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+        }
+        else if (model.ClassName == "RVM")
+        {
+            // Four RGB frames in, with a same-resolution alpha + foreground RGB output per frame.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 4, 32, 32 };");
+        }
+        else if (model.ClassName == "PSRT")
+        {
+            // Matches the bounded public-options fixture: four 8x8 RGB frames and 2x reconstruction.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 3, 16, 16 };");
         }
         else if (model.ClassName == "E3TTS")
         {
@@ -12456,6 +12536,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         // Keep the FP32/bounded fixture and give only this convergence probe enough
                         // steps to measure the descent described by the paper's training procedure.
                         "SeACo" => "    protected override int TrainingIterations => 5;",
+                        // SileroVad fits its training data; the family default asked too
+                        // early. TrainingError_ShouldNotExceedTestError compares MSE on the
+                        // trained example against a different random draw, and 2 (=6 updates)
+                        // lands at a ratio of 3.49 against a 3.0 bound. Measured here:
+                        //   updates  0     3     6     12    20    30    45    60
+                        //   ratio    5.19  4.19  3.49  2.66  1.72  0.70  0.02  0.00
+                        // It is 5.19 BEFORE a single update -- the two random target draws
+                        // have different spreads, so the early numbers say nothing about fit.
+                        // The model does fit: train MSE falls monotonically to 0.000000 while
+                        // test MSE rises. 7 (=21 updates) sits at ~1.7, inside the bound
+                        // rather than straddling it.
+                        "SileroVad" => "    protected override int TrainingIterations => 7;",
                         _ => "    protected override int TrainingIterations => 2;",
                     });
                     // Chirp3 and ParaformerLarge have a measured Adam warm-up transient: the loss rises
@@ -13516,14 +13608,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
         }
 
-        // VideoFlow is already FP32 in the T-Z resource shard, but its optical-flow/video
-        // backbone still exceeded the 120-second default 50+200 comparison. Preserve the
-        // generated architecture and cap only the repeated MoreData updates before considering
-        // any test-fixture shrinkage.
-        if (model.ClassName == "VideoFlow")
+        // Optical-flow fixtures whose MoreData window has to clear the optimizer warm-up
+        // hump (see WarmUpClearingMoreDataClassNames for the measured curve). The Heavy
+        // branch below applies the same window to the members that carry a timeout cap,
+        // so this fires only for the ones that do not -- the two conditions are mutually
+        // exclusive and cannot double-emit the property.
+        if (WarmUpClearingMoreDataClassNames.Contains(model.ClassName)
+            && !HeavyTrainingTimeoutClassNames.Contains(model.ClassName))
         {
-            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+            sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 40;");
         }
 
         // xLSTM keeps its residual sLSTM/mLSTM block stack and exponential-gating memory
@@ -13539,13 +13633,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
         }
 
-        // Upscale4KAgent is already FP32 in the U-Z resource shard, but its repeated
+      // Upscale4KAgent is already FP32 in the U-Z resource shard, but its repeated
         // super-resolution training probes still exceeded their watchdogs. Keep the agent/model
         // fixture intact and cap only optimizer-step counts before considering any fixture shrink.
         if (model.ClassName == "Upscale4KAgent")
         {
-            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+            // 1-vs-2 was too tight to be stable: measured on this fixture (4x3x32x32,
+            // float, seed 42) the first update rises 0.2564 -> 0.3307 and the second
+            // returns to 0.2612, so the verdict rests on a ~0.07 gap either side of one
+            // transient -- it passed locally and failed on CI. Unlike the optical-flow
+            // fixtures this model costs ~2.8 s per update, so the 10/40 window used there
+            // would need ~140 s and overrun the 120 s budget. 5/15 sits past the transient
+            // on the clean part of the curve (0.1854 -> 0.1133, a 0.072 gap against a 1e-4
+            // tolerance) for ~57 s, and reuses the 5/15 step budget this generator already
+            // applies to TrainingIterations and MemorizationTaskIterations.
+            sb.AppendLine("    protected override int MoreDataShortIterations => 5;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 15;");
             // Fifteen real updates retain the strict memorization-loss decrease invariant while
             // avoiding the default 100-step timeout; the super-resolution architecture is unchanged.
             sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
@@ -13571,8 +13674,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // these generated properties twice while retaining the universal cap.
             if (model.ClassName != "XTTSv2Clone")
             {
-                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                // The warm-up hump described above applies to MoreData as well, and for
+                // the optical-flow fixtures 1-vs-2 lands INSIDE it. See the set's own
+                // comment for the measured curve.
+                if (WarmUpClearingMoreDataClassNames.Contains(model.ClassName))
+                {
+                    sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
+                    sb.AppendLine("    protected override int MoreDataLongIterations => 40;");
+                }
+                else
+                {
+                    sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                    sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                }
             }
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             // Memorization needs enough steps for a heavy model's Adam moments to warm up past the

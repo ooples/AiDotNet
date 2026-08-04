@@ -595,6 +595,32 @@ public class VideoExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task SAM2_ScoreHeads_EmitOneScoreVectorPerBatchItem()
+    {
+        await Task.Yield();
+        var arch = CreateArch(height: 32, width: 32);
+        using var model = new SAM2<double>(arch, modelSize: SAM2ModelSize.Tiny);
+        var input = new Tensor<double>([2, 3, 32, 32]);
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = Math.Sin(i * 0.01);
+        }
+
+        var activations = model.GetNamedLayerActivations(input);
+
+        Assert.True(activations.TryGetValue("IouScores", out var iouScores));
+        Assert.Equal(4, iouScores.Rank);
+        Assert.Equal(2, iouScores.Shape[0]);
+        Assert.Equal(4, iouScores.Shape[1]);
+        Assert.Equal(1, iouScores.Shape[2]);
+        Assert.Equal(1, iouScores.Shape[3]);
+        for (int i = 0; i < iouScores.Length; i++)
+        {
+            Assert.False(double.IsNaN(iouScores[i]) || double.IsInfinity(iouScores[i]));
+        }
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task Cutie_Construction()
     {
         var arch = CreateArch();

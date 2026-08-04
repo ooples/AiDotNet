@@ -15412,14 +15412,15 @@ public static class LayerHelper<T>
         //   - Time mixing: token shift → project r,k,v,a,b → WKV-7 state update → group norm → output projection
         //   - Channel mixing: token shift → SiLU gating → receptance gate → output
         // With layer normalization and residual connections.
-        for (int layer = 0; layer < numLayers; layer++)
-        {
-            yield return new RWKV7Block<T>(
-                sequenceLength: maxSeqLength,
-                modelDimension: modelDim,
-                numHeads: numHeads,
-                ffnMultiplier: ffnMultiplier);
-        }
+        // One stack layer rather than N sibling blocks: RWKV-7 threads the first layer's value
+        // projection through every later layer, which a flat list of Forward(Tensor) layers cannot
+        // express. Rwkv7Stack owns the loop, exactly as the reference model does.
+        yield return new Rwkv7Stack<T>(
+            numLayers: numLayers,
+            sequenceLength: maxSeqLength,
+            modelDimension: modelDim,
+            numHeads: numHeads,
+            ffnMultiplier: ffnMultiplier);
 
         // === LM Head ===
         // Projects from modelDim back to vocabSize for next-token prediction logits.
@@ -24157,23 +24158,42 @@ public static class LayerHelper<T>
 
         // Input projection
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Residual CNN blocks (each with sub-blocks of Conv + BN + ReLU)
+        // Residual CNN blocks (each with sub-blocks of Conv + BN + ReLU).
+        //
+        // These were previously emitted as a PLAIN stack: numBlocks * numSubBlocks
+        // Dense+BN+Dropout with no skip connection, despite the name. At the default
+        // 10x5 that is a 50-layer feedforward chain whose end-to-end gain is the
+        // product of 50 per-layer gains sitting near 1.0, so a 0.02% parameter change
+        // swung the output nine orders of magnitude (measured on the generated
+        // fixture: max|output| 3.0e-4 -> 6.5e5 -> 4.0e-1 across three updates at
+        // batch 1, and monotone divergence to 1.2e7 at batch 2). Skip connections
+        // are also what the paper specifies. Same defect and same remedy as the ViT
+        // factories that were missing their skip-add.
+        //
+        // The inner DenseLayer must report matching input/output shapes for
+        // ResidualLayer.ValidateInnerLayer to succeed -- its ctor reports input as
+        // [-1] (lazy) until the first forward, so resolve eagerly to [encoderDim].
         for (int b = 0; b < numBlocks; b++)
         {
             for (int s = 0; s < numSubBlocks; s++)
             {
-                yield return new DenseLayer<T>(encoderDim, reluActivation);
-                yield return new BatchNormalizationLayer<T>();
+                var inner = new DenseLayer<T>(encoderDim, reluActivation);
+                inner.ResolveFromShape(new[] { encoderDim });
+                yield return new ResidualLayer<T>(
+                    innerLayer: inner,
+                    activationFunction: identityActivation
+                );
+                yield return new LayerNormalizationLayer<T>();
                 if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             }
         }
 
         // CTC head
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 
@@ -33729,8 +33749,8 @@ public static class LayerHelper<T>
         int maxSeqLength = 512)
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
-        for (int i = 0; i < numLayers; i++)
-            yield return new RWKV7Block<T>(maxSeqLength, modelDimension, numHeads, ffnMultiplier);
+        // Single stack layer — see the RWKV-7 LM builder above for why.
+        yield return new Rwkv7Stack<T>(numLayers, maxSeqLength, modelDimension, numHeads, ffnMultiplier);
         yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
@@ -34455,14 +34475,13 @@ public static class LayerHelper<T>
         // the fused CpuEngine.Rwkv7SequenceForward kernel, with batched token-shift/projections and
         // channel-mix. This replaces the older RWKVLayer whose scalar per-timestep/per-element
         // NumOps recurrence dominated forecaster training throughput (issue #1464).
-        for (int layer = 0; layer < numLayers; layer++)
-        {
-            yield return new RWKV7Block<T>(
-                sequenceLength: contextLength,
-                modelDimension: modelDim,
-                numHeads: numHeads,
-                globalIclrMultiplier: globalIclrMultiplier);
-        }
+        // Single stack layer — see the RWKV-7 LM builder above for why.
+        yield return new Rwkv7Stack<T>(
+            numLayers: numLayers,
+            sequenceLength: contextLength,
+            modelDimension: modelDim,
+            numHeads: numHeads,
+            globalIclrMultiplier: globalIclrMultiplier);
 
         // === Output Projection ===
         yield return new DenseLayer<T>(
