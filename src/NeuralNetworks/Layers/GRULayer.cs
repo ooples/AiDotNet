@@ -1566,6 +1566,14 @@ public partial class GRULayer<T> : LayerBase<T>
             ResolveFromShape(new[] { _hiddenSize });
         }
 
+        // ResolveFromShape only fixes the SHAPE — the weight tensors are still zero-length until
+        // EnsureInitialized allocates them, so without this the concatenation below returns an empty
+        // vector while ParameterCount (computed from the resolved shapes) reports the full count.
+        // Every consumer that pairs the two then breaks: the finance smoke test asserts
+        // ParameterCount == GetParameters().Length, and SetParameters rejects a correctly-sized saved
+        // vector as a length mismatch.
+        EnsureInitialized();
+
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_Wz.Data),
