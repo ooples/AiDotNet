@@ -98,6 +98,17 @@ public class StockformerOptions<T> : ModelOptions
     public int NumDirectionClasses { get; set; } = 2;
 
     /// <summary>
+    /// Gets or sets lambda, the weight on the classification task in <c>L = L_reg + lambda*L_cla</c>.
+    /// Default 1.0.
+    /// </summary>
+    /// <remarks>
+    /// The PAPER specifies a weighting (Eq. 12); the reference implementation sums the two tasks 1:1
+    /// with the weighted form commented out. So 1.0 is the reference's choice, not the paper's only
+    /// option, and an earlier revision of this code wrongly asserted the paper forbids weighting.
+    /// </remarks>
+    public double TaskLossWeight { get; set; } = 1.0;
+
+    /// <summary>
     /// Gets or sets the learning rate. Default 0.001.
     /// </summary>
     public double LearningRate { get; set; } = 0.001;
