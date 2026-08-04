@@ -6571,7 +6571,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
-                    "inputSize: 16, outputSize: 8), " +
+                    // 32, matching the probe this model is actually handed. VALLE resolves to the
+                    // AudioNN test family, whose generic branch emits [1, 64, 32] -- feature width
+                    // 32 -- while the architecture declared 16. The layer chain is width-consistent
+                    // for ANY width, so nothing in LayerHelper or InitializeLayers is wrong; the one
+                    // broken link was these two numbers disagreeing. Layers[0] resolved its weights
+                    // as [32, 16] from the declared 16, then met the 32-wide probe: "last dim of a
+                    // is 32, first dim of b is 16". It only bit the tests that trigger the lazy
+                    // shape walk first (SetTrainingMode / ParameterCount / GetParameters); a bare
+                    // Predict resolved Layers[0] straight from the probe and worked, which is why
+                    // this presented as 12 failures rather than all of them.
+                    // outputSize is 16 (= CodebookSize) for the same reason: 8 was never what this
+                    // model emits. It is read through the warm-up-derived EffectiveOutputShape so it
+                    // was harmless, but an honest number costs nothing.
+                    "inputSize: 32, outputSize: 16), " +
                     "new AiDotNet.Audio.Generation.VALLEOptions { " +
                     "MaxDurationSeconds = 1.0, ARHiddenDim = 32, NumARLayers = 1, NumARHeads = 2, " +
                     "NARHiddenDim = 32, NumNARLayers = 1, NumNARHeads = 2, PhonemeVocabSize = 32, " +
