@@ -138,7 +138,10 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
         }
 
         double videoMilliseconds = frames.Count / frameRate * 1000.0;
-        foreach (HarmCategory harm in Enum.GetValues<HarmCategory>())
+        // Enum.GetValues<T>() is .NET 5+. This library still targets net471, where only the
+        // non-generic overload exists, so the generic form compiles locally on net10.0 and breaks the
+        // net471 leg of CI (CS0308) — a failure invisible to a single-TFM local build.
+        foreach (HarmCategory harm in (HarmCategory[])Enum.GetValues(typeof(HarmCategory)))
         {
             if (!byHarm.TryGetValue(harm, out var evidence)) continue;
 
