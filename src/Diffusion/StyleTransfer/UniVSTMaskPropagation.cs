@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Diffusion.StyleTransfer;
@@ -35,6 +36,13 @@ public class UniVSTMaskPropagation<T>
     private readonly double _downsampleRate;
     private readonly Random _random;
 
+    /// <summary>
+    /// The ambient tensor engine. Read per use rather than captured in the constructor, so the
+    /// propagator follows a later engine switch instead of pinning whichever engine happened to be
+    /// current when it was built.
+    /// </summary>
+    private static IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>Gets k, the number of nearest neighbours that vote on each point.</summary>
     public int Neighbors => _neighbors;
 
@@ -54,7 +62,8 @@ public class UniVSTMaskPropagation<T>
     /// Optional seed for the anchor downsampling. Supplied in tests so a propagation run is
     /// reproducible; left null in production so successive runs decorrelate their sampling.
     /// </param>
-    public UniVSTMaskPropagation(int neighbors = 10, int anchorHistory = 9, double downsampleRate = 0.5, int? seed = null)
+    public UniVSTMaskPropagation(
+        int neighbors = 10, int anchorHistory = 9, double downsampleRate = 0.5, int? seed = null)
     {
         if (neighbors <= 0)
             throw new ArgumentOutOfRangeException(nameof(neighbors), neighbors, "neighbors must be positive.");
@@ -109,8 +118,9 @@ public class UniVSTMaskPropagation<T>
 
         int points = height * width;
 
-        // Row-normalized [points, channels] views, so a cosine similarity is a plain dot product.
-        var normalized = new double[features.Count][];
+        // Row-normalized [points, channels] matrices, so a cosine similarity is a plain dot product
+        // and the whole point-to-anchor comparison becomes one matmul per frame.
+        var normalized = new Tensor<T>[features.Count];
         for (int f = 0; f < features.Count; f++) normalized[f] = NormalizeRows(features[f], points, channels);
 
         var labels = new bool[features.Count][];
@@ -148,26 +158,36 @@ public class UniVSTMaskPropagation<T>
         return set;
     }
 
-    /// <summary>
-    /// Cosine similarity between point <paramref name="pa"/> of <paramref name="a"/> and point
-    /// <paramref name="pb"/> of <paramref name="b"/>, both row-normalized [points, channels].
-    /// </summary>
-    private static double Dot(double[] a, int pa, double[] b, int pb, int channels)
-    {
-        int oa = pa * channels, ob = pb * channels;
-        double sum = 0.0;
-        for (int c = 0; c < channels; c++) sum += a[oa + c] * b[ob + c];
-        return sum;
-    }
-
     private bool[] PropagateOneFrame(
-        double[][] normalized, bool[][] labels, IReadOnlyList<int> anchorFrames,
+        Tensor<T>[] normalized, bool[][] labels, IReadOnlyList<int> anchorFrames,
         int frame, int points, int channels)
     {
         // Candidate anchor points, downsampled but keeping the source foreground/background
         // proportions. Uniform sampling would under-represent whichever region is smaller and tilt
         // every majority vote toward the larger one.
         var candidates = BuildCandidates(labels, anchorFrames, points);
+        int anchorCount = candidates.Count;
+        if (anchorCount == 0) return new bool[points];
+
+        // Gather the candidates into one [channels, anchors] matrix so every point-to-anchor cosine
+        // similarity is a SINGLE matmul: [points, channels] x [channels, anchors] -> [points, anchors].
+        // At paper scale (4096 points, 10 anchor frames) the element-wise form is ~168M dot products
+        // per frame, which is exactly the kind of managed hot loop that has to be profiled out later.
+        var anchorT = new Tensor<T>(new[] { channels, anchorCount });
+        var anchorIsForeground = new bool[anchorCount];
+        for (int a = 0; a < anchorCount; a++)
+        {
+            var (anchorFrame, anchorPoint, isForeground) = candidates[a];
+            anchorIsForeground[a] = isForeground;
+            var source = normalized[anchorFrame];
+            int offset = anchorPoint * channels;
+            for (int c = 0; c < channels; c++) anchorT[(c * anchorCount) + a] = source[offset + c];
+        }
+
+        // Nearest neighbour = MAXIMUM cosine similarity. The paper prints "arg min CosSim(...)",
+        // which reads as minimising cosine DISTANCE; minimising similarity would select the least
+        // similar point and invert the whole scheme.
+        var similarity = Engine.TensorMatMul(normalized[frame], anchorT);
 
         var result = new bool[points];
         var bestSim = new double[_neighbors];
@@ -177,22 +197,22 @@ public class UniVSTMaskPropagation<T>
         {
             int filled = 0;
             for (int i = 0; i < _neighbors; i++) { bestSim[i] = double.NegativeInfinity; bestFg[i] = false; }
+            int row = p * anchorCount;
 
-            foreach (var (anchorFrame, anchorPoint, isForeground) in candidates)
+            // Top-k is a selection, not a matrix product, so it stays here rather than being forced
+            // into the engine.
+            for (int a = 0; a < anchorCount; a++)
             {
-                // Nearest neighbour = MAXIMUM cosine similarity. The paper prints "arg min
-                // CosSim(...)", which reads as minimising cosine DISTANCE; minimising similarity
-                // would select the least similar point and invert the whole scheme.
-                double sim = Dot(normalized[frame], p, normalized[anchorFrame], anchorPoint, channels);
+                double sim = NumOps.ToDouble(similarity[row + a]);
 
                 if (filled < _neighbors)
                 {
-                    bestSim[filled] = sim; bestFg[filled] = isForeground; filled++;
+                    bestSim[filled] = sim; bestFg[filled] = anchorIsForeground[a]; filled++;
                     if (filled == _neighbors) SortDescending(bestSim, bestFg, filled);
                 }
                 else if (sim > bestSim[_neighbors - 1])
                 {
-                    bestSim[_neighbors - 1] = sim; bestFg[_neighbors - 1] = isForeground;
+                    bestSim[_neighbors - 1] = sim; bestFg[_neighbors - 1] = anchorIsForeground[a];
                     SortDescending(bestSim, bestFg, _neighbors);
                 }
             }
@@ -268,26 +288,31 @@ public class UniVSTMaskPropagation<T>
         }
     }
 
-    private static double[] NormalizeRows(Tensor<T> features, int points, int channels)
+    /// <summary>
+    /// Row-normalizes a [height, width, channels] feature map into a [points, channels] matrix, so a
+    /// cosine similarity reduces to a dot product and the comparison can be done as a matmul.
+    /// </summary>
+    private static Tensor<T> NormalizeRows(Tensor<T> features, int points, int channels)
     {
-        var data = new double[points * channels];
+        var result = new Tensor<T>(new[] { points, channels });
         for (int p = 0; p < points; p++)
         {
             int offset = p * channels;
             double norm = 0.0;
             for (int c = 0; c < channels; c++)
             {
-                double v = Convert.ToDouble(NumOps.ToDouble(features[offset + c]));
-                data[offset + c] = v;
+                double v = NumOps.ToDouble(features[offset + c]);
                 norm += v * v;
             }
 
             norm = Math.Sqrt(norm);
-            // A zero-length feature vector has no direction; leaving it zero makes its similarity
-            // to everything 0 rather than NaN, so it simply never wins a vote.
-            if (norm > 0.0)
-                for (int c = 0; c < channels; c++) data[offset + c] /= norm;
+            // A zero-length feature vector has no direction; leaving it zero makes its similarity to
+            // everything 0 rather than NaN, so it simply never wins a vote.
+            if (norm <= 0.0) continue;
+
+            for (int c = 0; c < channels; c++)
+                result[offset + c] = NumOps.FromDouble(NumOps.ToDouble(features[offset + c]) / norm);
         }
-        return data;
+        return result;
     }
 }
