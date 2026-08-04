@@ -62,12 +62,27 @@ public class ExtraTreesClassifierOptions<T> : ClassifierOptions<T>
     public int MinSamplesLeaf { get; set; } = 1;
 
     /// <summary>
-    /// Gets or sets the maximum number of features to consider.
+    /// Gets or sets the rule for how many features each split considers. Default
+    /// <see cref="MaxFeatureSelection.Sqrt"/>.
+    /// </summary>
+    /// <remarks>
+    /// Ignored when <see cref="MaxFeatureCount"/> is set.
+    /// </remarks>
+    public MaxFeatureSelection MaxFeatures { get; set; } = MaxFeatureSelection.Sqrt;
+
+    /// <summary>
+    /// Gets or sets an explicit feature count per split, overriding <see cref="MaxFeatures"/>.
     /// </summary>
     /// <value>
-    /// "sqrt", "log2", "all", or a number. Default is "sqrt".
+    /// A positive count, or <c>null</c> (the default) to use the <see cref="MaxFeatures"/> rule.
     /// </value>
-    public string MaxFeatures { get; set; } = "sqrt";
+    /// <remarks>
+    /// A count is a number, so it gets its own numeric property rather than being smuggled through
+    /// the rule. The previous <c>string MaxFeatures</c> had to accept both, and its parse fell back
+    /// to sqrt on anything unrecognized — so a typo silently trained a different model.
+    /// Clamped to the available feature count at use.
+    /// </remarks>
+    public int? MaxFeatureCount { get; set; }
 
     /// <summary>
     /// Gets or sets the split criterion.
