@@ -548,6 +548,27 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         && OutputShape is not null;
 
     /// <summary>
+    /// <c>true</c> when this layer will have trainable parameters but cannot size them yet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The counterpart to PyTorch's <c>LazyModuleMixin.has_uninitialized_params()</c>. It exists so
+    /// that "this layer has no parameters" (a LayerNormalization-free activation, a dropout) is
+    /// distinguishable from "this layer's parameter count is not knowable yet" (a convolution whose
+    /// input channel count arrives with the first input).
+    /// </para>
+    /// <para>
+    /// Without this distinction the only way to keep a "models have learnable parameters" check
+    /// passing before the first forward was for <see cref="ParameterCount"/> to invent a number,
+    /// which then contradicted <see cref="GetParameters"/> — the count claimed weights the flat
+    /// vector did not contain, and every caller pairing the two broke. PyTorch refuses the question
+    /// instead: <c>UninitializedParameter.numel()</c> raises. Answering it honestly is strictly more
+    /// useful than either lying or throwing, and costs nothing at runtime.
+    /// </para>
+    /// </remarks>
+    public virtual bool HasUninitializedParameters => false;
+
+    /// <summary>
     /// <c>true</c> once first-forward setup has run, whether or not every axis ended up concrete.
     /// </summary>
     /// <remarks>
