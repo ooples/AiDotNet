@@ -66,7 +66,7 @@ public class MedicalASRMechanismTests
         Assert.Equal(MedicalAsrDecoderType.Ctc, Model(o => o.DecoderType = MedicalAsrDecoderType.Ctc).DecoderType);
 
         // Two members, no more: the paper compares exactly these two.
-        Assert.Equal(2, Enum.GetValues<MedicalAsrDecoderType>().Length);
+        Assert.Equal(2, Enum.GetValues(typeof(MedicalAsrDecoderType)).Length);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public class MedicalASRMechanismTests
     [Fact]
     public void BothArmsTrainAndProduceFiniteOutput()
     {
-        foreach (var arm in Enum.GetValues<MedicalAsrDecoderType>())
+        foreach (var arm in (MedicalAsrDecoderType[])Enum.GetValues(typeof(MedicalAsrDecoderType)))
         {
             var model = Model(o => o.DecoderType = arm);
             var input = Features();
