@@ -183,7 +183,13 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
             LearningRateSchedule.Constant => InitialLearningRate,
             LearningRateSchedule.InverseScaling => InitialLearningRate / (1.0 + 0.0001 * SampleCount),
             LearningRateSchedule.Exponential => InitialLearningRate * Math.Pow(0.9999, SampleCount),
-            LearningRateSchedule.StepDecay => InitialLearningRate * Math.Pow(0.5, SampleCount / 10000),
+            // The truncation here is DELIBERATE and is what makes this a step decay:
+            // the rate halves once per 10,000 samples and is flat between steps.
+            // Written as an explicit integer division so it reads as intent rather
+            // than as the accidental int/int that a reviewer (and CodeQL) sees. Using
+            // 10000.0 would silently turn this into a smooth exponential decay and
+            // change every schedule that selects StepDecay.
+            LearningRateSchedule.StepDecay => InitialLearningRate * Math.Pow(0.5, (double)(SampleCount / 10000)),
             _ => InitialLearningRate
         };
 

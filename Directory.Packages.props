@@ -288,13 +288,18 @@
          data-derived compiled-plan identity fix (#913), differentiable MelSpectrogram and corrected
          Spectrogram adjoint (#911), plus the net471 compatibility completion (#910).
 
+
          MERGE RESOLUTION (origin/master): master moved Tensors and OpenBLAS to 0.121.0 while leaving
          OneDNN and CLBlast at 0.119.0. Taking the MAXIMUM of each side rather than either wholesale:
          master's 0.121.0 is newer than this branch's 0.120.6 for Tensors/OpenBLAS and supersedes it,
          but accepting master's 0.119.0 for OneDNN/CLBlast would REGRESS past #906's saved-state
          pinning and #907's corrected LSTM GPU kernels, which this branch's work depends on. That
          breaks the strict lockstep the previous comment claimed, so the claim is removed rather than
-         left contradicting the versions below. -->
+         left contradicting the versions below.
+
+         Bumped 0.120.6 -> 0.121.0: brings AiDotNet.Tensors #925, which prevents full-span
+         autodiff views from being returned to the tensor pool while the graph still owns them. -->
+
     <PackageVersion Include="AiDotNet.Tensors" Version="0.121.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.120.6" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.121.0" />

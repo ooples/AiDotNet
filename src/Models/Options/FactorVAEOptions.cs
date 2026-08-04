@@ -141,6 +141,23 @@ public class FactorVAEOptions<T> : ModelOptions
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
+    /// Gets or sets whether the model's default Adam optimizer uses the AMSGrad second-moment maximum.
+    /// </summary>
+    /// <value>Defaults to <see langword="true"/>.</value>
+    /// <remarks>
+    /// <para>
+    /// FactorVAE samples latent factors during training. On this stochastic objective, plain Adam can
+    /// drift slightly after reaching a good solution because its effective denominator may decrease.
+    /// AMSGrad keeps that denominator non-decreasing and stabilizes longer training runs.
+    /// </para>
+    /// <para>
+    /// This setting applies only when no optimizer is supplied to the model constructor. A
+    /// caller-provided optimizer remains authoritative.
+    /// </para>
+    /// </remarks>
+    public bool UseAMSGrad { get; set; } = true;
+
+    /// <summary>
     /// Validates the options and throws if any value is invalid.
     /// </summary>
     /// <remarks>
