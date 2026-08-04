@@ -154,6 +154,10 @@ internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSeri
                 nameof(input));
         }
 
+        // Registers the depthwise / pointwise / batch-norm children with GetSubLayers() via the
+        // generated EnsureSubLayersRegistered(); they otherwise stay invisible to structural walkers.
+        EnsureInitializedFromInput(input);
+
         var hidden = input;
         for (int i = 0; i < _numConvolutions; i++)
         {

@@ -171,6 +171,10 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
         if (input.Shape.Length != 3)
             throw new ArgumentException($"CitrinetBlockLayer requires rank-3 [B, C, T] input; got rank {input.Shape.Length}.", nameof(input));
 
+        // Registers the sub-block convs / batch-norms with GetSubLayers() via the generated
+        // EnsureSubLayersRegistered(); they otherwise stay invisible to every structural walker.
+        EnsureInitializedFromInput(input);
+
         // Projected residual (skip) path.
         var residual = _residualBn.Forward(_residualConv.Forward(input));
 

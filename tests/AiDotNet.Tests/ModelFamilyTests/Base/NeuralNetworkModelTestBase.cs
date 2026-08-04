@@ -1106,6 +1106,143 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// The parameter COUNT and the parameter VECTOR must describe the same tensors.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every caller that pairs the two breaks when they disagree, and the break is silent:
+    /// SetParameters rejects a correctly-sized saved vector as a length mismatch, so a model comes
+    /// back from a round-trip at its initial weights with no error raised. This has now been wrong
+    /// four separate ways — GRULayer and LSTMLayer resolved their deferred shape in GetParameters
+    /// but never allocated, so the vector came back empty while the count read the resolved shapes;
+    /// ConvolutionalLayer invented a count for a layer whose weights did not exist yet; and
+    /// TrainableParameterGenerator never registered sub-layers held in a List, so the recursive walk
+    /// missed them entirely. Each was found one shard at a time, from a different failing symptom.
+    /// </para>
+    /// <para>
+    /// Asserted here so any model violating it fails on this invariant directly, naming the model,
+    /// rather than surfacing later as an unrelated NaN or a clone that quietly lost its training.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public virtual async Task ParameterCount_ShouldMatchGetParameters()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        using var network = CreateNetwork();
+
+        long declared = network.ParameterCount;
+        int actual;
+        try
+        {
+            actual = network.GetParameters().Length;
+        }
+        catch (NotSupportedException)
+        {
+            // Some models deliberately do not expose a flat parameter vector — detection backbones
+            // round-trip weights through WriteParameters/ReadParameters instead, and say so by
+            // throwing. There is no pairing to check when one side of it does not exist.
+            return;
+        }
+
+        // A model whose parameters are not sized yet legitimately reports 0 from BOTH surfaces;
+        // that is consistent, so it is not what this invariant is about.
+        if (declared == 0 && actual == 0) return;
+
+        Assert.True(declared == actual,
+            $"{network.GetType().FullName}: ParameterCount reports {declared} but GetParameters() " +
+            $"returned {actual} values (difference {declared - actual}). The two must describe the " +
+            "same tensors — SetParameters pairs them by length, so a mismatch means a saved " +
+            "parameter vector cannot be restored and the model silently keeps its initial weights. " +
+            "The usual causes are a layer that resolves its shape without allocating, a count " +
+            "computed for weights that do not exist yet, or sub-layers the recursive walk cannot " +
+            "reach (children held in a List need RegisterSubLayer).");
+    }
+
+    /// <summary>
+    /// Every child layer the model holds must be reachable through <c>GetSubLayers()</c>.
+    /// </summary>
+    /// <remarks>
+    /// The tape training step discovers parameters by walking GetSubLayers() recursively. A child
+    /// that is not reachable is still constructed and still runs in Forward — it simply never
+    /// trains, and nothing reports it. CitrinetBlockLayer held nine children and returned zero.
+    /// This walks the composites the model owns and checks each one accounts for the layer-typed
+    /// fields it holds, including those in collections.
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public virtual async Task SubLayers_ShouldAllBeReachable()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+
+        // Registration is deliberately LAZY: the generator's EnsureSubLayersRegistered() runs from
+        // EnsureInitialized(), so a freshly constructed composite legitimately reports no children.
+        // Checking before a forward reported every generator-covered composite as an offender —
+        // and forcing registration into the constructor instead is not the fix. It breaks training:
+        // the pre-step buffer-view save/restore walk (NeuralNetworkBase.SaveOriginalParameters)
+        // then also visits the children the parent already handles, and HiFiGAN came out of
+        // training producing identical outputs for different inputs. Drive one forward and ask the
+        // question at the point the property actually has to hold.
+        network.Predict(CreateRandomTensor(InputShape, rng));
+
+        var offenders = new List<string>();
+        foreach (var layer in network.Layers)
+        {
+            CheckReachable(layer, offenders);
+        }
+
+        Assert.True(offenders.Count == 0,
+            "These layers hold child layers that GetSubLayers() does not expose, so every consumer " +
+            "that discovers structure by walking it — shape resolution, uninitialized-parameter " +
+            "detection, training-mode propagation, introspection — sees a leaf and silently skips " +
+            "the children.\n\n" +
+            "Do NOT read this as 'these children never train' without checking: a layer whose " +
+            "children sit in fields the TrainableParameterGenerator recognises still has its " +
+            "tensors collected by the generated GetTrainableParameters(), which the tape walk calls " +
+            "directly. Whether training is affected depends on the layer; the structural walkers " +
+            "are wrong either way. Fix by calling RegisterSubLayer(child) at construction.\n\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    private static void CheckReachable(ILayer<T> layer, List<string> offenders)
+    {
+        var exposed = layer.GetSubLayers();
+        var exposedSet = new HashSet<object>(exposed, ReferenceEqualityComparer.Instance);
+
+        int held = 0, missing = 0;
+        foreach (var field in layer.GetType().GetFields(
+                     System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic))
+        {
+            object? value;
+            try { value = field.GetValue(layer); } catch { continue; }
+            if (value is null) continue;
+
+            if (value is ILayer<T> child)
+            {
+                held++;
+                if (!exposedSet.Contains(child)) missing++;
+            }
+            else if (value is System.Collections.IEnumerable seq and not string)
+            {
+                foreach (var item in seq)
+                {
+                    if (item is not ILayer<T> c) continue;
+                    held++;
+                    if (!exposedSet.Contains(c)) missing++;
+                }
+            }
+        }
+
+        if (missing > 0)
+            offenders.Add($"{layer.GetType().Name}: holds {held} child layer(s), " +
+                          $"{missing} not exposed by GetSubLayers() (exposed {exposed.Count})");
+
+        foreach (var sub in exposed) CheckReachable(sub, offenders);
+    }
+
     [Fact(Timeout = 120000)]
     public virtual async Task Parameters_ShouldBeNonEmpty()
     {
