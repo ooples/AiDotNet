@@ -534,17 +534,24 @@ public class Phase2GateTests
         const int kernelSize = 5;
         const int iterations = 50;
 
-        // Measure eager construction time
+        // Eager: WithInputDepth knows the fan-in, so the kernel [128, 64, 5, 5] is allocated and
+        // He-initialized during construction. This is the path that actually does the work.
+        //
+        // Both arms of this comparison used to call the deferred constructor, differing only in an
+        // initializationStrategy that neither of them reached — that constructor never allocates
+        // weights. So the gate timed the same code twice, both at 0 ms, and a strict `<` on equal
+        // values decided the outcome by scheduling noise. It reported green by luck rather than
+        // because laziness saved anything.
         var swEager = Stopwatch.StartNew();
         for (int i = 0; i < iterations; i++)
         {
-            var layer = new ConvolutionalLayer<float>(
-                outputDepth, kernelSize,
-                initializationStrategy: InitializationStrategies<float>.Eager);
+            var layer = ConvolutionalLayer<float>.WithInputDepth(
+                inputDepth, outputDepth, kernelSize);
+            layer.GetParameters();   // force the allocation the eager path exists to do
         }
         swEager.Stop();
 
-        // Measure lazy construction time
+        // Lazy: fan-in unknown, so construction allocates nothing and defers to the first forward.
         var swLazy = Stopwatch.StartNew();
         for (int i = 0; i < iterations; i++)
         {
@@ -554,9 +561,14 @@ public class Phase2GateTests
         }
         swLazy.Stop();
 
-        // Lazy should be significantly faster
-        Assert.True(swLazy.ElapsedMilliseconds < swEager.ElapsedMilliseconds,
-            $"Lazy ({swLazy.ElapsedMilliseconds}ms) should be faster than Eager ({swEager.ElapsedMilliseconds}ms)");
+        // Compare ticks, not whole milliseconds: 50 constructions land under 1 ms on a warm runner,
+        // where millisecond granularity rounds both arms to 0 and makes any strict comparison a
+        // coin toss. Deferring 50 x 128x64x5x5 kernel allocations must be strictly cheaper than
+        // performing them; anything else means the deferral is not actually deferring.
+        Assert.True(swLazy.ElapsedTicks < swEager.ElapsedTicks,
+            $"Deferred construction ({swLazy.ElapsedTicks} ticks) should be cheaper than eager " +
+            $"construction ({swEager.ElapsedTicks} ticks), which allocates and initializes " +
+            $"{iterations} kernels of [{outputDepth}, {inputDepth}, {kernelSize}, {kernelSize}].");
     }
 
     [Fact(Timeout = 60000)]

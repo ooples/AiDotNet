@@ -1117,7 +1117,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // ParameterCount reads the declared count without forcing lazy layers
         // to materialize their weight tensors (which at VGG16BN / DiT scale is
         // multi-GB and OOMs CI runners just for an existence check).
-        Assert.True(network.ParameterCount > 0, "Neural network should have learnable parameters.");
+        //
+        // A model built entirely from deferred-shape layers legitimately reports 0 here before its
+        // first forward: a convolution cannot size its kernels until it knows the input depth.
+        // ParameterCount used to paper over that by assuming a single input channel, which kept this
+        // assertion green while contradicting GetParameters() — the count described weights the flat
+        // vector did not contain, and SetParameters then rejected correctly-sized saved vectors.
+        // HasUninitializedParameters (PyTorch's has_uninitialized_params) states the real invariant
+        // without materializing anything.
+        Assert.True(network.ParameterCount > 0 || network.HasUninitializedParameters,
+            "Neural network should have learnable parameters (either sized now, or deferred until " +
+            "the first forward).");
     }
 
     [Fact(Timeout = 120000)]
