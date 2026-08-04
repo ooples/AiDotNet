@@ -10193,7 +10193,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 3), " +
                     "numScales: 2, numFeatures: 8)";
             }
-            else if ((model.ClassName is "DynamiCrafter" or "DRVI" or "EMAVFI" or "FLAVR")
+            else if ((model.ClassName is "DynamiCrafter" or "EMAVFI" or "FLAVR")
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {
@@ -10202,7 +10202,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 string optionsExpr = model.ClassName switch
                 {
                     "DynamiCrafter" => "new AiDotNet.Video.Options.DynamiCrafterOptions { NumFeatures = 16, NumDiffusionSteps = 2, NumResBlocks = 1, NumHeads = 2, DropoutRate = 0.0 }",
-                    "DRVI" => "new AiDotNet.Video.Options.DRVIOptions { NumFeatures = 8, NumContentBlocks = 1, NumMotionBlocks = 1, NumDecoderBlocks = 1, NumScales = 1, DropoutRate = 0.0 }",
                     "EMAVFI" => "new AiDotNet.Video.Options.EMAVFIOptions { NumFeatures = 8, NumSwinBlocks = 1, NumHeads = 2, WindowSize = 4, NumScales = 1, DropoutRate = 0.0 }",
                     _ => "new AiDotNet.Video.Options.FLAVROptions { NumFeatures = 8, NumResBlocks = 1, NumLevels = 2, NumInputFrames = 4, DropoutRate = 0.0 }"
                 };
@@ -10970,7 +10969,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             int fiSpatial = model.ClassName == "MoG" ? 16 : 64;
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ 6, {fiSpatial}, {fiSpatial} }};");
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 3, {fiSpatial}, {fiSpatial} }};");
-            if (model.ClassName is "DynamiCrafter" or "DRVI")
+            if (model.ClassName is "DynamiCrafter")
             {
                 // Both fixtures already run in FP32 and at bounded public-option scale. The serialized
                 // D-F trace still measured 58-78 seconds per class, concentrated in repeated training.
