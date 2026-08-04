@@ -20,5 +20,13 @@ jobs:
         # Loads commitlint.config.mjs — the action's default configFile is
         # ./commitlint.config.mjs, so the file MUST be named .mjs (a .js was
         # silently ignored, falling back to config-conventional defaults).
+        with:
+          # Follow only this branch's own commits. Without it the action walks every commit in the
+          # PR range, and a long-lived integration branch keeps absorbing master through merge
+          # commits — so the check was re-linting ~100 messages that were written elsewhere, already
+          # reviewed, and already merged to master. Those cannot be fixed from this PR without
+          # rewriting shared history, and re-judging them here says nothing about the change under
+          # review. First-parent traversal is the standard scoping for exactly this shape of branch.
+          firstParent: true
 
 
