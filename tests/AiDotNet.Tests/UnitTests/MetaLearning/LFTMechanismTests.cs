@@ -70,7 +70,7 @@ public class LFTMechanismTests
 
         // And it must not overflow for a large hyper-parameter.
         var large = Make(scale: 1000.0, bias: 1000.0);
-        Assert.True(double.IsFinite(large.EffectiveScaleStdDev(0)));
+        Assert.True(IsFinite(large.EffectiveScaleStdDev(0)));
         Assert.Equal(1000.0, large.EffectiveScaleStdDev(0), 6);
     }
 
@@ -299,4 +299,9 @@ public class LFTMechanismTests
         var ex = Assert.ThrowsAny<ArgumentException>(() => Algorithm(o => o.PseudoSeenFraction = 1.0));
         Assert.False(string.IsNullOrWhiteSpace(ex.Message));
     }
+
+    // double.IsFinite is .NET Core 3.0+; this suite also builds for net471, which has neither
+    // it nor Math.IsFinite. "Finite" is exactly "not NaN and not either infinity".
+    private static bool IsFinite(double value)
+        => !double.IsNaN(value) && !double.IsInfinity(value);
 }
