@@ -3148,9 +3148,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // each production options type retains its paper-faithful ImageSize default.
         => className == "FlamingoNeuralNetwork" ? 32
          : className == "MiniGPT4" ? 28
+         // SAM, SAM21, SlimSAM, MaskAdapter and Mask2Former are deliberately NOT in this list.
+         // Their constructor overrides pin 112 (SAM, SAM21) and 128 (the other three), and this arm
+         // shadows the IsPatchVisionModel branch below, so listing them here fed a 32px fixture to a
+         // model built for 112/128. Every declared/actual pair in the resulting 45 failures was
+         // exactly that ratio -- SAM declared [768, 7, 7] (112/16) and produced [768, 2, 2] (32/16).
+         //
+         // This has now been "fixed" in both directions. The ctor comments describe raising the
+         // architecture 32 -> 112/128 to match a fixture that emitted 128 at the time; adding the
+         // models here later dropped the fixture back to 32 and simply inverted the mismatch. The
+         // two pins have to move together, and the constructor is the one that decides -- so the
+         // fixture follows it, not the reverse.
+         //
+         // Size matters here beyond matching: at 32px SAM's stride-16 stem yields a 2x2 feature map,
+         // a step away from the 1x1 collapse that made a 32px XDecoder fixture produce silently zero
+         // gradients. 112 keeps it at 7x7, which is a real test.
          : className is "DEVA" or "DepthAnythingV2" or "FLIP" or "GeminiVision" or "Gemma3" or "ImageBindNeuralNetwork" or "InternVL" or "InternVL2" or "InternVL25" or "InternVL3"
-             or "Mask2Former" or "MaskAdapter" or "OneFormer" or "OpenCLIP" or "Pix2Struct"
-             or "SAM" or "SAM21" or "SEEM" or "ShowO" or "ShowO2" or "SigLIP2" or "SlimSAM" or "MetaCLIP" ? 32
+             or "OneFormer" or "OpenCLIP" or "Pix2Struct"
+             or "SEEM" or "ShowO" or "ShowO2" or "SigLIP2" or "MetaCLIP" ? 32
          // Shard M MedS-Meta: these three are already <float> AND already carry iteration caps from
          // their family branches, and their probes still overran the 120/180 s gate (MetaCLIP alone
          // failed 8 invariants). Neither exposes a usable width knob — MedSAMModelSize declares only
