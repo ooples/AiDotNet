@@ -722,7 +722,51 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </para>
     /// </remarks>
     /// <param name="output">The tensor <see cref="Forward"/> returned.</param>
-    internal void VerifyReportedOutputShape(Tensor<T> output)
+    /// <summary>
+    /// How this layer's output shape follows from its input shape. <see cref="ShapeRelationKind.Unknown"/>
+    /// by default, which checks nothing.
+    /// </summary>
+    /// <remarks>
+    /// Declaring one turns a shape mismatch from "this layer's number is wrong" into a statement
+    /// about WHERE the wrong number came from — see <see cref="ShapeRelationKind"/>. Opt-in on
+    /// purpose: a layer that has not declared a relation behaves exactly as before.
+    /// </remarks>
+    protected internal virtual ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Unknown;
+
+    /// <summary>
+    /// Given this layer's DECLARED output shape and its relation, the input shape that declaration
+    /// implies — or <c>null</c> when the relation cannot be inverted.
+    /// </summary>
+    /// <remarks>
+    /// Only relations that preserve the axes in question are invertible. Identity inverts exactly;
+    /// ChannelOnly inverts on the spatial axes but says nothing about the channel count; the
+    /// convolution formula is not invertible without the original extent, so it returns null rather
+    /// than guessing.
+    /// </remarks>
+    internal int[]? ImpliedInputShape(int[] declaredOutput)
+    {
+        switch (OutputShapeRelation)
+        {
+            case ShapeRelationKind.Identity:
+                return (int[])declaredOutput.Clone();
+
+            case ShapeRelationKind.ChannelOnly:
+            {
+                // Channel axis is the layer's own choice, so mark it unconstrained (-1) and keep
+                // the spatial axes, which this relation promises are carried through untouched.
+                var implied = (int[])declaredOutput.Clone();
+                if (implied.Length > 0) implied[0] = -1;
+                return implied;
+            }
+
+            default:
+                return null;
+        }
+    }
+
+    internal void VerifyReportedOutputShape(Tensor<T> output) => VerifyReportedOutputShape(output, actualInput: null);
+
+    internal void VerifyReportedOutputShape(Tensor<T> output, Tensor<T>? actualInput)
     {
         if (_reportedOutputShapeVerified) return;
         _reportedOutputShapeVerified = true;
@@ -741,6 +785,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             // those are exactly the layers a shape inference has to reason about, and skipping
             // any shape containing a sentinel would exempt all of them.
             if (reported[i] < 0) continue;
+
+            // Axes the sequential walk inferred are not this layer's claim. ResolveLazyLayerShapes
+            // fills them in from the architecture's input, which is only correct when the model's
+            // real forward IS that chain; for a custom forward it writes numbers the layer never
+            // agreed to. Asserting them blames the layer for someone else's inference, which is
+            // exactly what the MaskAdapter / Mask2Former / SlimSAM cluster was reporting. The
+            // channel axis (0) is still checked — that one the layer genuinely determines.
+            if (_spatialAxesWerePropagated && i >= 1) continue;
+
             if (reported[i] == actual[i + 1]) continue;
 
             throw new InvalidOperationException(
@@ -748,9 +801,65 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
                 $"produced [{string.Join(", ", actual)}] (per-sample [{string.Join(", ", actual.Skip(1))}]). " +
                 "A layer whose declared shape disagrees with what it computes corrupts every consumer " +
                 "that sizes itself from the declaration — parameter-vector slicing, chain resolution and " +
-                "ONNX export all read it.");
+                "ONNX export all read it." +
+                DescribeDeclarationProvenance(reported, actualInput));
         }
     }
+
+    /// <summary>
+    /// Uses this layer's shape relation to say whether the LAYER or the DECLARATION is at fault.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without a relation the failure text can only report two disagreeing numbers, which reads as
+    /// "this layer is broken" — and for the whole MaskAdapter / Mask2Former / SlimSAM cluster that
+    /// reading is wrong. Those layers computed correctly; something upstream wrote a declaration
+    /// describing an input they never received.
+    /// </para>
+    /// <para>
+    /// With a relation the declaration becomes a falsifiable claim about the input. A layer that
+    /// preserves shape and declares <c>[8, 32, 32]</c> is asserting it was fed <c>[8, 32, 32]</c>;
+    /// if it actually received <c>[8, 8, 8]</c>, the declaration is provably not describing this
+    /// forward, and the message says so and names the usual author.
+    /// </para>
+    /// </remarks>
+    private string DescribeDeclarationProvenance(int[] reported, Tensor<T>? actualInput)
+    {
+        if (actualInput is null || OutputShapeRelation == ShapeRelationKind.Unknown)
+            return string.Empty;
+
+        var implied = ImpliedInputShape(reported);
+        if (implied is null) return string.Empty;
+
+        var actualIn = actualInput.Shape.ToArray();
+        // Reported/implied shapes exclude the batch axis.
+        if (actualIn.Length != implied.Length + 1) return string.Empty;
+
+        bool inputContradicts = false;
+        for (int i = 0; i < implied.Length; i++)
+        {
+            if (implied[i] < 0) continue;
+            if (implied[i] != actualIn[i + 1]) { inputContradicts = true; break; }
+        }
+
+        if (!inputContradicts) return string.Empty;
+
+        return
+            $" This layer's shape relation is {OutputShapeRelation}, so the declared output asserts an " +
+            $"input of [{string.Join(", ", implied)}] — but the input it actually received was " +
+            $"[{string.Join(", ", actualIn.Skip(1))}]. The layer computed correctly for the input it was " +
+            "given; the DECLARATION is what does not describe this forward. Declarations for lazy layers " +
+            $"are written by {nameof(NeuralNetworkBase<T>)}.ResolveLazyLayerShapes, which walks Layers " +
+            "sequentially from the architecture's input shape — so a model whose real forward is not that " +
+            "sequential chain (a custom forward, a downsampling path, or branches) will have concrete " +
+            "dimensions pinned onto layers that never receive them.";
+    }
+
+    /// <summary>
+    /// True when this layer's spatial axes were filled in by the sequential shape walk rather than
+    /// determined by the layer, so they are not a claim it stands behind.
+    /// </summary>
+    private bool _spatialAxesWerePropagated;
 
     private bool _reportedOutputShapeVerified;
 
@@ -1633,6 +1742,44 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public int[] GetOutputShape() => OutputShape;
+
+    /// <summary>
+    /// Drops the concrete spatial dimensions from this layer's DECLARED output shape, leaving the
+    /// axes it genuinely determines. Called by the shape propagation after it resolves a lazy layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="NeuralNetworkBase{T}.ResolveLazyLayerShapes"/> derives a shape for each lazy layer
+    /// by walking <c>Layers</c> in order from the architecture's input. That is only valid when the
+    /// model's real forward IS that sequential chain. When it is not — a custom forward, a
+    /// downsampling path, branches — the walk pins spatial dimensions onto layers that never receive
+    /// them, and the layer then reports a size it does not produce.
+    /// </para>
+    /// <para>
+    /// The channel axis survives because it is usually the layer's own choice (a convolution's
+    /// OutputDepth) rather than an echo of the input, so it carries real information and a wrong one
+    /// is still worth catching. The spatial axes are the ones the walk cannot verify, and for a
+    /// shape-preserving layer they add nothing at all: the relation already says "same as input", so
+    /// writing numbers there is pure risk. Declaring them dynamic (-1) is honest — the layer accepts
+    /// any spatial extent — and <see cref="VerifyReportedOutputShape(Tensor{T})"/> skips dynamic axes,
+    /// so no real check is lost.
+    /// </para>
+    /// <para>
+    /// Only applies to layers that opted into a <see cref="ShapeRelationKind"/>; everything else is
+    /// left exactly as before.
+    /// </para>
+    /// </remarks>
+    internal void RelaxPropagatedSpatialAxes()
+    {
+        if (OutputShapeRelation == ShapeRelationKind.Unknown) return;
+        if (OutputShape is null || OutputShape.Length < 2) return;
+
+        // Keep the NUMBERS — the declared shape is load-bearing: tensor allocation reads it and
+        // rejects a -1 outright ("Shape dimension 2 must be non-negative"). Record instead that the
+        // spatial axes were inferred by the walk rather than determined by this layer, so the shape
+        // contract stops treating them as a claim the layer made.
+        _spatialAxesWerePropagated = true;
+    }
 
     /// <inheritdoc/>
     /// <remarks>

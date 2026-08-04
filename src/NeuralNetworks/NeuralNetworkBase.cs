@@ -3199,9 +3199,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 int[] outShape = layer.GetOutputShape();
                 if (outShape != null && outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0))
                 {
+                    // Deliberately NOT a copy: callers rely on currentShape aliasing the layer's own
+                    // shape array, so a later resolution that turns an axis dynamic is seen by the
+                    // rest of the walk. Cloning here made a downstream layer declare [8, 16] where
+                    // it should have declared [-1, 16].
                     currentShape = outShape;
                     if (outShape.Length >= 2) lastGoodShape = outShape;
                 }
+
+                // ...but the layer must not keep CLAIMING the spatial dims this walk inferred. They
+                // hold only if the model's real forward is this sequential chain; for a custom
+                // forward they are a false claim that surfaces later as "reports an output shape of
+                // [C, 32, 32] but its forward produced [C, 8, 8]". Propagation keeps its concrete
+                // value above; the declaration keeps only what the layer itself determines.
+                if (layer is LayerBase<T> relaxable) relaxable.RelaxPropagatedSpatialAxes();
+
                 // Resolved. (A dynamic/non-concrete output leaves currentShape as a
                 // deliberate shape-preserving passthrough for the next layer.)
                 return true;
@@ -4187,6 +4199,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var current = input;
             foreach (var layer in Layers)
             {
+                // Keep the INPUT so the verifier can tell a wrong layer from a wrong declaration.
+                var layerInput = current;
                 current = layer.Forward(current);
 
                 // Reconcile what the layer SAYS it outputs with what it just produced. A layer
@@ -4196,7 +4210,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // the cause. Runs once per layer per instance.
                 if (layer is Layers.LayerBase<T> verifiable)
                 {
-                    verifiable.VerifyReportedOutputShape(current);
+                    verifiable.VerifyReportedOutputShape(current, layerInput);
                 }
             }
             result = current;

@@ -45,6 +45,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
 public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Normalization rescales values; it never changes any axis.</remarks>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Identity;
+
     /// <summary>
     /// A small constant added to the variance for numerical stability.
     /// </summary>

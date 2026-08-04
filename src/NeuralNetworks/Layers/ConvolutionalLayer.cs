@@ -43,6 +43,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3")]
 public partial class ConvolutionalLayer<T> : LayerBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Channel axis is this layer's OutputDepth; spatial axes follow
+    /// floor((in + 2*padding - kernel) / stride) + 1.
+    /// </remarks>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Convolutional;
+
     /// <summary>
     /// Gets the depth (number of channels) of the input data.
     /// </summary>
