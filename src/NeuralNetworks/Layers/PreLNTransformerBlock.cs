@@ -235,6 +235,12 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// The block fixes its feature width and preserves the sequence axis, per the pre-LN residual
+    /// definition: every term of <c>x + Attn(LN(x))</c> and <c>x + FFN(LN(x))</c> keeps S.
+    /// </summary>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.FeatureOnly;
+
+    /// <summary>
     /// Resolves every sublayer's shape without a data-carrying forward. This runs both through
     /// <see cref="LayerBase{T}.ResolveFromShape"/> (the deserialization / shape-oracle path) and from
     /// the first real <see cref="Forward"/> when a static chain could not preserve the sequence axis. The norms and
@@ -254,18 +260,17 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         if (!_ffnUp.IsShapeResolved) _ffnUp.ResolveFromShape(hiddenShape);
         if (!_ffnDown.IsShapeResolved) _ffnDown.ResolveFromShape(new[] { 1, _ffnDim });
 
-        // A rank-1 probe carries only the feature width. It does NOT establish a
-        // one-token sequence: T5's embedding declaration intentionally omits its
-        // data-dependent sequence axis, so the sequential shape walk can arrive here
-        // with [hiddenSize]. Keep the declared [-1, hiddenSize] contract in that case;
-        // Forward will resolve it from the real [B, S, H] tensor. Pinning it to
-        // [1, hiddenSize] made every non-singleton T5 sequence contradict the block's
-        // metadata even though the paper-canonical residual block preserved S exactly.
-        if (input.Shape.Length < 2)
-            return;
-
-        int seq = input.Shape[input.Shape.Length - 2];
-        ResolveShapes(new[] { seq, hidden }, new[] { seq, hidden });
+        // The sequence axis stays dynamic, whatever this particular input carried. A pre-LN block
+        // is x + Attn(LN(x)) then x + FFN(LN(x)): every term preserves S exactly, and none of its
+        // parameters are sized by it, so S is not this block's to fix. Pinning whichever length
+        // arrived first made the block's own metadata contradict every later batch of a different
+        // length -- it declared [8, 16] while correctly producing [S, 16] for the real S -- which
+        // is the ordinary case for variable-length text, not an edge case.
+        //
+        // The rank-1 probe reaches here too: T5's embedding intentionally omits its data-dependent
+        // sequence axis, so the shape walk can arrive with just [hiddenSize]. Both paths now want
+        // the same declaration, so there is no longer a case to split on.
+        ResolveShapes(new[] { -1, hidden }, new[] { -1, hidden });
     }
 
     /// <summary>

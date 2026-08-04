@@ -60,4 +60,24 @@ public enum ShapeRelationKind
     /// <c>floor((in + 2*padding - kernel) / stride) + 1</c>.
     /// </summary>
     Convolutional,
+
+    /// <summary>
+    /// TRAILING (feature) axis is set by the layer; every leading axis is preserved — the
+    /// feature-last counterpart of <see cref="ChannelOnly"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Covers the sequence world: transformer blocks, dense projections over <c>[S, H]</c>, and
+    /// normalization over the feature axis. Their parameters are sized by the feature width alone,
+    /// so the sequence length is never theirs to fix — the same block is meant to accept any
+    /// sequence length, which is exactly why a resolution that pins one is a defect rather than a
+    /// detail.
+    /// </para>
+    /// <para>
+    /// This distinction is load-bearing: the other three relations put the layer-determined axis
+    /// FIRST, and reading a feature-last layer with a channel-first rule inverts which axis is a
+    /// real claim and which was merely inferred.
+    /// </para>
+    /// </remarks>
+    FeatureOnly,
 }

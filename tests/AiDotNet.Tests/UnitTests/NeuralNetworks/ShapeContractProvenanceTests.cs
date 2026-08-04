@@ -121,6 +121,88 @@ public class ShapeContractProvenanceTests
     }
 
     /// <summary>
+    /// A layer defined to preserve an axis must still preserve it after resolution.
+    /// </summary>
+    /// <remarks>
+    /// A pre-LN block is x + Attn(LN(x)) then x + FFN(LN(x)) — every term keeps S, and none of its
+    /// parameters are sized by it. Resolution used to pin whichever length arrived first, so the
+    /// block's own metadata then contradicted every later batch of a different length. Variable
+    /// sequence length is the ordinary case for text, so this must not regress.
+    /// </remarks>
+    [Fact]
+    public void ResolutionKeepsAnAxisTheLayerIsDefinedToPreserve()
+    {
+        var block = NewBlock();
+        block.ResolveShapesOnly([8, HiddenSize]);   // walk hands it a concrete sequence length
+
+        Assert.Equal([-1, HiddenSize], block.GetInputShape());
+        Assert.Equal([-1, HiddenSize], block.GetOutputShape());
+    }
+
+    /// <summary>
+    /// Keeping a free axis must not read as "never resolved" — those are different states that
+    /// both show up in the shape array as a bare -1.
+    /// </summary>
+    [Fact]
+    public void KeepingAFreeAxisStillCountsAsResolved()
+    {
+        var block = NewBlock();
+        Assert.False(block.IsShapeResolved, "precondition: unresolved before the first shape probe");
+
+        block.ResolveShapesOnly([8, HiddenSize]);
+
+        Assert.True(block.IsShapeResolved,
+            "A layer that resolved while deliberately keeping a declared-free axis dynamic IS " +
+            "resolved. Reading the surviving -1 as 'not resolved yet' re-runs first-forward setup " +
+            "on every pass and leaves a sequence-agnostic block permanently unresolved.");
+    }
+
+    /// <summary>
+    /// The layer's OWN width can never be declared free — otherwise "this axis is genuinely
+    /// dynamic" would become a way to opt out of the shape contract entirely.
+    /// </summary>
+    [Fact]
+    public void TheParameterizedAxisCannotBeLeftFree()
+    {
+        var block = NewBlock();
+        var resolve = typeof(LayerBase<double>)
+            .GetMethods(Any)
+            .First(m => m.Name == "ResolveShapes" && m.GetParameters().Length == 2);
+
+        // Axis 1 is the feature width — sized by this block's parameters, so not free.
+        var ex = Assert.ThrowsAny<Exception>(() =>
+            resolve.Invoke(block, [new[] { -1, -1 }, new[] { -1, -1 }]));
+
+        Assert.True(ex.GetBaseException() is ArgumentException,
+            $"Expected the contract to reject a free parameterized axis; got {ex.GetBaseException().GetType().Name}.");
+    }
+
+    /// <summary>
+    /// FeatureOnly is the mirror of ChannelOnly, and reading one with the other's convention
+    /// inverts exactly which axis is a real claim.
+    /// </summary>
+    /// <remarks>
+    /// Three of the four relations are channel-first. Applying that assumption to a feature-last
+    /// layer asserts the sequence length, which no transformer block fixes, and exempts the
+    /// feature width, which every one of them does — the contract still runs, but backwards.
+    /// </remarks>
+    [Fact]
+    public void FeatureOnlyPutsTheLayersOwnAxisLast()
+    {
+        var implied = typeof(LayerBase<double>)
+            .GetMethod("ImpliedInputShape", Any)!
+            .Invoke(NewBlock(), [new[] { 12, HiddenSize }]) as int[];
+
+        Assert.True(implied is not null, "FeatureOnly must be invertible: it preserves every leading axis.");
+        Assert.Equal([12, -1], implied!);
+    }
+
+    private const int HiddenSize = 16;
+
+    private static PreLNTransformerBlock<double> NewBlock() =>
+        new(HiddenSize, 4 * HiddenSize, new MultiHeadAttentionLayer<double>(headCount: 4, headDimension: 4));
+
+    /// <summary>
     /// An Identity-relation layer whose DECLARED output shape is set the way the sequential walk
     /// sets it — directly, rather than from anything the layer computed.
     /// </summary>
