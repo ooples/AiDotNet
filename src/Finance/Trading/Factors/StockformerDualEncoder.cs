@@ -1,54 +1,47 @@
-using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Finance.Trading.Factors;
 
 /// <summary>
-/// Stockformer's Dual-Frequency Spatiotemporal Encoder: the routing that gives each frequency band its
-/// own temporal operator, mixes each across the asset graph, and fuses them asymmetrically.
+/// Stockformer's Dual-Frequency Spatiotemporal Encoder and its fusion decoder, following the paper's
+/// equations rather than the shape of its prose.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
 /// <para>
-/// Ma, Xue, Lu and Chen, arXiv:2401.06139. Structure transcribed from <c>dualEncoder</c>,
-/// <c>sparseSpatialAttention</c>, <c>temporalConvNet</c> and <c>adaptiveFusion</c> in the reference
-/// implementation (github.com/Eric991005/Multitask-Stockformer).
-/// </para>
-/// <para>
-/// <b>The bands take DIFFERENT operators, and the direction is the contribution.</b> "Dual-frequency
-/// encoder" does not say which branch gets what, and inverting it yields a model that trains fine and
-/// means nothing:
+/// Ma, Xue, Lu and Chen, arXiv:2401.06139, equations 7, 10 and 11.
 /// </para>
 /// <code>
-///   low  band  ->  temporal mixing over the causal window   (trend)
-///   high band  ->  causal local convolution + ReLU          (short-horizon structure)
-///   both bands ->  their OWN graph-mixing projection, added residually
-///   fusion     ->  asymmetric: the low band is the base, the high band is projected in
+///   Eq. 7   temporal (low band, per asset, over time)   ta_n = Att(X_l, X_l, X_l)
+///   Eq. 10  spatial  (per timestep, over assets)        sa_t = Att(X~, X~, X~)
+///                                                        X~  = X + rho^spa + rho^tem
+///   Eq. 11  fusion                                       fa  = Att(Y_l, Y_l, Y_l)
+///                                                            + Att(Y_l, Y_h, Y_h)
 /// </code>
 /// <para>
-/// Each band owns a SEPARATE spatial projection (<c>ssal</c>/<c>ssah</c> in the reference) rather than
-/// sharing one module applied twice, so the bands learn different cross-asset structure.
+/// <b>Three corrections against an earlier revision of this class</b>, each found by reading the
+/// method section rather than only the reference code:
 /// </para>
+/// <list type="number">
+/// <item><description>Attention is REAL scaled dot-product, not a fixed causal average. The average
+/// left the model with no learnable temporal weighting, so longer training made the objective WORSE
+/// instead of better.</description></item>
+/// <item><description>The graph enters as an ADDITIVE EMBEDDING summed into the features
+/// (<c>rho^spa</c>), after which plain self-attention runs over assets. It is NOT a row-normalized
+/// adjacency matmul: the paper lets attention LEARN asset relationships with the graph as a prior,
+/// whereas a fixed mixing matrix imposes weights the model cannot override.</description></item>
+/// <item><description>Fusion is TWO summed attention terms — self-attention on the low band plus
+/// cross-attention with low as query and high as key/value — not a single projection.</description></item>
+/// </list>
 /// <para>
-/// <b>Every weight is owned by a layer supplied by the caller.</b> This type holds no parameters of its
-/// own. That is deliberate: weights in bare matrices are invisible to the parameter vector and to the
-/// gradient tape, so a model built that way cannot actually be trained through the standard path — it
-/// reports zero parameters and zero gradient. Projections go through <c>ILayer.Forward</c> and
-/// everything else through <c>Engine</c>, so the whole encoder is differentiable.
+/// The high band's temporal operator is a causal convolution rather than attention. Eq. 7 specifies
+/// attention for the LOW band only; the reference implementation uses <c>temporalConvNet</c> for the
+/// high band, so that choice is justified by the code, not the paper.
 /// </para>
-/// <para>
-/// <b>Documented simplification.</b> The reference's temporal and fusion stages are full scaled
-/// dot-product attention. Here temporal mixing is a causal average over the window and fusion is a
-/// learned projection of the high band onto the low, both differentiable and both preserving the
-/// asymmetry and the causality that matter. Rank-order behaviour of the bands is preserved; the
-/// attention weights are not learned per pair. Stated rather than implied, because it is a real
-/// departure from the reference even though the routing is faithful.
-/// </para>
-/// <para><b>For Beginners:</b> The slow and fast parts of a price series carry different information,
-/// so each is processed differently, each is allowed to look across the other assets, and then the slow
-/// view absorbs what the fast view found.</para>
+/// <para><b>For Beginners:</b> The slow and fast parts of each price series are analysed separately,
+/// each is allowed to look across the other assets — with a graph embedding telling it which assets are
+/// similar — and then the slow view consults the fast one.</para>
 /// </remarks>
 public sealed class StockformerDualEncoder<T>
 {
@@ -56,101 +49,132 @@ public sealed class StockformerDualEncoder<T>
 
     private static IEngine Engine => AiDotNetEngine.Current;
 
+    /// <summary>
+    /// One stacked encoder layer's blocks. The paper stacks L of these; the reference config sets
+    /// <c>layers = 2</c>.
+    /// </summary>
+    /// <param name="LowTemporal">Eq. 7 self-attention over time, low band.</param>
+    /// <param name="LowSpatial">Eq. 10 self-attention over assets, low band.</param>
+    /// <param name="HighSpatial">Eq. 10 self-attention over assets, high band.</param>
+    /// <param name="HighTemporalProjection">
+    /// Projection after the high band's causal convolution — its temporal operator is convolutional,
+    /// per the reference, so it needs no Q/K/V triple.
+    /// </param>
+    public sealed record Layer(
+        StockformerAttention<T> LowTemporal,
+        StockformerAttention<T> LowSpatial,
+        StockformerAttention<T> HighSpatial,
+        ILayer<T> HighTemporalProjection);
+
     private readonly int _features;
     private readonly int _kernelWidth;
-
-    private readonly ILayer<T> _lowTemporal;
-    private readonly ILayer<T> _highTemporal;
-    private readonly ILayer<T> _spatialLow;
-    private readonly ILayer<T> _spatialHigh;
-    private readonly ILayer<T> _fusion;
+    private readonly IReadOnlyList<Layer> _layers;
+    private readonly StockformerAttention<T> _fusionSelf;
+    private readonly StockformerAttention<T> _fusionCross;
     private readonly ILayer<T> _fusionNorm;
 
     /// <summary>Gets the model width.</summary>
     public int Features => _features;
 
+    /// <summary>Gets the number of stacked encoder layers (L).</summary>
+    public int LayerCount => _layers.Count;
+
     /// <summary>
-    /// Creates an encoder over caller-owned layers.
+    /// Creates an encoder over caller-owned layers. This type holds no parameters of its own, so every
+    /// weight is registered in the owning model and visible to both the optimizer and the tape.
     /// </summary>
     /// <param name="features">Model width.</param>
-    /// <param name="kernelWidth">Causal window for the high band's local convolution.</param>
-    /// <param name="lowTemporal">Projection applied to the low band after temporal mixing.</param>
-    /// <param name="highTemporal">Projection applied to the high band's causal convolution.</param>
-    /// <param name="spatialLow">Low band's graph-mixing projection.</param>
-    /// <param name="spatialHigh">High band's graph-mixing projection (a DISTINCT layer).</param>
-    /// <param name="fusion">Projection carrying the high band into the fused representation.</param>
+    /// <param name="kernelWidth">Causal window for the high band's convolution.</param>
+    /// <param name="layers">The L stacked encoder layers, applied in order.</param>
+    /// <param name="fusionSelf">Eq. 11's first term: self-attention on the low band.</param>
+    /// <param name="fusionCross">Eq. 11's second term: low queries the high band.</param>
     /// <param name="fusionNorm">
-    /// Normalization applied to the fused representation. The reference has
-    /// <c>nn.LayerNorm(features, elementwise_affine=False)</c> in <c>adaptiveFusion</c>; omitting it
-    /// made training DIVERGE with more iterations (200-step loss worse than 50-step), because the two
-    /// residual additions let activation scale grow unchecked through the fusion stage.
+    /// Normalization on the fused output. Present in the reference's <c>adaptiveFusion</c>
+    /// (<c>nn.LayerNorm</c>); the paper's method section does not mention it, so it is justified by the
+    /// code rather than the paper.
     /// </param>
     public StockformerDualEncoder(
         int features, int kernelWidth,
-        ILayer<T> lowTemporal, ILayer<T> highTemporal,
-        ILayer<T> spatialLow, ILayer<T> spatialHigh, ILayer<T> fusion, ILayer<T> fusionNorm)
+        IReadOnlyList<Layer> layers,
+        StockformerAttention<T> fusionSelf,
+        StockformerAttention<T> fusionCross,
+        ILayer<T> fusionNorm)
     {
         if (features <= 0) throw new ArgumentOutOfRangeException(nameof(features), features, "Width must be positive.");
         if (kernelWidth <= 0) throw new ArgumentOutOfRangeException(nameof(kernelWidth), kernelWidth, "Kernel width must be positive.");
+        if (layers is null) throw new ArgumentNullException(nameof(layers));
+        if (layers.Count == 0)
+            throw new ArgumentException(
+                "At least one encoder layer is required. The paper stacks L of them and the reference " +
+                "config sets layers = 2; an empty stack would leave the bands unencoded.", nameof(layers));
 
         _features = features;
         _kernelWidth = kernelWidth;
-        _lowTemporal = lowTemporal ?? throw new ArgumentNullException(nameof(lowTemporal));
-        _highTemporal = highTemporal ?? throw new ArgumentNullException(nameof(highTemporal));
-        _spatialLow = spatialLow ?? throw new ArgumentNullException(nameof(spatialLow));
-        _spatialHigh = spatialHigh ?? throw new ArgumentNullException(nameof(spatialHigh));
-        _fusion = fusion ?? throw new ArgumentNullException(nameof(fusion));
+        _layers = layers;
+        _fusionSelf = fusionSelf ?? throw new ArgumentNullException(nameof(fusionSelf));
+        _fusionCross = fusionCross ?? throw new ArgumentNullException(nameof(fusionCross));
         _fusionNorm = fusionNorm ?? throw new ArgumentNullException(nameof(fusionNorm));
-
-        if (ReferenceEquals(spatialLow, spatialHigh))
-        {
-            throw new ArgumentException(
-                "The two bands must have SEPARATE spatial projections (ssal/ssah in the reference). " +
-                "Sharing one layer would force both frequency bands to learn the same cross-asset " +
-                "structure, which erases half the dual-frequency design.", nameof(spatialHigh));
-        }
     }
 
     /// <summary>
-    /// Encodes both bands and fuses them.
+    /// Encodes both bands through the stack and fuses them.
     /// </summary>
     /// <param name="low">Low band, <c>[assets, time, features]</c>.</param>
     /// <param name="high">High band, same shape.</param>
-    /// <param name="graph">Asset graph, <c>[assets, assets]</c>.</param>
+    /// <param name="spatialEmbedding">
+    /// <c>rho^spa</c>: per-asset structural embedding, <c>[assets, features]</c>, broadcast over time.
+    /// </param>
+    /// <param name="temporalEmbedding">
+    /// <c>rho^tem</c>: per-timestep embedding, <c>[time, features]</c>, broadcast over assets.
+    /// </param>
     /// <returns>The fused representation and the encoded low band.</returns>
-    public (Tensor<T> Fused, Tensor<T> LowEncoded) Encode(Tensor<T> low, Tensor<T> high, Matrix<T> graph)
+    public (Tensor<T> Fused, Tensor<T> LowEncoded) Encode(
+        Tensor<T> low, Tensor<T> high, Matrix<T> spatialEmbedding, Matrix<T> temporalEmbedding)
     {
-        Validate(low, high, graph);
+        Validate(low, high, spatialEmbedding, temporalEmbedding);
 
         int assets = low.Shape[0];
         int time = low.Shape[1];
 
-        // Low band: causal temporal mixing, then a learned projection.
-        var lowMixed = Project(CausalMix(low, assets, time, time), _lowTemporal, assets, time);
+        var currentLow = low;
+        var currentHigh = high;
 
-        // High band: causal local convolution (ReLU comes from the layer's activation), then projection.
-        var highMixed = Project(CausalMix(high, assets, time, _kernelWidth), _highTemporal, assets, time);
+        foreach (var layer in _layers)
+        {
+            // Eq. 7: temporal self-attention on the low band, per asset, causal over time.
+            var lowTemporal = OverTime(currentLow, assets, time, layer.LowTemporal);
 
-        // Each band mixes across assets through the graph, then its OWN projection, added residually.
-        var lowEncoded = Engine.TensorAdd(
-            Project(GraphMix(lowMixed, graph, assets, time), _spatialLow, assets, time), lowMixed);
-        var highEncoded = Engine.TensorAdd(
-            Project(GraphMix(highMixed, graph, assets, time), _spatialHigh, assets, time), highMixed);
+            // High band: causal convolution then its projection (the reference's temporalConvNet).
+            var highTemporal = Project(
+                CausalWindow(currentHigh, assets, time), layer.HighTemporalProjection, assets, time);
 
-        // Asymmetric fusion: low is the base, high is projected in, then NORMALIZED. The reference
-        // normalizes here and it is load-bearing, not cosmetic: without it the stacked residual adds
-        // let activation scale drift and longer training made the objective worse instead of better.
-        var fused = Project(
-            Engine.TensorAdd(Project(highEncoded, _fusion, assets, time), lowEncoded),
-            _fusionNorm, assets, time);
-        return (fused, lowEncoded);
+            // Eq. 10: X~ = X + rho^spa + rho^tem, then self-attention over assets per timestep.
+            var lowSpatial = OverAssets(
+                AddEmbeddings(lowTemporal, spatialEmbedding, temporalEmbedding, assets, time),
+                assets, time, layer.LowSpatial);
+            var highSpatial = OverAssets(
+                AddEmbeddings(highTemporal, spatialEmbedding, temporalEmbedding, assets, time),
+                assets, time, layer.HighSpatial);
+
+            // Residual, so stacking layers cannot destroy what earlier ones found.
+            currentLow = Engine.TensorAdd(lowSpatial, lowTemporal);
+            currentHigh = Engine.TensorAdd(highSpatial, highTemporal);
+        }
+
+        // Eq. 11: Att(Y_l, Y_l, Y_l) + Att(Y_l, Y_h, Y_h) — self plus cross, summed.
+        var fusedSelf = OverTime(currentLow, assets, time, _fusionSelf);
+        var fusedCross = OverTimeCross(currentLow, currentHigh, assets, time, _fusionCross);
+        var fused = Project(Engine.TensorAdd(fusedSelf, fusedCross), _fusionNorm, assets, time);
+
+        return (fused, currentLow);
     }
 
-    private void Validate(Tensor<T> low, Tensor<T> high, Matrix<T> graph)
+    private void Validate(Tensor<T> low, Tensor<T> high, Matrix<T> spatial, Matrix<T> temporal)
     {
         if (low is null) throw new ArgumentNullException(nameof(low));
         if (high is null) throw new ArgumentNullException(nameof(high));
-        if (graph is null) throw new ArgumentNullException(nameof(graph));
+        if (spatial is null) throw new ArgumentNullException(nameof(spatial));
+        if (temporal is null) throw new ArgumentNullException(nameof(temporal));
 
         if (low.Shape.Length != 3)
             throw new ArgumentException($"Expected [assets, time, features]; got rank {low.Shape.Length}.", nameof(low));
@@ -161,118 +185,114 @@ public sealed class StockformerDualEncoder<T>
         }
         if (low.Shape[2] != _features)
             throw new ArgumentException($"Band width {low.Shape[2]} does not match encoder width {_features}.", nameof(low));
-        if (graph.Rows != low.Shape[0] || graph.Columns != low.Shape[0])
+        if (spatial.Rows != low.Shape[0] || spatial.Columns != _features)
             throw new ArgumentException(
-                $"Graph must be [assets, assets] = [{low.Shape[0]}, {low.Shape[0]}]; got " +
-                $"[{graph.Rows}, {graph.Columns}].", nameof(graph));
+                $"rho^spa must be [assets, features] = [{low.Shape[0]}, {_features}]; got " +
+                $"[{spatial.Rows}, {spatial.Columns}].", nameof(spatial));
+        if (temporal.Rows != low.Shape[1] || temporal.Columns != _features)
+            throw new ArgumentException(
+                $"rho^tem must be [time, features] = [{low.Shape[1]}, {_features}]; got " +
+                $"[{temporal.Rows}, {temporal.Columns}].", nameof(temporal));
     }
 
-    /// <summary>Runs a projection over every (asset, timestep) row, via the layer so the tape records it.</summary>
-    private Tensor<T> Project(Tensor<T> x, ILayer<T> layer, int assets, int time)
+    /// <summary>Attention along the TIME axis, independently per asset.</summary>
+    private Tensor<T> OverTime(Tensor<T> x, int assets, int time, StockformerAttention<T> attention)
     {
-        var flat = Engine.Reshape(x, new[] { assets * time, _features });
-        var projected = layer.Forward(flat);
-        return Engine.Reshape(projected, new[] { assets, time, _features });
+        var perAsset = new Tensor<T>[assets];
+        for (int a = 0; a < assets; a++)
+        {
+            var slice = AssetSlice(x, a, assets, time);
+            perAsset[a] = Engine.Reshape(attention.Apply(slice, slice, slice), new[] { 1, time, _features });
+        }
+        return Engine.Concat(perAsset, 0);
+    }
+
+    /// <summary>Cross-attention along TIME: query from <paramref name="q"/>, key/value from <paramref name="kv"/>.</summary>
+    private Tensor<T> OverTimeCross(
+        Tensor<T> q, Tensor<T> kv, int assets, int time, StockformerAttention<T> attention)
+    {
+        var perAsset = new Tensor<T>[assets];
+        for (int a = 0; a < assets; a++)
+        {
+            var qSlice = AssetSlice(q, a, assets, time);
+            var kvSlice = AssetSlice(kv, a, assets, time);
+            perAsset[a] = Engine.Reshape(
+                attention.Apply(qSlice, kvSlice, kvSlice), new[] { 1, time, _features });
+        }
+        return Engine.Concat(perAsset, 0);
     }
 
     /// <summary>
-    /// Causal temporal mixing as a MATMUL against a fixed lower-triangular averaging operator.
+    /// Attention along the ASSET axis, independently per timestep. No causal mask — assets are unordered.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Expressed as a matrix product on purpose. The obvious implementation — loop over timesteps and
-    /// write each output element — produces the same numbers and SEVERS THE GRADIENT TAPE, because
-    /// writing into a fresh tensor by index is not a recorded operation. The model then reports layers
-    /// and parameters but zero gradient, and training silently does nothing.
-    /// </para>
-    /// <para>
-    /// <c>L[t, u] = 1/(t+1)</c> for <c>u &lt;= t</c> and 0 above the diagonal, so row t averages
-    /// 0..t and position t can never see its future.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> CausalMix(Tensor<T> x, int assets, int time, int width)
+    private Tensor<T> OverAssets(Tensor<T> x, int assets, int time, StockformerAttention<T> attention)
     {
-        var mixer = CausalOperator(time, width);
-        return ApplyTimeOperator(x, mixer, assets, time);
+        var perStep = new Tensor<T>[time];
+        for (int t = 0; t < time; t++)
+        {
+            var slice = TimeSlice(x, t, assets, time);
+            perStep[t] = Engine.Reshape(attention.Apply(slice, slice, slice), new[] { assets, 1, _features });
+        }
+        return Engine.Concat(perStep, 1);
     }
 
-    /// <summary>
-    /// Builds the <c>[time, time]</c> causal operator: a running mean when <paramref name="window"/>
-    /// covers everything, a local window mean otherwise.
-    /// </summary>
-    private Tensor<T> CausalOperator(int time, int window)
+    /// <summary>Eq. 10's <c>X~ = X + rho^spa + rho^tem</c>, both broadcast.</summary>
+    private Tensor<T> AddEmbeddings(
+        Tensor<T> x, Matrix<T> spatial, Matrix<T> temporal, int assets, int time)
+    {
+        var bias = new Tensor<T>(new[] { assets, time, _features });
+        for (int a = 0; a < assets; a++)
+        {
+            for (int t = 0; t < time; t++)
+            {
+                int at = ((a * time) + t) * _features;
+                for (int f = 0; f < _features; f++)
+                    bias[at + f] = Ops.Add(spatial[a, f], temporal[t, f]);
+            }
+        }
+        // The bias is DATA, so building it by index costs no gradient; the add itself is recorded.
+        return Engine.TensorAdd(x, bias);
+    }
+
+    /// <summary>Causal local mean over the last <c>kernelWidth</c> steps, as a matmul so it stays on the tape.</summary>
+    private Tensor<T> CausalWindow(Tensor<T> x, int assets, int time)
     {
         var op = new Tensor<T>(new[] { time, time });
         for (int t = 0; t < time; t++)
         {
-            int first = window >= time ? 0 : Math.Max(0, t - window + 1);
-            int count = t - first + 1;
-            var weight = Ops.FromDouble(1.0 / count);
+            int first = Math.Max(0, t - _kernelWidth + 1);
+            var weight = Ops.FromDouble(1.0 / (t - first + 1));
             for (int u = first; u <= t; u++) op[(t * time) + u] = weight;
         }
-        return op;
-    }
 
-    /// <summary>
-    /// Applies a <c>[time, time]</c> operator across the time axis in ONE matmul.
-    /// </summary>
-    /// <remarks>
-    /// Permuting time to the front lets a single <c>[time, time] x [time, assets*features]</c> product
-    /// mix every asset and feature at once — no per-asset slicing loop, and every step
-    /// (permute, reshape, matmul) is a recorded Engine op so the gradient survives.
-    /// </remarks>
-    private Tensor<T> ApplyTimeOperator(Tensor<T> x, Tensor<T> op, int assets, int time)
-    {
         var timeFirst = Engine.Reshape(
             Engine.TensorPermute(x, new[] { 1, 0, 2 }), new[] { time, assets * _features });
-        var mixed = Engine.TensorMatMul(op, timeFirst);
         return Engine.TensorPermute(
-            Engine.Reshape(mixed, new[] { time, assets, _features }), new[] { 1, 0, 2 });
+            Engine.Reshape(Engine.TensorMatMul(op, timeFirst), new[] { time, assets, _features }),
+            new[] { 1, 0, 2 });
     }
 
-    /// <summary>
-    /// Mixes assets by matmul against the row-normalized graph, in ONE product.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The asset axis is already leading, so <c>[assets, assets] x [assets, time*features]</c> mixes
-    /// every timestep simultaneously. Written as a matmul rather than an indexing loop for the same
-    /// reason as the temporal operator: element-wise writes into a fresh tensor are invisible to the
-    /// tape, so the graph projection would receive no gradient and the model would train without ever
-    /// learning cross-asset structure.
-    /// </para>
-    /// <para>
-    /// A zero graph entry removes the edge. An asset with no neighbours gets an identity row, so it
-    /// keeps its own representation instead of collapsing to zero.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> GraphMix(Tensor<T> x, Matrix<T> graph, int assets, int time)
+    private Tensor<T> Project(Tensor<T> x, ILayer<T> layer, int assets, int time)
+        => Engine.Reshape(
+            layer.Forward(Engine.Reshape(x, new[] { assets * time, _features })),
+            new[] { assets, time, _features });
+
+    /// <summary>One asset's <c>[time, features]</c> slice, via a one-hot matmul so the tape follows it.</summary>
+    private Tensor<T> AssetSlice(Tensor<T> x, int asset, int assets, int time)
     {
-        var normalized = new Tensor<T>(new[] { assets, assets });
-        for (int a = 0; a < assets; a++)
-        {
-            double sum = 0.0;
-            for (int n = 0; n < assets; n++)
-            {
-                double w = Ops.ToDouble(graph[a, n]);
-                if (w > 0.0) sum += w;
-            }
-
-            if (sum <= 0.0)
-            {
-                normalized[(a * assets) + a] = Ops.One;
-                continue;
-            }
-
-            for (int n = 0; n < assets; n++)
-            {
-                double w = Ops.ToDouble(graph[a, n]);
-                if (w > 0.0) normalized[(a * assets) + n] = Ops.FromDouble(w / sum);
-            }
-        }
-
+        var selector = new Tensor<T>(new[] { 1, assets });
+        selector[asset] = Ops.One;
         var flat = Engine.Reshape(x, new[] { assets, time * _features });
-        return Engine.Reshape(Engine.TensorMatMul(normalized, flat), new[] { assets, time, _features });
+        return Engine.Reshape(Engine.TensorMatMul(selector, flat), new[] { time, _features });
     }
 
+    /// <summary>One timestep's <c>[assets, features]</c> slice, likewise by one-hot matmul.</summary>
+    private Tensor<T> TimeSlice(Tensor<T> x, int step, int assets, int time)
+    {
+        var selector = new Tensor<T>(new[] { 1, time });
+        selector[step] = Ops.One;
+        var timeFirst = Engine.Reshape(
+            Engine.TensorPermute(x, new[] { 1, 0, 2 }), new[] { time, assets * _features });
+        return Engine.Reshape(Engine.TensorMatMul(selector, timeFirst), new[] { assets, _features });
+    }
 }

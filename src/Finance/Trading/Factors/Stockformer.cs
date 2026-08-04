@@ -33,13 +33,16 @@ namespace AiDotNet.Finance.Trading.Factors;
 /// sym2 DWT separating trend from fluctuation. A PREPROCESSING stage: the reference performs it in the
 /// training script and feeds the network two already-split inputs.</description></item>
 /// <item><description><b>Dual-frequency spatiotemporal encoder</b> —
-/// <see cref="StockformerDualEncoder{T}"/>. Low band through temporal self-attention, high band
-/// through a causal TCN, each with its own spatial attention over the stock graph.</description></item>
-/// <item><description><b>Graph embedding</b> — a struc2vec-derived adjacency supplied via
-/// <see cref="Adjacency"/>, precomputed rather than learned.</description></item>
+/// <see cref="StockformerDualEncoder{T}"/>. Low band through temporal self-attention (Eq. 7), high
+/// band through a causal TCN, each then through self-attention over assets (Eq. 10), fused by two
+/// summed attention terms (Eq. 11).</description></item>
+/// <item><description><b>Graph embedding</b> — a struc2vec-derived per-asset embedding supplied via
+/// <see cref="CrossSectionalGraphModelBase{T}.AssetEmbedding"/> and ADDED to the features per Eq. 10,
+/// precomputed rather than learned. Not an adjacency matrix: the paper sums it in as a prior and lets
+/// attention learn the relationships.</description></item>
 /// <item><description><b>Multi-task heads</b> — return regression and direction classification,
-/// combined by <see cref="StockformerMultiTaskLoss{T}"/> as an unweighted 1:1 sum of masked MAE and
-/// cross-entropy.</description></item>
+/// combined by <see cref="StockformerMultiTaskLoss{T}"/> as <c>L_reg + lambda*L_cla</c> (Eq. 12),
+/// masked MAE plus cross-entropy, with lambda defaulting to the reference's 1.0.</description></item>
 /// </list>
 /// <para><b>For Beginners:</b> This ranks stocks. It splits each stock's history into a slow trend and
 /// fast wiggles, studies each with machinery suited to it, lets stocks influence one another through a
@@ -85,12 +88,9 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     // gradients flow and Training_ShouldReduceLoss / GradientFlow_ShouldBeNonZeroAndFinite /
     // Clone_AfterTraining_ShouldPreserveLearnedWeights are satisfiable rather than merely asserted.
     // The paper's routing is preserved by how these are COMBINED, not by hand-rolled arithmetic.
-    private DenseLayer<T>? _lift;          // scalar band value -> model width
-    private DenseLayer<T>? _lowTemporal;   // low band: attention-style value projection
-    private DenseLayer<T>? _highTemporal;  // high band: causal-conv-style projection
-    private DenseLayer<T>? _spatialLow;    // per-band graph mixing (separate instances, per reference)
-    private DenseLayer<T>? _spatialHigh;
-    private DenseLayer<T>? _fusion;        // cross-band fusion
+    private DenseLayer<T>? _lift;           // scalar band value -> model width
+    private DenseLayer<T>? _lowUpsample;    // Eq. 3-4: learnable inverse DWT, low band
+    private DenseLayer<T>? _highUpsample;   // Eq. 3-4: learnable inverse DWT, high band
     private DenseLayer<T>? _returnHead;
     private DenseLayer<T>? _directionHead;
     private LayerNormalizationLayer<T>? _fusionNorm;
@@ -181,7 +181,27 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// <param name="perStockReturns">Rows are stocks, columns are timesteps.</param>
     public Prediction PredictBands(Matrix<T> perStockReturns)
     {
-        var (fusedLast, lowLast) = ForwardCore(perStockReturns, out int assets);
+        if (perStockReturns is null) throw new ArgumentNullException(nameof(perStockReturns));
+
+        // Single-feature convenience: one series per asset. The paper's real input carries D factors,
+        // so prefer the Tensor overload for anything beyond a smoke test.
+        var asTensor = new Tensor<T>(new[] { perStockReturns.Rows, perStockReturns.Columns });
+        for (int a = 0; a < perStockReturns.Rows; a++)
+            for (int t = 0; t < perStockReturns.Columns; t++)
+                asTensor[(a * perStockReturns.Columns) + t] = perStockReturns[a, t];
+        return PredictBands(asTensor);
+    }
+
+    /// <summary>
+    /// Runs the full pipeline on a <c>[assets, time, features]</c> factor tensor.
+    /// </summary>
+    /// <remarks>
+    /// This is the paper's input shape: D price-volume factors per asset per timestep (D = 360 in the
+    /// reference), not a single return series.
+    /// </remarks>
+    public Prediction PredictBands(Tensor<T> features)
+    {
+        var (fusedLast, lowLast) = ForwardCore(features, out int assets);
 
         return new Prediction(
             ToVector(_returnHead!.Forward(fusedLast)),
@@ -214,7 +234,8 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
             prediction.DirectionLogits, prediction.LowDirectionLogits,
             directionTarget,
             _options.NumDirectionClasses,
-            _options.MissingValueSentinel);
+            _options.MissingValueSentinel,
+            _options.TaskLossWeight);
     }
 
     /// <summary>Gets metadata describing this model.</summary>
@@ -270,7 +291,7 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// </remarks>
     public override IReadOnlyList<Tensor<T>> PredictAllTasks(Tensor<T> input)
     {
-        var (fusedLast, _) = ForwardCore(ToMatrix(input), out _);
+        var (fusedLast, _) = ForwardCore(input, out _);
         return new[] { _returnHead!.Forward(fusedLast), _directionHead!.Forward(fusedLast) };
     }
 
@@ -283,7 +304,7 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     {
         // No Vector round-trip: that would sever the tape and leave training with no gradient path
         // from the loss back through the encoder.
-        var (fusedLast, _) = ForwardCore(ToMatrix(input), out _);
+        var (fusedLast, _) = ForwardCore(input, out _);
         return _returnHead!.Forward(fusedLast);
     }
 
@@ -328,41 +349,86 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
         int width = _options.HiddenDimension;
 
         _lift = new DenseLayer<T>(width);
-        _lowTemporal = new DenseLayer<T>(width);
-        // ReLU on the high band, matching the reference's relu after its temporal convolution.
-        // Cast required: ReLUActivation implements both the scalar and vector activation interfaces,
-        // so the DenseLayer overloads are ambiguous without it.
-        _highTemporal = new DenseLayer<T>(width, (IActivationFunction<T>)new ReLUActivation<T>());
-        _spatialLow = new DenseLayer<T>(width);
-        _spatialHigh = new DenseLayer<T>(width);
-        _fusion = new DenseLayer<T>(width);
-        // Present in the reference's adaptiveFusion, and required for training stability.
+        // Eq. 3-4: the inverse DWT is LEARNABLE (X_l = W^g g^T Xbar_l + b^g) and restores each band to
+        // the FULL window length. Treating the whole transform as fixed preprocessing, and feeding the
+        // encoder half-length bands, was wrong.
+        _lowUpsample = new DenseLayer<T>(_options.SequenceLength);
+        _highUpsample = new DenseLayer<T>(_options.SequenceLength);
+        // Present in the reference's adaptiveFusion; the paper's method section does not mention it.
+        //
+        // FIXED width. In the real forward pass this layer only ever sees width-sized activations, and
+        // the lazy constructor locks its gamma to whatever shape it happens to be handed first — which,
+        // if that first call comes from a generic walk over Layers, is the wrong width permanently.
         _fusionNorm = new LayerNormalizationLayer<T>(width);
         _returnHead = new DenseLayer<T>(1);
         _directionHead = new DenseLayer<T>(_options.NumDirectionClasses);
 
-        Layers.AddRange(new ILayer<T>[]
+        // ORDER MATTERS, for a reason unrelated to the forward pass. The dual-band routing means these
+        // layers are NOT applied in collection order, but the family's layer-activation probe walks
+        // Layers sequentially, feeding each one the previous one's output. So the sequence must at least
+        // be shape-COMPATIBLE end to end, or the probe throws mid-walk:
+        //   _lift (-> width), then everything width->width, then the heads, and the width->sequence
+        //   upsample filters LAST.
+        // Putting the upsamplers early emitted a sequence-width tensor into a width-sized LayerNorm and
+        // produced "Gamma shape (128) does not match the last 1 dimensions of input shape (1, 20, 20)".
+        Layers.Add(_lift);
+        Layers.Add(_fusionNorm);
+
+        // L stacked encoder layers (paper) / layers = 2 (reference config). NumLayers was previously
+        // read by nothing — the encoder ran a single pass.
+        var stack = new List<StockformerDualEncoder<T>.Layer>();
+        for (int l = 0; l < Math.Max(1, _options.NumLayers); l++)
         {
-            _lift, _lowTemporal, _highTemporal, _spatialLow, _spatialHigh, _fusion, _fusionNorm,
-            _returnHead, _directionHead,
-        });
+            // ReLU after the high band's causal convolution, per the reference. Cast required:
+            // ReLUActivation implements both activation interfaces, so the overloads are ambiguous.
+            var highProjection = new DenseLayer<T>(width, (IActivationFunction<T>)new ReLUActivation<T>());
+            Layers.Add(highProjection);
+
+            stack.Add(new StockformerDualEncoder<T>.Layer(
+                LowTemporal: MakeAttention(width, causal: true),    // Eq. 7, over time
+                LowSpatial: MakeAttention(width, causal: false),    // Eq. 10, over assets
+                HighSpatial: MakeAttention(width, causal: false),
+                HighTemporalProjection: highProjection));
+        }
+
+        _encoder = new StockformerDualEncoder<T>(
+            width, kernelWidth: 3, stack,
+            fusionSelf: MakeAttention(width, causal: true),         // Eq. 11 term 1
+            fusionCross: MakeAttention(width, causal: true),        // Eq. 11 term 2
+            fusionNorm: _fusionNorm);
+
+        // Heads, then the width->sequence upsamplers last, so the sequential probe stays shape-valid.
+        Layers.Add(_returnHead);
+        Layers.Add(_directionHead);
+        Layers.Add(_lowUpsample);
+        Layers.Add(_highUpsample);
     }
 
     /// <summary>
-    /// The encoder, built lazily over this model's layers.
+    /// Builds one attention block and registers its three projections as model layers.
     /// </summary>
     /// <remarks>
-    /// Constructed on demand rather than in the constructor because the layers must exist first, and
-    /// InitializeLayers is what creates them.
+    /// Registering here is what makes W^Q, W^K and W^V real parameters. Projections held as bare
+    /// matrices would be invisible to both the optimizer and the gradient tape.
     /// </remarks>
+    private StockformerAttention<T> MakeAttention(int width, bool causal)
+    {
+        var q = new DenseLayer<T>(width);
+        var k = new DenseLayer<T>(width);
+        var v = new DenseLayer<T>(width);
+        Layers.Add(q);
+        Layers.Add(k);
+        Layers.Add(v);
+        return new StockformerAttention<T>(width, q, k, v, causal);
+    }
+
+    /// <summary>The encoder, built by <see cref="InitializeLayers"/> over this model's layers.</summary>
     private StockformerDualEncoder<T> Encoder
     {
         get
         {
-            if (Layers.Count == 0) InitializeLayers();
-            return _encoder ??= new StockformerDualEncoder<T>(
-                _options.HiddenDimension, kernelWidth: 3,
-                _lowTemporal!, _highTemporal!, _spatialLow!, _spatialHigh!, _fusion!, _fusionNorm!);
+            if (_encoder is null) InitializeLayers();
+            return _encoder!;
         }
     }
 
@@ -387,51 +453,40 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new Stockformer<T>(_options) { Adjacency = Adjacency };
-
-    /// <summary>
-    /// Reinterprets a <c>[stocks, time]</c> (or <c>[1, stocks, time]</c>) tensor as a matrix.
-    /// </summary>
-    /// <remarks>
-    /// The natural input here is a cross-section matrix, but the base's contract is tensor-shaped, so
-    /// the conversion is explicit and validated rather than assumed.
-    /// </remarks>
-    private static Matrix<T> ToMatrix(Tensor<T> input)
-    {
-        if (input is null) throw new ArgumentNullException(nameof(input));
-
-        int rank = input.Shape.Length;
-        int stocks, time;
-        if (rank == 2) { stocks = input.Shape[0]; time = input.Shape[1]; }
-        else if (rank == 3 && input.Shape[0] == 1) { stocks = input.Shape[1]; time = input.Shape[2]; }
-        else
-        {
-            var dims = new int[rank];
-            for (int d = 0; d < rank; d++) dims[d] = input.Shape[d];
-            throw new ArgumentException(
-                $"Expected [stocks, time] or [1, stocks, time]; got [{string.Join(", ", dims)}].", nameof(input));
-        }
-
-        var m = new Matrix<T>(stocks, time);
-        for (int s = 0; s < stocks; s++)
-            for (int t = 0; t < time; t++) m[s, t] = input[(s * time) + t];
-        return m;
-    }
+        => new Stockformer<T>(_options) { AssetGraph = AssetGraph, AssetEmbedding = AssetEmbedding };
 
     /// <summary>Builds the architecture descriptor the financial base requires.</summary>
+    /// <remarks>
+    /// <para>
+    /// Declares a SEQUENCE input — <c>inputHeight = sequenceLength</c>, <c>inputWidth = numFeatures</c>.
+    /// TwoDimensional specifically, because <c>GetInputShape()</c> maps it to
+    /// <c>[InputHeight, InputWidth]</c>, and the family's test base derives the fed shape from exactly
+    /// that declaration (<c>GetArchitecture().GetInputShape()</c>) with a batch axis prepended. So this
+    /// produces <c>[batch, sequence, features]</c> — the shape the model actually wants. Choosing
+    /// ThreeDimensional instead inserts a depth axis and yields <c>[batch, depth, sequence, features]</c>.
+    /// </para>
+    /// <para>
+    /// The previous form passed only <c>inputFeatures</c>, so the architecture described a flat
+    /// 360-wide vector with no time axis and callers fed <c>[1, 1, 360]</c>: ONE timestep. A wavelet
+    /// window cannot be built from one step, and an earlier revision only appeared to work because it
+    /// read that shape as 360 TIMESTEPS of a single feature — decomposing across the feature axis
+    /// instead of time, which is not what the paper does.
+    /// </para>
+    /// </remarks>
     private static NeuralNetworkArchitecture<T> BuildArchitecture(StockformerOptions<T> options)
-        => new(inputFeatures: Math.Max(1, options.NumFeatures),
+        => new(inputType: InputType.TwoDimensional,
+               taskType: NeuralNetworkTaskType.Regression,
+               inputHeight: Math.Max(2, options.SequenceLength),
+               inputWidth: Math.Max(1, options.NumFeatures),
                outputSize: Math.Max(1, options.NumAssets));
 
     /// <summary>Lifts each scalar band value to the model width through the lift layer.</summary>
-    private Tensor<T> Lift(Matrix<T> band, int stocks, int time)
+    /// <summary>Projects the D input factors to the model width, through the lift layer.</summary>
+    private Tensor<T> Lift(Tensor<T> band, int assets, int time, int featureCount)
     {
-        var flat = new Tensor<T>(new[] { stocks * time, 1 });
-        for (int s = 0; s < stocks; s++)
-            for (int t = 0; t < time; t++) flat[(s * time) + t] = band[s, t];
-
-        var lifted = _lift!.Forward(flat);
-        return Engine.Reshape(lifted, new[] { stocks, time, _options.HiddenDimension });
+        var flat = Engine.Reshape(band, new[] { assets * time, featureCount });
+        return Engine.Reshape(
+            _lift!.Forward(flat), new[] { assets, time, _options.HiddenDimension });
     }
 
     /// <summary>
@@ -459,26 +514,152 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// layer Forward, so a tape wrapped around this call sees the whole graph.
     /// </summary>
     /// <returns>The fused representation's last step, the low band's, and the band time length.</returns>
-    private (Tensor<T> FusedLast, Tensor<T> LowLast) ForwardCore(Matrix<T> perStockReturns, out int assets)
+    private (Tensor<T> FusedLast, Tensor<T> LowLast) ForwardCore(Tensor<T> features, out int assets)
     {
-        if (perStockReturns is null) throw new ArgumentNullException(nameof(perStockReturns));
+        if (features is null) throw new ArgumentNullException(nameof(features));
 
-        assets = perStockReturns.Rows;
-        if (assets == 0)
-            throw new ArgumentException("At least one asset is required.", nameof(perStockReturns));
+        (assets, int time, int featureCount) = ReadShape(features);
 
-        var (lowMatrix, highMatrix) = _bands.SplitAll(perStockReturns);
-        int time = lowMatrix.Columns;
-        if (time == 0)
-            throw new ArgumentException(
-                $"An input window of {perStockReturns.Columns} timesteps decomposes to a zero-length " +
-                $"band at {_options.WaveletLevels} level(s). Lengthen the window.", nameof(perStockReturns));
+        // Eq. 2-4: the DWT is applied to the FEATURE tensor, per (asset, feature) series over time.
+        // An earlier revision decomposed a single scalar return per asset-timestep and lifted it with
+        // DenseLayer(1 -> width). That is a RANK-ONE projection: all width dimensions become scalar
+        // multiples of one number, so the model had almost no capacity and could not fit its training
+        // data (observed as training MSE ABOVE test MSE). The paper's input is D = 360 price-volume
+        // factors per asset per timestep, not one return.
+        var (low, high) = SplitFeatureTensor(features, assets, time, featureCount);
 
-        var low = Lift(lowMatrix, assets, time);
-        var high = Lift(highMatrix, assets, time);
-        var (fused, lowEncoded) = Encoder.Encode(low, high, ResolveGraph(assets));
+        // Project D features to the model width. With D > 1 this is a real linear map rather than a
+        // rank-one bottleneck.
+        var lowLifted = Lift(low, assets, time, featureCount);
+        var highLifted = Lift(high, assets, time, featureCount);
+
+        // Eq. 10 needs BOTH embeddings: rho^spa (structural, per asset) and rho^tem (per timestep).
+        var (fused, lowEncoded) = Encoder.Encode(
+            lowLifted, highLifted,
+            ResolveEmbedding(assets, _options.HiddenDimension),
+            TemporalEmbedding(time));
 
         return (LastStep(fused, assets, time), LastStep(lowEncoded, assets, time));
     }
 
+    /// <summary>
+    /// Reads <c>[assets, time, features]</c>, accepting <c>[assets, time]</c> as a single-feature case.
+    /// </summary>
+    private (int Assets, int Time, int Features) ReadShape(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+
+        // [batch, depth, sequence, features] — what a ThreeDimensional architecture declaration causes
+        // the family to feed. The batch axis stands in for the asset cross-section: a single-asset batch
+        // is a legitimate degenerate case, and the graph/embedding resolve to their neutral values.
+        if (rank == 4)
+        {
+            if (input.Shape[1] != 1)
+            {
+                throw new ArgumentException(
+                    $"Input depth is {input.Shape[1]}; this model expects depth 1 because its input is a " +
+                    "[sequence, features] window per asset, with no third spatial axis.", nameof(input));
+            }
+            return (input.Shape[0], input.Shape[2], input.Shape[3]);
+        }
+
+        if (rank == 3) return (input.Shape[0], input.Shape[1], input.Shape[2]);
+        if (rank == 2) return (input.Shape[0], input.Shape[1], 1);
+
+        var dims = new int[rank];
+        for (int d = 0; d < rank; d++) dims[d] = input.Shape[d];
+        throw new ArgumentException(
+            $"Expected [assets, time, features], [batch, 1, time, features] or [assets, time]; got " +
+            $"[{string.Join(", ", dims)}].", nameof(input));
+    }
+
+    /// <summary>
+    /// Applies the DWT independently to every (asset, feature) series along time.
+    /// </summary>
+    /// <remarks>
+    /// Eq. 3-4 filter the feature tensor, so each of the D factor series is decomposed separately
+    /// rather than the transform being applied to one aggregate return.
+    /// </remarks>
+    private (Tensor<T> Low, Tensor<T> High) SplitFeatureTensor(
+        Tensor<T> features, int assets, int time, int featureCount)
+    {
+        int bandLength = _bands.BandLength(time);
+        if (bandLength == 0)
+        {
+            var dims = new int[features.Shape.Length];
+            for (int d = 0; d < dims.Length; d++) dims[d] = features.Shape[d];
+            throw new ArgumentException(
+                $"An input window of {time} timesteps decomposes to a zero-length band at " +
+                $"{_options.WaveletLevels} level(s). Input shape was [{string.Join(", ", dims)}], read as " +
+                $"assets={assets}, time={time}, features={featureCount}. Lengthen the window, or the " +
+                "axis order is not what this model expects.", nameof(features));
+        }
+
+        var series = new Vector<T>(time);
+        var lowBands = new Matrix<T>(assets * featureCount, bandLength);
+        var highBands = new Matrix<T>(assets * featureCount, bandLength);
+
+        for (int a = 0; a < assets; a++)
+        {
+            for (int f = 0; f < featureCount; f++)
+            {
+                for (int t = 0; t < time; t++)
+                    series[t] = features[((a * time) + t) * featureCount + f];
+
+                var (lo, hi) = _bands.Split(series);
+                int row = (a * featureCount) + f;
+                for (int t = 0; t < bandLength; t++)
+                {
+                    lowBands[row, t] = t < lo.Length ? lo[t] : Ops.Zero;
+                    highBands[row, t] = t < hi.Length ? hi[t] : Ops.Zero;
+                }
+            }
+        }
+
+        // Eq. 3-4: learnable inverse filters restore each band to the FULL window length.
+        return (Restore(lowBands, _lowUpsample!, assets, time, featureCount),
+                Restore(highBands, _highUpsample!, assets, time, featureCount));
+    }
+
+    /// <summary>
+    /// Eq. 3-4: learnable upsampling of every band series back to <paramref name="time"/> steps.
+    /// </summary>
+    private Tensor<T> Restore(Matrix<T> bands, ILayer<T> filter, int assets, int time, int featureCount)
+    {
+        int rows = bands.Rows;
+        var input = new Tensor<T>(new[] { rows, bands.Columns });
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < bands.Columns; c++) input[(r * bands.Columns) + c] = bands[r, c];
+
+        var restored = filter.Forward(input);   // [rows, time]
+
+        // Back to [assets, time, features].
+        var result = new Tensor<T>(new[] { assets, time, featureCount });
+        for (int a = 0; a < assets; a++)
+        {
+            for (int f = 0; f < featureCount; f++)
+            {
+                int row = (a * featureCount) + f;
+                for (int t = 0; t < time; t++)
+                    result[((a * time) + t) * featureCount + f] = restored[(row * time) + t];
+            }
+        }
+        return result;
+    }
+
+    /// <summary>rho^tem: sinusoidal position encoding over the full window.</summary>
+    private Matrix<T> TemporalEmbedding(int time)
+    {
+        int width = _options.HiddenDimension;
+        var te = new Matrix<T>(time, width);
+        for (int t = 0; t < time; t++)
+        {
+            for (int f = 0; f < width; f++)
+            {
+                double angle = t / Math.Pow(10000.0, 2.0 * (f / 2) / width);
+                te[t, f] = Ops.FromDouble(f % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle));
+            }
+        }
+        return te;
+    }
 }
