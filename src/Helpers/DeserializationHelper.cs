@@ -2995,8 +2995,28 @@ public static class DeserializationHelper
             int sequenceLength = inputShape.Length > 0 && inputShape[0] > 0 ? inputShape[0] : 1;
             int modelDimension = inputShape.Length > 1 ? inputShape[1] : 256;
             int stateDimension = TryGetInt(additionalParams, "StateDimension") ?? 16;
-            int expandFactor = TryGetInt(additionalParams, "ExpandFactor") ?? 2;
             int convKernelSize = TryGetInt(additionalParams, "ConvKernelSize") ?? 4;
+
+            // ExpandFactor is the ctor argument; InnerDimension is what it produces
+            // (inner = model * expand). Prefer the explicit key, but derive it from the pair when
+            // restoring a model saved before MambaBlock published ExpandFactor — otherwise those
+            // files silently rebuild at the ctor default of 2 and reject their own parameters.
+            int? metadataModelDimension = TryGetInt(additionalParams, "ModelDimension");
+            int? innerDimension = TryGetInt(additionalParams, "InnerDimension");
+            int? derivedExpandFactor =
+                innerDimension is > 0 && metadataModelDimension is > 0 &&
+                innerDimension.Value % metadataModelDimension.Value == 0
+                    ? (int?)(innerDimension.Value / metadataModelDimension.Value)
+                    : null;
+            int expandFactor = TryGetInt(additionalParams, "ExpandFactor") ?? derivedExpandFactor ?? 2;
+
+            // The saved ModelDimension is authoritative. inputShape[1] is only a positional guess and
+            // is wrong whenever the block's input axis is not the model width.
+            if (metadataModelDimension is > 0) modelDimension = metadataModelDimension.Value;
+
+            // dtRank defaults to ceil(modelDimension/16) when negative, so a rebuild that ignores the
+            // saved value silently changes the dt projection's width for any block that set it.
+            int dtRank = TryGetInt(additionalParams, "DtRank") ?? -1;
 
             // MambaBlock has a constructor with all optional params after the first:
             // (int sequenceLength, int modelDimension = 256, int stateDimension = 16, int expandFactor = 2, int convKernelSize = 4, int dtRank = -1, IActivationFunction<T>? activationFunction = null)
@@ -3018,6 +3038,7 @@ public static class DeserializationHelper
                     else if (parameters[pi].Name == "stateDimension") args[pi] = stateDimension;
                     else if (parameters[pi].Name == "expandFactor") args[pi] = expandFactor;
                     else if (parameters[pi].Name == "convKernelSize") args[pi] = convKernelSize;
+                    else if (parameters[pi].Name == "dtRank") args[pi] = dtRank;
                     else if (parameters[pi].HasDefaultValue) args[pi] = parameters[pi].DefaultValue;
                     else args[pi] = null;
                 }
