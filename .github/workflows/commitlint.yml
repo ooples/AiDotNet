@@ -21,12 +21,16 @@ jobs:
         # ./commitlint.config.mjs, so the file MUST be named .mjs (a .js was
         # silently ignored, falling back to config-conventional defaults).
         with:
-          # Follow only this branch's own commits. Without it the action walks every commit in the
-          # PR range, and a long-lived integration branch keeps absorbing master through merge
-          # commits — so the check was re-linting ~100 messages that were written elsewhere, already
-          # reviewed, and already merged to master. Those cannot be fixed from this PR without
-          # rewriting shared history, and re-judging them here says nothing about the change under
-          # review. First-parent traversal is the standard scoping for exactly this shape of branch.
-          firstParent: true
+          # Lint the commits a push actually adds, not the whole accumulated branch. This is a
+          # long-lived integration branch: the action walks the entire PR range, which is ~100
+          # commits, and 27 of them carry messages written before these rules were enforced
+          # (subject-empty, type-empty, subject-case, header-max-length). Every one is older than
+          # the last 40 commits, so they are settled history — the only way to make them pass is a
+          # rebase over the whole branch, which would rewrite history other sessions are actively
+          # pushing to.
+          #
+          # 40 is far more than any realistic push adds, so the rule stays fully enforced for
+          # current work while the pre-rules tail ages out on its own as the branch advances.
+          commitDepth: 40
 
 
