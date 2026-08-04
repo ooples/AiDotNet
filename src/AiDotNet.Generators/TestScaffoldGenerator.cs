@@ -10782,6 +10782,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
         }
+        else if (model.ClassName == "UniVSTModel")
+        {
+            // UniVST is a LATENT diffusion model (LatentDiffusionModelBase), so Predict denoises and
+            // returns the LATENT — see the rationale on LatentDiffusionTestBase: the VAE-decoded image
+            // comes from Generate(), not Predict(), and the correct invariant is the stricter
+            // output.Length == input.Length in latent space.
+            //
+            // It also declares ModelDomain.Video (it genuinely restyles video), and generic family
+            // routing therefore hands it a temporal-video RGB fixture. That makes
+            // OutputShape_ShouldMatchInputShape compare a [3, H, W] frame against a
+            // [LatentChannels, H, W] latent and fail on 12288 vs 16384 — the same trap VideoCLIP
+            // documents above. Pin a LATENT-shaped fixture (4 = the SD v1.5 latent depth this model
+            // defaults to) so the declared domain stays truthful without misstating the contract.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 32, 32 };");
+        }
         else if (model.ClassName == "VideoGigaGAN")
         {
             // Matches the bounded full-topology VideoGigaGAN constructor above.
