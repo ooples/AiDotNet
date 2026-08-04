@@ -321,6 +321,20 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         _maskHead = Layers[idx++];
         _noiseFilterbank = Layers[idx++];
         _mixConv = Layers[idx++];
+
+        // Every layer must have been claimed by exactly one field above. The cursor walks Layers in
+        // the order InitializeLayers built them, so a mismatch means the two have drifted apart —
+        // and the symptom of that is silent: a field binds to its NEIGHBOUR's layer and the model
+        // computes a different function than it was built to, with correct shapes throughout.
+        // Checking it here also gives the final idx++ a reader, which is what CodeQL flagged: the
+        // increment was dead, so appending a layer would have gone unnoticed rather than tripping.
+        if (idx != Layers.Count)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(RoomImpulseResponse<T>)} bound {idx} layers but Layers holds {Layers.Count}. " +
+                "InitializeLayers and BindLayerReferences have drifted apart.");
+        }
+
         _bound = true;
     }
 
@@ -329,7 +343,17 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
         // Unbound means a caller supplied a custom layer chain; honour the sequential contract.
-        if (!_bound) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        if (!_bound)
+        {
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+
+            return current;
+        }
+
         return FiNSForward(input);
     }
 
