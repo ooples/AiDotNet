@@ -38,7 +38,9 @@ public class HarmTaxonomyModeratorTests
     {
         // "Our taxonomy contains six non-mutually exclusive categories: Information harms, Hate and
         // harassment harms, Clickbait harms, Addictive harms, Sexual harms, and Physical harms."
-        var categories = Enum.GetValues<HarmCategory>();
+        // Enum.GetValues<T>() is .NET 5+. This suite still builds for net471, where only the
+        // non-generic overload exists, so cast its Array result to the typed array.
+        var categories = (HarmCategory[])Enum.GetValues(typeof(HarmCategory));
         Assert.Equal(6, categories.Length);
         Assert.Contains(HarmCategory.Information, categories);
         Assert.Contains(HarmCategory.HateAndHarassment, categories);
@@ -70,7 +72,7 @@ public class HarmTaxonomyModeratorTests
             SafetyCategory.PolicyViolation,
         };
 
-        foreach (SafetyCategory signal in Enum.GetValues<SafetyCategory>())
+        foreach (SafetyCategory signal in (SafetyCategory[])Enum.GetValues(typeof(SafetyCategory)))
         {
             var harm = HarmTaxonomyMap.ToHarmCategory(signal);
             if (harm is null)
@@ -85,7 +87,7 @@ public class HarmTaxonomyModeratorTests
     [Fact]
     public void EveryHarmCategoryHasARepresentativeSignal()
     {
-        foreach (HarmCategory harm in Enum.GetValues<HarmCategory>())
+        foreach (HarmCategory harm in (HarmCategory[])Enum.GetValues(typeof(HarmCategory)))
         {
             var signal = HarmTaxonomyMap.RepresentativeSignal(harm);
             Assert.Equal(harm, HarmTaxonomyMap.ToHarmCategory(signal));
