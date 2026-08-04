@@ -77,7 +77,16 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         _options = options ?? new ContextNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Global-norm gradient clipping. The default-constructed optimizer applied no
+        // clipping at all, so a single update could move a deep CTC stack far enough to
+        // swing the output by orders of magnitude. Same remedy, and the same 1.0 bound,
+        // that the video models here already use (MoG, VideoCLIP) and that fixed the
+        // N-BEATS blow-up. Paired with the residual connections restored in
+        // CreateDefaultDeepCNNCTCLayers -- the architecture bounds the gain, this bounds
+        // the step.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
         SupportedLanguages = new[] { _options.Language };

@@ -12,21 +12,19 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// <remarks>
 /// <para>
 /// RWKV-7 is the seventh generation of the RWKV architecture, introducing expressive dynamic state
-/// evolution based on a generalized delta rule with data-dependent decay and vector-valued in-context
-/// learning rates. This allows the model to dynamically control how information is stored, replaced,
-/// retained, and forgotten in the recurrent state.
+/// evolution that replaces the fixed exponential decay of previous versions with learnable, data-dependent
+/// transition matrices. This allows the model to dynamically control how information is stored, retained,
+/// and forgotten in the recurrent state.
 /// </para>
 /// <para>
 /// Each block contains two sub-layers with residual connections:
 /// <code>
-///   Time Mixing (WKV-7 generalized delta rule, paper Eq. 17):
+///   Time Mixing (WKV-7 kernel):
 ///     1. Token shift: lerp between current and previous token
-///     2. Compute r, k, v, d (decay logit), and the ICL-rate logit from shifted inputs
-///     3. kappa_t = k_t * k_k (L2-normalised per head);  kTilde_t = k_t * (1 + (a_t - 1) * k_a)
-///     4. WKV-7 state update:
-///          wkv_t = wkv_{t-1} (diag(w_t) - kappaHat_t^T (a_t * kappaHat_t)) + v_t^T kTilde_t
-///        with w_t = exp(-e^(-1/2) * sigmoid(d_t)) and a_t = sigmoid(.)
-///     5. Output: GroupNorm(wkv_t . r_t), then a linear output projection
+///     2. Compute r, k, v, a, b from shifted inputs via linear projections
+///     3. WKV-7 state update: state_t = diag(a_t) * state_{t-1} + b_t^T * (k_t * v_t^T)
+///     4. Output: sigmoid(r_t) * GroupNorm(state_t * k_t)
+///     5. Linear output projection
 ///
 ///   Channel Mixing (SiLU gating):
 ///     1. Token shift: lerp between current and previous token
@@ -37,13 +35,8 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// <para>
 /// Key innovations over RWKV-6 "Finch":
 /// <list type="bullet">
-///   <item>The transition is a diagonal decay MINUS a rank-1 removal term — a "scaled approximation of
-///   a Householder matrix" — not RWKV-6/GLA's "diagonal decay plus additive injection". The removal
-///   term is what bounds the state: it keeps every eigenvalue of the transition inside [-1, 1].</item>
-///   <item>Decay w_t = exp(-e^(-1/2) sigmoid(d_t)) in (0.5453, 1) — deliberately only weakly
-///   contractive, and better conditioned than a plain sigmoid decay.</item>
-///   <item>A vector-valued in-context learning rate a_t in (0,1) scaling the removal.</item>
-///   <item>The readout contracts the state with r_t (not with k_t).</item>
+///   <item>Learnable transition vectors a_t (diagonal state decay) and b_t (additive state injection)</item>
+///   <item>State evolution: S_t = diag(a_t) * S_{t-1} + b_t * (k_t * v_t), replacing fixed exp decay</item>
 ///   <item>Group normalization on WKV output for stability</item>
 ///   <item>SiLU activation in channel mixing instead of squared ReLU</item>
 /// </list>
@@ -80,8 +73,8 @@ public partial class RWKV7Block<T> : LayerBase<T>
     private Tensor<T> _timeMixR;
     private Tensor<T> _timeMixK;
     private Tensor<T> _timeMixV;
-    private Tensor<T> _timeMixA;  // v7: shift coefficient for the decay logit
-    private Tensor<T> _timeMixB;  // v7: shift coefficient for the in-context learning rate
+    private Tensor<T> _timeMixA;  // v7: shift coefficient for 'a' (state decay)
+    private Tensor<T> _timeMixB;  // v7: shift coefficient for 'b' (state injection)
 
     // Linear projections: [modelDim, modelDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -98,29 +91,139 @@ public partial class RWKV7Block<T> : LayerBase<T>
     private Tensor<T> _outputWeights;
 
     // v7: Dynamic state evolution projections
+    /// <summary>
+    /// Low-rank decay projection, first factor: <c>w1</c> in <c>w = w0 + tanh(x_w @ w1) @ w2</c>.
+    /// </summary>
+    /// <remarks>
+    /// The reference (RWKV-LM RWKV-v7) makes the data-dependent part of the decay both LOW-RANK and
+    /// tanh-BOUNDED, and initialises this factor to ZERO so the decay starts exactly at the w0 ramp
+    /// and the projection only earns influence through training. A full-rank unbounded projection
+    /// initialised to noise — which is what this layer used to have — perturbs the ramp from the
+    /// first step and lets the decay logit drift without limit, which is how a state with
+    /// near-1.0 retention channels runs away.
+    /// </remarks>
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _w1;        // [modelDim, decayLoraRank], zeros
 
-    private Tensor<T> _aWeights;  // [modelDim, modelDim] projects to the per-channel decay logit d_t
+    /// <summary>Low-rank decay projection, second factor: <c>w2</c>. Orthogonal init, gain 0.1.</summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _w2;        // [decayLoraRank, modelDim]
+
+    /// <summary>
+    /// Low-rank ICL-rate projection, first factor: <c>a1</c> in <c>a = sigmoid(a0 + (x_a @ a1) @ a2)</c>.
+    /// Zero-initialised for the same reason as <see cref="_w1"/>; note the reference applies NO tanh
+    /// on this path, the sigmoid alone bounds it.
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _a1;        // [modelDim, iclLoraRank], zeros
+
+    /// <summary>Low-rank ICL-rate projection, second factor: <c>a2</c>. Orthogonal init, gain 0.1.</summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _a2;        // [iclLoraRank, modelDim]
+
+    /// <summary>
+    /// LoRA rank shared by the decay and ICL-rate projections:
+    /// <c>max(32, round(2.5*sqrt(C)/32)*32)</c>, per the reference.
+    /// </summary>
+    private readonly int _loraRank;
+
+    /// <summary>Gate LoRA rank: <c>max(32, round(5*sqrt(C)/32)*32)</c> — wider than the decay/ICL rank.</summary>
+    private readonly int _gateLoraRank;
+
+    /// <summary>Value-residual LoRA rank: <c>max(32, round(1.7*sqrt(C)/32)*32)</c> — the narrowest of the three.</summary>
+    private readonly int _mvLoraRank;
+
+    /// <summary>Bias of the value-residual gate, <c>v0</c>. Init <c>0.73 - linear*0.4</c>.</summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    private Tensor<T> _v0;        // [modelDim]
+
+    /// <summary>Value-residual LoRA first factor, zero-initialised.</summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _v1;        // [modelDim, mvLoraRank]
+
+    /// <summary>Value-residual LoRA second factor. Orthogonal init, gain 0.1.</summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _v2;        // [mvLoraRank, modelDim]
+
+    /// <summary>
+    /// The value-residual gate parameters (v0, v1, v2), in that order.
+    /// </summary>
+    /// <remarks>
+    /// Exposed so the cross-layer gradient tests can target exactly these. They are the only
+    /// parameters whose gradient depends on a DIFFERENT layer's output, so they are the ones a
+    /// broken cross-layer edge silently starves.
+    /// </remarks>
+    internal Tensor<T>[] ValueResidualParameters => [_v0, _v1, _v2];
+
+    /// <summary>The value projection weights, which the first layer publishes as v_first.</summary>
+    internal Tensor<T> ValueProjectionWeights => _valueWeights;
+
+    /// <summary>
+    /// The time-mixing output projection, which RWKV-7 initializes to exactly zero.
+    /// </summary>
+    /// <remarks>
+    /// Exposed for gradient tests, which must move it off zero first. While it is zero the whole
+    /// time-mixing branch contributes nothing, so <c>dL/dW = normed^T (dL/dout) W_out^T = 0</c> for
+    /// EVERY parameter upstream of it. That zero is correct, not a defect — but it means a gradient
+    /// test run at initialization measures nothing at all.
+    /// </remarks>
+    internal Tensor<T> OutputProjectionWeights => _outputWeights;
+
+    /// <summary>v_first handed in for THIS forward pass; null when this block is the first layer.</summary>
+    private Tensor<T>? _incomingVFirst;
+
+    /// <summary>v_first this block publishes for the next one. Per-pass, never carried across calls.</summary>
+    private Tensor<T>? _publishedVFirst;
+
+    /// <summary>
+    /// Per-head, per-channel bonus scale: <c>x += (r (*) k (*) r_k).sum(-1) * v</c>, applied AFTER
+    /// the group norm (arXiv:2503.14456).
+    /// </summary>
+    /// <remarks>
+    /// A direct current-token path that bypasses the recurrent state entirely — the head's own r·k
+    /// agreement, scaled per channel, gates a copy of v straight into the output. Omitting it does
+    /// not break shapes, so it compiles and trains while quietly removing one of the two routes
+    /// information can take through the block. Reference init: zeros(H, N) - 0.04.
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _rk;        // [numHeads, headDim]
+
+    /// <summary>Token-shift mix for the gate branch, <c>x_g</c> in the reference.</summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _timeMixG;  // [modelDim]
+
+    /// <summary>Gate LoRA first factor, zero-initialised: <c>g = sigmoid(x_g @ g1) @ g2</c>.</summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _g1;        // [modelDim, gateLoraRank]
+
+    /// <summary>Gate LoRA second factor. Orthogonal init, gain 0.1.</summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T> _g2;        // [gateLoraRank, modelDim]
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
 
     private Tensor<T> _aBias;     // [modelDim]
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-
-    private Tensor<T> _bWeights;  // [modelDim, modelDim] projects to the ICL-rate logit (a_t = sigmoid)
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
-
     private Tensor<T> _bBias;     // [modelDim]
 
-    // v7 delta rule: per-channel scales for the two derived key streams (paper Eq. 17 / reference impl).
-    //   kappa_t  = k_t (*) k_k         -> L2-normalised per head inside the fused kernel
-    //   kTilde_t = k_t (*) (1 + (a_t - 1) (*) k_a)
-    // Both are learnable per-channel vectors, so no extra matmul is needed.
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    /// <summary>
+    /// Per-channel scale forming the removal key: kappa_t = k_t (*) k_k (arXiv:2503.14456, Eq. 17).
+    /// </summary>
+    /// <remarks>
+    /// The kernel L2-normalises kappa per head, so only this vector's DIRECTION per head matters to
+    /// the removal term; its magnitude is divided out. Reference init (RWKV-LM RWKV-v7):
+    /// <c>k_k = 0.71 - linear*0.1</c> with <c>linear[n] = n/(C-1) - 0.5</c>.
+    /// </remarks>
+    private Tensor<T> _kk;        // [modelDim]
 
-    private Tensor<T> _kappaScale; // k_k, [modelDim]
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-
-    private Tensor<T> _kappaAScale; // k_a, [modelDim]
+    /// <summary>
+    /// Per-channel scale forming the value-injection key: kTilde_t = k_t (*) (1 + (a_t - 1) (*) k_a).
+    /// </summary>
+    /// <remarks>
+    /// Interpolates the key toward its ICL-rate-modulated form. At a_t = 1 this is the identity
+    /// (kTilde = k), so the block degrades to a plain delta rule when the in-context learning rate
+    /// saturates. Reference init: <c>k_a = 1.02</c>.
+    /// </remarks>
+    private Tensor<T> _ka;        // [modelDim]
 
     // v7: Group norm on WKV output (per head)
     private Tensor<T> _groupNormGamma;  // [modelDim]
@@ -184,12 +287,23 @@ public partial class RWKV7Block<T> : LayerBase<T>
     private Tensor<T>? _keyWeightsGrad;
     private Tensor<T>? _valueWeightsGrad;
     private Tensor<T>? _outputWeightsGrad;
-    private Tensor<T>? _aWeightsGrad;
+    private Tensor<T>? _w1Grad;
+    private Tensor<T>? _w2Grad;
     private Tensor<T>? _aBiasGrad;
-    private Tensor<T>? _bWeightsGrad;
+    private Tensor<T>? _a1Grad;
+    private Tensor<T>? _a2Grad;
     private Tensor<T>? _bBiasGrad;
-    private Tensor<T>? _kappaScaleGrad;
-    private Tensor<T>? _kappaAScaleGrad;
+    // Must exist and sit at the same index as _kk/_ka in GetAllParameterTensors: the two lists are
+    // zipped positionally by UpdateParameters and GetParameterGradients.
+    private Tensor<T>? _v0Grad;
+    private Tensor<T>? _v1Grad;
+    private Tensor<T>? _v2Grad;
+    private Tensor<T>? _rkGrad;
+    private Tensor<T>? _timeMixGGrad;
+    private Tensor<T>? _g1Grad;
+    private Tensor<T>? _g2Grad;
+    private Tensor<T>? _kkGrad;
+    private Tensor<T>? _kaGrad;
     private Tensor<T>? _groupNormGammaGrad;
     private Tensor<T>? _groupNormBetaGrad;
     private Tensor<T>? _channelMixRGrad;
@@ -226,6 +340,17 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// <summary>Gets the feed-forward network dimension.</summary>
     public int FFNDimension => _ffnDimension;
 
+    /// <summary>
+    /// RWKV-7's Global ICLR Multiplier <c>c</c>, applied to the state transition's removal term.
+    /// </summary>
+    private readonly double _globalIclrMultiplier;
+
+    /// <summary>
+    /// The paper's clamping lower bound <c>u = exp(-e^(-1/2))</c> on the decay multiplier
+    /// (arXiv:2503.14456, Eq. 12 and Appendix C, Theorem 1 — quoted there as 0.5452...).
+    /// </summary>
+    private static readonly double DecayClampLowerBound = Math.Exp(-Math.Exp(-0.5));
+
     /// <inheritdoc />
     public override long ParameterCount
     {
@@ -246,45 +371,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// <param name="numHeads">Number of heads for multi-headed states. Default: 4. Must divide modelDimension.</param>
     /// <param name="ffnMultiplier">FFN expansion multiplier. Default: 3.5 (RWKV-7 standard).</param>
     /// <param name="activationFunction">Optional activation on final output.</param>
-    /// <summary>
-    /// The paper's "Global ICLR Multiplier" <c>c</c> in the transition matrix
-    /// <c>A_t = diag(w_t) - c * kappaHat_t^T(a_t (*) kappaHat_t)</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// From Peng et al. 2025 (arXiv 2503.14456) Appendix C, Theorem 1: with every entry of
-    /// <c>w</c> in <c>(u, 1)</c> where <c>u = exp(-e^-0.5) = 0.5452...</c>, every entry of
-    /// <c>a</c> in <c>(0, 1)</c>, and <c>kappaHat</c> a unit row vector, then for
-    /// <c>c in (0, 1 + u)</c> all eigenvalues of <c>A</c> lie in <c>(-1, 1)</c>. The paper states
-    /// <c>c</c> "is set to 1 in the current implementations of RWKV-7 language modeling", which is
-    /// this default.
-    /// </para>
-    /// <para>
-    /// Two clauses of that theorem matter for long sequences. Item 4 only guarantees the PRODUCT
-    /// of transitions is bounded "if a_t is time-independent", which RWKV-7 deliberately violates
-    /// (a_t is data-dependent per token), and footnote 4 of the paper records that the authors
-    /// "allow only part of the range of possible negative eigenvalues in our pre-trained large
-    /// language models due to experimentally observed training instabilities". A negative
-    /// eigenvalue appears exactly when <c>c*a &gt; w</c>; choosing <c>c &lt;= u</c> keeps
-    /// <c>w - c*a &gt; 0</c> for every admissible w and a, so the transition stays strictly
-    /// positive-definite-like and the long product is bounded by the theorem's own conditions.
-    /// Long-context consumers can therefore restrict the range the way the authors do, rather than
-    /// relying on the unrestricted theoretical range.
-    /// </para>
-    /// </remarks>
-    private readonly double _globalIclrMultiplier;
-
-    /// <summary>
-    /// The paper's clamping lower bound <c>u = exp(-e^(-1/2))</c> on the decay multiplier
-    /// (arXiv 2503.14456, Eq 12 and Appendix C, Theorem 1 — quoted there as 0.5452...).
-    /// </summary>
-    /// <remarks>
-    /// DERIVED from the paper's formula rather than written as a decimal literal, so it stays exact
-    /// and self-documenting: the same <c>exp(-1/2)</c> constant appears in Eq 12's decay
-    /// <c>w_t = exp(-e^(-0.5) * sigmoid(d_t))</c>, and the two cannot drift apart.
-    /// </remarks>
-    private static readonly double DecayClampLowerBound = Math.Exp(-Math.Exp(-0.5));
-
     public RWKV7Block(
         int sequenceLength,
         int modelDimension = 256,
@@ -298,17 +384,16 @@ public partial class RWKV7Block<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
-        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
-
         // Theorem 1 (arXiv 2503.14456, Appendix C) is stated for c in (0, 1 + u); outside that range
         // the eigenvalue bound it proves no longer applies, so reject rather than silently accept.
         if (globalIclrMultiplier <= 0.0 || globalIclrMultiplier >= 1.0 + DecayClampLowerBound)
             throw new ArgumentOutOfRangeException(
                 nameof(globalIclrMultiplier),
                 globalIclrMultiplier,
-                $"The Global ICLR Multiplier must lie in (0, {1.0 + DecayClampLowerBound:F6}) — the interval " +
-                "over which RWKV-7's Theorem 1 bounds the transition matrix eigenvalues in (-1, 1).");
+                $"Global ICLR multiplier must lie in (0, {1.0 + DecayClampLowerBound}).");
         _globalIclrMultiplier = globalIclrMultiplier;
+
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
@@ -338,12 +423,26 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _valueWeights = new Tensor<T>([modelDimension, modelDimension]);
         _outputWeights = new Tensor<T>([modelDimension, modelDimension]);
 
-        _aWeights = new Tensor<T>([modelDimension, modelDimension]);
+        // LoRA rank shared by both projections: max(32, round(2.5*sqrt(C)/32)*32), per the reference.
+        _loraRank = Math.Max(32, (int)Math.Round(2.5 * Math.Sqrt(modelDimension) / 32.0) * 32);
+
+        _w1 = new Tensor<T>([modelDimension, _loraRank]);
+        _w2 = new Tensor<T>([_loraRank, modelDimension]);
         _aBias = new Tensor<T>([modelDimension]);
-        _bWeights = new Tensor<T>([modelDimension, modelDimension]);
+        _a1 = new Tensor<T>([modelDimension, _loraRank]);
+        _a2 = new Tensor<T>([_loraRank, modelDimension]);
         _bBias = new Tensor<T>([modelDimension]);
-        _kappaScale = new Tensor<T>([modelDimension]);
-        _kappaAScale = new Tensor<T>([modelDimension]);
+        _gateLoraRank = Math.Max(32, (int)Math.Round(5.0 * Math.Sqrt(modelDimension) / 32.0) * 32);
+        _mvLoraRank = Math.Max(32, (int)Math.Round(1.7 * Math.Sqrt(modelDimension) / 32.0) * 32);
+        _v0 = new Tensor<T>([modelDimension]);
+        _v1 = new Tensor<T>([modelDimension, _mvLoraRank]);
+        _v2 = new Tensor<T>([_mvLoraRank, modelDimension]);
+        _rk = new Tensor<T>([numHeads, modelDimension / numHeads]);
+        _timeMixG = new Tensor<T>([modelDimension]);
+        _g1 = new Tensor<T>([modelDimension, _gateLoraRank]);
+        _g2 = new Tensor<T>([_gateLoraRank, modelDimension]);
+        _kk = new Tensor<T>([modelDimension]);
+        _ka = new Tensor<T>([modelDimension]);
 
         _groupNormGamma = new Tensor<T>([modelDimension]);
         _groupNormBeta = new Tensor<T>([modelDimension]);
@@ -368,12 +467,21 @@ public partial class RWKV7Block<T> : LayerBase<T>
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_aWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_w1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_w2, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_aBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_bWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_a1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_a2, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_kappaScale, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_kappaAScale, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_v0, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_v1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_v2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_rk, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_timeMixG, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_g1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_g2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_kk, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_ka, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_channelKeyWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_channelValueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_channelReceptanceWeights, PersistentTensorRole.Weights);
@@ -423,19 +531,76 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // non-finite gradients before global clipping can act.
         _outputWeights.Fill(NumOps.Zero);
 
-        // v7: State evolution projections - initialized for stable decay.
-        InitializeProjection(_aWeights);
-        // Decay logit d. The paper's parameterisation w = exp(-e^(-1/2) * sigmoid(d)) maps d = -1 to
-        // sigmoid(-1) ~ 0.269 and hence w ~ 0.849 retention per step.
-        _aBias.Fill(NumOps.FromDouble(-1.0));
+        // v7: State evolution projections - initialized for stable decay
+        // Decay LoRA. w1 is ZERO so the data-dependent term starts at exactly tanh(0) = 0 and the
+        // decay begins precisely at the w0 ramp below; w2 is orthogonal with gain 0.1. This is the
+        // reference scheme, and the zero start is the load-bearing part — the previous full-rank
+        // InitializeProjection(_aWeights) injected noise into the decay logit before a single step.
+        _w1.Fill(NumOps.Zero);
+        new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_w2, _loraRank, _modelDimension);
+        // Decay logit init, per the reference implementation (RWKV-LM RWKV-v7):
+        //     www[n] = -6 + 6 * (n/(C-1))^(1 + ratio_0_to_1^0.3)
+        //     w0[n]  = www[n] + 0.5 + zigzag[n] * 2.5
+        // giving a per-channel RAMP of timescales rather than one shared value. Under the kernel's
+        // w_t = exp(-e^(-1/2) * sigmoid(d_t)) this spans retention from about 0.55 (fast-forgetting
+        // channels) to nearly 1.0 (near-permanent memory), which is the paper's (0.5453, 1) range.
+        //
+        // This replaces a flat Fill(-1.0), whose comment claimed "sigmoid(-1) ~ 0.27 retention". That
+        // was true of the OLD kernel, which used sigmoid(d) directly as the retention; under Eq. 17
+        // the same value gives ~0.85 on EVERY channel — uniform, long, and outside the spread the
+        // architecture relies on to mix short- and long-range memory.
+        //
+        // ratio_0_to_1 is layer_id/(n_layer-1) in the reference. This block does not receive a layer
+        // index, so the exponent uses ratio_0_to_1 = 0 (exponent 1, a linear ramp) — the reference's
+        // first-layer schedule. Threading a layer index through would let later layers use the
+        // steeper curve the reference gives them.
+        for (int n = 0; n < _modelDimension; n++)
+        {
+            double frac = _modelDimension > 1 ? (double)n / (_modelDimension - 1) : 0.0;
+            double zz = _headDimension > 1
+                ? ((n % _headDimension) - (_headDimension - 1) / 2.0) / ((_headDimension - 1) / 2.0)
+                : 0.0;
+            double zigzag = zz * Math.Abs(zz);
+            _aBias[n] = NumOps.FromDouble(-6.0 + 6.0 * frac + 0.5 + zigzag * 2.5);
+        }
 
-        InitializeProjection(_bWeights);
-        // In-context learning rate logit; sigmoid(0) = 0.5 gives a mid-strength rank-1 removal.
+        // ICL-rate LoRA, same scheme. No tanh on this path in the reference — the sigmoid applied to
+        // the sum bounds it.
+        _a1.Fill(NumOps.Zero);
+        new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_a2, _loraRank, _modelDimension);
         _bBias.Fill(NumOps.FromDouble(0.0));
 
-        // Reference RWKV-7 initialization for the two derived key scales.
-        _kappaScale.Fill(NumOps.FromDouble(0.85));
-        _kappaAScale.Fill(NumOps.One);
+        // Removal- and injection-key scales, initialised as in the reference implementation
+        // (RWKV-LM RWKV-v7): k_k = 0.71 - linear*0.1 with linear[n] = n/(C-1) - 0.5, and
+        // k_a = 1.02. The k_k ramp gives early channels a slightly larger removal scale than late
+        // ones; k_a just above 1 starts the injection key a touch beyond a plain delta rule.
+        for (int n = 0; n < _modelDimension; n++)
+        {
+            double linear = _modelDimension > 1 ? (double)n / (_modelDimension - 1) - 0.5 : 0.0;
+            _kk[n] = NumOps.FromDouble(0.71 - linear * 0.1);
+        }
+        _ka.Fill(NumOps.FromDouble(1.02));
+
+        // r_k bonus scale, and the gate LoRA (same zero/orthogonal scheme as the decay and ICL pairs).
+        _rk.Fill(NumOps.FromDouble(-0.04));
+
+        // Value-residual gate. v0 = 0.73 - linear*0.4 puts sigmoid(v0) near 0.6-0.7 at init, so a fresh
+        // deeper layer already leans toward the first layer.s values and learns its way off that.
+        for (int n = 0; n < _modelDimension; n++)
+        {
+            double vlin = _modelDimension > 1 ? (double)n / (_modelDimension - 1) - 0.5 : 0.0;
+            _v0[n] = NumOps.FromDouble(0.73 - vlin * 0.4);
+        }
+        _v1.Fill(NumOps.Zero);
+        new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_v2, _mvLoraRank, _modelDimension);
+        _g1.Fill(NumOps.Zero);
+        new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_g2, _gateLoraRank, _modelDimension);
+        // x_g uses the same 0.2 exponent as x_r in the reference's token-shift ramp.
+        for (int n = 0; n < _modelDimension; n++)
+        {
+            double ddd = _modelDimension > 1 ? (double)n / _modelDimension : 0.0;
+            _timeMixG[n] = NumOps.FromDouble(1.0 - Math.Pow(ddd, 0.2));
+        }
 
         _groupNormGamma.Fill(NumOps.One);
         _groupNormBeta.Fill(NumOps.Zero);
@@ -505,8 +670,25 @@ public partial class RWKV7Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input) => ForwardWithValueResidual(input, null).Output;
+
+    /// <summary>
+    /// Forward pass that also threads the RWKV-7 value residual, mirroring the reference's
+    /// <c>x, v_first = block(x, v_first)</c>.
+    /// </summary>
+    /// <param name="input">The block input.</param>
+    /// <param name="vFirst">The first layer's value projection, or <c>null</c> when this IS the first layer.</param>
+    /// <returns>The block output, and the v_first to hand to the next block.</returns>
+    /// <remarks>
+    /// v_first travels as an ordinary VALUE through the call chain rather than through shared mutable
+    /// state. That is what keeps it a normal edge on the tape — the same reason PyTorch expresses it
+    /// as a plain tuple return — and it removes any question of which block is "first" at clone or
+    /// deserialize time: whoever is handed <c>null</c> is first.
+    /// </remarks>
+    internal (Tensor<T> Output, Tensor<T> VFirst) ForwardWithValueResidual(Tensor<T> input, Tensor<T>? vFirst)
     {
+        _incomingVFirst = vFirst;
+        _publishedVFirst = null;
         _originalInputShape = input._shape;
 
         int rank = input.Shape.Length;
@@ -546,14 +728,17 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _lastOutput = result;
 
         if (rank == 2)
-            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
+            return (Engine.Reshape(result, new[] { seqLen, _modelDimension }),
+                    _publishedVFirst ?? vFirst ?? result);
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return Engine.Reshape(result, outputShape);
+        // _publishedVFirst is set by TimeMixingForward: this block's own value projection when it is
+        // the first layer, otherwise the one it was handed, passed straight through.
+        return (Engine.Reshape(result, outputShape), _publishedVFirst ?? vFirst ?? result);
     }
 
     /// <summary>
@@ -608,11 +793,13 @@ public partial class RWKV7Block<T> : LayerBase<T>
         var mixV3 = Engine.Reshape(_timeMixV, new[] { 1, 1, _modelDimension });
         var mixA3 = Engine.Reshape(_timeMixA, new[] { 1, 1, _modelDimension });
         var mixB3 = Engine.Reshape(_timeMixB, new[] { 1, 1, _modelDimension });
+        var mixG3 = Engine.Reshape(_timeMixG, new[] { 1, 1, _modelDimension });
         var invR3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixR), new[] { 1, 1, _modelDimension });
         var invK3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixK), new[] { 1, 1, _modelDimension });
         var invV3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixV), new[] { 1, 1, _modelDimension });
         var invA3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixA), new[] { 1, 1, _modelDimension });
         var invB3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixB), new[] { 1, 1, _modelDimension });
+        var invG3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixG), new[] { 1, 1, _modelDimension });
 
         // Token-shifted input over the whole sequence: xShifted[:, t, :] = x[:, t-1, :], with the
         // t=0 slot taken from the previous token (zeros in training; the streaming cache otherwise).
@@ -627,67 +814,132 @@ public partial class RWKV7Block<T> : LayerBase<T>
             : xPrev0;
 
         // Batched token-shift lerps: mix*x_t + (1-mix)*x_prev over all timesteps at once.
-        var rIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixR3), Engine.TensorBroadcastMultiply(xShifted, invR3));
-        var kIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixK3), Engine.TensorBroadcastMultiply(xShifted, invK3));
-        var vIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixV3), Engine.TensorBroadcastMultiply(xShifted, invV3));
-        var aIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixA3), Engine.TensorBroadcastMultiply(xShifted, invA3));
-        var bIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixB3), Engine.TensorBroadcastMultiply(xShifted, invB3));
+        var rIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixR3), Engine.TensorMultiply(xShifted, invR3));
+        var kIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixK3), Engine.TensorMultiply(xShifted, invK3));
+        var vIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixV3), Engine.TensorMultiply(xShifted, invV3));
+        var aIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixA3), Engine.TensorMultiply(xShifted, invA3));
+        var bIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixB3), Engine.TensorMultiply(xShifted, invB3));
+        var gIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixG3), Engine.TensorMultiply(xShifted, invG3));
 
         // Batched projections: [batch*seqLen, modelDim] @ [modelDim, modelDim] -> reshape back to 3D.
         int bsl = batchSize * seqLen;
         var Rall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(rIn, new[] { bsl, _modelDimension }), _receptanceWeights), new[] { batchSize, seqLen, _modelDimension });
         var Kall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(kIn, new[] { bsl, _modelDimension }), _keyWeights), new[] { batchSize, seqLen, _modelDimension });
         var Vall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(vIn, new[] { bsl, _modelDimension }), _valueWeights), new[] { batchSize, seqLen, _modelDimension });
+        // Value residual (arXiv:2503.14456). The first layer publishes its value projection; every
+        // layer above blends toward it, per channel:
+        //     v = v + (v_first - v) * sigmoid(v0 + (x_v @ v1) @ v2)
+        // Built entirely from IEngine ops so the blend is a normal set of tape edges and the gradient
+        // reaches v0/v1/v2 AND flows back down into the producing layer's value projection.
+        if (_incomingVFirst is null)
+        {
+            _publishedVFirst = Vall;
+        }
+        else
+        {
+            var vGate = Engine.Sigmoid(Engine.TensorAdd(
+                Engine.Reshape(
+                    Engine.TensorMatMul(
+                        Engine.TensorMatMul(Engine.Reshape(vIn, new[] { bsl, _modelDimension }), _v1),
+                        _v2),
+                    new[] { batchSize, seqLen, _modelDimension }),
+                Engine.Reshape(_v0, new[] { 1, 1, _modelDimension })));
+            Vall = Engine.TensorAdd(
+                Vall,
+                Engine.TensorMultiply(Engine.TensorSubtract(_incomingVFirst, Vall), vGate));
+            _publishedVFirst = _incomingVFirst;
+        }
+
         var aBias3 = Engine.Reshape(_aBias, new[] { 1, 1, _modelDimension });
         var bBias3 = Engine.Reshape(_bBias, new[] { 1, 1, _modelDimension });
-        var Aall = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(aIn, new[] { bsl, _modelDimension }), _aWeights), new[] { batchSize, seqLen, _modelDimension }), aBias3);
-        var Ball = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(bIn, new[] { bsl, _modelDimension }), _bWeights), new[] { batchSize, seqLen, _modelDimension }), bBias3);
+        // Decay logit:  w = w0 + tanh(x_w @ w1) @ w2      (low-rank, tanh-bounded)
+        // ICL logit:    a = a0 + (x_a @ a1) @ a2          (low-rank; sigmoid applied below)
+        // Both per the reference. The tanh on the decay path is what keeps the logit from drifting
+        // once channels are initialised near the top of the paper's (0.5453, 1) retention range.
+        var Aall = Engine.TensorAdd(
+            Engine.Reshape(
+                Engine.TensorMatMul(
+                    Engine.Tanh(Engine.TensorMatMul(Engine.Reshape(aIn, new[] { bsl, _modelDimension }), _w1)),
+                    _w2),
+                new[] { batchSize, seqLen, _modelDimension }),
+            aBias3);
+        var Ball = Engine.TensorAdd(
+            Engine.Reshape(
+                Engine.TensorMatMul(
+                    Engine.TensorMatMul(Engine.Reshape(bIn, new[] { bsl, _modelDimension }), _a1),
+                    _a2),
+                new[] { batchSize, seqLen, _modelDimension }),
+            bBias3);
 
-        // ---- Paper-faithful RWKV-7 state evolution (arXiv:2503.14456, Eq. 17). The two derived key
-        // streams are formed here on the tape (batched over the whole sequence, so no per-timestep
-        // ops and no extra matmul — k_k / k_a are per-channel vectors):
-        //   a_t      = sigmoid(Ball)                        in (0,1), the ICL rate
-        //   kappa_t  = Kall (*) k_k                         (L2-normalised per head in the kernel)
-        //   kTilde_t = Kall (*) (1 + (a_t - 1) (*) k_a)
-        // a_t is materialised ONCE and handed to the kernel post-activation so kTilde and the
-        // recurrence share a single tape node for it.
-        var aRate = Engine.Sigmoid(Ball);
-        var kkScale3 = Engine.Reshape(_kappaScale, new[] { 1, 1, _modelDimension });
-        var kaScale3 = Engine.Reshape(_kappaAScale, new[] { 1, 1, _modelDimension });
-        var kappaAll = Engine.TensorBroadcastMultiply(Kall, kkScale3);
-        var kTildeAll = Engine.TensorMultiply(
+        // ---- #1464: the entire WKV state recurrence (diagonal decay + rank-1 injection + gated
+        // readout) runs in ONE fused, differentiable engine op instead of ~10 tape micro-ops per
+        // timestep. The kernel applies the r/a/b sigmoids internally and records a single tape node
+        // whose backward is the BPTT adjoint of the recurrence, so the projection-weight gradients
+        // are identical to the per-step formulation (clone-parity preserved) — it just removes the
+        // per-timestep tape-dispatch overhead that made the memorization test exceed the 180s budget.
+        //   S_t[di,vi] = sigmoid(a)[di]*S_{t-1}[di,vi] + (sigmoid(b)[di]*k[di])*v[vi]
+        //   wkv_t[di]  = sigmoid(r)[di] * sum_vi S_t[di,vi]*k[vi]
+        // Generalised delta rule inputs (arXiv:2503.14456, Eq. 17). The kernel takes kappa
+        // PRE-normalisation and forms -kappaHat and (a (*) kappaHat) itself, matching the reference
+        // kernel call RWKV7_CLAMPW_CUDA(r, w, kTilde, v, -kk, kk*a); it likewise derives
+        // w_t = exp(-e^(-1/2) * sigmoid(d_t)) from the decay LOGIT, so Aall is passed unactivated.
+        //
+        //   a_t      = sigmoid(Ball)              in-context learning rate, in (0,1)
+        //   kappa_t  = k_t (*) k_k                removal key, L2-normalised per head in-kernel
+        //   kTilde_t = k_t (*) (1 + (a_t-1)(*)k_a) value-injection key
+        //
+        // a_t is materialised here rather than inside the kernel because kTilde needs it too.
+        var kk3 = Engine.Reshape(_kk, new[] { 1, 1, _modelDimension });
+        var ka3 = Engine.Reshape(_ka, new[] { 1, 1, _modelDimension });
+        var iclRate = Engine.Sigmoid(Ball);
+        var kappa = Engine.TensorMultiply(Kall, kk3);
+        var kTilde = Engine.TensorMultiply(
             Kall,
             Engine.TensorAddScalar(
-                Engine.TensorBroadcastMultiply(
-                    Engine.TensorSubtractScalar(aRate, NumOps.One), kaScale3),
+                Engine.TensorMultiply(Engine.TensorSubtractScalar(iclRate, NumOps.One), ka3),
                 NumOps.One));
 
-        // ---- #1464: the entire WKV state recurrence (diagonal decay MINUS the rank-1 removal, plus
-        // the value injection and the r-contraction readout) runs in ONE fused, differentiable engine
-        // op instead of ~10 tape micro-ops per timestep. The kernel applies the decay
-        // parameterisation w = exp(-e^(-1/2) sigmoid(d)) and the per-head L2 normalisation of kappa
-        // internally, and records a single tape node whose backward is the BPTT adjoint of the
-        // recurrence — removing the per-timestep tape-dispatch overhead that made the memorization
-        // test exceed the 180s budget. The delta rule is inherently sequential in t, so it MUST stay
-        // one fused kernel; decomposing it into per-step Engine ops would time out immediately.
-        //   wkv_t = wkv_{t-1}(diag(w_t) - kappaHat_t^T(a_t (*) kappaHat_t)) + v_t^T kTilde_t
-        //   o_t   = wkv_t . r_t
         // Apply the paper's Global ICLR Multiplier c to the TRANSITION's removal term only. Scaling
         // the in-context learning rate here is exactly equivalent to
         //   A_t = diag(w_t) - c * kappaHat^T(a (*) kappaHat)
         // because the kernel forms the removal as kappaHat^T(a (*) kappaHat). It must NOT be applied
-        // to the replacement key: Eq 7 defines kTilde = k (*) lerp(1, a, alpha) with no c, so kTilde
-        // above deliberately keeps the unscaled aRate.
-        var aRateTransition = _globalIclrMultiplier == 1.0
-            ? aRate
-            : Engine.TensorMultiplyScalar(aRate, NumOps.FromDouble(_globalIclrMultiplier));
+        // to the replacement key: Eq. 7 defines kTilde = k (*) lerp(1, a, alpha) with no c, so the
+        // kTilde above deliberately keeps the unscaled iclRate.
+        var iclRateTransition = _globalIclrMultiplier == 1.0
+            ? iclRate
+            : Engine.TensorMultiplyScalar(iclRate, NumOps.FromDouble(_globalIclrMultiplier));
 
-        var wkvAll = Engine.Rwkv7SequenceForward(Rall, kappaAll, kTildeAll, Vall, Aall, aRateTransition, _numHeads);
+        var wkvAll = Engine.Rwkv7SequenceForward(Rall, kappa, kTilde, Vall, Aall, iclRateTransition, _numHeads);
 
         // Group-normalize (per head, per position) and project to the output — both batched over all
         // positions as [batch*seqLen, modelDim], so NO per-timestep ops remain in time-mixing.
         var wkv2d = Engine.Reshape(wkvAll, new[] { bsl, _modelDimension });
         var normed2d = ApplyGroupNorm(wkv2d, bsl);
+
+        // r_k bonus, AFTER the group norm and before the gate, per the reference:
+        //     x = x + ((r (*) k (*) r_k).sum(dim=-1, keepdim=True) * v)
+        // A direct current-token route that bypasses the recurrent state: the head's own r-k
+        // agreement, scaled per channel by r_k, admits a copy of v straight to the output. Reduced
+        // over headDim and broadcast back across it.
+        var rHeads = Engine.Reshape(Rall, new[] { bsl, _numHeads, _headDimension });
+        var kHeads = Engine.Reshape(Kall, new[] { bsl, _numHeads, _headDimension });
+        var vHeads = Engine.Reshape(Vall, new[] { bsl, _numHeads, _headDimension });
+        var rk3 = Engine.Reshape(_rk, new[] { 1, _numHeads, _headDimension });
+        var rkAgreement = Engine.ReduceSum(
+            Engine.TensorMultiply(Engine.TensorMultiply(rHeads, kHeads), rk3),
+            new[] { 2 }, keepDims: true);                       // [bsl, numHeads, 1]
+        var bonus2d = Engine.Reshape(
+            Engine.TensorMultiply(vHeads, rkAgreement),          // broadcasts over headDim
+            new[] { bsl, _modelDimension });
+        normed2d = Engine.TensorAdd(normed2d, bonus2d);
+
+        // Output gate: g = sigmoid(x_g @ g1) @ g2, applied multiplicatively before the projection.
+        // g1 is zero-initialised, so sigmoid(0) = 0.5 and g starts as a constant 0.5 @ g2 rather
+        // than at zero — the gate is live from step one, unlike the decay/ICL LoRAs.
+        var gate2d = Engine.TensorMatMul(
+            Engine.Sigmoid(Engine.TensorMatMul(Engine.Reshape(gIn, new[] { bsl, _modelDimension }), _g1)),
+            _g2);
+        normed2d = Engine.TensorMultiply(normed2d, gate2d);
         // These projections are paper-faithfully initialized to exactly zero, but
         // they are trainable parameters. Keep an explicit graph dependency on the
         // parameter so compilation cannot mistake the initial value for a static
@@ -703,7 +955,8 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // keeping the #1464 per-step-overhead win. In INFERENCE the autoregressive streaming contract
         // requires the final WKV state S_T so the next call can continue the sequence; the fused
         // Rwkv7SequenceForward returns only the gated outputs (not S_T), so compute S_T from the same
-        // documented generalized delta-rule recurrence (off-tape; inference only)
+        // documented recurrence (off-tape; inference only):
+        //   S_t[di,vi] = sigmoid(A_t)[di]*S_{t-1}[di,vi] + (sigmoid(B_t)[di]*K_t[di])*V_t[vi]
         // seeded from the prior state (`state`) so token-by-token streaming accumulates correctly.
         if (IsTrainingMode)
         {
@@ -718,27 +971,8 @@ public partial class RWKV7Block<T> : LayerBase<T>
         }
         else
         {
-            // aRateTransition, NOT aRate: the streaming state must apply the same Global ICLR
-            // Multiplier as the fused training kernel, or inference would run a different
-            // transition A_t than the one the weights were trained under.
-            _recurrentState = ComputeFinalWkvState(
-                state, Aall, aRateTransition, kappaAll, kTildeAll, Vall, batchSize, seqLen);
-            // .Clone() is REQUIRED, not defensive. GetSliceAlongDimension returns a VIEW over x's
-            // buffer, and x is an Engine/tape intermediate whose storage is arena/pool-rented for the
-            // duration of THIS forward only. Storing the bare view in a field that outlives the
-            // forward (and the caller's TensorArena scope) means the NEXT inference call reads
-            // storage that has already been returned to the pool and overwritten by whatever
-            // allocated next — so the token-shift term becomes garbage and the block emits NaN.
-            // That is exactly the observed Q-S shard signature: RWKVForecaster's single-Predict
-            // invariant (ForwardPass_ShouldBeFinite_AfterTraining) passes while the two that Predict
-            // MORE THAN ONCE after training (DifferentInputs_AfterTraining_ShouldProduceDifferent-
-            // Outputs, Clone_AfterTraining_ShouldPreserveLearnedWeights) report L2/||trained|| = NaN,
-            // and why it "passes in isolation and fails once earlier tests have run" — whether the
-            // recycled buffer still happens to hold the old values is pure allocation history.
-            // Every other writer of this field already clones (SetPreviousToken / SetRecurrentState),
-            // and the sibling RWKVLayer.cs does `x.GetSliceAlongDimension(seqLen - 1, 1).Clone()` for
-            // this same token-shift cache; the delta-rule rewrite dropped the copy here.
-            _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1).Clone() : xPrev.Clone();
+            _recurrentState = ComputeFinalWkvState(state, Aall, Ball, Kall, Vall, batchSize, seqLen);
+            _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1) : xPrev;
         }
 
         // Cache for backward
@@ -757,32 +991,21 @@ public partial class RWKV7Block<T> : LayerBase<T>
 
     /// <summary>
     /// Computes the final WKV recurrent state S_T after processing a sequence, for autoregressive streaming
-    /// inference. Mirrors the generalized delta rule the fused <c>Rwkv7SequenceForward</c> kernel applies
-    /// internally (paper Eq. 17), per head, with the state indexed <c>S[vi, ki]</c> (value axis first, as
-    /// in the paper's <c>[d_v x d_k]</c> orientation):
-    /// <code>
-    ///   kappaHat = kappa_t / ||kappa_t||_2         (per head)
-    ///   w        = exp(-e^(-1/2) * sigmoid(d_t))
-    ///   S_t[vi,ki] = S_{t-1}[vi,ki]*w[ki] - (S_{t-1}[vi,:] . kappaHat)*a_t[ki]*kappaHat[ki]
-    ///                + v_t[vi]*kTilde_t[ki]
-    /// </code>
-    /// Runs off the autodiff tape (scalar arithmetic over the already-projected streams) since the
+    /// inference. Mirrors the recurrence the fused <c>Rwkv7SequenceForward</c> kernel applies internally:
+    /// <c>S_t[h,di,vi] = sigmoid(A_t)[h,di]*S_{t-1}[h,di,vi] + sigmoid(B_t)[h,di]*K_t[h,di]*V_t[h,vi]</c>,
+    /// per head. Runs off the autodiff tape (scalar arithmetic over the projected A/B/K/V values) since the
     /// streaming state carries no gradient — it only seeds the next inference call.
     /// </summary>
     /// <param name="seed">The prior state to continue from (zeros on the first call), [batch, heads, headDim, headDim].</param>
-    /// <param name="decayLogitAll">Decay pre-activation d over the sequence, [batch, seqLen, modelDim].</param>
-    /// <param name="iclRateAll">In-context learning rate a_t in (0,1), [batch, seqLen, modelDim].</param>
-    /// <param name="kappaAll">kappa_t (pre-normalisation) over the sequence, [batch, seqLen, modelDim].</param>
-    /// <param name="kTildeAll">kTilde_t over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="aAll">Decay projection A over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="bAll">Injection-gate projection B over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="kAll">Key projection over the sequence, [batch, seqLen, modelDim].</param>
     /// <param name="vAll">Value projection over the sequence, [batch, seqLen, modelDim].</param>
-    /// <param name="decayLogitAll">Decay logits over the sequence, [batch, seqLen, modelDim].</param>
-    /// <param name="iclRateAll">Post-sigmoid in-context learning rates, [batch, seqLen, modelDim].</param>
     /// <param name="batchSize">The batch size.</param>
     /// <param name="seqLen">The sequence length.</param>
     /// <returns>The final state S_T, shape [batch, numHeads, headDim, headDim].</returns>
     private Tensor<T> ComputeFinalWkvState(
-        Tensor<T> seed, Tensor<T> decayLogitAll, Tensor<T> iclRateAll,
-        Tensor<T> kappaAll, Tensor<T> kTildeAll, Tensor<T> vAll, int batchSize, int seqLen)
+        Tensor<T> seed, Tensor<T> aAll, Tensor<T> bAll, Tensor<T> kAll, Tensor<T> vAll, int batchSize, int seqLen)
     {
         int hd = _headDimension;
         var s = new Tensor<T>(new[] { batchSize, _numHeads, hd, hd });
@@ -790,60 +1013,31 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // Seed from the prior state so streaming (seqLen == 1 per call) accumulates across calls.
         for (int bi = 0; bi < batchSize; bi++)
             for (int h = 0; h < _numHeads; h++)
-                for (int vi = 0; vi < hd; vi++)
-                    for (int ki = 0; ki < hd; ki++)
-                        s[new[] { bi, h, vi, ki }] = seed[new[] { bi, h, vi, ki }];
-
-        // Must match CpuEngine's Rwkv7DecayScale / Rwkv7NormEps exactly.
-        const double decayScale = 0.60653065971263342; // exp(-1/2)
-        const double normEps = 1e-12;
-        var kappaHat = new T[hd];
-        var decay = new T[hd];
+                for (int di = 0; di < hd; di++)
+                    for (int vi = 0; vi < hd; vi++)
+                        s[new[] { bi, h, di, vi }] = seed[new[] { bi, h, di, vi }];
 
         for (int t = 0; t < seqLen; t++)
             for (int bi = 0; bi < batchSize; bi++)
                 for (int h = 0; h < _numHeads; h++)
-                {
-                    int hOff = h * hd;
-                    double sumSq = 0.0;
-                    for (int ki = 0; ki < hd; ki++)
+                    for (int di = 0; di < hd; di++)
                     {
-                        double kap = NumOps.ToDouble(kappaAll[new[] { bi, t, hOff + ki }]);
-                        sumSq += kap * kap;
-                    }
-                    double invN = 1.0 / Math.Sqrt(sumSq + normEps);
-                    for (int ki = 0; ki < hd; ki++)
-                    {
-                        kappaHat[ki] = NumOps.FromDouble(
-                            NumOps.ToDouble(kappaAll[new[] { bi, t, hOff + ki }]) * invN);
-                        decay[ki] = NumOps.FromDouble(Math.Exp(
-                            -decayScale * SigmoidDouble(NumOps.ToDouble(decayLogitAll[new[] { bi, t, hOff + ki }]))));
-                    }
-
-                    for (int vi = 0; vi < hd; vi++)
-                    {
-                        // Removal projection p = S_{t-1}[vi,:] . kappaHat (row vi only depends on row vi).
-                        T p = NumOps.Zero;
-                        for (int ki = 0; ki < hd; ki++)
-                            p = NumOps.Add(p, NumOps.Multiply(s[new[] { bi, h, vi, ki }], kappaHat[ki]));
-
-                        T v = vAll[new[] { bi, t, hOff + vi }];
-                        for (int ki = 0; ki < hd; ki++)
+                        int idx = (h * hd) + di;
+                        T a = Sigmoid(aAll[new[] { bi, t, idx }]);
+                        T bk = NumOps.Multiply(Sigmoid(bAll[new[] { bi, t, idx }]), kAll[new[] { bi, t, idx }]);
+                        for (int vi = 0; vi < hd; vi++)
                         {
-                            T a = iclRateAll[new[] { bi, t, hOff + ki }];
-                            T kt = kTildeAll[new[] { bi, t, hOff + ki }];
-                            T decayed = NumOps.Multiply(s[new[] { bi, h, vi, ki }], decay[ki]);
-                            T removed = NumOps.Multiply(p, NumOps.Multiply(a, kappaHat[ki]));
-                            s[new[] { bi, h, vi, ki }] = NumOps.Add(
-                                NumOps.Subtract(decayed, removed), NumOps.Multiply(v, kt));
+                            T v = vAll[new[] { bi, t, (h * hd) + vi }];
+                            T prev = s[new[] { bi, h, di, vi }];
+                            s[new[] { bi, h, di, vi }] = NumOps.Add(NumOps.Multiply(a, prev), NumOps.Multiply(bk, v));
                         }
                     }
-                }
 
         return s;
     }
 
-    private static double SigmoidDouble(double x) => 1.0 / (1.0 + Math.Exp(-x));
+    private T Sigmoid(T x) =>
+        NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.FromDouble(Math.Exp(-NumOps.ToDouble(x)))));
 
     /// <summary>
     /// Channel mixing forward with SiLU gating (RWKV-7 style).
@@ -872,8 +1066,8 @@ public partial class RWKV7Block<T> : LayerBase<T>
             ? Engine.TensorConcatenate(new[] { xPrev0, Engine.TensorNarrow(x, 1, 0, seqLen - 1) }, axis: 1)
             : xPrev0;
 
-        var rIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixR3), Engine.TensorBroadcastMultiply(xShifted, invR3));
-        var kIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixK3), Engine.TensorBroadcastMultiply(xShifted, invK3));
+        var rIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixR3), Engine.TensorMultiply(xShifted, invR3));
+        var kIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixK3), Engine.TensorMultiply(xShifted, invK3));
 
         // r = sigmoid(W_r · rIn); k = W_k · kIn; SiLU(k); v = W_v · SiLU(k); out = sigmoid(r) · v.
         var rGate = Engine.Sigmoid(Engine.TensorMatMul(Engine.Reshape(rIn, new[] { bsl, _modelDimension }), _channelReceptanceWeights)); // [bsl, modelDim]
@@ -891,9 +1085,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // would leak the last training token into a later inference call.
         if (!IsTrainingMode && seqLen > 0)
         {
-            // Same required copy as the time-mixing token-shift cache above: a bare slice view over
-            // this forward's arena-rented buffer would be read back after that storage was recycled.
-            _prevChannelToken = x.GetSliceAlongDimension(seqLen - 1, 1).Clone();
+            _prevChannelToken = x.GetSliceAlongDimension(seqLen - 1, 1);
         }
 
         return Engine.Reshape(y, new[] { batchSize, seqLen, _modelDimension });
@@ -913,7 +1105,11 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // call.
         int modelDim = _numHeads * _headDimension;
         var input4D = Engine.Reshape(input, new[] { batchSize, modelDim, 1, 1 });
-        var output4D = Engine.GroupNorm(input4D, _numHeads, _groupNormGamma, _groupNormBeta, 1e-6, out _, out _);
+        // eps = 64e-5, per the reference (nn.GroupNorm(H, C, eps=64e-5)) — NOT the 1e-6 that was here.
+        // The WKV readout can leave a head with near-zero variance, and 1/sqrt(var + 1e-6) then
+        // amplifies that head enormously; 64e-5 is ~640x larger and deliberately damps it. This is a
+        // stability choice in the architecture, not a rounding detail.
+        var output4D = Engine.GroupNorm(input4D, _numHeads, _groupNormGamma, _groupNormBeta, 64e-5, out _, out _);
         return Engine.Reshape(output4D, input._shape);
     }
 
@@ -927,11 +1123,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
         return Engine.LayerNorm(shaped, gamma, beta, 1e-6, out _, out _);
     }
 
-    // NOTE: the time-mixing sub-layer has NO hand-written backward — it is fully tape-connected
-    // (TimeMixingForward is built from Engine ops plus the single fused Rwkv7SequenceForward node,
-    // whose custom BPTT adjoint the tape invokes). The previous private
-    // AccumulateTimeMixParameterGradients helper was unreachable AND encoded the superseded
-    // RWKV-6-style recurrence, so it was removed rather than left as misleading scaffolding.
 
     /// <summary>
     /// GroupNorm backward pass. Computes input gradient with proper normalization chain rule.
@@ -1129,12 +1320,21 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _keyWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
         _valueWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
         _outputWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
-        _aWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
+        _w1Grad = new Tensor<T>([_modelDimension, _loraRank]);
+        _w2Grad = new Tensor<T>([_loraRank, _modelDimension]);
         _aBiasGrad = new Tensor<T>([_modelDimension]);
-        _bWeightsGrad = new Tensor<T>([_modelDimension, _modelDimension]);
+        _a1Grad = new Tensor<T>([_modelDimension, _loraRank]);
+        _a2Grad = new Tensor<T>([_loraRank, _modelDimension]);
         _bBiasGrad = new Tensor<T>([_modelDimension]);
-        _kappaScaleGrad = new Tensor<T>([_modelDimension]);
-        _kappaAScaleGrad = new Tensor<T>([_modelDimension]);
+        _v0Grad = new Tensor<T>([_modelDimension]);
+        _v1Grad = new Tensor<T>([_modelDimension, _mvLoraRank]);
+        _v2Grad = new Tensor<T>([_mvLoraRank, _modelDimension]);
+        _rkGrad = new Tensor<T>([_numHeads, _headDimension]);
+        _timeMixGGrad = new Tensor<T>([_modelDimension]);
+        _g1Grad = new Tensor<T>([_modelDimension, _gateLoraRank]);
+        _g2Grad = new Tensor<T>([_gateLoraRank, _modelDimension]);
+        _kkGrad = new Tensor<T>([_modelDimension]);
+        _kaGrad = new Tensor<T>([_modelDimension]);
         _groupNormGammaGrad = new Tensor<T>([_modelDimension]);
         _groupNormBetaGrad = new Tensor<T>([_modelDimension]);
         _channelMixRGrad = new Tensor<T>([_modelDimension]);
@@ -1310,12 +1510,21 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _keyWeightsGrad = null;
         _valueWeightsGrad = null;
         _outputWeightsGrad = null;
-        _aWeightsGrad = null;
+        _w1Grad = null;
+        _w2Grad = null;
         _aBiasGrad = null;
-        _bWeightsGrad = null;
+        _a1Grad = null;
+        _a2Grad = null;
         _bBiasGrad = null;
-        _kappaScaleGrad = null;
-        _kappaAScaleGrad = null;
+        _v0Grad = null;
+        _v1Grad = null;
+        _v2Grad = null;
+        _rkGrad = null;
+        _timeMixGGrad = null;
+        _g1Grad = null;
+        _g2Grad = null;
+        _kkGrad = null;
+        _kaGrad = null;
         _groupNormGammaGrad = null;
         _groupNormBetaGrad = null;
         _channelMixRGrad = null;
@@ -1402,12 +1611,21 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _keyWeightsGrad = null;
         _valueWeightsGrad = null;
         _outputWeightsGrad = null;
-        _aWeightsGrad = null;
+        _w1Grad = null;
+        _w2Grad = null;
         _aBiasGrad = null;
-        _bWeightsGrad = null;
+        _a1Grad = null;
+        _a2Grad = null;
         _bBiasGrad = null;
-        _kappaScaleGrad = null;
-        _kappaAScaleGrad = null;
+        _v0Grad = null;
+        _v1Grad = null;
+        _v2Grad = null;
+        _rkGrad = null;
+        _timeMixGGrad = null;
+        _g1Grad = null;
+        _g2Grad = null;
+        _kkGrad = null;
+        _kaGrad = null;
         _groupNormGammaGrad = null;
         _groupNormBetaGrad = null;
         _channelMixRGrad = null;
@@ -1421,12 +1639,26 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _normBeta2Grad = null;
     }
 
+    /// <summary>All trainable tensors, for gradient diagnostics in tests.</summary>
+    internal Tensor<T>[] ParameterTensorsForDiagnostics => GetAllParameterTensors();
+
+    /// <summary>Names positionally matching <see cref="ParameterTensorsForDiagnostics"/>.</summary>
+    internal static string[] ParameterNamesForDiagnostics =>
+    [
+        "timeMixR", "timeMixK", "timeMixV", "timeMixA", "timeMixB",
+        "receptanceWeights", "keyWeights", "valueWeights", "outputWeights",
+        "w1", "w2", "aBias", "a1", "a2", "bBias", "kk", "ka", "rk", "timeMixG", "g1", "g2", "v0", "v1", "v2",
+        "groupNormGamma", "groupNormBeta",
+        "channelMixR", "channelMixK",
+        "channelKeyWeights", "channelValueWeights", "channelReceptanceWeights",
+        "normGamma1", "normBeta1", "normGamma2", "normBeta2"
+    ];
+
     private Tensor<T>[] GetAllParameterTensors() =>
     [
         _timeMixR, _timeMixK, _timeMixV, _timeMixA, _timeMixB,
         _receptanceWeights, _keyWeights, _valueWeights, _outputWeights,
-        _aWeights, _aBias, _bWeights, _bBias,
-        _kappaScale, _kappaAScale,
+        _w1, _w2, _aBias, _a1, _a2, _bBias, _kk, _ka, _rk, _timeMixG, _g1, _g2, _v0, _v1, _v2,
         _groupNormGamma, _groupNormBeta,
         _channelMixR, _channelMixK,
         _channelKeyWeights, _channelValueWeights, _channelReceptanceWeights,
@@ -1437,8 +1669,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
     [
         _timeMixRGrad, _timeMixKGrad, _timeMixVGrad, _timeMixAGrad, _timeMixBGrad,
         _receptanceWeightsGrad, _keyWeightsGrad, _valueWeightsGrad, _outputWeightsGrad,
-        _aWeightsGrad, _aBiasGrad, _bWeightsGrad, _bBiasGrad,
-        _kappaScaleGrad, _kappaAScaleGrad,
+        _w1Grad, _w2Grad, _aBiasGrad, _a1Grad, _a2Grad, _bBiasGrad, _kkGrad, _kaGrad, _rkGrad, _timeMixGGrad, _g1Grad, _g2Grad, _v0Grad, _v1Grad, _v2Grad,
         _groupNormGammaGrad, _groupNormBetaGrad,
         _channelMixRGrad, _channelMixKGrad,
         _channelKeyWeightsGrad, _channelValueWeightsGrad, _channelReceptanceWeightsGrad,
@@ -1453,18 +1684,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
         metadata["HeadDimension"] = _headDimension.ToString();
         metadata["FFNDimension"] = _ffnDimension.ToString();
         metadata["Architecture"] = "RWKV-7";
-        // The state-evolution formulation is part of the layer's identity: a checkpoint written by the
-        // superseded "diagonal decay + additive injection" build is NOT loadable into the paper-faithful
-        // delta-rule build (the parameter vector gained k_k / k_a and the readout contracts r, not k).
-        // Record it so a mismatched restore is diagnosable instead of silently producing wrong outputs.
-        metadata["StateEvolution"] = "GeneralizedDeltaRule";
-        // The two per-channel key scales introduced by the delta rule. Their SHAPES follow from
-        // ModelDimension (both [modelDim]) and their VALUES round-trip through
-        // GetParameters/SetParameters, but recording their presence and count keeps the persisted
-        // parameter layout self-describing — a rebuild that omitted them would otherwise deserialize
-        // into a shorter parameter vector and silently reconstruct a wrong-shaped layer.
-        metadata["KappaScaleLength"] = _kappaScale.Length.ToString();
-        metadata["KappaAScaleLength"] = _kappaAScale.Length.ToString();
         return metadata;
     }
 }
