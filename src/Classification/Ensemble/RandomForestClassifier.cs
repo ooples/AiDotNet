@@ -242,18 +242,26 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
     /// </summary>
     private int CalculateMaxFeatures()
     {
-        if (string.IsNullOrEmpty(Options.MaxFeatures))
+        // An explicit count wins over the rule.
+        if (Options.MaxFeatureCount is int explicitCount)
         {
-            return NumFeatures;
+            if (explicitCount <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(Options.MaxFeatureCount)} must be positive when set; got {explicitCount}.");
+            }
+            return Math.Min(explicitCount, NumFeatures);
         }
 
-        return Options.MaxFeatures.ToLower() switch
+        // Exhaustive over the enum. The string version's `_ => sqrt` fallback meant an unrecognized
+        // value silently trained a different model than the caller requested.
+        return Options.MaxFeatures switch
         {
-            "sqrt" => (int)Math.Ceiling(Math.Sqrt(NumFeatures)),
-            "log2" => (int)Math.Ceiling(Math.Log(NumFeatures, 2)),
-            "all" => NumFeatures,
-            _ when int.TryParse(Options.MaxFeatures, out int n) => Math.Min(n, NumFeatures),
-            _ => (int)Math.Ceiling(Math.Sqrt(NumFeatures)) // Default to sqrt
+            MaxFeatureSelection.Sqrt => (int)Math.Ceiling(Math.Sqrt(NumFeatures)),
+            MaxFeatureSelection.Log2 => (int)Math.Ceiling(Math.Log(NumFeatures, 2)),
+            MaxFeatureSelection.All => NumFeatures,
+            _ => throw new InvalidOperationException(
+                $"Unhandled {nameof(MaxFeatureSelection)} value '{Options.MaxFeatures}'.")
         };
     }
 
