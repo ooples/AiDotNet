@@ -147,7 +147,8 @@ public static class StockformerMultiTaskLoss<T>
         Vector<T> mainClassLogits, Vector<T> lowClassLogits,
         Vector<T> directionTarget,
         int numClasses,
-        double missingSentinel = 0.0)
+        double missingSentinel = 0.0,
+        double taskLossWeight = 1.0)
     {
         double regression =
             MaskedMae(mainRegression, mainReturnTarget, missingSentinel)
@@ -157,7 +158,9 @@ public static class StockformerMultiTaskLoss<T>
             CrossEntropy(mainClassLogits, directionTarget, numClasses)
             + CrossEntropy(lowClassLogits, directionTarget, numClasses);
 
-        // Unweighted sum. See the class remarks: the reference has a weighted form commented out.
-        return (regression, classification, regression + classification);
+        // L = L_reg + lambda*L_cla (paper Eq. 12). The reference uses lambda = 1, which is the
+        // default here -- but the weighting exists in the paper, so it is a parameter rather than a
+        // hardcoded 1:1 sum.
+        return (regression, classification, regression + (taskLossWeight * classification));
     }
 }

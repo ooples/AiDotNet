@@ -66,31 +66,62 @@ public abstract class CrossSectionalGraphModelBase<T> : FinancialModelBase<T>
     }
 
     /// <summary>
-    /// Gets or sets the asset relationship graph, <c>[assets, assets]</c>.
+    /// Gets or sets the asset relationship TOPOLOGY, <c>[assets, assets]</c>.
     /// </summary>
-    /// <value>
-    /// The adjacency or embedding-derived affinity between assets, or <c>null</c> to treat assets as
-    /// unconnected.
-    /// </value>
     /// <remarks>
     /// <para>
-    /// Data, not a learned parameter: it is supplied by the caller and is not part of the model's
-    /// parameter vector, so it does not participate in training, serialization or cloning. Setting it
-    /// changes predictions without changing any weight.
+    /// Who is connected to whom. This is what message-passing models need — GCN and GAT attend over a
+    /// node's NEIGHBOURS, so they require the edge structure itself.
     /// </para>
     /// <para>
-    /// <c>null</c> means the identity graph — every asset sees only itself. That is a legitimate
-    /// baseline, but it disables the cross-sectional mechanism these models exist for, so
-    /// <see cref="HasGraph"/> is exposed to let callers and tests detect the degenerate case rather
-    /// than silently getting isolated-asset behaviour.
+    /// Deliberately separate from <see cref="AssetEmbedding"/>. Topology and features are different
+    /// things, and the split follows the standard convention (PyTorch Geometric keeps <c>edge_index</c>
+    /// apart from <c>x</c>). Collapsing them into one member forces a model that wants one to
+    /// misinterpret the other.
+    /// </para>
+    /// <para>
+    /// Data, not a learned parameter: supplied by the caller, absent from the parameter vector, and so
+    /// not part of training, serialization or cloning.
     /// </para>
     /// </remarks>
-    public Matrix<T>? Adjacency { get; set; }
+    public Matrix<T>? AssetGraph { get; set; }
 
     /// <summary>
-    /// Whether a non-trivial asset graph has been supplied.
+    /// Gets or sets a precomputed per-asset structural EMBEDDING, <c>[assets, embeddingWidth]</c>.
     /// </summary>
-    public bool HasGraph => Adjacency is not null;
+    /// <remarks>
+    /// <para>
+    /// The output of struc2vec, node2vec, DeepWalk or similar: the graph's structure already encoded
+    /// as a feature vector per asset. Models consume it by ADDING it to their inputs, not by treating
+    /// it as an adjacency — Stockformer's Eq. 10 is <c>X~ = X + rho^spa + rho^tem</c>.
+    /// </para>
+    /// <para>
+    /// A model needing topology should read <see cref="AssetGraph"/>; one needing structural features
+    /// should read this. Supplying an embedding where topology is expected (or the reverse) is a
+    /// modelling error, not something to silently coerce.
+    /// </para>
+    /// </remarks>
+    public Matrix<T>? AssetEmbedding { get; set; }
+
+    /// <summary>
+    /// Whether asset TOPOLOGY has been supplied.
+    /// </summary>
+    /// <remarks>
+    /// Exposed so callers and tests can detect the degenerate case. Without a graph, a message-passing
+    /// model falls back to the identity — every asset seeing only itself — which is legitimate but
+    /// disables the cross-sectional mechanism these models exist for.
+    /// </remarks>
+    public bool HasGraph => AssetGraph is not null;
+
+    /// <summary>
+    /// Whether a precomputed structural EMBEDDING has been supplied.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="HasGraph"/> because the two inputs are separate. A model can
+    /// legitimately have one and not the other, and reporting a single "has graph" flag would hide
+    /// which of them is actually present.
+    /// </remarks>
+    public bool HasEmbedding => AssetEmbedding is not null;
 
     /// <summary>
     /// Gets the number of prediction heads this model exposes.
@@ -140,7 +171,7 @@ public abstract class CrossSectionalGraphModelBase<T> : FinancialModelBase<T>
         if (assetCount <= 0)
             throw new ArgumentOutOfRangeException(nameof(assetCount), assetCount, "Asset count must be positive.");
 
-        var graph = Adjacency;
+        var graph = AssetGraph;
         if (graph is null)
         {
             var identity = new Matrix<T>(assetCount, assetCount);
@@ -152,11 +183,48 @@ public abstract class CrossSectionalGraphModelBase<T> : FinancialModelBase<T>
         if (graph.Rows != assetCount || graph.Columns != assetCount)
         {
             throw new InvalidOperationException(
-                $"{nameof(Adjacency)} is [{graph.Rows}, {graph.Columns}] but this cross-section has " +
+                $"{nameof(AssetGraph)} is [{graph.Rows}, {graph.Columns}] but this cross-section has " +
                 $"{assetCount} assets. A graph built for a different asset universe would be applied to " +
                 "the wrong assets and still produce plausible-looking output, so this fails instead.");
         }
 
         return graph;
+    }
+
+    /// <summary>
+    /// Resolves the structural embedding, substituting zeros when none was supplied.
+    /// </summary>
+    /// <param name="assetCount">Number of assets in the current cross-section.</param>
+    /// <param name="width">Embedding width the model expects.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when a supplied embedding disagrees with the cross-section or the expected width. An
+    /// embedding built for a different asset universe would attach the wrong structural prior to each
+    /// asset and still produce plausible output.
+    /// </exception>
+    protected Matrix<T> ResolveEmbedding(int assetCount, int width)
+    {
+        if (assetCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(assetCount), assetCount, "Asset count must be positive.");
+        if (width <= 0)
+            throw new ArgumentOutOfRangeException(nameof(width), width, "Embedding width must be positive.");
+
+        var embedding = AssetEmbedding;
+        if (embedding is null)
+        {
+            // Zeros: an additive embedding of zero is the identity, so the model degrades to
+            // "no structural prior" rather than to something arbitrary.
+            return new Matrix<T>(assetCount, width);
+        }
+
+        if (embedding.Rows != assetCount || embedding.Columns != width)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(AssetEmbedding)} is [{embedding.Rows}, {embedding.Columns}] but this model " +
+                $"expects [{assetCount}, {width}]. An embedding from a different asset universe or a " +
+                "different encoder width would attach the wrong prior to each asset and still look " +
+                "plausible, so this fails instead.");
+        }
+
+        return embedding;
     }
 }

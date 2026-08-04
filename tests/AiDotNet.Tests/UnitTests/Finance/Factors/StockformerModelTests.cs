@@ -88,17 +88,18 @@ public class StockformerModelTests
         var model = new Stockformer<double>(SmallOptions());
         var isolated = model.PredictBands(Returns());
 
-        var dense = new Matrix<double>(Stocks, Stocks);
+        // rho^spa: a per-asset structural embedding ADDED to the features (Eq. 10), not an adjacency.
+        var embedding = new Matrix<double>(Stocks, 8);
         for (int i = 0; i < Stocks; i++)
-            for (int j = 0; j < Stocks; j++) dense[i, j] = 1.0;
-        model.Adjacency = dense;
+            for (int f = 0; f < 8; f++) embedding[i, f] = 0.1 * (i + 1);
+        model.AssetEmbedding = embedding;
         var connected = model.PredictBands(Returns());
 
         bool differs = false;
         for (int i = 0; i < isolated.Returns.Length; i++)
             if (Math.Abs(isolated.Returns[i] - connected.Returns[i]) > 1e-9) { differs = true; break; }
 
-        Assert.True(differs, "A fully connected graph produced identical output to an isolated one.");
+        Assert.True(differs, "The structural embedding changed nothing; Eq. 10 is not consuming it.");
     }
 
     [Fact]
@@ -202,10 +203,13 @@ public class StockformerModelTests
         // The identity fallback is legitimate but disables the model's whole point, so it must be
         // detectable rather than silently in effect.
         var model = new Stockformer<double>(SmallOptions());
+        Assert.False(model.HasEmbedding);
         Assert.False(model.HasGraph);
 
-        model.Adjacency = new Matrix<double>(Stocks, Stocks);
-        Assert.True(model.HasGraph);
+        // Topology and structural features are separate members; Stockformer consumes the embedding.
+        model.AssetEmbedding = new Matrix<double>(Stocks, 8);
+        Assert.True(model.HasEmbedding);
+        Assert.False(model.HasGraph);
     }
 
     [Fact]
@@ -215,20 +219,21 @@ public class StockformerModelTests
         // worst failure mode available. ResolveGraph refuses instead.
         var model = new Stockformer<double>(SmallOptions())
         {
-            Adjacency = new Matrix<double>(Stocks + 3, Stocks + 3),
+            AssetEmbedding = new Matrix<double>(Stocks + 3, 8),
         };
 
         Assert.Throws<InvalidOperationException>(() => model.PredictBands(Returns()));
     }
 
     [Fact]
-    public void EncoderRejectsAGraphThatIsNotAssetByAsset()
+    public void EncoderRejectsAnEmbeddingThatIsNotAssetByWidth()
     {
         var encoder = BuildEncoder();
         var band = new Tensor<double>(new[] { 3, 5, 4 });
-        var wrong = new Matrix<double>(2, 2);
+        var wrongSpatial = new Matrix<double>(2, 4);      // 2 assets, but the bands carry 3
+        var temporal = new Matrix<double>(5, 4);
 
-        Assert.Throws<ArgumentException>(() => encoder.Encode(band, band, wrong));
+        Assert.Throws<ArgumentException>(() => encoder.Encode(band, band, wrongSpatial, temporal));
     }
 
     [Fact]
@@ -237,28 +242,49 @@ public class StockformerModelTests
         var encoder = BuildEncoder();
         var low = new Tensor<double>(new[] { 3, 5, 4 });
         var high = new Tensor<double>(new[] { 3, 6, 4 });   // the two bands come from ONE split
-        var graph = new Matrix<double>(3, 3);
+        var spatial = new Matrix<double>(3, 4);
+        var temporal = new Matrix<double>(5, 4);
 
-        Assert.Throws<ArgumentException>(() => encoder.Encode(low, high, graph));
+        Assert.Throws<ArgumentException>(() => encoder.Encode(low, high, spatial, temporal));
     }
 
     [Fact]
-    public void EncoderRefusesToShareOneSpatialLayerAcrossBothBands()
+    public void EncoderRequiresAtLeastOneStackedLayer()
     {
-        // ssal/ssah are distinct in the reference. Sharing one layer would force both frequency bands
-        // to learn identical cross-asset structure, erasing half the dual-frequency design — so this
-        // is rejected at construction rather than silently degrading the model.
-        var shared = new DenseLayer<double>(4);
+        // The paper stacks L layers and the reference sets layers = 2. An empty stack would leave the
+        // bands unencoded while still returning plausibly-shaped output.
         Assert.Throws<ArgumentException>(() => new StockformerDualEncoder<double>(
             features: 4, kernelWidth: 3,
-            lowTemporal: new DenseLayer<double>(4), highTemporal: new DenseLayer<double>(4),
-            spatialLow: shared, spatialHigh: shared, fusion: new DenseLayer<double>(4),
+            layers: Array.Empty<StockformerDualEncoder<double>.Layer>(),
+            fusionSelf: Attention(), fusionCross: Attention(),
             fusionNorm: new LayerNormalizationLayer<double>(4)));
     }
 
+    [Fact]
+    public void ModelStacksTheConfiguredNumberOfEncoderLayers()
+    {
+        // NumLayers was previously read by nothing — the encoder ran a single pass regardless.
+        var options = SmallOptions();
+        options.NumLayers = 3;
+        var model = new Stockformer<double>(options);
+
+        // Three stacked layers plus the fusion pair means strictly more parameters than one layer.
+        var single = SmallOptions();
+        single.NumLayers = 1;
+        Assert.True(model.GetParameters().Length > new Stockformer<double>(single).GetParameters().Length,
+            "Raising NumLayers did not add parameters; the stack is not being built.");
+    }
+
+    private static StockformerAttention<double> Attention() => new(
+        4, new DenseLayer<double>(4), new DenseLayer<double>(4), new DenseLayer<double>(4), causal: true);
+
     private static StockformerDualEncoder<double> BuildEncoder() => new(
         features: 4, kernelWidth: 3,
-        lowTemporal: new DenseLayer<double>(4), highTemporal: new DenseLayer<double>(4),
-        spatialLow: new DenseLayer<double>(4), spatialHigh: new DenseLayer<double>(4),
-        fusion: new DenseLayer<double>(4), fusionNorm: new LayerNormalizationLayer<double>(4));
+        layers: new[]
+        {
+            new StockformerDualEncoder<double>.Layer(
+                Attention(), Attention(), Attention(), new DenseLayer<double>(4)),
+        },
+        fusionSelf: Attention(), fusionCross: Attention(),
+        fusionNorm: new LayerNormalizationLayer<double>(4));
 }
