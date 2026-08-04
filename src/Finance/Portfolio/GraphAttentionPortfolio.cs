@@ -145,7 +145,7 @@ public class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
             return;
         }
 
-        Layers.AddRange(LayerHelper<T>.CreateDefaultAttentionAllocationLayers(
+        Layers.AddRange(LayerHelper<T>.CreateDefaultGraphAttentionPortfolioLayers(
             Architecture,
             NumFeatures,
             _options.AttentionFeatureDimension * _options.NumHeads,

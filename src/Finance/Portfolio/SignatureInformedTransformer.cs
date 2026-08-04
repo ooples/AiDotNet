@@ -148,7 +148,7 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
             return;
         }
 
-        Layers.AddRange(LayerHelper<T>.CreateDefaultAttentionAllocationLayers(
+        Layers.AddRange(LayerHelper<T>.CreateDefaultSignatureInformedTransformerLayers(
             Architecture,
             NumFeatures,
             _options.ModelDimension,
