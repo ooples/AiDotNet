@@ -175,7 +175,9 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         _numQueries = numQueries;
         _numTableClasses = 2;       // background, table
         _numStructureClasses = 7;   // background, table, column, row, column header, projected row header, spanning cell
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { EnableGradientClipping = true, MaxGradientNorm = 1.0 });
 
         ImageSize = imageSize;
 
@@ -231,7 +233,9 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         _numQueries = numQueries;
         _numTableClasses = 2;
         _numStructureClasses = 7;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { EnableGradientClipping = true, MaxGradientNorm = 1.0 });
 
         ImageSize = imageSize;
 

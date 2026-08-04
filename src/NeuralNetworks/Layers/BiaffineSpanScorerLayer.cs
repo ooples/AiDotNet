@@ -33,7 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">Numeric type (float / double).</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4, 3")]
+// Finite-difference gradchecks require a stationary forward function. Disable dropout only in the
+// generated fixture while preserving the paper-faithful 0.2 production default below.
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null, 0.0, 2")]
 public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;

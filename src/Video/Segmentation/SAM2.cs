@@ -104,6 +104,14 @@ public class SAM2<T> : NeuralNetworkBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <summary>
+    /// SAM2's decoder selects one mask through a data-dependent IoU argmax and its video path also
+    /// reads mutable memory-bank state. Those branches cannot be captured once and safely replayed
+    /// by a static fused-training plan. Keep the real paper topology on the eager autodiff tape so
+    /// every step evaluates the current scores, selects the current mask, and updates live weights.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <summary>
     /// Gets the input height.
     /// </summary>
     internal int InputHeight => _height;
@@ -738,16 +746,34 @@ public class SAM2<T> : NeuralNetworkBase<T>
         return x;
     }
 
-    /// <summary>Runs a half-open span of layers, applying GELU between them as the decoder does.</summary>
-    private Tensor<T> RunSpanWithGelu(Tensor<T> input, int start, int end)
+    /// <summary>
+    /// Runs one of SAM2's global-pooling score heads, canonicalizing pooled NCHW features to the
+    /// two-dimensional layout expected by the head's Dense layer.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GlobalPoolingLayer{T}"/> preserves the channel axis and emits
+    /// [batch, channels, 1, 1]. <see cref="DenseLayer{T}"/> deliberately follows linear-layer
+    /// semantics and transforms only the final axis, so forwarding that rank-4 tensor directly
+    /// would emit [batch, channels, 1, scores]. The reshape belongs at this branch boundary and uses
+    /// <c>Engine.Reshape</c> so gradients from the IoU and object-presence losses remain on the tape.
+    /// </remarks>
+    private Tensor<T> RunScoreHead(Tensor<T> input, int start, int end)
     {
-        var x = input;
-        for (int i = start; i < end; i++)
+        if (end - start != 2)
         {
-            x = ApplyGELU(Layers[i].Forward(x));
+            throw new InvalidOperationException(
+                "A SAM2 score head must contain global pooling followed by a Dense layer.");
         }
 
-        return x;
+        var pooled = Layers[start].Forward(input);
+        int batch = pooled.Shape[0];
+        if (batch <= 0 || pooled.Length % batch != 0)
+        {
+            throw new InvalidOperationException("SAM2 score-head pooling emitted an invalid batch layout.");
+        }
+
+        var flattened = Engine.Reshape(pooled, new[] { batch, pooled.Length / batch });
+        return Layers[start + 1].Forward(flattened);
     }
 
     #region Module spans
@@ -1036,7 +1062,11 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
         if (ModulesWired)
         {
-            features = RunSpanWithGelu(features, _maskRefineStart, _maskRefineEnd);
+            // The helper-created refinement convolutions already contain the ReLU activations used
+            // by SAM2's retained SAM mask decoder. Running them directly also keeps their outputs on
+            // the autodiff tape; the former extra raw GELU transform both changed the reference
+            // activation stack and disconnected the refinement/encoder parameters from mask loss.
+            features = RunSpan(features, _maskRefineStart, _maskRefineEnd);
 
             // The mask head is a 1x1 convolution whose activation IS a sigmoid, so it already emits
             // probabilities. Applying ApplySigmoid on top of it would squash [0,1] into
@@ -1044,16 +1074,17 @@ public class SAM2<T> : NeuralNetworkBase<T>
             masks = Layers[_maskHeadIndex].Forward(features);
 
             // The IoU and occlusion heads each begin with their own global-average pool and end in a
-            // sigmoid dense layer, so they take the FULL feature map and need no extra pooling or
-            // activation either.
+            // sigmoid dense layer, so they take the FULL feature map and need no extra activation.
+            // Global pooling preserves the NCHW channel axis; RunScoreHead graph-safely flattens its
+            // [batch, channels, 1, 1] output to [batch, channels] before the Dense layer.
             // The head ends in a dense layer, so it emits [batch, candidates]; SelectBestMask and
             // GetNamedLayerActivations read IoU as [batch, candidates, 1, 1]. Normalise the rank with
             // Engine.Reshape rather than a raw tensor.Reshape so the tape survives.
             iouScores = NormalizeScoreRank(
-                RunSpan(features, _iouHeadStart, _iouHeadEnd), MaskCandidateCount);
+                RunScoreHead(features, _iouHeadStart, _iouHeadEnd), MaskCandidateCount);
 
             var occlusion = NormalizeScoreRank(
-                RunSpan(features, _occlusionHeadStart, _occlusionHeadEnd), 1);
+                RunScoreHead(features, _occlusionHeadStart, _occlusionHeadEnd), 1);
             occlusionScore = Convert.ToDouble(occlusion[0, 0, 0, 0]);
         }
         else

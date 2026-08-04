@@ -129,7 +129,9 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
                 cumulativeH += hazardIncrement;
 
                 // Variance increment: d(t)/n(t)^2
-                cumulativeVar += (double)eventsAtTime / (atRisk * atRisk);
+                // atRisk * atRisk is squared in int and overflows for a large cohort,
+                // so the variance term flips sign rather than shrinking.
+                cumulativeVar += (double)eventsAtTime / ((double)atRisk * atRisk);
             }
 
             _cumulativeHazard[t] = NumOps.FromDouble(cumulativeH);
