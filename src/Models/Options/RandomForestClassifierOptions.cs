@@ -108,15 +108,28 @@ public class RandomForestClassifierOptions<T> : ClassifierOptions<T>
     /// <para><b>For Beginners:</b> How many features each tree considers at each decision point.
     ///
     /// Common settings:
-    /// - "sqrt": Square root of features (default for classification)
-    /// - "log2": Log base 2 of features
-    /// - null or "all": All features (but this loses some randomness!)
-    /// - A number: Exactly that many features
+    /// - <see cref="MaxFeatureSelection.Sqrt"/>: Square root of features (default for classification)
+    /// - <see cref="MaxFeatureSelection.Log2"/>: Log base 2 of features
+    /// - <see cref="MaxFeatureSelection.All"/>: All features (but this loses some randomness!)
+    /// - <see cref="MaxFeatureCount"/>: Exactly that many features
     ///
     /// Using fewer features = more random, more different trees.
     /// </para>
     /// </remarks>
-    public string MaxFeatures { get; set; } = "sqrt";
+    public MaxFeatureSelection MaxFeatures { get; set; } = MaxFeatureSelection.Sqrt;
+
+    /// <summary>
+    /// Gets or sets an explicit feature count per split, overriding <see cref="MaxFeatures"/>.
+    /// </summary>
+    /// <value>
+    /// A positive count, or <c>null</c> (the default) to use the <see cref="MaxFeatures"/> rule.
+    /// </value>
+    /// <remarks>
+    /// Separate from the rule because a count is a number. The previous <c>string</c> form had to
+    /// carry both, and fell back to sqrt on any unrecognized value, so a typo silently trained a
+    /// different model. Clamped to the available feature count at use.
+    /// </remarks>
+    public int? MaxFeatureCount { get; set; }
 
     /// <summary>
     /// Gets or sets the criterion used to measure the quality of a split.
