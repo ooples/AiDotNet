@@ -135,6 +135,18 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
 
+    /// <summary>
+    /// Optional hook that rewrites the projected queries, keys and values before they are split into
+    /// heads. Null by default, in which case the forward pass is unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Set by techniques that steer a FROZEN attention block by editing Q/K/V rather than its output
+    /// — UniVST's query blending and key/value AdaIN, for instance. Not part of the layer's
+    /// parameters or serialized state: it is a caller-owned strategy, so cloning or reloading a layer
+    /// does not carry it along.
+    /// </remarks>
+    public IQkvTransform<T>? QkvTransform { get; set; }
+
     // Cached projected Q, K, V for backward pass (4D: [batch, heads, seq, head_dim])
     private Tensor<T>? _lastProjectedQueries = null;
     private Tensor<T>? _lastProjectedKeys = null;
@@ -1227,9 +1239,37 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var k2D = Engine.Reshape(key, [batchSize * seqLengthKV, embeddingDimension]);
         var v2D = Engine.Reshape(value, [batchSize * seqLengthKV, embeddingDimension]);
 
+        static Tensor<T> ApplyQkvTransform(Tensor<T>? produced, Tensor<T> original, string method)
+        {
+            if (produced is null)
+                throw new InvalidOperationException(
+                    $"IQkvTransform.{method} returned null; it must return a tensor.");
+
+            // A transform that changes the element count would break the head reshape a few lines
+            // below with a confusing message about Q_flat. Failing here names the real culprit.
+            if (produced.Length != original.Length)
+                throw new InvalidOperationException(
+                    $"IQkvTransform.{method} must preserve shape: got [{string.Join(", ", produced._shape)}] " +
+                    $"({produced.Length} elements) from [{string.Join(", ", original._shape)}] " +
+                    $"({original.Length} elements).");
+
+            return produced;
+        }
+
         var Q_flat = Engine.TensorMatMul(q2D, _queryWeights);
         var K_flat = Engine.TensorMatMul(k2D, _keyWeights);
         var V_flat = Engine.TensorMatMul(v2D, _valueWeights);
+
+        // Q/K/V steering hook (see IQkvTransform). Applied HERE — after projection, before the head
+        // split — because methods that rewrite Q/K/V need the projected tensors, and the only other
+        // wrapping point available (IAttentionBlockDecorator.PostProcess) sees the post-softmax
+        // OUTPUT instead. Null unless a caller attaches one, so the default path is unchanged.
+        if (QkvTransform is not null)
+        {
+            Q_flat = ApplyQkvTransform(QkvTransform.TransformQuery(Q_flat), Q_flat, "TransformQuery");
+            K_flat = ApplyQkvTransform(QkvTransform.TransformKey(K_flat), K_flat, "TransformKey");
+            V_flat = ApplyQkvTransform(QkvTransform.TransformValue(V_flat), V_flat, "TransformValue");
+        }
 
         // Reshape and Transpose to [Batch, HeadCount, Seq, HeadDim]
         int targetQElems = batchSize * seqLengthQ * _headCount * _headDimension;
