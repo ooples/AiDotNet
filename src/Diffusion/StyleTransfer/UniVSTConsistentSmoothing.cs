@@ -33,7 +33,13 @@ public class UniVSTConsistentSmoothing<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly UniVSTOptions _options;
-    private readonly IEngine _engine;
+
+    /// <summary>
+    /// The ambient tensor engine. Read per use rather than captured in the constructor, so the
+    /// smoother follows a later engine switch instead of pinning whichever engine happened to be
+    /// current when it was built.
+    /// </summary>
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>Gets m, the window half-width; the full window spans 2m + 1 frames.</summary>
     public int HalfWindow => _options.SmoothingHalfWindow;
@@ -43,15 +49,10 @@ public class UniVSTConsistentSmoothing<T>
 
     /// <summary>Creates the smoother.</summary>
     /// <param name="options">Configuration; defaults are the paper's.</param>
-    /// <param name="engine">
-    /// Tensor engine used for warping. Defaults to the ambient engine. Threaded through so the warp
-    /// is recorded on the caller's gradient tape rather than severing it.
-    /// </param>
-    public UniVSTConsistentSmoothing(UniVSTOptions? options = null, IEngine? engine = null)
+    public UniVSTConsistentSmoothing(UniVSTOptions? options = null)
     {
         _options = options ?? new UniVSTOptions();
         _options.Validate();
-        _engine = engine ?? AiDotNetEngine.Current;
     }
 
     /// <summary>True when smoothing applies at the given progress through the schedule (fraction of T).</summary>
@@ -125,7 +126,7 @@ public class UniVSTConsistentSmoothing<T>
                     // right, because warping by a zero field would average in an UNALIGNED frame and
                     // reintroduce exactly the ghosting this step removes.
                     if (flow == null) continue;
-                    aligned = FlowWarpHelper.Warp(_engine, frames[j], flow);
+                    aligned = FlowWarpHelper.Warp(Engine, frames[j], flow);
                 }
 
                 for (int p = 0; p < accumulator.Length; p++)
