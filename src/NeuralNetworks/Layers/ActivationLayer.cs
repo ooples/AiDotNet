@@ -27,6 +27,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>()")]
 public class ActivationLayer<T> : LayerBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>An activation is elementwise, so the shape is carried through unchanged.</remarks>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Identity;
+
     /// <summary>
     /// Stores the input from the most recent forward pass for use in the backward pass.
     /// </summary>
