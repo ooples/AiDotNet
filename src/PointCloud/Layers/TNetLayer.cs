@@ -121,8 +121,35 @@ public class TNetLayer<T> : LayerBase<T>
         Parameters = GetParameters();
     }
 
+    /// <summary>
+    /// Hands the MLP / pooling / FC children to <see cref="LayerBase{T}.GetSubLayers"/>.
+    /// </summary>
+    /// <remarks>
+    /// Written out by hand because this class is not <c>partial</c> and carries no
+    /// <c>[LayerProperty]</c>, so TrainableParameterGenerator emits no
+    /// <c>EnsureSubLayersRegistered()</c> for it — the sibling composites get this for free.
+    /// Registering here rather than in the constructor is deliberate: doing it at construction puts
+    /// the children in front of the pre-step buffer-view save/restore walk alongside the parent
+    /// that already handles them, which silently breaks training.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (!_subLayersRegistered)
+        {
+            _subLayersRegistered = true;
+            foreach (var l in _mlpLayers) RegisterSubLayer(l);
+            RegisterSubLayer(_maxPooling);
+            foreach (var l in _fcLayers) RegisterSubLayer(l);
+        }
+
+        base.EnsureInitialized();
+    }
+
+    private bool _subLayersRegistered;
+
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         Tensor<T> features = input;

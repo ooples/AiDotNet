@@ -107,6 +107,11 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Registers the inner convs with GetSubLayers() via the generated
+        // EnsureSubLayersRegistered(). Without it they self-initialize on their own first Forward,
+        // so outputs are correct while every structural walker sees this block as a leaf.
+        EnsureInitializedFromInput(input);
+
         // Gated activation: z = tanh(W_f * x) ⊙ sigmoid(W_g * x).
         var f = _filterConv.Forward(input);
         var g = _gateConv.Forward(input);

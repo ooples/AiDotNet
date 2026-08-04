@@ -100,9 +100,48 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
 
     public override long ParameterCount => InnerConvs().Sum(c => c.ParameterCount);
 
+    /// <summary>
+    /// Channel width is fixed by the block; the time axis is carried through untouched, since every
+    /// inner conv is "same"-padded so the residual adds line up.
+    /// </summary>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.ChannelOnly;
+
+    /// <summary>
+    /// Resolves while KEEPING the time axis dynamic.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this the block never resolved at all. It declares <c>[channels, -1]</c>, and
+    /// <see cref="LayerBase{T}.IsShapeResolved"/> reads any -1 as "not resolved yet", so
+    /// <c>EnsureInitialized()</c> never ran -- and with it the generated
+    /// <c>EnsureSubLayersRegistered()</c> that hands the 18 inner convs to
+    /// <see cref="LayerBase{T}.GetSubLayers"/>. The block therefore looked like a leaf to every
+    /// structural walker for its entire lifetime: shape resolution, uninitialized-parameter
+    /// detection and introspection all saw nothing inside it.
+    /// </para>
+    /// <para>
+    /// Registering the convs in the constructor instead looks like the obvious fix and is not one.
+    /// It puts them in front of the pre-step buffer-view save/restore walk
+    /// (<c>NeuralNetworkBase.SaveOriginalParameters</c>) alongside the parent that already handles
+    /// them, and HiFiGAN then came out of training producing identical outputs for different
+    /// inputs. Resolving lets registration happen at the point the framework intends.
+    /// </para>
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        ResolveShapes(new[] { _channels, -1 }, new[] { _channels, -1 });
+    }
+
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // The block's own weights live in the inner convs, which self-initialize on their first
+        // Forward, so skipping this looked harmless and the outputs were always correct. What it
+        // actually skipped is EnsureInitialized(), and with it the generated
+        // EnsureSubLayersRegistered() -- so the 18 convs were never handed to GetSubLayers() and
+        // the block presented itself as a leaf to every structural walker for its whole lifetime.
+        EnsureInitializedFromInput(input);
+
         int numDil = _dilations.Length;
         Tensor<T>? sum = null;
 

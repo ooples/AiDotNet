@@ -111,6 +111,10 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
     /// <returns>Output with intersample attention applied [batchSize, numFeatures, embeddingDim].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Registers the four projections with GetSubLayers() via the generated
+        // EnsureSubLayersRegistered(); they otherwise stay invisible to every structural walker.
+        EnsureInitializedFromInput(input);
+
         _inputCache = input;
 
         int batchSize = input.Shape[0];
