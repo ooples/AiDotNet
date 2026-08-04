@@ -544,8 +544,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public virtual bool IsShapeResolved =>
-        InputShape is not null && !ShapeContainsSentinel(InputShape)
-        && OutputShape is not null;
+        InputShape is not null && OutputShape is not null
+        // A layer that resolved while deliberately keeping a declared-free axis dynamic IS
+        // resolved. Reading the surviving -1 as "not resolved yet" would re-run first-forward
+        // setup on every pass and leave a sequence-length-agnostic block permanently unresolved.
+        && (_resolvedWithDeclaredFreeAxes || !ShapeContainsSentinel(InputShape));
 
     /// <summary>
     /// <c>true</c> when this layer will have trainable parameters but cannot size them yet.
@@ -759,10 +762,41 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
                 return implied;
             }
 
+            case ShapeRelationKind.FeatureOnly:
+            {
+                // Mirror image of ChannelOnly: the layer fixes the TRAILING feature width and
+                // carries every leading axis through, so only that last axis is unconstrained.
+                var implied = (int[])declaredOutput.Clone();
+                if (implied.Length > 0) implied[implied.Length - 1] = -1;
+                return implied;
+            }
+
             default:
                 return null;
         }
     }
+
+    /// <summary>
+    /// The single axis this layer's own parameters are sized by — the one number in a declared
+    /// shape that is genuinely the layer's claim. Returns <c>-1</c> when no relation is declared.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Three of the four relations are channel-first, putting that axis at 0;
+    /// <see cref="ShapeRelationKind.FeatureOnly"/> is feature-last and puts it at the end. Reading
+    /// a feature-last layer with the channel-first assumption inverts the question exactly: it
+    /// asserts the sequence length, which no transformer block fixes, and exempts the feature
+    /// width, which every one of them does.
+    /// </para>
+    /// </remarks>
+    private int ParameterizedAxisIndex(int rank) => OutputShapeRelation switch
+    {
+        ShapeRelationKind.Identity => 0,
+        ShapeRelationKind.ChannelOnly => 0,
+        ShapeRelationKind.Convolutional => 0,
+        ShapeRelationKind.FeatureOnly => rank - 1,
+        _ => -1,
+    };
 
     internal void VerifyReportedOutputShape(Tensor<T> output) => VerifyReportedOutputShape(output, actualInput: null);
 
@@ -791,8 +825,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             // real forward IS that chain; for a custom forward it writes numbers the layer never
             // agreed to. Asserting them blames the layer for someone else's inference, which is
             // exactly what the MaskAdapter / Mask2Former / SlimSAM cluster was reporting. The
-            // channel axis (0) is still checked — that one the layer genuinely determines.
-            if (_spatialAxesWerePropagated && i >= 1) continue;
+            // parameterized axis is still checked — that one the layer genuinely determines, and
+            // it sits at the END for feature-last layers, not always at 0.
+            if (_spatialAxesWerePropagated && i != ParameterizedAxisIndex(reported.Length)) continue;
 
             if (reported[i] == actual[i + 1]) continue;
 
@@ -861,6 +896,36 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </summary>
     private bool _spatialAxesWerePropagated;
 
+    /// <summary>
+    /// Set when <see cref="ResolveShapes"/> accepted an input shape that keeps a declared-free
+    /// axis dynamic, so <see cref="IsShapeResolved"/> can tell that state apart from "never
+    /// resolved" — both of which show up in the shape array as a bare <c>-1</c>.
+    /// </summary>
+    private bool _resolvedWithDeclaredFreeAxes;
+
+    /// <summary>
+    /// True when every dynamic entry in <paramref name="resolvedInput"/> is an axis this layer
+    /// already declared dynamic and its relation preserves.
+    /// </summary>
+    private bool DeclaredFreeAxesOnly(int[] resolvedInput)
+    {
+        // Pre-resolution, InputShape still holds the constructor's declaration — the record of
+        // what this layer said it accepts before anything tried to narrow it.
+        var declared = InputShape;
+        if (declared is null || declared.Length != resolvedInput.Length) return false;
+        if (OutputShapeRelation == ShapeRelationKind.Unknown) return false;
+
+        int parameterized = ParameterizedAxisIndex(resolvedInput.Length);
+        for (int i = 0; i < resolvedInput.Length; i++)
+        {
+            if (resolvedInput[i] >= 0) continue;
+            if (declared[i] >= 0) return false;   // was concrete; resolution may not un-fix it
+            if (i == parameterized) return false; // the layer's own width is never "free"
+        }
+
+        return true;
+    }
+
     private bool _reportedOutputShapeVerified;
 
     /// <summary>
@@ -876,7 +941,32 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (resolvedInputShape is null) throw new ArgumentNullException(nameof(resolvedInputShape));
         if (resolvedOutputShape is null) throw new ArgumentNullException(nameof(resolvedOutputShape));
         if (ShapeContainsSentinel(resolvedInputShape))
-            throw new ArgumentException("Resolved input shape still contains a -1 placeholder.", nameof(resolvedInputShape));
+        {
+            // ...unless every dynamic entry is an axis this layer ALWAYS declared free and its
+            // relation carries through untouched. A transformer block is the case that forces
+            // this: it is defined to preserve the sequence axis, so S is not its to fix, and
+            // demanding a concrete value left it only the option of pinning whichever length the
+            // first input happened to carry. That pin then contradicted every later batch of a
+            // different length — the block declared [8, 16] while its own forward, correctly,
+            // produced [S, 16] for whatever S arrived.
+            //
+            // The rule is deliberately narrow: an axis may stay dynamic only if it was dynamic at
+            // construction AND is not the axis the layer's parameters are sized by. You cannot
+            // invent dynamism during resolution, only decline to pin what you always said was
+            // free — so "this layer never got resolved" stays distinguishable from "this axis is
+            // genuinely free", which is the distinction a bare -1 could not previously express.
+            if (!DeclaredFreeAxesOnly(resolvedInputShape))
+            {
+                throw new ArgumentException(
+                    $"Resolved input shape [{string.Join(", ", resolvedInputShape)}] still contains a -1 " +
+                    $"placeholder on an axis {GetType().Name} has not declared free. An axis may stay " +
+                    $"dynamic through resolution only when it was declared dynamic at construction and " +
+                    $"the layer's {nameof(OutputShapeRelation)} passes it through unchanged.",
+                    nameof(resolvedInputShape));
+            }
+
+            _resolvedWithDeclaredFreeAxes = true;
+        }
         // The OUTPUT may legitimately keep a dynamic axis. A layer whose output length is decided
         // by something other than its own input -- a decoder emitting one position per TARGET
         // token, cross-attention emitting one per query -- has no honest concrete value to give,
