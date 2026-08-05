@@ -1687,7 +1687,22 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // CreateRandomTargetTensor for the same reason the trainTarget
         // a few lines above uses it — type-constrained families (NER /
         // CRF) need legal label values.
-        var testTarget = CreateRandomTargetTensor(EffectiveOutputShape, ModelTestHelpers.CreateSeededRandom(99));
+        //
+        // DIFFERENT SEED from testInput. Both used 99, and because these are two FRESHLY seeded
+        // generators filled in the same sequential order, testTarget[i] == testInput[i] across the
+        // whole overlapping prefix — the "test target" was literally the test input.
+        //
+        // That inverted the invariant. Training error was measured against an independent target,
+        // while test error was measured against the model's own input, so any near-identity model
+        // scored about zero on the test side by construction and was reported as fitting its
+        // training data worse than unseen data. All three failures were residual architectures that
+        // predict close to their input: AudioSuperResolution ends with `h = h + x`, LiteDVDNet is a
+        // residual denoiser whose head is damped to 1% at init, and FeedForwardNeuralNetwork's
+        // OutputShape [1] means the whole comparison rests on a single element.
+        //
+        // The train-side numbers were the honest ones all along: ~0.167 is E[(U-U')^2] for two
+        // independent uniforms, which is what an untrained model should score.
+        var testTarget = CreateRandomTargetTensor(EffectiveOutputShape, ModelTestHelpers.CreateSeededRandom(100));
         double testMSE = MeasureLoss(network, network.Predict(testInput), testTarget);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
