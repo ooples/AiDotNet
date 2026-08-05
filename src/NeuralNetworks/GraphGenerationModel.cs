@@ -852,6 +852,20 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Counts the layer parameters PLUS the variational weights, matching
+    /// <see cref="GetParameters"/> exactly.
+    /// </summary>
+    /// <remarks>
+    /// <c>GetParameters</c> appends <c>_meanWeights</c> and <c>_logVarWeights</c> after the layer
+    /// walk, but the count was left to the base, which knows only about <c>Layers</c>. The two
+    /// therefore disagreed by the full size of the variational head -- 1,600 declared against
+    /// 2,624 returned -- so a round-trip through <c>SetParameters</c> silently dropped the mean
+    /// and log-variance projections that make this a VAE rather than a plain autoencoder.
+    /// </remarks>
+    public override long ParameterCount =>
+        base.ParameterCount + _meanWeights.Length + _logVarWeights.Length;
+
+    /// <summary>
     /// Gets all parameters as a vector.
     /// </summary>
     public override Vector<T> GetParameters()
