@@ -18,7 +18,7 @@ namespace AiDotNet.MetaLearning;
 /// <item><b>Hybrid/Advanced:</b> CNAP, SEAL, GNNMeta, MetaOptNet</item>
 /// <item><b>Neural Processes:</b> CNP, NP, ANP, ConvCNP, ConvNP, TNP, SwinTNP, TETNP, EquivCNP, SteerCNP, RCNP, LBANP</item>
 /// <item><b>Foundation Model Era:</b> MetaLoRA, LoRARecycle, ICMFusion, MetaLoRABank, AutoLoRA, MetaDiff, MetaDM, MetaDDPM</item>
-/// <item><b>Bayesian Extensions:</b> PACOH, MetaPACOH, BMAML, BayProNet, FlexPACBayes</item>
+/// <item><b>Bayesian Extensions:</b> PACOH, MetaPACOH, BMAML, BayProNet, SImPa</item>
 /// <item><b>Cross-Domain:</b> MetaFDMixup, FreqPrior, MetaCollaborative, SDCL, FreqPrompt, OpenMAMLPlus</item>
 /// <item><b>Meta-RL:</b> PEARL, DREAM, DiscoRL, InContextRL, HyperNetMetaRL, ContextMetaRL</item>
 /// <item><b>Continual/Online:</b> ACL, iTAML, SparseMAML, MbPA, OML, MOCA</item>
@@ -1046,15 +1046,21 @@ public enum MetaLearningAlgorithmType
     BayProNet,
 
     /// <summary>
-    /// Flex-PAC-Bayes - Flexible PAC-Bayes bounds for meta-learning (2024).
-    /// Provides tighter, more flexible PAC-Bayesian bounds for meta-learners.
+    /// SImPa - statistical implicit PAC-Bayes meta-learning (Nguyen, Do and Carneiro, arXiv:2003.02455).
     /// </summary>
     /// <remarks>
-    /// <b>Key Idea:</b> Use data-dependent priors and flexible divergence measures to derive
-    /// tighter PAC-Bayesian bounds that better reflect actual meta-learning performance.
-    /// <para><b>Use When:</b> You need the tightest available generalization guarantees for meta-learning.</para>
+    /// <b>Key Idea:</b> Represent the task-specific posterior IMPLICITLY, by generating parameters from
+    /// latent noise, instead of assuming a multivariate normal with diagonal covariance. Because such a
+    /// posterior has no density, the KL term in the PAC-Bayes bound is recovered from samples via the
+    /// compression lemma and a learned scalar network.
+    /// <para><b>Use When:</b> You need calibrated few-shot uncertainty together with a generalization
+    /// guarantee that covers unseen tasks as well as unseen samples.</para>
+    /// <para>
+    /// Renamed from <c>FlexPACBayes</c>, which was not a published method name and whose implementation
+    /// used exactly the diagonal-Gaussian point posterior this paper argues against.
+    /// </para>
     /// </remarks>
-    FlexPACBayes,
+    SImPa,
 
     // ===== Cross-Domain Few-Shot =====
 
