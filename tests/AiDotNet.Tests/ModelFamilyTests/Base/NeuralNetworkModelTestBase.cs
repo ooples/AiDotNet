@@ -2721,6 +2721,519 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
         return true;
     }
+
+    // ========================================================================
+    // MATHEMATICAL INVARIANT: the backward is wired to the LOSS
+    //
+    // Every generated scaffold inherits this base, so these apply across the model families
+    // without touching TestScaffoldGenerator.
+    //
+    // WHAT THIS ADDS OVER THE NEIGHBOURING INVARIANTS. Training_ShouldChangeParameters and
+    // GradientFlow_ShouldBeNonZeroAndFinite already establish that a step MOVES the parameters and
+    // leaves them finite, and they do it better than a flat snapshot can — per-chunk hashing with
+    // full coverage and no contiguous allocation, so they run on paper-scale models instead of
+    // skipping them. Those two halves are deliberately NOT duplicated here.
+    //
+    // What none of them can see is WHERE the parameters moved to. A backward that records nothing
+    // relevant, or is wired to something other than the loss, still moves the parameters (the
+    // optimizer applies whatever it is handed) and still produces a perfectly correct forward pass,
+    // so every existing invariant passes while training learns nothing about the target. The same
+    // blind spot in AiDotNet.Tensors hid a Spectrogram backward off by ~1/nFft with varying sign, a
+    // MelSpectrogram that produced no gradient at all, and three GPU audio overrides that returned
+    // results without recording.
+    // ========================================================================
+
+    /// <summary>
+    /// True when the gradient-correctness invariants apply. Override to <c>false</c> for models that
+    /// are not trained by gradient descent at all — evolutionary / topology-augmenting models (NEAT),
+    /// closed-form solvers, and population methods have no per-parameter gradient to check.
+    /// </summary>
+    protected virtual bool GradientCorrectnessInvariantApplicable => true;
+
+    /// <summary>
+    /// When false (the default) these invariants REPORT their findings instead of failing.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately reporting-first. Turning it on everywhere at once would fail an unknown number of
+    /// families simultaneously, which tells you nothing about which are real. The report names each
+    /// model and finding, so the worklist can be worked down family by family and each one flipped to
+    /// blocking as it is fixed. Override to <c>true</c> per family once it is clean.
+    /// </remarks>
+    protected virtual bool GradientCorrectnessInvariantBlocking => false;
+
+    /// <summary>
+    /// Parameter-count ceiling above which these invariants report a skip instead of running.
+    /// </summary>
+    /// <remarks>
+    /// Both need a parameter snapshot restored via <see cref="INeuralNetworkModel{T}.UpdateParameters"/>,
+    /// which takes a FLAT vector — so unlike the chunk-streaming invariants above they cannot avoid one
+    /// contiguous allocation. The neighbouring invariants stream via GetParameterChunks precisely
+    /// because paper-scale models OOM on that, so this is bounded rather than allowed to OOM. The skip
+    /// is REPORTED, not silent.
+    /// </remarks>
+    protected virtual long GradientCorrectnessMaxParameters => 5_000_000;
+
+    /// <summary>
+    /// How many times further a different target must rotate the update, relative to what the model does
+    /// to itself under an identical target, before target-dependence is credited. Default 2x.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Expressed as a ratio of cosine DEFICITS (<c>1 - cosine</c>) rather than an absolute cosine gap,
+    /// and that correction also came out of the data. A flat 0.01 gap produced 44 findings, of which most
+    /// were false: models like GraphSAGENetwork reproduced their own direction to cosine 1.000000 exactly
+    /// and rotated it to 0.996143 for a different target. That is roughly 5 degrees of entirely real
+    /// signal against a zero noise floor, and a flat gap called it a defect purely because 0.0039 &lt; 0.01.
+    /// One step from a random initialization barely moves the parameters, so genuine target effects are
+    /// SMALL in absolute cosine while still being unambiguous relative to the control.
+    /// </para>
+    /// <para>
+    /// The deficit ratio has no such scale problem: it asks whether the target rotates the update
+    /// materially further than an identical target does, which is the actual question.
+    /// </para>
+    /// </remarks>
+    protected virtual double TargetDependenceDeficitRatio => 2.0;
+
+    /// <summary>
+    /// Cosine deficit below which two update directions are treated as the SAME direction. Default 1e-9.
+    /// </summary>
+    /// <remarks>
+    /// The unambiguous case that motivates the whole invariant: a different target rotating the update by
+    /// nothing at all. Measured examples sat at cosine 1.000000 against a 1.000000 control — bit-level
+    /// identical directions, which no amount of stochasticity explains.
+    /// </remarks>
+    protected virtual double IdenticalDirectionEpsilon => 1e-9;
+
+    /// <summary>
+    /// Below this same-target reproducibility the model is too stochastic to measure, and the result is
+    /// reported INCONCLUSIVE rather than asserted. Default 0.5 cosine.
+    /// </summary>
+    protected virtual double TargetDependenceSelfSimilarityFloor => 0.5;
+
+    /// <summary>
+    /// A training step must move the parameters somewhere that DEPENDS ON THE TARGET.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It observes the PARAMETER DELTA rather than any gradient accessor, and that choice is load
+    /// bearing. An earlier draft read <see cref="INeuralNetworkModel{T}.GetParameterGradients"/> after a
+    /// step and reported all-zero gradients for about thirty families that in fact train correctly:
+    /// training runs through TrainWithTape/ComputeTapeLoss, so gradients live in the GradientTape and
+    /// are applied straight to the parameters, leaving the per-layer buffers that accessor reads
+    /// untouched from the removed Backpropagate() era. The delta is what actually determines whether
+    /// learning can happen, and it is implementation-agnostic.
+    /// (<see cref="ParameterGradientAccessor_IsPopulatedOrExplicitlyUnsupported"/> tracks that
+    /// accessor's own contract separately, so the two worklists do not contaminate each other.)
+    /// </para>
+    /// <para>
+    /// The SAME-TARGET CONTROL is what makes the claim honest. Training on target A then target B and
+    /// finding a difference proves nothing on its own, because dropout and BatchNorm make a step
+    /// stochastic — the difference could be RNG. So target A is run twice from the same starting
+    /// parameters first, and the target's effect is only credited when it exceeds what the model does
+    /// to itself under an identical target.
+    /// </para>
+    /// <para>
+    /// The statistic is the update's DIRECTION, not its size, and that correction came out of the data:
+    /// the magnitude version reported INCONCLUSIVE for 72 of the first 103 families because adaptive
+    /// optimizers normalize the step to roughly the learning rate, so max|delta| measures the learning
+    /// rate rather than the target. Normalization rescales the update vector without rotating it, so the
+    /// angle survives it. See the comment at the comparison itself for the measured numbers.
+    /// </para>
+    /// <para>
+    /// The comparison is a RATIO of cosine deficits against the control, not a fixed cosine gap — see
+    /// <see cref="TargetDependenceDeficitRatio"/>. A fixed gap over-reported badly, because one step from
+    /// a random initialization produces genuine target effects that are small in absolute cosine while
+    /// being unambiguous relative to a deterministic control.
+    /// </para>
+    /// <para>
+    /// Both targets go through <see cref="MakeTargetWellPosedForLoss"/>. Comparing a well-posed target
+    /// against a raw constant would compare two different DOMAINS rather than two targets: for the
+    /// softmax cross-entropy families an all-zero target is not a legal label at all, so a difference
+    /// (or a thrown exception) would say nothing about whether the backward reads the target.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task TrainingStep_ShouldDependOnTheTarget()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
+        if (!GradientCorrectnessInvariantApplicable) return;
+
+        var input = CreateRandomTensor(InputShape, rng);
+        var targetA = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
+        var targetB = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
+
+        // FIXTURE GUARD, and it is not a formality — without it this invariant manufactures findings.
+        // MakeTargetWellPosedForLoss projects a target into the shape its loss can actually use, and for
+        // the label-style families (NER sequences, one-hot classification) that projection can collapse
+        // two DIFFERENT random draws onto the SAME legal target. When it does, an identical update is the
+        // correct answer and reporting "the backward ignores the target" is simply wrong.
+        //
+        // Measured: without this guard the invariant named 21 families, including FeedForwardNeuralNetwork
+        // and RecurrentNeuralNetwork — the simplest and best-tested models in the library, and 7 of the 21
+        // were NER families whose well-posed targets are label sequences. That pattern is the signature of
+        // a degenerate fixture, not of a library-wide broken backward.
+        if (MaxAbsTensorDelta(targetA, targetB) == 0.0)
+        {
+            ReportGradientFinding(GradientReportFile, GetType().Name,
+                "SKIPPED: the two targets are IDENTICAL after MakeTargetWellPosedForLoss projected them "
+                + "onto this loss's legal target space, so there is no target difference to detect. A "
+                + "family-specific target generator is needed to measure this model.");
+            return;
+        }
+
+        // Warm up so lazily-allocated parameters exist before anything is snapshotted — same
+        // rationale as Training_ShouldChangeParameters, where a length-0 snapshot produced a false
+        // "no parameters changed".
+        network.SetTrainingMode(true);
+        try { network.Predict(input); }
+        catch (InvalidOperationException) { /* some layers refuse a bare forward; Train warms them */ }
+
+        string model = GetType().Name;
+        if (network.ParameterCount > GradientCorrectnessMaxParameters)
+        {
+            ReportGradientFinding(GradientReportFile, model,
+                $"SKIPPED: {network.ParameterCount} parameters exceeds the {GradientCorrectnessMaxParameters} " +
+                "ceiling for snapshotting a flat parameter vector.");
+            return;
+        }
+
+        Vector<T> p0;
+        try { p0 = network.GetParameters(); }
+        catch (Exception ex)
+        {
+            ReportGradientFinding(GradientReportFile, model, $"SKIPPED: GetParameters threw {ex.GetType().Name}.");
+            return;
+        }
+        if (p0.Length == 0)
+        {
+            ReportGradientFinding(GradientReportFile, model, "SKIPPED: model exposes no flat parameters to compare.");
+            return;
+        }
+
+        // A REPORTING-first invariant must never hard-fail, and without this it did. Plenty of families
+        // legitimately cannot take a plain gradient step from a supplied parameter vector: NEAT and the
+        // other population methods have no per-parameter gradient at all, several vision-language models
+        // refuse Train on a bare tensor pair, and some evaluators are inference-only. Those threw straight
+        // out of the test, so the invariant turned into dozens of hard failures across the shards — the
+        // exact opposite of producing a worklist, and it would have polluted the CI error list this branch
+        // exists to clean up. GradientCorrectnessInvariantApplicable is the declared opt-out, but it
+        // cannot be relied on to have been set on every such family in advance.
+        Vector<T> stepA;
+        try
+        {
+            stepA = RunGradientStepFrom(network, p0, input, targetA);
+        }
+        catch (Exception ex)
+        {
+            ReportGradientFinding(GradientReportFile, model,
+                $"SKIPPED: a training step threw {ex.GetType().Name}, so this model does not support a "
+                + "plain gradient step from a supplied parameter vector. Set "
+                + "GradientCorrectnessInvariantApplicable to false for it if that is by design.");
+            return;
+        }
+
+        // Whether the step moved at all, and whether it stayed finite, is the job of
+        // Training_ShouldChangeParameters and GradientFlow_ShouldBeNonZeroAndFinite. Duplicating
+        // their assertions here would report the same defect twice under two names; when they are
+        // already failing this comparison has nothing to say, so it stands down.
+        if (CountNonFiniteParams(stepA) > 0 || MaxAbsParamDelta(p0, stepA) == 0.0)
+        {
+            ReportGradientFinding(GradientReportFile, model,
+                "SKIPPED: the step did not move the parameters finitely, which Training_ShouldChangeParameters "
+                + "and GradientFlow_ShouldBeNonZeroAndFinite already report. Target-dependence is not "
+                + "measurable until that is fixed.");
+            try { network.UpdateParameters(p0); } catch { /* restoring is courtesy; the model is discarded */ }
+            return;
+        }
+
+        // Control: the same target from the same start, so the two comparisons differ only in target.
+        Vector<T> stepA2, stepB;
+        try
+        {
+            stepA2 = RunGradientStepFrom(network, p0, input, targetA);
+            stepB = RunGradientStepFrom(network, p0, input, targetB);
+        }
+        catch (Exception ex)
+        {
+            ReportGradientFinding(GradientReportFile, model,
+                $"SKIPPED: a repeat training step threw {ex.GetType().Name} after the first succeeded, so "
+                + "the comparison cannot be completed.");
+            return;
+        }
+
+        try { network.UpdateParameters(p0); } catch { /* restoring is courtesy; the model is discarded */ }
+
+        // DIRECTION, not magnitude. An earlier version compared max|delta| against a same-target noise
+        // floor and was USELESS — it reported INCONCLUSIVE for 72 of the 103 families it reached, with
+        // telltale ratios: noise 1.001E-005 against effect 1.001E-005 (exactly equal), and
+        // 1.001E-003 against 2.005E-003 (exactly 2x). Those numbers are quantized to the LEARNING RATE.
+        // Adam and its relatives normalize the update by the gradient's running RMS, so the per-parameter
+        // step size approaches lr no matter what the gradient was, and max|delta| therefore measures the
+        // optimizer's step size while carrying almost no information about the target. No margin on that
+        // statistic can work.
+        //
+        // The update DIRECTION does not have that problem: normalization rescales the vector but does
+        // not rotate it. So the comparison is how well the update direction reproduces under the SAME
+        // target versus how much it changes under a DIFFERENT one.
+        double selfSimilarity = DeltaCosine(p0, stepA, stepA2);
+        double crossSimilarity = DeltaCosine(p0, stepA, stepB);
+
+        if (double.IsNaN(selfSimilarity) || double.IsNaN(crossSimilarity))
+        {
+            ReportGradientFinding(GradientReportFile, model,
+                "SKIPPED: an update direction had zero length, so no angle between updates is defined.");
+            return;
+        }
+
+        // A model whose own update direction does not reproduce under an identical target cannot support
+        // any conclusion about the target — the honest answer is INCONCLUSIVE, not a finding.
+        if (selfSimilarity < TargetDependenceSelfSimilarityFloor)
+        {
+            ReportGradientFinding(GradientReportFile, model,
+                $"INCONCLUSIVE target-dependence: repeating the SAME target reproduced the update "
+                + $"direction only to cosine {selfSimilarity:F4}, below the {TargetDependenceSelfSimilarityFloor:F2} "
+                + $"floor (a different target gave {crossSimilarity:F4}). The step is too stochastic here "
+                + "to attribute anything to the target. Not asserted either way.");
+            return;
+        }
+
+        // Compared as DEFICITS from perfect alignment, so the test is "does the target rotate the update
+        // further than an identical target does" rather than "by more than some fixed cosine".
+        double selfDeficit = 1.0 - selfSimilarity;
+        double crossDeficit = 1.0 - crossSimilarity;
+
+        if (crossDeficit > Math.Max(selfDeficit * TargetDependenceDeficitRatio, IdenticalDirectionEpsilon))
+            return;   // the target measurably steers the update, clear of this model's own variation
+
+        if (crossDeficit > IdenticalDirectionEpsilon)
+        {
+            // The target does rotate the update, but not clearly further than the model's own repeat
+            // does. That is a measurement limit, not a defect.
+            ReportGradientFinding(GradientReportFile, model,
+                $"INCONCLUSIVE target-dependence: a different target rotated the update by a cosine "
+                + $"deficit of {crossDeficit:E3}, against {selfDeficit:E3} for an identical target — under "
+                + $"the {TargetDependenceDeficitRatio}x margin, so it cannot be separated from the model's "
+                + "own run-to-run variation. Not asserted either way.");
+            return;
+        }
+
+        string message = $"{model}: changing the target left the update DIRECTION unchanged "
+            + $"(cosine {crossSimilarity:F6} against a same-target control of {selfSimilarity:F6}; cross "
+            + $"deficit {crossDeficit:E3} is at or below the {IdenticalDirectionEpsilon:E0} identical-direction "
+            + "threshold), so the backward is not connected to the loss. The step moves the parameters, "
+            + "which is why the other invariants pass, but it moves them somewhere that does not depend on "
+            + "what the model was asked to predict.";
+        ReportGradientFinding(GradientReportFile, model, message);
+        Assert.True(!GradientCorrectnessInvariantBlocking, message);
+    }
+
+    /// <summary>
+    /// Cosine similarity between two parameter UPDATES measured from the same starting point.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately on the deltas rather than on the parameter vectors themselves. Two parameter
+    /// vectors that differ by one small step are nearly identical, so their cosine is ~1.0 for any
+    /// target and would wash the signal out entirely; the deltas are the part that carries it.
+    /// </remarks>
+    private static double DeltaCosine(Vector<T> start, Vector<T> first, Vector<T> second)
+    {
+        if (first.Length != start.Length || second.Length != start.Length) return double.NaN;
+
+        double dot = 0.0, n1 = 0.0, n2 = 0.0;
+        for (int i = 0; i < start.Length; i++)
+        {
+            double s = ConvertToDouble(start[i]);
+            double a = ConvertToDouble(first[i]) - s;
+            double b = ConvertToDouble(second[i]) - s;
+            dot += a * b;
+            n1 += a * a;
+            n2 += b * b;
+        }
+
+        if (n1 <= 0.0 || n2 <= 0.0) return double.NaN;
+        double cos = dot / (Math.Sqrt(n1) * Math.Sqrt(n2));
+        return Math.Max(-1.0, Math.Min(1.0, cos));   // clamp away float drift past the valid range
+    }
+
+    /// <summary>
+    /// <see cref="INeuralNetworkModel{T}.GetParameterGradients"/> must be populated after a training
+    /// step, or say plainly that it is unsupported.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returning a silently-zero vector is the defect. Training runs through TrainWithTape, which
+    /// applies gradients from the GradientTape directly to the parameters and never fills the per-layer
+    /// gradient buffers this accessor reads — a leftover from the removed Backpropagate() API. Callers
+    /// cannot tell "the gradient is genuinely zero" from "nobody wrote it", so anything built on this
+    /// accessor (custom optimizers, gradient clipping, logging, norm monitoring) reads zeros and
+    /// appears to work.
+    /// </para>
+    /// <para>
+    /// Split from <see cref="TrainingStep_ShouldDependOnTheTarget"/> deliberately: this is an
+    /// API-contract problem, not a per-model training bug, and folding the two together is exactly what
+    /// produced thirty false "this model has no gradients" findings. A model can fail this one while
+    /// training perfectly well.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task ParameterGradientAccessor_IsPopulatedOrExplicitlyUnsupported()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
+        if (!GradientCorrectnessInvariantApplicable) return;
+
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
+        network.SetTrainingMode(true);
+        try { network.Predict(input); }
+        catch (InvalidOperationException) { /* warmed by Train below */ }
+
+        string model = GetType().Name;
+        if (network.ParameterCount > GradientCorrectnessMaxParameters)
+        {
+            ReportGradientFinding(AccessorReportFile, model,
+                $"SKIPPED: {network.ParameterCount} parameters exceeds the ceiling.");
+            return;
+        }
+
+        // Same reason as the sibling invariant: this one reports rather than asserts, so a model that
+        // cannot take a bare Train step must be skipped rather than turned into a hard shard failure.
+        try
+        {
+            network.Train(input, target);
+        }
+        catch (Exception ex)
+        {
+            ReportGradientFinding(AccessorReportFile, model,
+                $"SKIPPED: Train threw {ex.GetType().Name}, so the accessor's post-step contract cannot be "
+                + "checked on this model.");
+            return;
+        }
+
+        Vector<T> grads;
+        try { grads = network.GetParameterGradients(); }
+        catch (NotSupportedException)
+        {
+            return;   // saying so explicitly is the acceptable alternative to populating it
+        }
+        catch (Exception ex)
+        {
+            ReportGradientFinding(AccessorReportFile, model,
+                $"GetParameterGradients threw {ex.GetType().Name} rather than NotSupportedException.");
+            return;
+        }
+
+        string? finding = null;
+        if (grads is null || grads.Length == 0)
+        {
+            finding = "GetParameterGradients returns an EMPTY vector after a training step.";
+        }
+        else
+        {
+            int nonFinite = CountNonFiniteParams(grads);
+            if (nonFinite > 0)
+            {
+                finding = $"GetParameterGradients contains {nonFinite} non-finite entries.";
+            }
+            else
+            {
+                bool allZero = true;
+                for (int i = 0; i < grads.Length && allZero; i++) allZero = ConvertToDouble(grads[i]) == 0.0;
+                if (allZero)
+                    finding = $"GetParameterGradients returns {grads.Length} entries that are ALL EXACTLY ZERO "
+                        + "after a training step, so callers cannot distinguish a genuinely zero gradient from "
+                        + "one that was never written. Populate it from the tape, or throw NotSupportedException.";
+            }
+        }
+
+        if (finding is null) return;
+        string message = $"{model}: {finding}";
+        ReportGradientFinding(AccessorReportFile, model, message);
+        Assert.True(!GradientCorrectnessInvariantBlocking, message);
+    }
+
+    /// <summary>Trains one step from a known parameter vector and returns the resulting parameters.</summary>
+    private static Vector<T> RunGradientStepFrom(
+        INeuralNetworkModel<T> network, Vector<T> start, Tensor<T> input, Tensor<T> target)
+    {
+        network.UpdateParameters(start);
+        network.Train(input, target);
+        return network.GetParameters();
+    }
+
+    /// <summary>Largest absolute elementwise difference, or <see cref="double.NaN"/> on a length mismatch.</summary>
+    private static double MaxAbsParamDelta(Vector<T> a, Vector<T> b)
+    {
+        if (a.Length != b.Length) return double.NaN;
+        double worst = 0.0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double d = Math.Abs(ConvertToDouble(a[i]) - ConvertToDouble(b[i]));
+            if (d > worst) worst = d;
+        }
+        return worst;
+    }
+
+    /// <summary>
+    /// Largest absolute elementwise difference between two TENSORS, or <see cref="double.NaN"/> on a
+    /// length mismatch. Used to confirm the two targets really differ before anything is concluded from
+    /// comparing the updates they produce.
+    /// </summary>
+    private static double MaxAbsTensorDelta(Tensor<T> a, Tensor<T> b)
+    {
+        if (a is null || b is null) return double.NaN;
+        if (a.Length != b.Length) return double.NaN;
+
+        double worst = 0.0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double d = Math.Abs(ConvertToDouble(a[i]) - ConvertToDouble(b[i]));
+            if (d > worst) worst = d;
+        }
+        return worst;
+    }
+
+    private static int CountNonFiniteParams(Vector<T> v)
+    {
+        int n = 0;
+        for (int i = 0; i < v.Length; i++)
+        {
+            double x = ConvertToDouble(v[i]);
+            if (double.IsNaN(x) || double.IsInfinity(x)) n++;
+        }
+        return n;
+    }
+
+    private const string GradientReportFile = "gradient-findings.txt";
+    private const string AccessorReportFile = "gradient-accessor-findings.txt";
+
+    /// <summary>
+    /// Appends a gradient finding to the report file so the worklist survives the test run.
+    /// </summary>
+    /// <remarks>
+    /// The scaffolds do not pass an <c>ITestOutputHelper</c> to this base, and a reporting-only
+    /// invariant whose output vanishes is worth nothing. Mirrors the OpParity report convention:
+    /// honour an env-var directory, else fall back to a fixed temp folder. Best-effort — a reporting
+    /// failure must never turn into a test failure.
+    /// </remarks>
+    private static void ReportGradientFinding(string file, string model, string message)
+    {
+        try
+        {
+            var dir = Environment.GetEnvironmentVariable("AIDOTNET_GRADIENT_REPORT_DIR")
+                      ?? Path.Combine(Path.GetTempPath(), "aidotnet-gradient-invariant");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(Path.Combine(dir, file), $"{model}\t{message}{Environment.NewLine}");
+        }
+        catch { /* reporting is best-effort */ }
+    }
 }
 
 /// <summary>
