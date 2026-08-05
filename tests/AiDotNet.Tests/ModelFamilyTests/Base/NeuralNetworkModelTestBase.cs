@@ -2893,11 +2893,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         catch (InvalidOperationException) { /* some layers refuse a bare forward; Train warms them */ }
 
         string model = GetType().Name;
-        if (network.ParameterCount > GradientCorrectnessMaxParameters)
+        if (network.ParameterCount > GradientCorrectnessChunkedMaxParameters)
         {
             ReportGradientFinding(GradientReportFile, model,
-                $"SKIPPED: {network.ParameterCount} parameters exceeds the {GradientCorrectnessMaxParameters} " +
-                "ceiling for snapshotting a flat parameter vector.");
+                $"SKIPPED: {network.ParameterCount} parameters exceeds the "
+                + $"{GradientCorrectnessChunkedMaxParameters} ceiling. Even the chunked path holds the model "
+                + "plus a snapshot of its start, so peak memory is about twice the parameters; a shard that "
+                + "OOMs is worse than a family that goes unmeasured.");
             return;
         }
 
@@ -3025,17 +3027,56 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
-        Vector<T> p0;
-        try { p0 = network.GetParameters(); }
+        ParameterProbe parameterProbe;
+        try
+        {
+            // Small models keep the original flat round trip. Larger ones snapshot per-tensor instead,
+            // which is what removes the CONTIGUOUS-allocation failure: Vector<T>'s constructor OOMs on a
+            // multi-gigabyte single block long before the machine is actually out of memory.
+            parameterProbe = network.ParameterCount > GradientCorrectnessMaxParameters
+                ? ParameterProbe.Chunked(network, TargetDependenceMaxSampledValues)
+                : ParameterProbe.Flat(network, network.GetParameters());
+        }
         catch (Exception ex)
         {
-            ReportGradientFinding(GradientReportFile, model, $"SKIPPED: GetParameters threw {ex.GetType().Name}.");
+            ReportGradientFinding(GradientReportFile, model,
+                $"SKIPPED: snapshotting the starting parameters threw {ex.GetType().Name}.");
             return;
         }
+
+        Vector<T> p0 = parameterProbe.Start;
         if (p0.Length == 0)
         {
-            ReportGradientFinding(GradientReportFile, model, "SKIPPED: model exposes no flat parameters to compare.");
+            ReportGradientFinding(GradientReportFile, model, "SKIPPED: model exposes no parameters to compare.");
             return;
+        }
+
+        // VERIFY THAT RESTORE ACTUALLY WORKS before trusting anything built on it. The chunked path writes
+        // back through the tensors GetParameterChunks yields, which are documented as references into the
+        // model — but a model returning copies instead would leave the three trajectories starting from
+        // DIFFERENT points, and every cosine below would be quietly meaningless. So perturb, restore, and
+        // check rather than trusting the contract.
+        if (parameterProbe.IsChunked)
+        {
+            try
+            {
+                network.Train(input, targetA);
+                parameterProbe.Restore();
+                if (MaxAbsParamDelta(p0, parameterProbe.SampleCurrent()) != 0.0)
+                {
+                    ReportGradientFinding(GradientReportFile, model,
+                        "SKIPPED: restoring through GetParameterChunks did not take effect, so this model's "
+                        + "chunks are copies rather than references and the three trajectories cannot be "
+                        + "made to share a starting point.");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                ReportGradientFinding(GradientReportFile, model,
+                    $"SKIPPED: verifying chunked restore threw {ex.GetType().Name}.");
+                return;
+            }
         }
 
         // A REPORTING-first invariant must never hard-fail, and without this it did. Plenty of families
@@ -3049,8 +3090,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Vector<T> stepA, meanDeltaA;
         try
         {
-            stepA = RunGradientStepFrom(network, p0, input, targetA);
-            meanDeltaA = MeanUpdateDirection(network, p0, input, targetA);
+            stepA = RunGradientStepFrom(parameterProbe, network, input, targetA);
+            meanDeltaA = MeanUpdateDirection(parameterProbe, network, input, targetA);
         }
         catch (Exception ex)
         {
@@ -3071,7 +3112,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 "SKIPPED: the step did not move the parameters finitely, which Training_ShouldChangeParameters "
                 + "and GradientFlow_ShouldBeNonZeroAndFinite already report. Target-dependence is not "
                 + "measurable until that is fixed.");
-            try { network.UpdateParameters(p0); } catch { /* restoring is courtesy; the model is discarded */ }
+            try { parameterProbe.Restore(); } catch { /* restoring is courtesy; the model is discarded */ }
             return;
         }
 
@@ -3081,8 +3122,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Vector<T> meanDeltaA2, meanDeltaB;
         try
         {
-            meanDeltaA2 = MeanUpdateDirection(network, p0, input, targetA);
-            meanDeltaB = MeanUpdateDirection(network, p0, input, targetB);
+            meanDeltaA2 = MeanUpdateDirection(parameterProbe, network, input, targetA);
+            meanDeltaB = MeanUpdateDirection(parameterProbe, network, input, targetB);
         }
         catch (Exception ex)
         {
@@ -3092,7 +3133,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
-        try { network.UpdateParameters(p0); } catch { /* restoring is courtesy; the model is discarded */ }
+        try { parameterProbe.Restore(); } catch { /* restoring is courtesy; the model is discarded */ }
 
         // DIRECTION, not magnitude. An earlier version compared max|delta| against a same-target noise
         // floor and was USELESS — it reported INCONCLUSIVE for 72 of the 103 families it reached, with
@@ -3182,14 +3223,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// entirely; the delta is the part that carries it.
     /// </remarks>
     private Vector<T> MeanUpdateDirection(
-        INeuralNetworkModel<T> network, Vector<T> start, Tensor<T> input, Tensor<T> target)
+        ParameterProbe probe, INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
     {
+        var start = probe.Start;
         int repeats = Math.Max(1, TargetDependenceRepeatCount);
         var accumulator = new double[start.Length];
 
         for (int r = 0; r < repeats; r++)
         {
-            var after = RunGradientStepFrom(network, start, input, target);
+            var after = RunGradientStepFrom(probe, network, input, target);
             if (after.Length != start.Length) return new Vector<T>(0);
             for (int i = 0; i < start.Length; i++)
                 accumulator[i] += ConvertToDouble(after[i]) - ConvertToDouble(start[i]);
@@ -3205,6 +3247,159 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// test project also targets.
     /// </summary>
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+    /// <summary>
+    /// Parameter ceiling for the CHUNKED measurement path, which handles models too large for a flat
+    /// snapshot. Default 60 million.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Above <see cref="GradientCorrectnessMaxParameters"/> the flat <c>GetParameters</c> round trip is
+    /// impossible — <c>Vector&lt;T&gt;</c>'s constructor OOMs on a multi-gigabyte CONTIGUOUS request long
+    /// before the machine runs out of memory. The chunked path snapshots per-tensor instead, so the same
+    /// bytes are spread across many smaller allocations and never need one contiguous block.
+    /// </para>
+    /// <para>
+    /// It still costs about 2x parameters at peak — the live model plus the snapshot — because comparing
+    /// three trajectories from a COMMON START requires that start to be recoverable, and there is no way
+    /// around holding it. That is why this has its own, finite ceiling rather than being unbounded: at 60
+    /// million parameters the peak is roughly 1 GB, and a shard that OOMs is worse than a family that goes
+    /// unmeasured.
+    /// </para>
+    /// </remarks>
+    protected virtual long GradientCorrectnessChunkedMaxParameters => 60_000_000;
+
+    /// <summary>
+    /// Cap on how many parameter values the direction comparison samples. Default 2 million.
+    /// </summary>
+    /// <remarks>
+    /// The cosine between two update directions is estimated on a random SUBSET of parameter chunks rather
+    /// than all of them. A cosine over a large random subspace is a sound estimator of the full-space
+    /// angle, and it bounds the three delta accumulators to a fixed size no matter how big the model is —
+    /// so only the snapshot scales, not the measurement. Whole chunks are taken rather than scattered
+    /// elements so the sample stays cheap to gather and respects tensor boundaries.
+    /// </remarks>
+    protected virtual int TargetDependenceMaxSampledValues => 2_000_000;
+
+    /// <summary>
+    /// Holds a model's starting parameters and produces bounded samples of its current ones, so the
+    /// direction comparison is identical for small and large models.
+    /// </summary>
+    /// <remarks>
+    /// Two modes behind one surface. FLAT keeps the whole start in a single <c>Vector&lt;T&gt;</c> and
+    /// restores with <c>UpdateParameters</c> — the original path, unchanged for models that fit. CHUNKED
+    /// copies each parameter tensor separately and restores by writing back into the live chunks, which
+    /// <c>GetParameterChunks</c> documents as references into the model. Both expose the same
+    /// <see cref="Start"/> and <see cref="SampleCurrent"/>, so the caller does not branch.
+    /// </remarks>
+    private sealed class ParameterProbe
+    {
+        private readonly INeuralNetworkModel<T> _network;
+        private readonly Vector<T>? _flatStart;
+        private readonly List<Tensor<T>>? _snapshot;
+        private readonly List<int>? _sampledChunks;
+        private readonly int _sampleLength;
+
+        /// <summary>The starting parameters, as the bounded sample the comparison operates on.</summary>
+        public Vector<T> Start { get; }
+
+        /// <summary>True when the chunked path is in use.</summary>
+        public bool IsChunked => _snapshot is not null;
+
+        private ParameterProbe(INeuralNetworkModel<T> network, Vector<T> flatStart)
+        {
+            _network = network;
+            _flatStart = flatStart;
+            Start = flatStart;
+            _sampleLength = flatStart.Length;
+        }
+
+        private ParameterProbe(
+            INeuralNetworkModel<T> network, List<Tensor<T>> snapshot, List<int> sampledChunks, int sampleLength)
+        {
+            _network = network;
+            _snapshot = snapshot;
+            _sampledChunks = sampledChunks;
+            _sampleLength = sampleLength;
+            Start = GatherFrom(snapshot, sampledChunks, sampleLength);
+        }
+
+        /// <summary>Builds a flat probe for a model small enough to snapshot contiguously.</summary>
+        public static ParameterProbe Flat(INeuralNetworkModel<T> network, Vector<T> start)
+            => new(network, start);
+
+        /// <summary>
+        /// Builds a chunked probe: copies every parameter tensor and selects a bounded subset of them for
+        /// the comparison.
+        /// </summary>
+        public static ParameterProbe Chunked(INeuralNetworkModel<T> network, int maxSampledValues)
+        {
+            var snapshot = new List<Tensor<T>>();
+            foreach (var chunk in EnumerateParameterChunks(network))
+            {
+                var copy = new Tensor<T>(chunk.Shape.ToArray());
+                for (int i = 0; i < chunk.Length; i++) copy[i] = chunk[i];
+                snapshot.Add(copy);
+            }
+
+            // Take whole chunks, in order, until the cap is reached. Ordered rather than randomized so the
+            // sample is reproducible across the three trajectories being compared — a different subset per
+            // run would make the cosines meaningless.
+            var selected = new List<int>();
+            int total = 0;
+            for (int i = 0; i < snapshot.Count && total < maxSampledValues; i++)
+            {
+                if (snapshot[i].Length == 0) continue;
+                selected.Add(i);
+                total += snapshot[i].Length;
+            }
+
+            return new ParameterProbe(network, snapshot, selected, total);
+        }
+
+        private static Vector<T> GatherFrom(List<Tensor<T>> chunks, List<int> selected, int length)
+        {
+            var values = new Vector<T>(length);
+            int at = 0;
+            foreach (int index in selected)
+            {
+                var chunk = chunks[index];
+                for (int i = 0; i < chunk.Length && at < length; i++) values[at++] = chunk[i];
+            }
+            return values;
+        }
+
+        /// <summary>Puts the model back at its starting parameters.</summary>
+        public void Restore()
+        {
+            if (_snapshot is null)
+            {
+                _network.UpdateParameters(_flatStart!);
+                return;
+            }
+
+            // Chunks are references into the model, so writing through them restores it without ever
+            // building a flat vector.
+            int index = 0;
+            foreach (var live in EnumerateParameterChunks(_network))
+            {
+                if (index >= _snapshot.Count) break;
+                var saved = _snapshot[index++];
+                int n = Math.Min(live.Length, saved.Length);
+                for (int i = 0; i < n; i++) live[i] = saved[i];
+            }
+        }
+
+        /// <summary>The model's current parameters, as the same bounded sample as <see cref="Start"/>.</summary>
+        public Vector<T> SampleCurrent()
+        {
+            if (_snapshot is null) return _network.GetParameters();
+
+            var live = new List<Tensor<T>>();
+            foreach (var chunk in EnumerateParameterChunks(_network)) live.Add(chunk);
+            return GatherFrom(live, _sampledChunks!, _sampleLength);
+        }
+    }
 
     /// <summary>Cosine similarity between two vectors, clamped to the valid range.</summary>
     private static double VectorCosine(Vector<T> first, Vector<T> second)
@@ -3391,12 +3586,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// resulting parameters.
     /// </summary>
     private Vector<T> RunGradientStepFrom(
-        INeuralNetworkModel<T> network, Vector<T> start, Tensor<T> input, Tensor<T> target)
+        ParameterProbe probe, INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
     {
-        network.UpdateParameters(start);
+        probe.Restore();
         int steps = Math.Max(1, TargetDependenceStepCount);
         for (int i = 0; i < steps; i++) network.Train(input, target);
-        return network.GetParameters();
+        return probe.SampleCurrent();
     }
 
     /// <summary>Largest absolute elementwise difference, or <see cref="double.NaN"/> on a length mismatch.</summary>
