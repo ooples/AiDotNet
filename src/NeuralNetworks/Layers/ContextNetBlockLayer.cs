@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -21,6 +21,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 16", TestConstructorArgs = "8, 8, 3, 2")]
+// These blocks keep [B, C, T] channels-first throughout, so every BatchNormalization here
+// declares ChannelsFirst. Left at the default Infer, the layer decides by testing whether the
+// TRAILING axis equals the parameter count -- true by coincidence whenever T == C -- and then
+// normalizes across channels at each time index instead of across the batch per channel.
 internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly int _inputChannels;
@@ -93,7 +97,7 @@ internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSeri
             _pointwise[i] = new Conv1DLayer<T>(
                 channels, outputChannels, kernelSize: 1, dilation: 1, stride: 1, padding: 0,
                 activation: new IdentityActivation<T>(), initializationStrategy: Init(i * 3 + 1));
-            _batchNorm[i] = new BatchNormalizationLayer<T>(outputChannels);
+            _batchNorm[i] = new BatchNormalizationLayer<T>(outputChannels) { Layout = BatchNormDataLayout.ChannelsFirst };
             channels = outputChannels;
         }
 
@@ -107,7 +111,7 @@ internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSeri
             _residualProjection = new Conv1DLayer<T>(
                 inputChannels, outputChannels, kernelSize: 1, dilation: 1, stride: stride, padding: 0,
                 activation: new IdentityActivation<T>(), initializationStrategy: Init(numConvolutions * 3 + 1));
-            _residualBatchNorm = new BatchNormalizationLayer<T>(outputChannels);
+            _residualBatchNorm = new BatchNormalizationLayer<T>(outputChannels) { Layout = BatchNormDataLayout.ChannelsFirst };
         }
 
         _dropout = dropoutRate > 0.0 ? new DropoutLayer<T>(dropoutRate) : null;

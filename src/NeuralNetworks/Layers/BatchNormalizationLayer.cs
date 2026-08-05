@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -380,6 +380,17 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// - Running statistics (mean and variance) initialized to 0.0 and 1.0
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// How this layer should read a rank-3 input. <see cref="BatchNormDataLayout.Infer"/> by default,
+    /// which is the historical behaviour.
+    /// </summary>
+    /// <remarks>
+    /// Rank 3 is genuinely ambiguous -- [C, H, W] unbatched image versus [B, C, T] batched
+    /// channels-first sequence -- and the layer cannot tell them apart from the shape alone. Rather
+    /// than guess, callers that know say so. Opt-in: leaving this at Infer changes nothing.
+    /// </remarks>
+    public BatchNormDataLayout Layout { get; set; } = BatchNormDataLayout.Infer;
+
     public BatchNormalizationLayer(double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
         : base(new[] { -1 }, new[] { -1 })
     {
@@ -649,7 +660,22 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         bool flattenedFeaturesLast = false;
         int[]? preFlattenShape = null;
         int featureSize = _gamma.Length;
-        if (input.Rank >= 3 && featureSize > 0 && input.Shape[^1] == featureSize)
+
+        // A caller that has DECLARED channels-first never takes the features-last flatten, even
+        // when the trailing axis happens to equal featureSize. That coincidence is not rare and it
+        // is not harmless: ContextNet's [1, 32, 32] activations have T == C exactly, so this branch
+        // fired and reshaped to [32, 32] with CHANNELS as rows and TIME as columns -- computing
+        // mean/variance across channels at each time index, indexing gamma/beta by time, and
+        // EMA-updating the running statistics from those transposed moments. Five BN layers of that
+        // drive the running variance toward zero; eval-mode then divides by sqrt(~0 + 1e-5), and
+        // MSE squares the result. That is the NaN.
+        //
+        // Rank alone cannot tell [B, C, T] from an unbatched [C, H, W] image, so the layer does not
+        // try to guess -- the caller declares it. Default is Infer, which is exactly today's
+        // behaviour, so nothing changes for any existing caller.
+        bool channelsFirstDeclared = Layout == BatchNormDataLayout.ChannelsFirst;
+
+        if (!channelsFirstDeclared && input.Rank >= 3 && featureSize > 0 && input.Shape[^1] == featureSize)
         {
             preFlattenShape = input._shape;
             int leadingBatch = 1;
@@ -868,7 +894,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // against input [C, H, W] — "Tensors with shapes [64, 32, 32] and [1, 64, 1] cannot
         // be broadcast" (surfaced by DenseNetNetwork.Predict on a [3, 32, 32] image).
         int rank = input.Shape.Length;
-        int channelAxis = rank == 1 || rank == 3 ? 0 : 1;
+        // Rank 3 is ambiguous: [C, H, W] (unbatched image, channels axis 0) or [B, C, T] (batched
+        // channels-first sequence, channels axis 1). A caller that declared ChannelsFirst gets
+        // axis 1; everyone else keeps the historical axis-0 reading. Guessing here is what
+        // broadcast the channel scale along ContextNet's BATCH axis.
+        int channelAxis = Layout == BatchNormDataLayout.ChannelsFirst && rank >= 3
+            ? 1
+            : (rank == 1 || rank == 3 ? 0 : 1);
 
         var broadcastShape = new int[rank];
         for (int d = 0; d < rank; d++)

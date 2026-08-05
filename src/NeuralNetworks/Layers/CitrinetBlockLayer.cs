@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -48,6 +48,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 16", TestConstructorArgs = "8, 3, 2")]
+// These blocks keep [B, C, T] channels-first throughout, so every BatchNormalization here
+// declares ChannelsFirst. Left at the default Infer, the layer decides by testing whether the
+// TRAILING axis equals the parameter count -- true by coincidence whenever T == C -- and then
+// normalizes across channels at each time index instead of across the batch per channel.
 public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
 
@@ -116,7 +120,7 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
         // Residual projection: 1x1 pointwise conv (downsamples T when stride > 1) + BN.
         _residualConv = new Conv1DLayer<T>(channels, channels, kernelSize: 1, dilation: 1, stride: stride,
             padding: 0, activation: new IdentityActivation<T>(), initializationStrategy: Init(1));
-        _residualBn = new BatchNormalizationLayer<T>(channels);
+        _residualBn = new BatchNormalizationLayer<T>(channels) { Layout = BatchNormDataLayout.ChannelsFirst };
 
         _depthwise = new DepthwiseConv1DLayer<T>[numSubBlocks];
         _pointwise = new Conv1DLayer<T>[numSubBlocks];
@@ -128,7 +132,7 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
                 padding: null, activation: new IdentityActivation<T>(), initializationStrategy: Init(10 + r * 3));
             _pointwise[r] = new Conv1DLayer<T>(channels, channels, kernelSize: 1, dilation: 1, stride: 1,
                 padding: 0, activation: new IdentityActivation<T>(), initializationStrategy: Init(11 + r * 3));
-            _bn[r] = new BatchNormalizationLayer<T>(channels);
+            _bn[r] = new BatchNormalizationLayer<T>(channels) { Layout = BatchNormDataLayout.ChannelsFirst };
         }
 
         // Paper SE: ReLU on the reduced FC, sigmoid on the expand FC. Passing explicit scalar
