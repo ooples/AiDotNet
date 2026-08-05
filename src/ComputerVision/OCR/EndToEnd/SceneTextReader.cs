@@ -31,20 +31,29 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 [ModelTask(ModelTask.Detection)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
-// Citation corrected. arXiv 1911.09941 is "Josephson linewidth in a resistively-shunted model with
-// non-sinusoidal current-phase relation" — an unrelated condensed-matter paper. ABCNet is arXiv
-// 2002.10200 (CVPR 2020 oral, pp. 9809-9818); the title was also truncated and the authors and year
-// were missing entirely.
+// The ABCNet [ResearchPaper] attribution was REMOVED from this class rather than having its gap closed.
 //
-// IMPLEMENTATION NOTE: this class composes a separate detector and recognizer and contains no Bezier
-// curve representation or BezierAlign layer — which ARE ABCNet's contributions (adaptively fitting
-// curved text with a parameterized Bezier curve, and BezierAlign for extracting features of
-// arbitrary-shaped instances). So it is a generic two-stage text spotter, not ABCNet. Closing that gap
-// is tracked separately; the reference is corrected here so it points at the paper it names.
-[ResearchPaper("ABCNet: Real-time Scene Text Spotting with Adaptive Bezier-Curve Network",
-    "https://arxiv.org/abs/2002.10200",
-    Year = 2020,
-    Authors = "Yuliang Liu, Hao Chen, Chunhua Shen, Tong He, Lianwen Jin, Liangwei Wang")]
+// This is an honest, useful thing: a detector-agnostic, recognizer-agnostic two-stage text spotter that
+// composes CRAFT/EAST/DBNet with CRNN/TrOCR. What it is NOT is ABCNet. ABCNet's two contributions are a
+// cubic Bezier boundary representation and the BezierAlign sampling layer, and neither can be bolted onto
+// a pipeline that crops a box and hands it to a separate recognizer — the whole point of ABCNet is that
+// the curve parameters couple the two branches over one shared feature map.
+//
+// Rebuilding this class into ABCNet would have destroyed a working generic pipeline to satisfy a
+// citation. Instead ABCNet exists as its own model (see ABCNet.cs, with CubicBezierCurve and
+// BezierAlign), and this class keeps its own identity with no paper claim it does not implement.
+//
+// (For the record, the attribution was doubly wrong before: the URL originally pointed at arXiv
+// 1911.09941, "Josephson linewidth in a resistively-shunted model with non-sinusoidal current-phase
+// relation" — an unrelated condensed-matter paper.)
+//
+// [ModelMetadataExempt] is therefore required, because AIDN001 makes [ResearchPaper] mandatory on every
+// concrete model. The exemption is the honest outcome here and not a way around the rule: this class
+// implements no single published method, it composes methods that each carry their own citation (CRAFT,
+// EAST, DBNet, CRNN, TrOCR). Substituting a survey to satisfy the attribute would re-introduce exactly
+// the defect being removed — a paper reference that does not describe what the code does. Every other
+// metadata attribute stays, so the class remains fully discoverable.
+[ModelMetadataExempt]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
