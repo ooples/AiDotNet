@@ -2993,10 +2993,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // exact opposite of producing a worklist, and it would have polluted the CI error list this branch
         // exists to clean up. GradientCorrectnessInvariantApplicable is the declared opt-out, but it
         // cannot be relied on to have been set on every such family in advance.
-        Vector<T> stepA;
+        Vector<T> stepA, meanDeltaA;
         try
         {
             stepA = RunGradientStepFrom(network, p0, input, targetA);
+            meanDeltaA = MeanUpdateDirection(network, p0, input, targetA);
         }
         catch (Exception ex)
         {
@@ -3021,12 +3022,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
-        // Control: the same target from the same start, so the two comparisons differ only in target.
-        Vector<T> stepA2, stepB;
+        // Control: the same target again from the same start, so the two comparisons differ only in target.
+        // Both are AVERAGED over TargetDependenceRepeatCount independent runs, which is what lets a
+        // stochastic model be measured at all — see that property's remarks.
+        Vector<T> meanDeltaA2, meanDeltaB;
         try
         {
-            stepA2 = RunGradientStepFrom(network, p0, input, targetA);
-            stepB = RunGradientStepFrom(network, p0, input, targetB);
+            meanDeltaA2 = MeanUpdateDirection(network, p0, input, targetA);
+            meanDeltaB = MeanUpdateDirection(network, p0, input, targetB);
         }
         catch (Exception ex)
         {
@@ -3050,8 +3053,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // The update DIRECTION does not have that problem: normalization rescales the vector but does
         // not rotate it. So the comparison is how well the update direction reproduces under the SAME
         // target versus how much it changes under a DIFFERENT one.
-        double selfSimilarity = DeltaCosine(p0, stepA, stepA2);
-        double crossSimilarity = DeltaCosine(p0, stepA, stepB);
+        double selfSimilarity = VectorCosine(meanDeltaA, meanDeltaA2);
+        double crossSimilarity = VectorCosine(meanDeltaA, meanDeltaB);
 
         if (double.IsNaN(selfSimilarity) || double.IsNaN(crossSimilarity))
         {
@@ -3108,23 +3111,43 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     }
 
     /// <summary>
-    /// Cosine similarity between two parameter UPDATES measured from the same starting point.
+    /// The MEAN parameter update produced by training on <paramref name="target"/>, averaged over
+    /// <see cref="TargetDependenceRepeatCount"/> independent runs from the same starting point.
     /// </summary>
     /// <remarks>
-    /// Deliberately on the deltas rather than on the parameter vectors themselves. Two parameter
-    /// vectors that differ by one small step are nearly identical, so their cosine is ~1.0 for any
-    /// target and would wash the signal out entirely; the deltas are the part that carries it.
+    /// Returns the DELTA rather than the resulting parameters. Two parameter vectors differing by one small
+    /// step are nearly identical, so their cosine is ~1.0 for any target and washes the signal out
+    /// entirely; the delta is the part that carries it.
     /// </remarks>
-    private static double DeltaCosine(Vector<T> start, Vector<T> first, Vector<T> second)
+    private Vector<T> MeanUpdateDirection(
+        INeuralNetworkModel<T> network, Vector<T> start, Tensor<T> input, Tensor<T> target)
     {
-        if (first.Length != start.Length || second.Length != start.Length) return double.NaN;
+        int repeats = Math.Max(1, TargetDependenceRepeatCount);
+        var accumulator = new double[start.Length];
+
+        for (int r = 0; r < repeats; r++)
+        {
+            var after = RunGradientStepFrom(network, start, input, target);
+            if (after.Length != start.Length) return new Vector<T>(0);
+            for (int i = 0; i < start.Length; i++)
+                accumulator[i] += ConvertToDouble(after[i]) - ConvertToDouble(start[i]);
+        }
+
+        var mean = new Vector<T>(start.Length);
+        for (int i = 0; i < start.Length; i++) mean[i] = NumOps.FromDouble(accumulator[i] / repeats);
+        return mean;
+    }
+
+    /// <summary>Cosine similarity between two vectors, clamped to the valid range.</summary>
+    private static double VectorCosine(Vector<T> first, Vector<T> second)
+    {
+        if (first.Length == 0 || second.Length == 0 || first.Length != second.Length) return double.NaN;
 
         double dot = 0.0, n1 = 0.0, n2 = 0.0;
-        for (int i = 0; i < start.Length; i++)
+        for (int i = 0; i < first.Length; i++)
         {
-            double s = ConvertToDouble(start[i]);
-            double a = ConvertToDouble(first[i]) - s;
-            double b = ConvertToDouble(second[i]) - s;
+            double a = ConvertToDouble(first[i]);
+            double b = ConvertToDouble(second[i]);
             dot += a * b;
             n1 += a * a;
             n2 += b * b;
@@ -3268,6 +3291,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </para>
     /// </remarks>
     protected virtual int TargetDependenceStepCount => 3;
+
+    /// <summary>
+    /// Independent runs averaged per condition before the update directions are compared. Default 3.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// AVERAGING IS WHAT MAKES A STOCHASTIC MODEL MEASURABLE. A single run's update direction carries the
+    /// model's own randomness (dropout masks, sampled weights) on top of the target's effect, and when the
+    /// two are comparable the comparison can only report INCONCLUSIVE — which is what happened to 132
+    /// families. Averaging R independent runs converges on the EXPECTED update for that target: the noise
+    /// falls as 1 / sqrt(R) while the target's contribution does not fall at all, so the same-target
+    /// control tightens toward zero and a real effect becomes separable.
+    /// </para>
+    /// <para>
+    /// Seeding the model's RNG instead would have been cheaper, but there is no hook for it — dropout
+    /// layers construct their own generator and RandomHelper exposes only per-instance seeding, no global
+    /// seed. Averaging needs no cooperation from the model.
+    /// </para>
+    /// <para>
+    /// It does NOT rescue every family, and that is correct rather than a shortfall. A Bayesian network
+    /// samples its weights, and GRU/LSTM reproduced their own direction to cosine 0.003 — those are
+    /// genuinely chaotic at this step size, and INCONCLUSIVE remains the honest verdict for them however
+    /// many runs are averaged.
+    /// </para>
+    /// </remarks>
+    protected virtual int TargetDependenceRepeatCount => 3;
 
     /// <summary>
     /// Trains <see cref="TargetDependenceStepCount"/> steps from a known parameter vector and returns the
