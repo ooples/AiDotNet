@@ -278,6 +278,43 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         InvalidateParameterCountCache();
     }
 
+    // Native layers are materialized on first use, deliberately, to keep construction cheap for
+    // metadata and shape probes. But the introspection entry points below were not part of "first
+    // use", so a freshly constructed Nougat answered them from an EMPTY Layers list -- reporting a
+    // model with no learnable parameters and no activations. Route them through the same gate.
+    // Sibling MATCHA already does exactly this; Nougat, Pix2Struct, Dessurt, Donut and TrOCR do not.
+    //
+    // This is the half of the Nougat work that is safe to land. It does NOT address the model's
+    // real defect: Train() drives the flat Layers list, which is not the graph this model runs.
+    // Fixing that needs a teacher-forcing path, because the decoder's EmbeddingLayer expects token
+    // ids and the flat chain hands it continuous encoder features -- running the real forward
+    // end-to-end throws "Index -1 ... out of bounds for embedding table with vocabulary size
+    // 50000". See the task notes; do not try to solve it by re-wiring ForwardForTraining alone.
+
+    /// <inheritdoc/>
+    public override long ParameterCount
+    {
+        get
+        {
+            EnsureNativeInitialized();
+            return base.ParameterCount;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        EnsureNativeInitialized();
+        return base.GetParameters();
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        EnsureNativeInitialized();
+        return base.GetNamedLayerActivations(input);
+    }
+
     #endregion
 
     #region IDocumentQA Implementation
