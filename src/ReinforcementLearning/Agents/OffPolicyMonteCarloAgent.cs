@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -300,7 +300,22 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override long ParameterCount => _qTable.Count * _options.ActionSize;
+    /// <summary>
+    /// The number of Q-values actually stored, not <c>_qTable.Count * ActionSize</c>. That product
+    /// assumes every visited state has explored every action, which a tabular agent does not do --
+    /// states appear as they are seen and actions as they are tried.
+    /// </summary>
+    private long QTableEntryCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var state in _qTable) total += state.Value.Count;
+            return total;
+        }
+    }
+
+    public override long ParameterCount => QTableEntryCount;
 
     public override int FeatureCount => _options.ActionSize;
 
@@ -345,10 +360,6 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
 
-        if (paramsList.Count == 0)
-        {
-            paramsList.Add(NumOps.Zero);
-        }
 
         var paramsVector = new Vector<T>(paramsList.Count);
         for (int i = 0; i < paramsList.Count; i++)

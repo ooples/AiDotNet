@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -180,7 +180,16 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _valueTable.Count + (_policy.Count * _options.ActionSize);
+    /// <summary>
+    /// Folded from <see cref="GetParameters"/> so the count and the vector cannot disagree.
+    /// </summary>
+    /// <remarks>
+    /// The previous product formula described a DIFFERENT set of tensors than the getter builds,
+    /// and the two drifted apart the moment the tables became ragged. Deriving the count from the
+    /// vector is the same rule applied to DeepReinforcementLearningAgentBase: one source, the count
+    /// is a fold over it, never a second opinion about it.
+    /// </remarks>
+    public override long ParameterCount => GetParameters().Length;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -253,8 +262,6 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
             foreach (var a in s.Value)
                 vector[idx++] = a.Value;
 
-        if (idx == 0)
-            vector[0] = NumOps.Zero;
 
         return vector;
     }

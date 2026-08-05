@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -262,7 +262,16 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override long ParameterCount => _qTable1.Count * _options.ActionSize * 2;
+    /// <summary>
+    /// Folded from <see cref="GetParameters"/> so the count and the vector cannot disagree.
+    /// </summary>
+    /// <remarks>
+    /// The previous product formula described a DIFFERENT set of tensors than the getter builds,
+    /// and the two drifted apart the moment the tables became ragged. Deriving the count from the
+    /// vector is the same rule applied to DeepReinforcementLearningAgentBase: one source, the count
+    /// is a fold over it, never a second opinion about it.
+    /// </remarks>
+    public override long ParameterCount => GetParameters().Length;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -301,7 +310,9 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     {
         // Flatten both Q-tables into vector using linear indexing
         // Vector size: stateCount * 2 * actionSize
-        int stateCount = Math.Max(_qTable1.Count, 1);
+        // No Math.Max(..., 1): an agent that has learned nothing has zero parameters, and
+        // inventing one only to avoid an empty vector is what desynchronised the two APIs.
+        int stateCount = _qTable1.Count;
         int vectorSize = stateCount * 2 * _options.ActionSize;
         var parameters = new Vector<T>(vectorSize);
 
