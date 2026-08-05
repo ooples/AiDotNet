@@ -33,6 +33,18 @@ public class VaeDecodeAliasingTests
         return t;
     }
 
+    /// <summary>
+    /// A LATENT-shaped tensor. The noise predictor consumes latents, not images — passing the
+    /// image-shaped Textured() fixture routes it down a different path and the test measures nothing.
+    /// </summary>
+    private static Tensor<double> TexturedLatent(int seed)
+    {
+        var t = new Tensor<double>(new[] { 1, 4, 32, 32 });
+        var rng = new Random(seed);
+        for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 2.0) - 1.0;
+        return t;
+    }
+
     private static double MaxAbsDiff(Tensor<double> a, Tensor<double> b)
     {
         double d = 0.0;
@@ -112,6 +124,50 @@ public class VaeDecodeAliasingTests
         Assert.False(ReferenceEquals(a, b),
             "Encode returned the SAME tensor object for two different images.");
         Assert.True(MaxAbsDiff(a, b) > 0.0, "Two different images encoded to byte-identical latents.");
+    }
+
+    [Fact]
+    public void TwoNoisePredictionsReturnIndependentTensors()
+    {
+        // The SAME defect existed on NoisePredictorBase, reached through the concrete predictors' public
+        // PredictNoise / PredictNoiseWithEmbedding overrides. Found by sweeping every
+        // CompiledModelHost.Predict consumer after the VAE fix rather than assuming the VAE was the only
+        // one. NeuralNetworkBase.Predict was swept too and is clean (it already returns a fresh tensor).
+        var model = new UniVSTModel<double>(seed: 42);
+        var np = model.NoisePredictor;
+
+        var latentA = TexturedLatent(3);
+        var latentB = TexturedLatent(4);
+
+        // Warm up so any lazily adopted compiled plan is active before the comparison.
+        for (int i = 0; i < 3; i++) { _ = np.PredictNoise(latentA, 10); _ = np.PredictNoise(latentB, 10); }
+
+        var na = np.PredictNoise(latentA, 10);
+        var nb = np.PredictNoise(latentB, 10);
+
+        Assert.False(ReferenceEquals(na, nb),
+            "PredictNoise returned the SAME tensor object for two different latents.");
+        Assert.True(MaxAbsDiff(na, nb) > 0.0,
+            "Two different latents produced byte-identical noise predictions.");
+    }
+
+    [Fact]
+    public void AnEarlierNoisePredictionIsNotMutatedByALaterOne()
+    {
+        // Both the compiled AND the eager path had to be detached. The eager fallback aliases because
+        // layers reuse preallocated output buffers on the inference fast path (ConvolutionalLayer's
+        // _preAllocatedOutput), so detaching only the compiled path left this failing.
+        var model = new UniVSTModel<double>(seed: 42);
+        var np = model.NoisePredictor;
+
+        var first = np.PredictNoise(TexturedLatent(5), 10);
+        var snapshot = new double[first.Length];
+        for (int i = 0; i < first.Length; i++) snapshot[i] = first[i];
+
+        _ = np.PredictNoise(TexturedLatent(6), 10);
+
+        for (int i = 0; i < first.Length; i++)
+            Assert.Equal(snapshot[i], first[i], 12);
     }
 
     [Fact]
