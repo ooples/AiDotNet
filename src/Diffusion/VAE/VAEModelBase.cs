@@ -80,13 +80,40 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// implementations should wrap their forward body with this helper.
     /// </summary>
     protected Tensor<T> EncodeCompiled(Tensor<T> image, Func<Tensor<T>> eagerEncode) =>
-        _encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode);
+        DetachPlanOutput(_encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode));
 
     /// <summary>
     /// Routes <paramref name="eagerDecode"/> through the decoder compile host.
     /// </summary>
     protected Tensor<T> DecodeCompiled(Tensor<T> latent, Func<Tensor<T>> eagerDecode) =>
-        _decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode);
+        DetachPlanOutput(_decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode));
+
+    /// <summary>
+    /// Returns a tensor the caller can safely RETAIN, copying when the compiled plan handed back its
+    /// own resident output buffer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A compiled plan is reused across calls: <c>CompiledModelHost.Predict</c> does
+    /// <c>SetInputs(...)</c> then returns <c>plan.Execute()</c>, and that result IS the plan's resident
+    /// output tensor, overwritten on the next call. For plumbing that consumes the result immediately —
+    /// a diffusion denoiser's per-step forward — that is exactly right and a copy would be pure waste.
+    /// </para>
+    /// <para>
+    /// Encode and Decode are different: they are public API returning a tensor the caller keeps. Without
+    /// this copy, two decodes hand back THE SAME OBJECT, so a caller holding both holds one buffer twice.
+    /// Measured before this fix: <c>ReferenceEquals(Decode(a), Decode(b))</c> was true and two latents
+    /// differing by maxAbs 1.116 produced byte-identical images. That silently defeats any test that
+    /// decodes more than once, which is why an untrained VAE round trip appeared to be
+    /// information-free — it was aliasing, not the tanh saturation it was first attributed to.
+    /// </para>
+    /// <para>
+    /// The copy is taken at THIS boundary rather than inside <c>CompiledModelHost</c> deliberately, so
+    /// the per-step denoiser hot path keeps its zero-copy contract. Other
+    /// <c>CompiledModelHost.Predict</c> consumers that retain their result need the same treatment.
+    /// </para>
+    /// </remarks>
+    private static Tensor<T> DetachPlanOutput(Tensor<T> planOutput) => planOutput.Clone();
 
     /// <summary>
     /// Async overload of <see cref="EncodeCompiled"/>.
