@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -752,6 +752,63 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
+        // ---- Shards "P A,C,I,L,N,P" and "Vo-VR": OOM containment ----------------------------
+        // Both runners were KILLED mid-suite rather than failing tests. The [memdiag] probe shows
+        // MemAvailable at 240 MB (P) and 72 MB (Vo-VR) in the seconds before death, followed by a
+        // real "The runner has received a shutdown signal" ##[error] and no xUnit summary at all.
+        // Neither ran long enough to be a job-level timeout, and their recorded failure counts (3
+        // and 1) are floors, not totals -- everything after the kill is simply unknown.
+        //
+        // <float> halves every activation, gradient and Adam moment buffer, which is the dominant
+        // resident cost of a training step. Applied to the whole shard rather than to a suspected
+        // culprit, because a runner death tells you nothing about WHICH model exhausted memory --
+        // only that the shard as a whole did not fit.
+        //
+        // Paper-scale defaults are untouched: this selects the precision the GENERATED FIXTURE is
+        // instantiated at, and every production options type keeps its own dimensions. Models in
+        // these shards already carried by earlier rungs (Paraformer, Parakeet RNNT/TDT, PatchTST,
+        // Pix2Struct, PixelLM, Pixtral, PixtralLarge, VoiceCraft, Voicebox, VoxtLM, PaCMAP) are
+        // deliberately not repeated here.
+        "PANet",
+        "PASDModel",
+        "PATEGANGenerator",
+        "PaLI",
+        "PaLI3",
+        "PaLIX",
+        "PaLME",
+        "PackNet",
+        "PaintByExampleModel",
+        "ParakeetCTC",
+        "ParallelWaveGAN",
+        "ParametricEqualizer",
+        "ParlerTTS",
+        "PartialLeastSquaresRegression",
+        "PartitionMCMCAlgorithm",
+        "PassiveAggressiveClassifier",
+        "PathVLM",
+        "PatternJailbreakDetector",
+        "PiZero",
+        "Pika21Model",
+        "Piper",
+        "Pix2Pix",
+        "Pix2PixZeroModel",
+        "PixArtDeltaLCMModel",
+        "PixArtDeltaModel",
+        "PixArtModel",
+        "PixArtSigmaModel",
+        "PlayHT",
+        "PlaygroundV25Model",
+        "PlaygroundV3Model",
+        "VRT",
+        "Vocos",
+        "VoiceCraftModel",
+        "VoiceFlow",
+        "VoiceprintDeepfakeDetector",
+        "VotingClassifier",
+        "VoxLingua107Identifier",
+        "VoxelCNN",
+        "VoyageAIEmbeddingModel",
+
         // KMaXDeepLab (k-MaX-DeepLab, Yu et al. 2022): k-means Mask Transformer for panoptic segmentation.
         // Its 3 single-forward tests pass in ~4 s, but LossStrictlyDecreasesOnMemorizationTask HANGS past the
         // blame-hang timeout at <double> — the k-means cross-attention (queries x pixels x dim) makes each of
@@ -9528,6 +9585,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
                     "NumHeads = 4, VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, " +
                     "MaxPatchesPerImage = 16, EnableVariableResolution = true, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "Nougat"
+                     && typeName.StartsWith(
+                         "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
+            {
+                // The OTHER Nougat. AiDotNet.VisionLanguage.Document.Nougat is handled by the
+                // document-OCR branch below; this one is a distinct class in a different namespace
+                // sharing the simple name, so that branch's namespace gate skipped it and it was
+                // built at FULL PAPER SCALE -- 896px, hiddenDim 1024, 12 encoder + 10 decoder
+                // layers, vocab 50,000. That is 423,315,280 parameters in a CI fixture: every
+                // training invariant blew the 120 s gate, and the flat parameter vector it produced
+                // ("Vector lengths must match. Got 423315280 and 238653352") is a second, separate
+                // consequence of the same scale.
+                //
+                // Reduced to smoke scale the same way its siblings are, preserving the architecture
+                // that matters: patch embedding -> residual ViT/Swin encoder -> cross-attending
+                // decoder, all still exercised, just narrow and shallow. imageSize 128 matches the
+                // generic vision spatial size this model's fixture already emits, and patchSize 16
+                // keeps an 8x8 = 64-token sequence. numHeads 4 against hiddenDim 128 gives a 32-d
+                // head, so the divisibility contract the encoder enforces stays satisfied.
+                // Production defaults on the constructor are untouched.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    "tokenizer: null, imageSize: 128, patchSize: 16, maxSequenceLength: 32, " +
+                    "hiddenDim: 128, numEncoderLayers: 2, numDecoderLayers: 2, numHeads: 4, " +
+                    "vocabSize: 64)";
             }
             else if ((model.ClassName is "GOTOCR2" or "Surya" or "MPLUGDocOwl" or "MPLUGDocOwl15"
                           or "MPLUGDocOwl2" or "TextMonkey" or "UReader" or "DocPedia" or "Nougat")

@@ -108,10 +108,25 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         Guard.NotNull(options);
         _options = options;
 
-        // FIX ISSUE 6: Use learning rate from options consistently
+        // Use the rate the BASE class already resolved, not the raw option. `options.LearningRate`
+        // is declared `T?`, but for a value-type T — float and double, i.e. every real use — that
+        // is not Nullable<T>, so an unconfigured option reads as default(T) == 0 and `is not null`
+        // is TRUE. This ctor therefore handed Adam InitialLearningRate = 0 whenever the caller did
+        // not set one, which is every default-constructed DreamerAgent.
+        //
+        // ReinforcementLearningAgentBase already solves this and says so at length: it treats
+        // default(T) as "not configured" and substitutes 0.001, precisely because "a zero learning
+        // rate ... is meaningless for Bellman updates (every Q-update collapses to Q <- Q + 0 = Q,
+        // which is the symptom that surfaced as the entire RL test family failing
+        // Training_ShouldChangeParameters)". The base runs first, so LearningRate is resolved by
+        // the time this body executes; re-deriving it here reintroduced the bug the base fixed.
+        //
+        // The zero was silent until an optimizer validated its rate at construction, at which point
+        // it became "Base learning rate must be positive" and took DreamerAgent's whole suite plus
+        // AllDefaultConstructableModels_ShouldConstructWithoutException with it. Silent was worse.
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
-            InitialLearningRate = _options.LearningRate is not null ? NumOps.ToDouble(_options.LearningRate) : 0.001,
+            InitialLearningRate = NumOps.ToDouble(LearningRate),
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8
