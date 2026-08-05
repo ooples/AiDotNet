@@ -2909,6 +2909,35 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // This is what makes the report self-diagnosing instead of needing per-family triage: a finding
         // now certifies that the loss DID change while the update direction did not, which is a genuine
         // contradiction. Without it, the two cases are indistinguishable in the output.
+        // THIRD FIXTURE GUARD: a SCALAR-output model cannot be measured this way at all, and that is
+        // algebra rather than a threshold. For a single output the parameter gradient factorizes as
+        // (prediction - target) * grad_theta(prediction). The target enters ONLY through the scalar
+        // residual; the direction is grad_theta(prediction), which does not involve the target. So two
+        // targets give updates that are scalar multiples of one another — cosine exactly 1.0 — and when the
+        // optimizer additionally reduces the step to sign(gradient), the updates are bit-identical for as
+        // long as both targets sit on the same side of the prediction.
+        //
+        // MEASURED on the only two families that survived every earlier guard, at 12 steps:
+        //   RecurrentNeuralNetwork  deficit 7.7e-13, magnitude spread 0.999966 (sign-only), output length 1
+        //   HyperbolicNeuralNetwork deficit 5.7e-11, magnitude spread 0.000272,             output length 1
+        // Both had moved 2-7% of their parameter norm, so the trajectory genuinely progressed — the
+        // invariance is structural, not a stalled measurement. Reporting these as defects would be wrong.
+        //
+        // A scalar-output model COULD be measured by choosing two targets that straddle the prediction, so
+        // the residuals have opposite signs and the updates become anti-parallel. That needs a
+        // prediction-aware target generator, which is noted rather than built here.
+        int effectiveOutputLength = EffectiveOutputLength();
+        if (effectiveOutputLength == 1)
+        {
+            ReportGradientFinding(GradientReportFile, model,
+                "SKIPPED: this model has a SCALAR output, so its gradient is "
+                + "(prediction - target) * grad(prediction) and the update direction is target-independent "
+                + "by construction — the target only rescales it. Target-dependence is not measurable from "
+                + "the update direction here; it would need two targets straddling the prediction so the "
+                + "residuals differ in SIGN.");
+            return;
+        }
+
         double targetLossSeparation;
         try
         {
@@ -3068,9 +3097,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             + $"deficit {crossDeficit:E3} is at or below the {IdenticalDirectionEpsilon:E0} identical-direction "
             + $"threshold) EVEN THOUGH the loss separates the two targets by {targetLossSeparation:E3}. The "
             + "loss can see the difference and the update cannot. "
-            + $"[step magnitude spread min/max over moved coordinates = {StepMagnitudeSpread(p0, stepA):F6}; "
-            + "a value at or near 1.0 means every coordinate moved by the SAME amount, i.e. the update is a "
-            + "pure sign vector and this measurement is degenerate rather than the model being broken]";
+            + $"[diagnostics: step magnitude spread min/max = {StepMagnitudeSpread(p0, stepA):F6} (near 1.0 "
+            + $"means a pure sign vector); relative movement ||delta||/||p0|| = {RelativeMovement(p0, stepA):E3} "
+            + $"over {Math.Max(1, TargetDependenceStepCount)} steps (a tiny value means the trajectory never "
+            + $"left its starting point, so grad(prediction) never diverged and the comparison is "
+            + $"under-powered); output length = {EffectiveOutputLength()} (1 means a scalar output, whose "
+            + "gradient is target-independent in direction by construction)]";
         ReportGradientFinding(GradientReportFile, model, message);
         Assert.True(!GradientCorrectnessInvariantBlocking, message);
     }
@@ -3280,6 +3312,44 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             if (d > worst) worst = d;
         }
         return worst;
+    }
+
+    /// <summary>
+    /// Total parameter movement relative to the starting point, <c>||delta|| / ||p0||</c>.
+    /// </summary>
+    /// <remarks>
+    /// A tiny value says the trajectory never left where it started. That matters for reading a
+    /// target-dependence finding: the whole reason multiple steps separate two targets is that after the
+    /// first update the predictions differ, so <c>grad(prediction)</c> diverges. If the parameters barely
+    /// moved, <c>grad(prediction)</c> is effectively unchanged and N steps behave like one — the comparison
+    /// is under-powered rather than the model being wrong.
+    /// </remarks>
+    private static double RelativeMovement(Vector<T> start, Vector<T> after)
+    {
+        if (start.Length != after.Length) return double.NaN;
+
+        double deltaSq = 0.0, startSq = 0.0;
+        for (int i = 0; i < start.Length; i++)
+        {
+            double s = ConvertToDouble(start[i]);
+            double d = ConvertToDouble(after[i]) - s;
+            deltaSq += d * d;
+            startSq += s * s;
+        }
+
+        if (startSq <= 0.0) return double.NaN;
+        return Math.Sqrt(deltaSq) / Math.Sqrt(startSq);
+    }
+
+    /// <summary>Length of the effective output, so a scalar-output model can be identified.</summary>
+    private int EffectiveOutputLength()
+    {
+        var shape = EffectiveOutputShape;
+        if (shape is null || shape.Length == 0) return 0;
+
+        int total = 1;
+        for (int i = 0; i < shape.Length; i++) total *= Math.Max(1, shape[i]);
+        return total;
     }
 
     /// <summary>
