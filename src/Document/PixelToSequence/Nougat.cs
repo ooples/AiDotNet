@@ -791,24 +791,48 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         EnsureNativeInitialized();
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape is the ENTIRE training step: forward, backward, global-norm gradient
+            // clipping (NeuralNetworkBase.ApplyGradientClipping) and the optimizer update. The
+            // `UpdateParameters(CollectGradients())` that followed applied a SECOND, unclipped,
+            // hardcoded-1e-4 SGD step on top of it every call -- and threw before it could, because
+            // CollectGradients produced 1,055,424 values against GetParameters' 528,592
+            // ("Vector lengths must match"), taking six of Nougat's tests with it.
+            //
+            // Same redundant-second-step defect PSENet and DBNet already had removed.
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
         EnsureNativeInitialized();
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
+
+        // Contract (NeuralNetworkBase): the vector holds the NEW parameter VALUES, not gradients.
+        // This previously read the argument as gradients and applied `params -= grads * 1e-4`,
+        // which corrupts every caller that honours the real contract -- WithParameters, clone and
+        // serialize round-trips, and meta-optimizers -- because they hand it values and it
+        // subtracts them from the model. Distributed across the trainable layers exactly as the
+        // corrected sibling DBNet does.
+        int startIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                layer.UpdateParameters(parameters.SubVector(startIndex, layerParameterCount));
+                startIndex += layerParameterCount;
+            }
+        }
     }
 
     private Vector<T> CollectGradients()

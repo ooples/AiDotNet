@@ -10878,10 +10878,27 @@ public static class LayerHelper<T>
     private static IEnumerable<ILayer<T>> CreateNougatEncoderLayers(
         int hiddenDim, int numLayers, int numHeads, int imageSize, int patchSize)
     {
-        // Swin-style patch embedding (the auto CNN->sequence reshape in DocumentNeuralNetworkBase
-        // fires at the first transformer block below, so the [B,hiddenDim,H',W'] conv map becomes a
-        // [patches, hiddenDim] sequence for attention).
-        yield return new ConvolutionalLayer<T>(hiddenDim, patchSize, patchSize, 0);
+        // Swin-style patch embedding. PatchEmbeddingLayer does the patch convolution AND the
+        // spatial->sequence flatten in one layer, which is what Nougat's ViT/Swin encoder actually
+        // is (Blecher et al. 2023) -- and, unlike the previous arrangement, it is the same layer on
+        // every path.
+        //
+        // This used to be a bare ConvolutionalLayer that leaned on the automatic CNN->sequence
+        // reshape in DocumentNeuralNetworkBase.Forward. That reshape is INFERENCE-ONLY. Neither the
+        // sequential shape walk nor the tape training forward runs it, so both of them handed the
+        // very next LayerNormalization a rank-3 [hiddenDim, H', W'] conv map and it bound gamma to
+        // the trailing axis -- the spatial WIDTH, 8 -- instead of the model dimension, 1024. From
+        // there every downstream layer inherited 8: TransformerEncoderLayer resolved
+        // embeddingSize = 8 and threw "must be evenly divisible by numHeads (16)", and once a
+        // prediction had bound gamma correctly to 1024 the training path came back with the mirror
+        // image, "Gamma shape (1024) does not match ... (1024, 8, 8)". Fifteen failures, one cause.
+        //
+        // DocumentNeuralNetworkBase already anticipates this: it special-cases PatchEmbeddingLayer
+        // to suppress its own reshape, noting the layer "does it tape-compatibly -- so the training
+        // path ... gets the SAME flatten". Nougat simply was not using it. Its siblings that build
+        // patch embeddings this way (see the other PatchEmbeddingLayer call sites in this file) do
+        // not have the defect.
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder — paper-faithful RESIDUAL blocks (Blecher et al. 2023; Nougat's encoder
