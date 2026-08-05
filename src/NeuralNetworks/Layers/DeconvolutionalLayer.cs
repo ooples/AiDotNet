@@ -492,7 +492,24 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        InitializeLayerWeights(_kernels, InputDepth, OutputDepth);
+        // Fans must include the RECEPTIVE FIELD, not just the channel counts. Passing bare
+        // InputDepth/OutputDepth under-counted fan-in by KernelSize^2 (9x for a 3x3 kernel), and since
+        // initialization std scales as 1/sqrt(fan) that inflated every deconv's initial weights.
+        //
+        // Measured consequence before this fix: each upsampling deconv multiplied activation meanAbs by
+        // ~1.7x, so a StandardVAE decoder's three deconvs compounded ~5.4x (latent meanAbs 1.32 ->
+        // 7.66) and drove the decoder's output tanh into saturation — 47.2% of outputs pinned at
+        // exactly +/-1, making an untrained decode information-free (two latents differing by maxAbs
+        // 0.673 decoded to byte-identical images). ConvolutionalLayer never had this bug; it computes
+        // fanIn = KernelInChannels * KernelSize * KernelSize explicitly.
+        //
+        // Orientation follows PyTorch's _calculate_fan_in_and_fan_out for a transposed convolution:
+        // this kernel is laid out [inputDepth, outputDepth, K, K], and for ConvTranspose the fan-in is
+        // taken from the SECOND weight axis. So fan-in is OutputDepth * K * K and fan-out is
+        // InputDepth * K * K — the reverse of a forward convolution, because a transposed convolution
+        // scatters each input over the output rather than gathering.
+        int receptiveField = KernelSize * KernelSize;
+        InitializeLayerWeights(_kernels, OutputDepth * receptiveField, InputDepth * receptiveField);
         InitializeLayerBiases(_biases);
     }
 
