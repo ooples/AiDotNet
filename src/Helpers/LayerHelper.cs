@@ -24871,6 +24871,23 @@ public static class LayerHelper<T>
                 dropoutRate,
                 geluActivation);
         }
+
+        // Terminal normalization. TransformerEncoderBlock is PRE-LN -- it normalizes on the way IN
+        // to each sublayer and returns a bare residual sum -- so without a final LayerNorm the last
+        // block's output is the only activation in the stack that never gets normalized at all.
+        // Every Pre-LN formulation includes this (GPT-2 onward); it is not optional, and its
+        // absence is not a small effect: the residual stream grows across depth unchecked, so the
+        // pooled encoder output arrives at the head roughly an order of magnitude wider than a
+        // BERT-scale encoder's. UNITER's memorization probe opened at an MSE of 26.8 against
+        // U[0,1) targets -- about 14x the variance an LN-terminated encoder yields -- and 15 steps
+        // could not descend it.
+        //
+        // The papers behind this helper (UNITER, Oscar, ViLT, VinVL, VisualBERT) are all BERT-based
+        // and therefore POST-LN, where LN(x + Sublayer(x)) already normalizes every block's output
+        // including the last. This restores that guarantee for the Pre-LN blocks actually used
+        // here, which is the faithful reading of "the encoder output is layer-normalized" common to
+        // all five.
+        yield return new LayerNormalizationLayer<T>();
     }
 
     /// <summary>
