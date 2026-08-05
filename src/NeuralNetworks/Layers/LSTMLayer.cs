@@ -2370,23 +2370,38 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // A lazily-constructed LSTM (hidden size given, input size deferred to the
-        // first forward) still has a well-defined parameter set once we adopt the
-        // standard square default (input size == hidden size, as in stacked recurrent
-        // stages). Resolve to that default when parameters are requested before any
-        // forward so they are materialized rather than reported as empty; a later
-        // forward with a different input width re-adapts via the input-adaptation path.
-        if (!IsShapeResolved && _hiddenSize > 0)
+        // An unresolved LSTM reports NO parameters, matching ParameterCount, which returns 0 while
+        // _inputSize is the lazy sentinel. Both surfaces now describe the same tensors at every
+        // point in the lifecycle: nothing before a forward resolves the width, the true counts
+        // after.
+        //
+        // This used to guess instead -- ResolveFromShape(new[] { _hiddenSize }), the "standard
+        // square default" of inputSize == hiddenSize -- and that guess was the defect, for three
+        // reasons. It mutated on READ: ResolveFromShape ends in EnsureInitializedFromInput, so
+        // merely asking a lazy layer for its parameters permanently pinned the wrong input width
+        // and allocated at it. Its stated justification was false: the comment promised "a later
+        // forward with a different input width re-adapts via the input-adaptation path", but
+        // LSTMLayer has no such path (GRULayer does, which is the only reason the same guess
+        // survives there -- by silently truncating or zero-padding real data, which is worse than
+        // throwing). And it CREATED the ParameterCount/GetParameters mismatch it was cited as
+        // preventing: BiaffineNER reported 9,801 parameters while this returned 1,934,601, because
+        // three BidirectionalLayers x two inner LSTMs each materialised a 200x200 square that the
+        // real forward then contradicted with its true width of 32.
+        //
+        // Do NOT "fix" the disagreement from the other side by making ParameterCount mirror the
+        // guess. That was tried: BidirectionalLayer's constructor guards on
+        // `_backwardLayer.ParameterCount > 0` before cloning, so a non-zero count fires the
+        // allocation inside the model constructor, before any forward exists, and BiaffineNER went
+        // from 3 failing tests to 26 -- every one "wIh.Shape[1] (200) must equal input feature
+        // count (32)". Removing the guess removes the trigger; agreeing with the guess keeps it.
+        if (!IsShapeResolved || _inputSize <= 0)
         {
-            ResolveFromShape(new[] { _hiddenSize });
+            return Vector<T>.Empty();
         }
 
-        // ResolveFromShape only fixes the SHAPE — the weight tensors are still zero-length until
-        // EnsureInitialized allocates them, so without this the concatenation below returns an empty
-        // vector while ParameterCount (computed from the resolved shapes) reports the full count.
-        // Every consumer that pairs the two then breaks: the finance smoke test asserts
-        // ParameterCount == GetParameters().Length, and SetParameters rejects a correctly-sized saved
-        // vector as a length mismatch.
+        // Resolved: the weight tensors are still zero-length until EnsureInitialized allocates them,
+        // and without this the concatenation below returns an empty vector while ParameterCount
+        // reports the full count.
         EnsureInitialized();
 
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
@@ -2461,6 +2476,16 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Accept the empty vector an unresolved layer hands out. GetParameters() reports nothing
+        // while the input width is still the lazy sentinel, so a round-trip -- and every caller
+        // that slices a flat vector by ParameterCount and passes the (zero-length) slice back --
+        // must be able to hand that back without throwing. Nothing to restore, and pinning a width
+        // from a zero-length vector is exactly the guess this layer no longer makes.
+        if (parameters.Length == 0 && (!IsShapeResolved || _inputSize <= 0))
+        {
+            return;
+        }
+
         // The parameter vector's length is authoritative for the gate-weight layout. Re-infer
         // _inputSize from it whenever the layer hasn't resolved a width yet OR the current
         // _inputSize disagrees with the vector (e.g. a clone copied a stale width without

@@ -274,16 +274,25 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
                     "DocGCN training requires a gradient-based optimizer.", nameof(optimizer));
         }
 
-        // Luo et al. train the semantic/syntactic GCNs with Adam at 1e-4
-        // (COLING 2022, section 4.3). The previous bare Adam silently used
-        // the framework-wide 1e-3 rate, and Train() then ignored this field
-        // altogether in favor of another lazily-created 1e-3 Adam. On the
-        // small native stack that double mismatch overshot immediately.
+        // Doc-GCN (Luo et al., COLING 2022) §4.3 specifies THREE Adam rates, not one:
+        // 1e-4 for the Semantic/Syntactic GCNs, 0.001 for "others", and 2e-5 for the classifier.
+        // The previous value took the 1e-4 branch rate and applied it to the whole model -- but the
+        // default native stack has no semantic/syntactic GCN in it at all (see CreateDefaultDocGCNLayers:
+        // it emits DenseLayer + Dropout, with the adjacency implicitly identity). This stack IS the
+        // paper's "others" path, so 0.001 is its rate, and picking the smallest of the three left
+        // the model training an order of magnitude below both the paper and the framework default.
+        //
+        // That is measurable rather than theoretical. Adam's per-parameter step is about lr on a
+        // repeated single pair, so across the memorization probe's 15 steps the 316 parameters moved
+        // ~1.0e-3 in total and the loss fell 1.3276 -> 1.3155: a 0.912% decrease against a 1.000%
+        // threshold, missing by 9% of the threshold. It was not that gradients were failing to reach
+        // the parameters -- a detached graph gives a flat loss, and a last-layer-only gradient would
+        // have given roughly a tenth of that movement. The whole model was descending, just slowly.
         return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 1e-4,
+                InitialLearningRate = 1e-3,
                 EnableGradientClipping = true,
                 MaxGradientNorm = 1.0
             });

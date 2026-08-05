@@ -599,6 +599,38 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    /// <summary>
+    /// Trains on the SAME preprocessed tensor <see cref="PredictCore"/> evaluates, rather than on
+    /// the raw input.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this override the base implementation walks <c>Layers</c> on the raw tensor while
+    /// prediction runs on the preprocessed one, so the model was trained on one input distribution
+    /// and measured on another. Preprocessing here maps a U[0,1) fixture (mean 0.5, std 0.29) to
+    /// roughly mean 0.07, std 1.26, and additionally promotes [3, H, W] to [1, 3, H, W] -- so the
+    /// two paths differed in rank as well as scale.
+    /// </para>
+    /// <para>
+    /// That is what made the loss climb MONOTONICALLY with training rather than merely fail to
+    /// improve. BatchNormalization takes its batch-statistics branch during training and updates
+    /// its running mean/variance, so those running stats drifted toward the RAW activation
+    /// distribution; eval-mode prediction then normalized with them and got progressively more
+    /// wrong the longer training ran. Starting values are (0, 1) -- a pure identity affine -- which
+    /// is exactly why the untrained baseline looked healthy at 0.876 and the trained model reached
+    /// 1.418.
+    /// </para>
+    /// <para>
+    /// Same fix as the siblings that already do this: DocBank and MATCHA. DBNet, EAST and CRAFT
+    /// share the identical asymmetry and are not fixed here.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureLayerRandomSeedsWired();
+        return base.ForwardForTraining(PreprocessDocument(input));
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
