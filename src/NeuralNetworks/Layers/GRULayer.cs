@@ -413,23 +413,22 @@ public partial class GRULayer<T> : LayerBase<T>
     {
         get
         {
-            // Match GetParameters()'s auto-resolution behaviour: when input
-            // size hasn't been pinned by a first Forward but hidden size is
-            // known, GetParameters resolves to the standard square default
-            // (inputSize == hiddenSize) and returns the full weight bank.
-            // Reporting 0 here while GetParameters returns the materialised
-            // vector causes NeuralNetworkBase.GetParameters to undersize the
-            // destination buffer and throw on the per-layer Slice copy
-            // (line 605 — the RelationalGCN smoke-test crash). Mirror the
-            // resolution rule so the two paths stay in sync.
-            int effectiveInputSize = _inputSize > 0
-                ? _inputSize
-                : (_hiddenSize > 0 ? _hiddenSize : 0);
-            if (effectiveInputSize <= 0)
+            // Report nothing until a real forward pins the input width, matching GetParameters().
+            // Both surfaces now describe the same tensors at every point in the lifecycle.
+            //
+            // This previously mirrored GetParameters()'s square-default GUESS so the two agreed on
+            // a fabricated number. They have to agree, but on the truth: with the guess removed
+            // from GetParameters, mirroring it here would recreate the very mismatch the old
+            // comment set out to prevent. The RelationalGCN crash it cited came from
+            // NeuralNetworkBase.GetParameters sizing its destination from Sum(ParameterCount);
+            // that code is gone and the method now sizes from each layer's real
+            // GetParameters().Length, so an honest 0 is safe.
+            if (_inputSize <= 0)
                 return 0;
-            return _hiddenSize * effectiveInputSize * 3 +  // Wz, Wr, Wh
-                   _hiddenSize * _hiddenSize * 3 +         // Uz, Ur, Uh
-                   _hiddenSize * 3;                        // bz, br, bh
+
+            return _hiddenSize * _inputSize * 3 +   // Wz, Wr, Wh
+                   _hiddenSize * _hiddenSize * 3 +  // Uz, Ur, Uh
+                   _hiddenSize * 3;                 // bz, br, bh
         }
     }
 
@@ -1555,15 +1554,24 @@ public partial class GRULayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
-        // A lazily-constructed GRU (hidden size given, input size deferred to the
-        // first forward) still has a well-defined parameter set once we adopt the
-        // standard square default (input size == hidden size, as in stacked recurrent
-        // stages). Resolve to that default when parameters are requested before any
-        // forward so they are materialized rather than reported as empty; a later
-        // forward with a different input width re-adapts via the input-adaptation path.
-        if (!IsShapeResolved && _hiddenSize > 0)
+        // An unresolved GRU reports NO parameters, matching ParameterCount below. This used to
+        // resolve to a "standard square default" (inputSize == hiddenSize) and allocate at it, so
+        // merely ASKING a lazy layer for its parameters permanently pinned a guessed width.
+        //
+        // GRU hid that better than LSTM did, which made it the more dangerous of the two. LSTM has
+        // no input-adaptation path, so a wrong pin surfaced loudly as "wIh.Shape[1] (200) must equal
+        // input feature count (32)". GRU HAS one, so a wrong pin instead silently truncates or
+        // zero-pads real input data to the guessed width and trains on it. A quieter bug, not a
+        // smaller one.
+        //
+        // The comment this replaces justified the guess by pointing at a RelationalGCN crash in
+        // NeuralNetworkBase.GetParameters, which used to size its destination buffer from
+        // Sum(ParameterCount). That sizing no longer exists — the method now sizes and copies from
+        // each layer's real GetParameters().Length — so the justification is stale relative to the
+        // code it cites.
+        if (!IsShapeResolved || _inputSize <= 0)
         {
-            ResolveFromShape(new[] { _hiddenSize });
+            return Vector<T>.Empty();
         }
 
         // ResolveFromShape only fixes the SHAPE — the weight tensors are still zero-length until
@@ -1590,6 +1598,15 @@ public partial class GRULayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Accept the empty vector an unresolved layer hands out, so a round-trip through
+        // GetParameters -> SetParameters is a no-op rather than an error, and so every caller that
+        // slices a flat vector by ParameterCount (now 0 while lazy) can pass the zero-length slice
+        // straight back. Materializing storage from a zero length would re-introduce a guessed width.
+        if (parameters.Length == 0 && (!IsShapeResolved || _inputSize <= 0))
+        {
+            return;
+        }
+
         MaterializeParameterStorageFor(parameters.Length);
 
         // Bulk copy from parameter vector into tensor storage — avoids per-element SetFlat calls
