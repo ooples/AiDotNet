@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -391,6 +391,49 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual int MoreDataLongIterations => 200;
 
+    /// <summary>
+    /// Lower bound applied to <see cref="MoreDataShortIterations"/> regardless of any override.
+    /// </summary>
+    /// <remarks>
+    /// Five steps is enough for the optimizer to be past its first-step transient, which is the
+    /// minimum needed for "short" to mean anything as a baseline. Raise
+    /// <see cref="MoreDataIterationFloorLong"/> with it if you change this.
+    /// </remarks>
+    protected virtual int MoreDataIterationFloorShort => 5;
+
+    /// <summary>
+    /// Lower bound applied to <see cref="MoreDataLongIterations"/> regardless of any override.
+    /// </summary>
+    /// <remarks>
+    /// Fifteen steps is chosen from evidence, not convention: the SEA-RAFT trace quoted in
+    /// <see cref="MoreData_ShouldNotDegrade"/> runs 0.404 (untrained), 38.6, 100.2, 1.26, ... and
+    /// does not settle to 0.111 until step 15. Comparing a 5-step run against a 15-step run asks
+    /// whether more training helps AFTER the transient, which is the property this test is named
+    /// for. Comparing 1 against 2 asks whether the second Adam step happened to overshoot.
+    /// </remarks>
+    protected virtual int MoreDataIterationFloorLong => 15;
+
+    /// <summary>
+    /// Lower bound applied to <see cref="TrainingIterations"/>, for the same reason as
+    /// <see cref="MoreDataIterationFloorShort"/>: 12 scaffold sites pin it to 1 and 16 to 2, and
+    /// "training did not reduce loss" after one or two Adam steps is not evidence that training is
+    /// broken. The base default is 10, so this only lifts the models that were pinned below it.
+    /// </summary>
+    protected virtual int TrainingIterationFloor => 5;
+
+    /// <summary>
+    /// Lower bound applied to <see cref="MemorizationTaskIterations"/>. Sixteen models already
+    /// specify exactly 15 and the base default is 100; the pinned 1s and 2s are the outliers, and
+    /// a "memorization" task that runs two steps memorizes nothing.
+    /// </summary>
+    protected virtual int MemorizationIterationFloor => 15;
+
+    /// <summary>Effective training length: the model's own count, never below the floor.</summary>
+    protected int EffectiveTrainingIterations => Math.Max(TrainingIterations, TrainingIterationFloor);
+
+    /// <summary>Effective memorization length: the model's own count, never below the floor.</summary>
+    protected int EffectiveMemorizationIterations => Math.Max(MemorizationTaskIterations, MemorizationIterationFloor);
+
     /// <inheritdoc />
     public virtual async Task InitializeAsync()
     {
@@ -662,7 +705,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double initialLoss = MeasureLoss(network, initialOutput, target);
 
         // Train
-        for (int i = 0; i < TrainingIterations * 3; i++)
+        for (int i = 0; i < EffectiveTrainingIterations * 3; i++)
             network.Train(input, target);
 
         // Measure final loss
@@ -766,7 +809,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // value in any chunk.
         var preHashes = ComputeChunkHashes(network);
 
-        for (int i = 0; i < TrainingIterations; i++)
+        for (int i = 0; i < EffectiveTrainingIterations; i++)
             network.Train(input, target);
 
         var postHashes = ComputeChunkHashes(network);
@@ -898,7 +941,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
         var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);
-        for (int i = 0; i < TrainingIterations; i++)
+        for (int i = 0; i < EffectiveTrainingIterations; i++)
             network.Train(trainInput, trainTarget);
 
         // Two distinct test inputs that differ in every position. Use
@@ -980,14 +1023,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
-        for (int i = 0; i < TrainingIterations; i++)
+        for (int i = 0; i < EffectiveTrainingIterations; i++)
             network.Train(input, target);
 
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
             Assert.False(double.IsNaN(ConvertToDouble(output[i])),
-                $"Output[{i}] is NaN after {TrainingIterations} training iterations.");
+                $"Output[{i}] is NaN after {EffectiveTrainingIterations} training iterations.");
             Assert.False(double.IsInfinity(ConvertToDouble(output[i])),
                 $"Output[{i}] is Infinity after training — potential gradient explosion.");
         }
@@ -1338,7 +1381,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
         var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);
-        for (int i = 0; i < TrainingIterations; i++)
+        for (int i = 0; i < EffectiveTrainingIterations; i++)
             network.Train(trainInput, trainTarget);
 
         // Force eval mode before capturing the trained baseline so layers
@@ -1522,9 +1565,23 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         else
             network2 = (INeuralNetworkModel<T>)network1.Clone();
 
-        // Train network1 for the "short" iteration count (default 50)
-        int shortIters = MoreDataShortIterations;
-        int longIters = MoreDataLongIterations;
+        // Floor the per-model overrides. 42 scaffold sites pin MoreDataShortIterations => 1 and 37
+        // pin MoreDataLongIterations => 2 to fit the CI time budget, and at that length this
+        // assertion measures nothing it claims to: it fires after one or two optimizer steps, which
+        // is exactly the regime the remarks below describe as unreliable -- momentum and Adam
+        // routinely overshoot before settling, and the SEA-RAFT trace there does not reach its
+        // eventual 0.111 until step 15.
+        //
+        // Measured independently while adding the default warmup schedule: sweeping the warmup
+        // fraction only moved failures between MoreData and the short-run progress checks, never
+        // reducing both. That is the signature of a budget too short to distinguish "this model
+        // diverges" from "this model has not started converging yet".
+        //
+        // A floor rather than 42 edits, so a model that deliberately asks for MORE keeps it, and
+        // the cost is one number to tune if a shard runs long. Deliberately far below the 50/200
+        // defaults -- this needs to fit CI, not reproduce a training run.
+        int shortIters = Math.Max(MoreDataShortIterations, MoreDataIterationFloorShort);
+        int longIters = Math.Max(MoreDataLongIterations, MoreDataIterationFloorLong);
 
         // Enforce the virtual contract: overrides must keep shortIters > 0
         // (a zero-iteration "short" training is meaningless as a baseline)
@@ -1662,7 +1719,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
-        for (int i = 0; i < TrainingIterations * 3; i++)
+        for (int i = 0; i < EffectiveTrainingIterations * 3; i++)
             network.Train(input, target);
 
         double trainMSE = MeasureLoss(network, network.Predict(input), target);
@@ -2041,14 +2098,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double lossStep1 = MemorizationProbeLoss(network, input, target);
 
         // (MemorizationTaskIterations - 1) more steps on the same pair.
-        int followOnSteps = System.Math.Max(0, MemorizationTaskIterations - 1);
+        int followOnSteps = System.Math.Max(0, EffectiveMemorizationIterations - 1);
         for (int s = 0; s < followOnSteps; s++) network.Train(input, target);
         double lossFinal = MemorizationProbeLoss(network, input, target);
 
         Assert.False(double.IsNaN(lossStep1) || double.IsInfinity(lossStep1),
             $"Loss after step 1 is non-finite: {lossStep1}");
         Assert.False(double.IsNaN(lossFinal) || double.IsInfinity(lossFinal),
-            $"Loss after step {MemorizationTaskIterations} is non-finite: {lossFinal}");
+            $"Loss after step {EffectiveMemorizationIterations} is non-finite: {lossFinal}");
 
         // Strict decrease by the configured threshold (default 1 % over
         // the follow-on steps; relaxed for paper-scale models that take
@@ -2081,7 +2138,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Assert.True(atFloor || alreadyConverged
                 || lossFinal < lossStep1 * MemorizationTaskLossThreshold,
             $"Loss did NOT strictly decrease on memorization task: step 1={lossStep1:F6}, "
-            + $"step {MemorizationTaskIterations}={lossFinal:F6}. "
+            + $"step {EffectiveMemorizationIterations}={lossFinal:F6}. "
             + "Diagnostic: optimizer is oscillating, gradient sign is wrong, or first-step blew the model "
             + "into a high-loss region it can't recover from.");
     }
