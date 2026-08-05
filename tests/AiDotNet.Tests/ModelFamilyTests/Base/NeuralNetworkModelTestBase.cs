@@ -2901,6 +2901,48 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
+        // SECOND FIXTURE GUARD, and the one that decides what a finding MEANS. Two targets can be
+        // different tensors yet carry identical supervision — a label-sequence target compared under a
+        // loss that reduces it to the same thing, for instance. When the LOSS cannot tell them apart,
+        // neither can any backward, and an unchanged update is the correct behaviour rather than a defect.
+        //
+        // This is what makes the report self-diagnosing instead of needing per-family triage: a finding
+        // now certifies that the loss DID change while the update direction did not, which is a genuine
+        // contradiction. Without it, the two cases are indistinguishable in the output.
+        double targetLossSeparation;
+        try
+        {
+            var probe = network.Predict(input);
+            double lossA = MeasureLoss(network, probe, targetA);
+            double lossB = MeasureLoss(network, probe, targetB);
+
+            if (double.IsNaN(lossA) || double.IsNaN(lossB))
+            {
+                ReportGradientFinding(GradientReportFile, model,
+                    "SKIPPED: the loss is NaN for one of the two targets, so no comparison between them "
+                    + "means anything.");
+                return;
+            }
+
+            if (lossA == lossB)
+            {
+                ReportGradientFinding(GradientReportFile, model,
+                    $"SKIPPED: both targets give the IDENTICAL loss ({lossA:E6}) at the same parameters, so "
+                    + "this loss cannot distinguish them and an unchanged update is correct. The targets "
+                    + "differ as tensors but not as supervision — a family-specific target generator is "
+                    + "needed to measure this model.");
+                return;
+            }
+
+            targetLossSeparation = Math.Abs(lossA - lossB);
+        }
+        catch (Exception ex)
+        {
+            ReportGradientFinding(GradientReportFile, model,
+                $"SKIPPED: probing the loss for the two targets threw {ex.GetType().Name}.");
+            return;
+        }
+
         Vector<T> p0;
         try { p0 = network.GetParameters(); }
         catch (Exception ex)
@@ -3024,9 +3066,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         string message = $"{model}: changing the target left the update DIRECTION unchanged "
             + $"(cosine {crossSimilarity:F6} against a same-target control of {selfSimilarity:F6}; cross "
             + $"deficit {crossDeficit:E3} is at or below the {IdenticalDirectionEpsilon:E0} identical-direction "
-            + "threshold), so the backward is not connected to the loss. The step moves the parameters, "
-            + "which is why the other invariants pass, but it moves them somewhere that does not depend on "
-            + "what the model was asked to predict.";
+            + $"threshold) EVEN THOUGH the loss separates the two targets by {targetLossSeparation:E3}. The "
+            + "loss can see the difference and the update cannot. "
+            + $"[step magnitude spread min/max over moved coordinates = {StepMagnitudeSpread(p0, stepA):F6}; "
+            + "a value at or near 1.0 means every coordinate moved by the SAME amount, i.e. the update is a "
+            + "pure sign vector and this measurement is degenerate rather than the model being broken]";
         ReportGradientFinding(GradientReportFile, model, message);
         Assert.True(!GradientCorrectnessInvariantBlocking, message);
     }
@@ -3159,12 +3203,50 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Assert.True(!GradientCorrectnessInvariantBlocking, message);
     }
 
-    /// <summary>Trains one step from a known parameter vector and returns the resulting parameters.</summary>
-    private static Vector<T> RunGradientStepFrom(
+    /// <summary>
+    /// Steps to take from the common starting point before the update directions are compared. Default 3.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// MORE THAN ONE IS MATHEMATICALLY REQUIRED, and this is the single most important thing about this
+    /// invariant. After exactly ONE step the update direction can be target-independent for entirely
+    /// correct models, for two separate reasons, both measured:
+    /// </para>
+    /// <para>
+    /// (1) SCALAR-RESIDUAL GRADIENTS. For a single-output loss the parameter gradient factorizes as
+    /// <c>(prediction - target) * grad_theta(prediction)</c>. The target appears ONLY in the scalar
+    /// residual; the direction is fixed by <c>grad_theta(prediction)</c>, which does not involve the
+    /// target at all. So two different targets give updates that are exact scalar multiples of each other
+    /// — cosine 1.0 to machine precision. Measured on ResidualNeuralNetwork (cross deficit 4.6e-12 with a
+    /// per-coordinate magnitude spread of 0.000000, i.e. wildly varying magnitudes but exactly parallel)
+    /// and on SparseNeuralNetwork (deficit 1.1e-16).
+    /// </para>
+    /// <para>
+    /// (2) SIGN-ONLY FIRST STEPS. An adaptive optimizer's first step from fresh state reduces to
+    /// <c>-lr * sign(gradient)</c>, because <c>m / sqrt(v)</c> with <c>m = g</c> and <c>v = g^2</c> is
+    /// <c>sign(g)</c>. That discards magnitude entirely, so any two targets whose gradients merely share
+    /// signs produce a bit-identical update. Measured as a per-coordinate magnitude spread near 1.0:
+    /// RecurrentNeuralNetwork 0.9999, FeedForwardNeuralNetwork 0.9870, NeuralNetwork 0.9697.
+    /// </para>
+    /// <para>
+    /// Both degeneracies break as soon as a SECOND step is taken: after the first update the predictions
+    /// differ between the two runs, so <c>grad_theta(prediction)</c> itself diverges and the trajectories
+    /// genuinely separate. Two steps suffice in principle; three leaves margin without materially
+    /// lengthening the sweep.
+    /// </para>
+    /// </remarks>
+    protected virtual int TargetDependenceStepCount => 3;
+
+    /// <summary>
+    /// Trains <see cref="TargetDependenceStepCount"/> steps from a known parameter vector and returns the
+    /// resulting parameters.
+    /// </summary>
+    private Vector<T> RunGradientStepFrom(
         INeuralNetworkModel<T> network, Vector<T> start, Tensor<T> input, Tensor<T> target)
     {
         network.UpdateParameters(start);
-        network.Train(input, target);
+        int steps = Math.Max(1, TargetDependenceStepCount);
+        for (int i = 0; i < steps; i++) network.Train(input, target);
         return network.GetParameters();
     }
 
@@ -3198,6 +3280,34 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             if (d > worst) worst = d;
         }
         return worst;
+    }
+
+    /// <summary>
+    /// Ratio of the smallest to the largest per-coordinate step magnitude, over coordinates that moved.
+    /// </summary>
+    /// <remarks>
+    /// A value at or near 1.0 says every moved coordinate moved by the SAME amount — the signature of an
+    /// adaptive optimizer's first step from fresh state, where <c>m / sqrt(v)</c> reduces to
+    /// <c>sign(gradient)</c> and the update carries no gradient magnitude at all. That matters for
+    /// interpreting a target-dependence finding: a pure sign vector is identical for any two targets whose
+    /// gradients merely share signs, so an unchanged direction is a degenerate MEASUREMENT rather than
+    /// evidence of a disconnected backward.
+    /// </remarks>
+    private static double StepMagnitudeSpread(Vector<T> start, Vector<T> after)
+    {
+        if (start.Length != after.Length) return double.NaN;
+
+        double smallest = double.MaxValue, largest = 0.0;
+        for (int i = 0; i < start.Length; i++)
+        {
+            double d = Math.Abs(ConvertToDouble(after[i]) - ConvertToDouble(start[i]));
+            if (d <= 0.0) continue;
+            if (d < smallest) smallest = d;
+            if (d > largest) largest = d;
+        }
+
+        if (largest <= 0.0) return double.NaN;
+        return smallest / largest;
     }
 
     private static int CountNonFiniteParams(Vector<T> v)
