@@ -1622,12 +1622,16 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// snapshot-based parameter-change probes (Training_ShouldChangeParameters,
     /// GradientFlow_ShouldBeNonZeroAndFinite) see real evolutionary
     /// updates. The base <see cref="NeuralNetworkBase{T}.GetParameterChunks"/>
-    /// walks <see cref="Layers"/>, but NEAT populates Layers with a stub
-    /// representation of the best genome and the actual trainable surface
-    /// lives in the genome's <c>Connections</c> list — so the inherited
-    /// chunk walk reported zero changes after Train and produced false
-    /// "no parameters changed" failures (#1224 Cluster F). Yielding a
-    /// genome-derived chunk surfaces the evolutionary delta.
+    /// walks <see cref="Layers"/>, which NEAT leaves EMPTY — its trainable
+    /// surface is the best genome's <c>Connections</c> list, and there is no
+    /// fixed layer partition to publish because the topology is evolved and
+    /// mutates every generation. So the inherited chunk walk reported zero
+    /// changes after Train and produced false "no parameters changed"
+    /// failures (#1224 Cluster F). Yielding a genome-derived chunk surfaces
+    /// the evolutionary delta.
+    /// (This previously said NEAT "populates Layers with a stub representation
+    /// of the best genome". It does not: Layers is written nowhere in this
+    /// file. The override is right; the reason given for it was not.)
     /// </summary>
     public override System.Collections.Generic.IEnumerable<Tensor<T>> GetParameterChunks()
     {
