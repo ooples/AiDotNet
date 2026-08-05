@@ -2923,19 +2923,66 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // Both had moved 2-7% of their parameter norm, so the trajectory genuinely progressed — the
         // invariance is structural, not a stalled measurement. Reporting these as defects would be wrong.
         //
-        // A scalar-output model COULD be measured by choosing two targets that straddle the prediction, so
-        // the residuals have opposite signs and the updates become anti-parallel. That needs a
-        // prediction-aware target generator, which is noted rather than built here.
+        // A scalar-output model needs targets that STRADDLE the prediction, and that is now built rather
+        // than merely noted. Two random targets usually land on the same side, giving residuals of the same
+        // sign and updates that are positive scalar multiples of one another — cosine +1 regardless of the
+        // backward's correctness. Mirroring the second target about the prediction,
+        // targetB = 2 * prediction - targetA, makes the residual exactly -r where targetA's was +r. The two
+        // updates then differ by a factor of -1, so a CORRECT backward yields cosine near -1: as far from
+        // the same-target control's +1 as the measurement can get, which turns the least informative case
+        // into the most informative one.
+        bool usedMirroredScalarTarget = false;
         int effectiveOutputLength = EffectiveOutputLength();
         if (effectiveOutputLength == 1)
         {
-            ReportGradientFinding(GradientReportFile, model,
-                "SKIPPED: this model has a SCALAR output, so its gradient is "
-                + "(prediction - target) * grad(prediction) and the update direction is target-independent "
-                + "by construction — the target only rescales it. Target-dependence is not measurable from "
-                + "the update direction here; it would need two targets straddling the prediction so the "
-                + "residuals differ in SIGN.");
-            return;
+            try
+            {
+                var scalarProbe = network.Predict(input);
+
+                // EffectiveOutputShape says scalar, but the ACTUAL prediction and target must be scalar too
+                // or the mirror is invalid: flipping element [0] of a longer target leaves the remaining
+                // residual components unflipped, so the update legitimately does NOT go anti-parallel and a
+                // finding would be an artifact of a partial mirror. Verified rather than assumed, because
+                // a declared shape and a produced shape have disagreed before.
+                if (scalarProbe.Length != 1 || targetA.Length != 1)
+                {
+                    ReportGradientFinding(GradientReportFile, model,
+                        $"SKIPPED: EffectiveOutputShape reports a scalar output but the prediction has "
+                        + $"{scalarProbe.Length} element(s) and the target {targetA.Length}. Mirroring only "
+                        + "the first element would flip part of the residual and make any conclusion an "
+                        + "artifact, so this model needs a full prediction-aware target generator.");
+                    return;
+                }
+
+                double prediction = ConvertToDouble(scalarProbe[0]);
+                double original = ConvertToDouble(targetA[0]);
+                double mirroredValue = (2.0 * prediction) - original;
+
+                if (!IsFinite(prediction) || !IsFinite(mirroredValue) || mirroredValue == original)
+                {
+                    // mirrored == original means the residual is already zero, so there is no sign to flip.
+                    ReportGradientFinding(GradientReportFile, model,
+                        $"SKIPPED: scalar-output model whose residual cannot be mirrored (prediction "
+                        + $"{prediction:E3}, target {original:E3}). With a zero or non-finite residual there "
+                        + "is no opposite-signed target to compare against.");
+                    return;
+                }
+
+                // NOT re-projected through MakeTargetWellPosedForLoss: the mirror is constructed to be a
+                // legal scalar target already, and re-projecting could move it back onto targetA's side and
+                // silently undo the whole point.
+                var mirrored = new Tensor<T>(targetA.Shape.ToArray());
+                for (int i = 0; i < mirrored.Length; i++) mirrored[i] = targetA[i];
+                mirrored[0] = NumOps.FromDouble(mirroredValue);
+                targetB = mirrored;
+                usedMirroredScalarTarget = true;
+            }
+            catch (Exception ex)
+            {
+                ReportGradientFinding(GradientReportFile, model,
+                    $"SKIPPED: probing the prediction to mirror a scalar target threw {ex.GetType().Name}.");
+                return;
+            }
         }
 
         double targetLossSeparation;
@@ -2953,7 +3000,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 return;
             }
 
-            if (lossA == lossB)
+            // The mirrored scalar target is the ONE case where equal loss does not mean indistinguishable,
+            // so this guard must not fire on it. Mirroring flips the residual from +r to -r, and a
+            // SYMMETRIC loss such as squared error scores those identically while their gradients point in
+            // exactly OPPOSITE directions. Skipping here would discard the most informative comparison the
+            // invariant can make — measured on RecurrentNeuralNetwork, which the guard rejected at an
+            // identical loss of 3.351173E-002 while its gradients were the thing under test.
+            if (lossA == lossB && !usedMirroredScalarTarget)
             {
                 ReportGradientFinding(GradientReportFile, model,
                     $"SKIPPED: both targets give the IDENTICAL loss ({lossA:E6}) at the same parameters, so "
@@ -3095,11 +3148,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
+        string evidence = usedMirroredScalarTarget
+            ? "The second target was MIRRORED about the prediction, so its residual is exactly the negative "
+              + "of the first's. A correct backward must therefore produce an ANTI-PARALLEL update, cosine "
+              + "near -1. Getting +1 means the update did not change at all when the error changed sign, "
+              + $"which no symmetry of the loss explains. (Loss separation {targetLossSeparation:E3}; a "
+              + "symmetric loss such as squared error legitimately scores both targets the same, which is "
+              + "why that number is not the evidence here — the sign flip is.)"
+            : $"EVEN THOUGH the loss separates the two targets by {targetLossSeparation:E3}. The loss can "
+              + "see the difference and the update cannot.";
+
         string message = $"{model}: changing the target left the update DIRECTION unchanged "
             + $"(cosine {crossSimilarity:F6} against a same-target control of {selfSimilarity:F6}; cross "
             + $"deficit {crossDeficit:E3} is at or below the {IdenticalDirectionEpsilon:E0} identical-direction "
-            + $"threshold) EVEN THOUGH the loss separates the two targets by {targetLossSeparation:E3}. The "
-            + "loss can see the difference and the update cannot. "
+            + $"threshold). {evidence} "
             + $"[diagnostics: step magnitude spread min/max = {StepMagnitudeSpread(p0, stepA):F6} (near 1.0 "
             + $"means a pure sign vector); relative movement ||delta||/||p0|| = {RelativeMovement(p0, stepA):E3} "
             + $"over {Math.Max(1, TargetDependenceStepCount)} steps (a tiny value means the trajectory never "
@@ -3137,6 +3199,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         for (int i = 0; i < start.Length; i++) mean[i] = NumOps.FromDouble(accumulator[i] / repeats);
         return mean;
     }
+
+    /// <summary>
+    /// Finiteness check written out because <c>double.IsFinite</c> does not exist on net471, which this
+    /// test project also targets.
+    /// </summary>
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
     /// <summary>Cosine similarity between two vectors, clamped to the valid range.</summary>
     private static double VectorCosine(Vector<T> first, Vector<T> second)
