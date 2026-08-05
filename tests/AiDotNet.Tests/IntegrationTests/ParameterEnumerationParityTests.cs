@@ -37,6 +37,9 @@ namespace AiDotNet.Tests.IntegrationTests;
 /// already say per model.
 /// </para>
 /// </remarks>
+// Shares the sweeps' collection so a local `Category=Sweep` run does not execute three
+// whole-library sweeps concurrently. CI gives each its own runner via the job matrix.
+[Collection("ParameterSweeps")]
 [Trait("Category", "Sweep")]
 public class ParameterEnumerationParityTests
 {

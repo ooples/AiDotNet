@@ -1,4 +1,4 @@
-name: Build & SonarCloud
+﻿name: Build & SonarCloud
 
 # Primary build workflow - other workflows depend on this.
 # Runs on ubuntu-latest; net471 targets cross-compile via the modern .NET SDK's
@@ -1461,7 +1461,7 @@ jobs:
           if-no-files-found: ignore
 
   parameter-enumeration-sweep:
-    name: Parameter enumeration sweep
+    name: Parameter sweep (${{ matrix.sweep }})
     runs-on: ubuntu-latest
     # Constructs every model in the assembly and measures both parameter APIs on each. Long by
     # nature, which is exactly why it is not allowed inside a test shard: dropped into
@@ -1470,6 +1470,17 @@ jobs:
     timeout-minutes: 60
     if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please') }}"
     continue-on-error: true   # a reporter, never a gate - see below
+    # One runner PER sweep. Each of these constructs every model in the library, so running them
+    # together in a single job is what killed the first attempt: the step was cancelled after 6m48s
+    # against a 60-minute limit, which is a runner OOM, not a timeout. Splitting gives each sweep a
+    # whole runner's memory and runs them concurrently instead of serially.
+    strategy:
+      fail-fast: false
+      matrix:
+        sweep:
+          - ParameterCountContractTests
+          - ParameterChunkParityTests
+          - ParameterEnumerationParityTests
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -1498,15 +1509,20 @@ jobs:
         # "is this PR good". ParameterCountContractTests is the gate; it runs here too so the
         # violation list lands in one place, but its verdict is enforced by that test, not this job.
         run: |
-          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj             -c Release -f net10.0 --nologo             --filter 'Category=Sweep'             --logger 'console;verbosity=detailed'             --logger 'trx;LogFileName=sweep.trx'             --results-directory TestResults
+          # `|| true` keeps an OOM-killed or non-zero harness from taking the upload step
+          # with it. The findings are written incrementally, so a dead run still has evidence
+          # on disk -- losing it to a skipped upload is the one outcome with no diagnostic value.
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \n            --filter 'FullyQualifiedName~${{ matrix.sweep }}' \n            --logger 'console;verbosity=detailed' \n            --logger 'trx;LogFileName=sweep.trx' \n            --results-directory TestResults || true
 
       - name: Upload sweep report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
-          name: parameter-enumeration-parity-${{ github.sha }}
+          name: parameter-sweep-${{ matrix.sweep }}-${{ github.sha }}
           path: |
             /tmp/parameter-enumeration-parity.tsv
+            /tmp/parameter-count-violations.txt
+            /tmp/chunk-parity.txt
             TestResults/
           if-no-files-found: warn
           retention-days: 14

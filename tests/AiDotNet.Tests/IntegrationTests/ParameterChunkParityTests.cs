@@ -30,8 +30,12 @@ namespace AiDotNet.Tests.IntegrationTests;
 /// number. That is the failure this test exists to find BEFORE the rewire, not after.
 /// </para>
 /// <para>
-/// Chunk lengths are read without materialising anything, so unlike the flat-vector comparison
-/// this is safe to run even on the multi-billion-parameter video models.
+/// Chunk lengths themselves are references, but ASKING for them is not free:
+/// <c>GetParameterChunks()</c> calls <c>ResolveLazyLayerShapes()</c> first, which allocates every
+/// deferred weight tensor. An earlier version of this comment claimed the enumeration was safe on
+/// the multi-billion-parameter video models; it is not, and that assumption OOM-killed both a local
+/// run and a CI runner. Models that are too large, or not sized yet, are skipped and counted --
+/// see the guards in the loop for why a size threshold alone cannot catch the second case.
 /// </para>
 /// </remarks>
 [Collection("ParameterSweeps")]
@@ -54,7 +58,7 @@ public class ParameterChunkParityTests
 
         var divergent = new List<string>();
         var noChunks = new List<string>();
-        int compared = 0, unmeasurable = 0, tooLarge = 0;
+        int compared = 0, unmeasurable = 0, tooLarge = 0, unsized = 0;
 
         var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "chunk-parity.txt");
         System.IO.StreamWriter? log = null;
@@ -82,6 +86,26 @@ public class ParameterChunkParityTests
                 {
                     tooLarge++;
                     log?.WriteLine($"TOO-LARGE {typeName}: ParameterCount={declared}");
+                    continue;
+                }
+
+                // A size guard on `declared` alone is NOT sufficient, and assuming it was is what
+                // OOM-killed both the local run and the CI runner. Deferred layers now report 0
+                // parameters -- correctly, since their weights are not sized until an input width
+                // arrives -- so a multi-billion-parameter model whose layers are all deferred reads
+                // 0 here and sails straight past the threshold. GetParameterChunks() then calls
+                // ResolveLazyLayerShapes(), which ALLOCATES every one of those weight tensors.
+                // The number the guard consults is precisely the number that cannot be trusted for
+                // the models the guard exists to catch.
+                //
+                // HasUninitializedParameters answers the question the count cannot: is this model
+                // sized yet? If not, there is no chunk parity to measure without forcing the
+                // materialisation we are trying to avoid, so it is skipped and reported as such
+                // rather than silently attempted.
+                if (ReadBool(instance, "HasUninitializedParameters"))
+                {
+                    unsized++;
+                    log?.WriteLine($"UNSIZED {typeName}: deferred layers, cannot enumerate without materialising");
                     continue;
                 }
 
@@ -142,7 +166,8 @@ public class ParameterChunkParityTests
         log?.Dispose();
 
         _output.WriteLine($"Compared {compared} models; {noChunks.Count} expose no chunk API; " +
-                          $"{tooLarge} too large to enumerate; {unmeasurable} unmeasurable; {divergent.Count} divergent.");
+                          $"{tooLarge} too large to enumerate; {unsized} not sized yet; " +
+                          $"{unmeasurable} unmeasurable; {divergent.Count} divergent.");
         foreach (var n in noChunks.Take(40)) _output.WriteLine("  NO-CHUNKS " + n);
         foreach (var d in divergent) _output.WriteLine("  DIVERGENT " + d);
 
@@ -150,6 +175,15 @@ public class ParameterChunkParityTests
         // itself a contract anyone has agreed to yet, and failing the build on it would block
         // work on a question we are still answering.
         Assert.True(true);
+    }
+
+    private static bool ReadBool(object instance, string propertyName)
+    {
+        var prop = instance.GetType().GetProperty(propertyName,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+        if (prop is null) return false;
+        try { return prop.GetValue(instance) is true; }
+        catch { return false; }
     }
 
     private static long ReadLong(object instance, string propertyName)
