@@ -1498,6 +1498,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // of the span family -- the load profile CI actually has. FP32 halves the per-step
         // footprint with the paper-scale topology and iteration counts left intact.
         "TriaffineNER",
+        // Timeout ladder, rung 1. METER surfaced during the #1789 parameter-surface audit and was
+        // confirmed reproducible in ISOLATION, not merely under shard load: it timed out on
+        // Clone_AfterTraining_ShouldPreserveLearnedWeights against the 120 s gate even as the only
+        // test in the run, and failed identically against a clean tree -- pre-existing, not fallout
+        // from the parameter work.
+        //
+        // METER (Dou et al. 2022) is a co-attentional vision-language transformer, so every step
+        // pays for both towers plus the cross-modal fusion stack; the dominant cost is activation
+        // and Adam-moment memory traffic, which is what halving the element width addresses.
+        // MEASURED: this alone cleared the clone probe. The four repeated TRAINING probes needed
+        // the rung-2 cap on top -- see HeavyTrainingTimeoutClassNames.
+        "METER",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -1917,6 +1929,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         //   BSVD                33s — own convergence block
         //   AudioPaLM           24s — emits counts + memorization
         //   AudioEventDetector  18s — emits MoreDataTolerance
+
+        // Timeout ladder, rung 2. METER went to <float> first and was MEASURED: that alone fixed
+        // Clone_AfterTraining_ShouldPreserveLearnedWeights, but the four repeated TRAINING probes
+        // (Training_ShouldReduceLoss, TrainingError_ShouldNotExceedTestError,
+        // LossStrictlyDecreasesOnMemorizationTask, MoreData_ShouldNotDegrade) still overran the
+        // 120/180 s gates. Every one failed on TIME, not on a numeric assertion, so FP32 cost the
+        // model no accuracy -- it simply is not a large enough saving for a co-attentional
+        // vision-language transformer that pays for both towers plus the cross-modal fusion stack
+        // on every step.
+        //
+        // Cap repetition only; the published topology and the real training path are untouched.
+        "METER",
     };
     // Fixtures whose MoreData probe lands INSIDE the optimizer warm-up hump at the
     // 1-vs-2 window, so the invariant measures a transient rather than a training
