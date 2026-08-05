@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -231,7 +231,23 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _qTable.Count * _options.ActionSize;
+    /// <summary>
+    /// The number of Q-values actually stored, not <c>_qTable.Count * ActionSize</c>. That product
+    /// assumes every visited state has explored every action, which a tabular agent does not do —
+    /// states appear as they are seen and actions as they are tried — so it disagreed with the
+    /// entries GetParameters actually returns.
+    /// </summary>
+    private long QTableEntryCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var state in _qTable) total += state.Value.Count;
+            return total;
+        }
+    }
+
+    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -273,7 +289,6 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         foreach (var s in _qTable)
             foreach (var a in s.Value)
                 p.Add(a.Value);
-        if (p.Count == 0) p.Add(NumOps.Zero);
         var v = new Vector<T>(p.Count);
         for (int i = 0; i < p.Count; i++) v[i] = p[i];
         return v;

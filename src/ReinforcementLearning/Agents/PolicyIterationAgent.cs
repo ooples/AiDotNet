@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -346,10 +346,6 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
             paramsList.Add(value);
         }
 
-        if (paramsList.Count == 0)
-        {
-            paramsList.Add(NumOps.Zero);
-        }
 
         var paramsVector = new Vector<T>(paramsList.Count);
         for (int i = 0; i < paramsList.Count; i++)
