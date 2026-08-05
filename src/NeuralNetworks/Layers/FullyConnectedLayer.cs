@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -374,10 +374,45 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([outputSize]);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input width is known. Without this, a deferred layer said "I have no
+    /// parameters" (count 0, empty vector) AND "nothing is pending" -- three surfaces agreeing on a
+    /// statement that is false, since the layer certainly will have weights once it sees an input.
+    /// Callers asking "does this model have learnable parameters?" got a flat no and had no way to
+    /// tell it apart from a genuinely parameterless layer. Mirrors
+    /// <see cref="ConvolutionalLayer{T}.HasUninitializedParameters"/> and PyTorch's
+    /// <c>LazyModuleMixin.has_uninitialized_params()</c>.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
+
     /// <summary>
-    /// Gets the total number of trainable parameters (weights + biases).
+    /// Gets the total number of trainable parameters (weights + biases), or 0 while the input
+    /// width is still deferred.
     /// </summary>
-    public override long ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _biases.Shape[0];
+    /// <remarks>
+    /// <para>
+    /// The deferred constructor allocates <c>_weights</c> as <c>[0, 0]</c> and <c>_biases</c> as
+    /// <c>[outputSize]</c>, because the bias count is known from the output size but the weight
+    /// count is not knowable until the input width arrives. Without the guard this property
+    /// therefore returned <c>0 * 0 + outputSize</c> -- the biases ALONE -- while
+    /// <see cref="GetParameters"/> returns an empty vector for the same layer. That is not a count
+    /// that is merely stale; it is one that can never be right, since it omits every weight and
+    /// no caller can tell it apart from a genuine bias-only total.
+    /// </para>
+    /// <para>
+    /// Reporting 0 here matches <see cref="GetParameters"/> exactly, in both states, by reusing its
+    /// guard rather than restating the condition. This is the same correction
+    /// <see cref="ConvolutionalLayer{T}"/> already carries: a deferred layer's guessed count kept
+    /// existence checks passing while contradicting the tensors the getter hands out. Callers that
+    /// need to distinguish "no parameters" from "parameters not sized yet" ask
+    /// <c>HasUninitializedParameters</c>, which is precisely the question a partial count was being
+    /// misused to answer.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount =>
+        IsShapeResolved ? (long)_weights.Shape[0] * _weights.Shape[1] + _biases.Shape[0] : 0L;
 
     /// <summary>
     /// Initializes the weights and biases with appropriate values for effective training.
