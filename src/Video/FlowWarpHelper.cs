@@ -135,8 +135,29 @@ public static class FlowWarpHelper
     }
 
     /// <summary>
-    /// Maps pixel coordinates to the <c>[-1, 1]</c> range GridSample samples in.
+    /// Maps pixel coordinates to the <c>[-1, 1]</c> range GridSample samples in, using the
+    /// <c>align_corners=false</c> convention: <c>norm = 2 * (p + 0.5) / extent - 1</c>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// FIXED: this previously used <c>2p / (extent - 1) - 1</c>, which is the <c>align_corners=TRUE</c>
+    /// mapping, while the two-argument <c>IEngine.GridSample(input, grid)</c> it feeds is documented as a
+    /// torchvision-default shim — and torchvision defaults to <c>align_corners=false</c>, placing
+    /// normalized -1 and +1 at the OUTER EDGES of the border pixels rather than at their centres.
+    /// </para>
+    /// <para>
+    /// The mismatch made the sampler decode every requested coordinate <c>p</c> as
+    /// <c>p * extent / (extent - 1) - 0.5</c>: a half-pixel shift plus an outward stretch that grows
+    /// toward the edges (1.6% at extent 64). Every warp was therefore slightly wrong, in a way no
+    /// shape or finiteness check could see and that a "did the warp reduce the error" test still passes
+    /// through, because a mostly-right warp still reduces error.
+    /// </para>
+    /// <para>
+    /// MEASURED, not reasoned about: sampling an affine map <c>f(y,x) = x + 10y</c> at intended (3, 5)
+    /// returned 51.033333333333335 rather than 53 — exactly <c>2.7 + 10 * 4.8333</c>, the
+    /// false-convention decode of true-convention input. See BezierAlignConventionTests.
+    /// </para>
+    /// </remarks>
     private static Tensor<T> Normalize<T>(
         IEngine engine, Tensor<T> pixels, int extent, INumericOperations<T> numOps)
     {
@@ -146,8 +167,8 @@ public static class FlowWarpHelper
             return engine.TensorMultiplyScalar(pixels, numOps.Zero);
         }
 
-        var scaled = engine.TensorMultiplyScalar(pixels, numOps.FromDouble(2.0 / (extent - 1)));
-        return engine.TensorAddScalar(scaled, numOps.FromDouble(-1.0));
+        var scaled = engine.TensorMultiplyScalar(pixels, numOps.FromDouble(2.0 / extent));
+        return engine.TensorAddScalar(scaled, numOps.FromDouble((1.0 / extent) - 1.0));
     }
 
     /// <summary>
