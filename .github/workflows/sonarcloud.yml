@@ -318,23 +318,23 @@ jobs:
           - name: Unit - 01 Activation/Attention/Autodiff
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.ActivationFunctions|FullyQualifiedName~UnitTests.Attention|FullyQualifiedName~UnitTests.Autodiff)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.ActivationFunctions|FullyQualifiedName~UnitTests.Attention|FullyQualifiedName~UnitTests.Autodiff)'
           - name: Unit - 02 AutoML/Data/Diagnostics
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.AutoML|FullyQualifiedName~UnitTests.Data|FullyQualifiedName~UnitTests.Diagnostics)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.AutoML|FullyQualifiedName~UnitTests.Data|FullyQualifiedName~UnitTests.Diagnostics)'
           - name: Unit - 03a Diffusion Core/Schedulers/Encoding
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers)'
           - name: Unit - 03b1 Diffusion Preprocessors
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~PreprocessorContractTests'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~PreprocessorContractTests'
           - name: Unit - 03b2 Diffusion DDPM
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~DDPMModelTests'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~DDPMModelTests'
           - name: Unit - 03b3 Diffusion Control Guidance/Adapters
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -359,31 +359,31 @@ jobs:
           - name: Unit - 03c1 Diffusion Contracts A-C
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.A|FullyQualifiedName~DiffusionModelContractTests.B|FullyQualifiedName~DiffusionModelContractTests.C)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.A|FullyQualifiedName~DiffusionModelContractTests.B|FullyQualifiedName~DiffusionModelContractTests.C)'
           - name: Unit - 03c2 Diffusion Contracts D-I
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.D|FullyQualifiedName~DiffusionModelContractTests.E|FullyQualifiedName~DiffusionModelContractTests.F|FullyQualifiedName~DiffusionModelContractTests.G|FullyQualifiedName~DiffusionModelContractTests.H|FullyQualifiedName~DiffusionModelContractTests.I)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.D|FullyQualifiedName~DiffusionModelContractTests.E|FullyQualifiedName~DiffusionModelContractTests.F|FullyQualifiedName~DiffusionModelContractTests.G|FullyQualifiedName~DiffusionModelContractTests.H|FullyQualifiedName~DiffusionModelContractTests.I)'
           - name: Unit - 03c3 Diffusion Contracts J-R
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.J|FullyQualifiedName~DiffusionModelContractTests.K|FullyQualifiedName~DiffusionModelContractTests.L|FullyQualifiedName~DiffusionModelContractTests.M|FullyQualifiedName~DiffusionModelContractTests.N|FullyQualifiedName~DiffusionModelContractTests.O|FullyQualifiedName~DiffusionModelContractTests.P|FullyQualifiedName~DiffusionModelContractTests.Q|FullyQualifiedName~DiffusionModelContractTests.R)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.J|FullyQualifiedName~DiffusionModelContractTests.K|FullyQualifiedName~DiffusionModelContractTests.L|FullyQualifiedName~DiffusionModelContractTests.M|FullyQualifiedName~DiffusionModelContractTests.N|FullyQualifiedName~DiffusionModelContractTests.O|FullyQualifiedName~DiffusionModelContractTests.P|FullyQualifiedName~DiffusionModelContractTests.Q|FullyQualifiedName~DiffusionModelContractTests.R)'
           - name: Unit - 03c4 Diffusion Contracts S
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~DiffusionModelContractTests.S'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~DiffusionModelContractTests.S'
           - name: Unit - 03c5 Diffusion Contracts T-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.T|FullyQualifiedName~DiffusionModelContractTests.U|FullyQualifiedName~DiffusionModelContractTests.V|FullyQualifiedName~DiffusionModelContractTests.W|FullyQualifiedName~DiffusionModelContractTests.X|FullyQualifiedName~DiffusionModelContractTests.Y|FullyQualifiedName~DiffusionModelContractTests.Z)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.T|FullyQualifiedName~DiffusionModelContractTests.U|FullyQualifiedName~DiffusionModelContractTests.V|FullyQualifiedName~DiffusionModelContractTests.W|FullyQualifiedName~DiffusionModelContractTests.X|FullyQualifiedName~DiffusionModelContractTests.Y|FullyQualifiedName~DiffusionModelContractTests.Z)'
           - name: Unit - 03c6 Editing Contracts A-I
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~EditingModelContractTests.A|FullyQualifiedName~EditingModelContractTests.B|FullyQualifiedName~EditingModelContractTests.C|FullyQualifiedName~EditingModelContractTests.D|FullyQualifiedName~EditingModelContractTests.E|FullyQualifiedName~EditingModelContractTests.F|FullyQualifiedName~EditingModelContractTests.G|FullyQualifiedName~EditingModelContractTests.H|FullyQualifiedName~EditingModelContractTests.I)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~EditingModelContractTests.A|FullyQualifiedName~EditingModelContractTests.B|FullyQualifiedName~EditingModelContractTests.C|FullyQualifiedName~EditingModelContractTests.D|FullyQualifiedName~EditingModelContractTests.E|FullyQualifiedName~EditingModelContractTests.F|FullyQualifiedName~EditingModelContractTests.G|FullyQualifiedName~EditingModelContractTests.H|FullyQualifiedName~EditingModelContractTests.I)'
           - name: Unit - 03c7 Editing Contracts J-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~EditingModelContractTests.J|FullyQualifiedName~EditingModelContractTests.K|FullyQualifiedName~EditingModelContractTests.L|FullyQualifiedName~EditingModelContractTests.M|FullyQualifiedName~EditingModelContractTests.N|FullyQualifiedName~EditingModelContractTests.O|FullyQualifiedName~EditingModelContractTests.P|FullyQualifiedName~EditingModelContractTests.Q|FullyQualifiedName~EditingModelContractTests.R|FullyQualifiedName~EditingModelContractTests.S|FullyQualifiedName~EditingModelContractTests.T|FullyQualifiedName~EditingModelContractTests.U|FullyQualifiedName~EditingModelContractTests.V|FullyQualifiedName~EditingModelContractTests.W|FullyQualifiedName~EditingModelContractTests.X|FullyQualifiedName~EditingModelContractTests.Y|FullyQualifiedName~EditingModelContractTests.Z)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~EditingModelContractTests.J|FullyQualifiedName~EditingModelContractTests.K|FullyQualifiedName~EditingModelContractTests.L|FullyQualifiedName~EditingModelContractTests.M|FullyQualifiedName~EditingModelContractTests.N|FullyQualifiedName~EditingModelContractTests.O|FullyQualifiedName~EditingModelContractTests.P|FullyQualifiedName~EditingModelContractTests.Q|FullyQualifiedName~EditingModelContractTests.R|FullyQualifiedName~EditingModelContractTests.S|FullyQualifiedName~EditingModelContractTests.T|FullyQualifiedName~EditingModelContractTests.U|FullyQualifiedName~EditingModelContractTests.V|FullyQualifiedName~EditingModelContractTests.W|FullyQualifiedName~EditingModelContractTests.X|FullyQualifiedName~EditingModelContractTests.Y|FullyQualifiedName~EditingModelContractTests.Z)'
           - name: Unit - 03d1 Diffusion FastGen Image/VAE
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -436,40 +436,40 @@ jobs:
           - name: Unit - 03d8 Diffusion New Conditioners
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~NewConditionerContractTests'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~NewConditionerContractTests'
           - name: Unit - 04 Feature/Fit/Fitness/Genetics
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.FeatureSelectors|FullyQualifiedName~UnitTests.FitDetectors|FullyQualifiedName~UnitTests.FitnessCalculators|FullyQualifiedName~UnitTests.Genetics)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.FeatureSelectors|FullyQualifiedName~UnitTests.FitDetectors|FullyQualifiedName~UnitTests.FitnessCalculators|FullyQualifiedName~UnitTests.Genetics)'
           - name: Unit - 05 Helpers/Inference/Interpretability
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Helpers|FullyQualifiedName~UnitTests.Inference|FullyQualifiedName~UnitTests.Interpretability)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Helpers|FullyQualifiedName~UnitTests.Inference|FullyQualifiedName~UnitTests.Interpretability)'
           - name: Unit - 06 KD/Schedulers/LA
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.KnowledgeDistillation|FullyQualifiedName~UnitTests.LearningRateSchedulers|FullyQualifiedName~UnitTests.LinearAlgebra)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.KnowledgeDistillation|FullyQualifiedName~UnitTests.LearningRateSchedulers|FullyQualifiedName~UnitTests.LinearAlgebra)'
           - name: Unit - 07 Logging/Loss/Meta/Mixed/Compression
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Logging|FullyQualifiedName~UnitTests.LossFunctions|FullyQualifiedName~UnitTests.MetaLearning|FullyQualifiedName~UnitTests.MixedPrecision|FullyQualifiedName~UnitTests.ModelCompression)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Logging|FullyQualifiedName~UnitTests.LossFunctions|FullyQualifiedName~UnitTests.MetaLearning|FullyQualifiedName~UnitTests.MixedPrecision|FullyQualifiedName~UnitTests.ModelCompression)'
           # NeuralNetworks split to avoid timeouts
           - name: Unit - 08a NN-Classic (ResNet/VGG/DenseNet)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
           - name: Unit - 08b NN-Efficient (MobileNet/EfficientNet)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
           - name: Unit - 08c NN-VLM (Blip/Blip2/Clip)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
           - name: Unit - 08d NN-Adapters/Other
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           # 'Unit - 08e NN-Remaining (catch-all)' removed: it was a duplicate
           # of the ModelFamily NeuralNetworks shards (`A-F` + `G-L` + `M-N` +
           # `O-R` + `S` + `T` + `U-Z`, same ModelFamilyTests.NeuralNetworks scope,
@@ -481,19 +481,19 @@ jobs:
           - name: Unit - 09 Optimizers/RAG
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Optimizers|FullyQualifiedName~UnitTests.RAG)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Optimizers|FullyQualifiedName~UnitTests.RAG)'
           - name: Unit - 10 Regularization/RL/RAG2
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Regularization|FullyQualifiedName~UnitTests.ReinforcementLearning|FullyQualifiedName~UnitTests.RetrievalAugmentedGeneration)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Regularization|FullyQualifiedName~UnitTests.ReinforcementLearning|FullyQualifiedName~UnitTests.RetrievalAugmentedGeneration)'
           - name: Unit - 11 Serving/TimeSeries/Token/Transfer
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Serving|FullyQualifiedName~UnitTests.TimeSeries|FullyQualifiedName~UnitTests.Tokenization|FullyQualifiedName~UnitTests.TransferLearning)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Serving|FullyQualifiedName~UnitTests.TimeSeries|FullyQualifiedName~UnitTests.Tokenization|FullyQualifiedName~UnitTests.TransferLearning)'
           - name: Unit - 12 ProgramSynthesis/Reasoning
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.ProgramSynthesis|FullyQualifiedName~UnitTests.Reasoning)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.ProgramSynthesis|FullyQualifiedName~UnitTests.Reasoning)'
           - name: Unit - 13 Remaining (ActiveLearning/Agents/CL/Physics/etc.)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -541,11 +541,11 @@ jobs:
           - name: Other - PromptEngineering
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.PromptEngineering'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.PromptEngineering'
           - name: Other - Recovery/Concurrency
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.Recovery|FullyQualifiedName~AiDotNet.Tests.Concurrency)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.Recovery|FullyQualifiedName~AiDotNet.Tests.Concurrency)'
           - name: Other - Playground
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -970,7 +970,7 @@ jobs:
           - name: Integration A-B
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.A|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.B)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.A|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.B)'
           # Integration C was the largest Integration shard (~2300 cases across
           # 12 C* namespaces) and the only one forced fully serial — its
           # ComputerVision namespace instantiates paper-scale segmentation
@@ -985,27 +985,27 @@ jobs:
           - name: Integration C - ComputerVision
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.ComputerVision'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.ComputerVision'
           - name: Integration C - Core
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.C&FullyQualifiedName!~AiDotNet.Tests.IntegrationTests.ComputerVision'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.C&FullyQualifiedName!~AiDotNet.Tests.IntegrationTests.ComputerVision'
           - name: Integration D
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.D'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.D'
           - name: Integration E-G
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.E|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.F|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.G)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.E|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.F|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.G)'
           - name: Integration H-L
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&Category!=SerialPerf&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.H|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.I|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.J|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.K|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.L)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&Category!=SerialPerf&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.H|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.I|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.J|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.K|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.L)'
           - name: Integration M
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.M'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.M'
           - name: Integration N-O
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -1013,23 +1013,23 @@ jobs:
             # smoke tests for models now owned by ModelFamily.NeuralNetworks.
             # Keep its integration-only models in this shard, but do not run
             # duplicate model-family invariants a second time under Integration.
-            filter: 'Category!=GPU&Category!=Stress&Category!=ModelFamilyDuplicate&Category!=SerialPerf&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.N|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.O)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&Category!=ModelFamilyDuplicate&Category!=SerialPerf&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.N|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.O)'
           - name: Integration P-Q
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.P|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Q)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.P|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Q)'
           - name: Integration R
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.R'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.R'
           - name: Integration S
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.S'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.S'
           - name: Integration T-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.T|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.U|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.V|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.W|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.X|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Y|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Z)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.T|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.U|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.V|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.W|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.X|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Y|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Z)'
           # Dedicated SERIAL lane for single-process perf/memory guards (CpuToWallRatio,
           # MemoryBudget). Tagged Category=SerialPerf and excluded from Integration N-O above,
           # they run ALONE here so no sibling collection contends for CPU/memory and invalidates
@@ -1046,15 +1046,15 @@ jobs:
           - name: TopLevel - FederatedLearning
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.FederatedLearning'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.FederatedLearning'
           - name: TopLevel - Audio/Onnx/Tokenization
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.Audio|FullyQualifiedName~AiDotNet.Tests.Onnx|FullyQualifiedName~AiDotNet.Tests.Tokenization)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.Audio|FullyQualifiedName~AiDotNet.Tests.Onnx|FullyQualifiedName~AiDotNet.Tests.Tokenization)'
           - name: TopLevel - Components/Adversarial/EndToEnd
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.ComponentTests|FullyQualifiedName~AiDotNet.Tests.AdversarialRobustness|FullyQualifiedName~AiDotNet.Tests.EndToEndTests)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.ComponentTests|FullyQualifiedName~AiDotNet.Tests.AdversarialRobustness|FullyQualifiedName~AiDotNet.Tests.EndToEndTests)'
           # =====================================================================
           # SERVING TESTS
           # =====================================================================
@@ -1459,6 +1459,57 @@ jobs:
             TestResults/**/coverage.opencover.xml
             TestResults/**/*.trx
           if-no-files-found: ignore
+
+  parameter-enumeration-sweep:
+    name: Parameter enumeration sweep
+    runs-on: ubuntu-latest
+    # Constructs every model in the assembly and measures both parameter APIs on each. Long by
+    # nature, which is exactly why it is not allowed inside a test shard: dropped into
+    # "Integration P-Q" (which its class name matches) it would consume that shard's whole budget.
+    # The Sweep category keeps it out of every shard filter; this job is the only thing that runs it.
+    timeout-minutes: 60
+    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please') }}"
+    continue-on-error: true   # a reporter, never a gate - see below
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Free up disk space
+        run: |
+          echo "Disk before cleanup:"; df -h /
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc /usr/local/.ghcup || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          echo "Disk after cleanup:"; df -h /
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run the sweep
+        # The reporting harness (ParameterEnumerationParityTests) classifies every override as
+        # redundant / load-bearing / self-inconsistent / mandatory, by invoking the genuine
+        # inherited implementation rather than approximating it. Its output is the input to the
+        # single-source-of-truth migration: which overrides can be deleted mechanically, and which
+        # have to be read. It writes rows incrementally, so a killed run still yields evidence.
+        #
+        # continue-on-error above is deliberate: this job answers "how big is the migration", not
+        # "is this PR good". ParameterCountContractTests is the gate; it runs here too so the
+        # violation list lands in one place, but its verdict is enforced by that test, not this job.
+        run: |
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj             -c Release -f net10.0 --nologo             --filter 'Category=Sweep'             --logger 'console;verbosity=detailed'             --logger 'trx;LogFileName=sweep.trx'             --results-directory TestResults
+
+      - name: Upload sweep report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: parameter-enumeration-parity-${{ github.sha }}
+          path: |
+            /tmp/parameter-enumeration-parity.tsv
+            TestResults/
+          if-no-files-found: warn
+          retention-days: 14
 
   sonarcloud:
     name: SonarCloud Analysis
