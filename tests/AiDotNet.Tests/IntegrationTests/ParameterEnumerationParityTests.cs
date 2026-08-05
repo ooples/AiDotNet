@@ -37,6 +37,7 @@ namespace AiDotNet.Tests.IntegrationTests;
 /// already say per model.
 /// </para>
 /// </remarks>
+[Trait("Category", "Sweep")]
 public class ParameterEnumerationParityTests
 {
     private readonly ITestOutputHelper _output;
@@ -46,6 +47,25 @@ public class ParameterEnumerationParityTests
     /// <summary>Machine-readable output; written incrementally so an interrupted run still yields data.</summary>
     private static string TsvPath =>
         Path.Combine(Path.GetTempPath(), "parameter-enumeration-parity.tsv");
+
+    /// <summary>
+    /// Above this parameter count the sweep reads <c>ParameterCount</c> only and never calls
+    /// <c>GetParameters()</c>.
+    /// </summary>
+    /// <remarks>
+    /// Materialising a flat vector costs 8 bytes per parameter for <c>double</c>, on top of the
+    /// weights themselves. CogVideoModel's default constructor builds the paper-scale 5B variant
+    /// (baseChannels 384, cross-attention dim 4096, 49 frames at 480x720); asking it for a flat
+    /// copy is a ~40 GB allocation that killed the test host outright and took the rest of the
+    /// sweep with it. The MODEL is fine -- construction is cheap and ParameterCount is just a sum
+    /// over its two sub-networks. The sweep was the problem.
+    ///
+    /// So the guard is on size, not on a list of names: the cheap value decides whether the
+    /// expensive one is safe to ask for. 50M parameters is ~400 MB at double, comfortably
+    /// measurable, and above it the pairing cannot be checked -- which is reported honestly rather
+    /// than skipped silently.
+    /// </remarks>
+    private const long MaxParametersToMaterialize = 50_000_000L;
 
     /// <summary>Bounded so one pathological constructor cannot stall the sweep.</summary>
     private static readonly TimeSpan ConstructionTimeout = TimeSpan.FromSeconds(10);
@@ -143,6 +163,14 @@ public class ParameterEnumerationParityTests
             try
             {
                 long declared = ReadParameterCount(instance);
+                if (declared > MaxParametersToMaterialize)
+                {
+                    Record(new Row(typeName, Verdict.Unmeasurable, declared, -1, -1,
+                        overridesCount, overridesGet,
+                        $"too large to materialise ({declared} parameters) - not measured"));
+                    continue;
+                }
+
                 long actual = ReadGetParametersLength(instance);
                 long baseDerived = BaseDerivedCount(instance, out string? baseErr);
 
