@@ -303,6 +303,19 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// - It will improve its upsampling abilities as it processes more data
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input width is known. Without this, a deferred layer said "I have no
+    /// parameters" (count 0, empty vector) AND "nothing is pending" -- three surfaces agreeing on a
+    /// statement that is false, since the layer certainly will have weights once it sees an input.
+    /// Callers asking "does this model have learnable parameters?" got a flat no and had no way to
+    /// tell it apart from a genuinely parameterless layer. Mirrors
+    /// <see cref="ConvolutionalLayer{T}.HasUninitializedParameters"/> and PyTorch's
+    /// <c>LazyModuleMixin.has_uninitialized_params()</c>.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
+
     public override long ParameterCount => _kernels.Length > 0
         ? _kernels.Length + _biases.Length
         // Deferred-shape mode: weights aren't materialised yet (e.g. resolved via
