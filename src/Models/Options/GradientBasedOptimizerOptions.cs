@@ -263,62 +263,10 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// - Using warmup to slowly increase the learning rate at the start
     /// - Cycling between high and low learning rates
     ///
-    /// Leave this null (the default) to get the standard warmup-then-cosine-decay schedule
-    /// described on <see cref="UseDefaultLearningRateSchedule"/>, rather than a constant rate.
+    /// Set this to null (default) to use a constant learning rate.
     /// </para>
     /// </remarks>
     public ILearningRateScheduler? LearningRateScheduler { get; set; }
-
-    /// <summary>
-    /// When no <see cref="LearningRateScheduler"/> is set, install the standard linear-warmup
-    /// then cosine-decay schedule instead of training at a flat rate. Default <c>true</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Warmup and decay are what every modern training recipe does -- Transformer (Vaswani et al.
-    /// 2017) warms up then decays, BERT and GPT warm up over the first few percent of steps,
-    /// ResNet/ViT recipes cosine-decay -- and a beginner who passes no options at all should get
-    /// that, not a flat rate. A constant learning rate is the one choice essentially no published
-    /// recipe makes, and it was the previous default purely because null meant "do nothing".
-    /// </para>
-    /// <para>
-    /// Length is derived from <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.MaxIterations"/>
-    /// rather than fixed, which matters: a fixed warmup would swamp a short run. Ten percent of the
-    /// planned budget, floored at one step and capped, means a 10,000-step run warms up over the
-    /// usual few hundred steps while a 2-step smoke test warms up over 1 and still moves.
-    /// </para>
-    /// <para><b>For Beginners:</b> Warmup starts the learning rate near zero and raises it over the
-    /// first few steps, so the very first updates -- made when the weights are still random -- can't
-    /// throw the model somewhere it struggles to recover from. Decay then lowers it again toward the
-    /// end so the model settles instead of bouncing around the answer.</para>
-    /// <para>
-    /// Set to <c>false</c> for a flat rate, or assign <see cref="LearningRateScheduler"/> to choose
-    /// your own. An explicit scheduler always wins; this only fills the gap when none was given.
-    /// </para>
-    /// </remarks>
-    public bool UseDefaultLearningRateSchedule { get; set; } = true;
-
-    /// <summary>
-    /// Fraction of <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.MaxIterations"/> spent
-    /// warming up when <see cref="UseDefaultLearningRateSchedule"/> applies. Default 0.1.
-    /// </summary>
-    /// <remarks>
-    /// MEASURED, not chosen by convention. Across 15 models that fail MoreData_ShouldNotDegrade:
-    /// no warmup = 14 failures, 0.05 = 11, 0.1 = 10. Lowering it fixes fewer MoreData failures
-    /// (4 -> 8 remaining) while causing fewer short-run progress failures (6 -> 3), so the constant
-    /// only moves failures between two buckets -- see the class remarks on why that trade is
-    /// intrinsic at a very short iteration budget.
-    /// </remarks>
-    public double DefaultWarmupFraction { get; set; } = 0.1;
-
-    /// <summary>
-    /// Upper bound on the derived warmup length, in steps. Default 1000.
-    /// </summary>
-    /// <remarks>
-    /// Keeps very long runs from spending an unreasonable prefix warming up; 10% of a million-step
-    /// budget is not a warmup, it is a phase.
-    /// </remarks>
-    public int DefaultWarmupStepCap { get; set; } = 1000;
 
     /// <summary>
     /// Gets or sets when the learning rate scheduler should be stepped.
