@@ -399,6 +399,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// minimum needed for "short" to mean anything as a baseline. Raise
     /// <see cref="MoreDataIterationFloorLong"/> with it if you change this.
     /// </remarks>
+    /// <summary>Reference-identity comparer, spelled out so no BCL/AiDotNet name collision applies.</summary>
+    private sealed class IdentityComparer : IEqualityComparer<object>
+    {
+        internal static readonly IdentityComparer Instance = new();
+        public new bool Equals(object? a, object? b) => ReferenceEquals(a, b);
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
+
     protected virtual int MoreDataIterationFloorShort => 5;
 
     /// <summary>
@@ -1253,7 +1261,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     private static void CheckReachable(ILayer<T> layer, List<string> offenders)
     {
         var exposed = layer.GetSubLayers();
-        var exposedSet = new HashSet<object>(exposed, ReferenceEqualityComparer.Instance);
+        // Explicit comparer rather than the BCL's ReferenceEqualityComparer: that name also resolves
+        // to an internal AiDotNet type in this compilation, which the Release build picks and then
+        // rejects as inaccessible (CS0122), and the BCL one is .NET 5+ only so it would not survive
+        // the net471 target either. Reference identity is all this needs; spell it out.
+        var exposedSet = new HashSet<object>(exposed, IdentityComparer.Instance);
 
         int held = 0, missing = 0;
         foreach (var field in layer.GetType().GetFields(
