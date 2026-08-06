@@ -3078,6 +3078,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// difference between sub-second tests and 120-second timeouts.
     /// </summary>
     private bool _layerShapesResolved;
+    /// <summary>
+    /// Whether lazy shape resolution has already run on this instance.
+    /// </summary>
+    /// <remarks>
+    /// Exposed for overriders of <see cref="ResolveLazyLayerShapes"/>, which is called from a dozen entry
+    /// points (parameter counting, streaming auto-detect, training-mode switches). Without the flag an
+    /// override has no way to honour the one-shot contract the base implementation follows, and re-walks
+    /// the whole model on every ParameterCount access.
+    /// </remarks>
+    protected bool LayerShapesResolved => _layerShapesResolved;
+
+    /// <summary>
+    /// Records that lazy shape resolution has run, so subsequent calls short-circuit.
+    /// </summary>
+    /// <remarks>
+    /// The counterpart to <see cref="LayerShapesResolved"/>. An override that resolves shapes through a
+    /// model's real (non-sequential) topology must call this, exactly as the base implementation sets the
+    /// flag on both of its exit paths.
+    /// </remarks>
+    protected void MarkLayerShapesResolved() => _layerShapesResolved = true;
+
 
     /// <summary>
     /// One-shot flag for the layer-only branch of <see cref="EnsureArchitectureInitialized"/>.

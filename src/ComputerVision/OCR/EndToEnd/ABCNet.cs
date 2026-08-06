@@ -10,6 +10,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Graph;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -85,6 +86,10 @@ public class ABCNet<T> : NeuralNetworkBase<T>
     private readonly ABCNetOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
+
+    // The declared wiring. Two graphs because the model has two entry points; see BuildGraph.
+    private LayerGraph<T>? _detectionGraph;
+    private LayerGraph<T>? _recognitionGraph;
 
     // The tensor engine comes from NeuralNetworkBase's own Engine member rather than a local one, so
     // this model records on the same engine as every other layer it drives. Declaring a second one here
@@ -213,15 +218,7 @@ public class ABCNet<T> : NeuralNetworkBase<T>
         Layers.Add(new ConvolutionalLayer<T>(c / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>));
         Layers.Add(new DenseLayer<T>(_options.NumCharacterClasses));
 
-        // Layout contract check. This model's forward pass is BRANCHED and its recognition branch feeds a
-        // dense head a permuted-and-flattened tensor, which is exactly the kind of hand-off that fails deep
-        // inside a forward with an unhelpful message — ABCNet's own scaffold reported
-        // "Expected input depth 1, but got 256" and "shapes must match [128,32,97] vs [17,32,32]" across 16
-        // tests, naming no layer. Validating the declared layouts here names the offending pair up front.
-        //
-        // Reported rather than thrown, because this chain is deliberately NOT a straight pipeline: layers
-        // 3 and 4 are parallel heads reading the same backbone output, so a purely sequential adjacency
-        // check has a legitimate false positive built into it. See ValidateLayerContracts.
+        BuildGraph();
         ValidateLayerContracts();
     }
 
@@ -253,20 +250,83 @@ public class ABCNet<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void ValidateLayerContracts()
     {
+        if (_detectionGraph is null || _recognitionGraph is null) return;
+
+        // The runs come from the GRAPH now, not from hand-written index ranges. That is the whole point of
+        // migrating: ContiguousRuns breaks a run at a fan-out and at an edge transform, which is exactly
+        // where two layers stop meeting directly — so the false positive the pilot hit (conv -> dense
+        // across a permute) cannot be constructed any more, and nobody has to remember which indices are
+        // safe to compare.
+        Validate(_detectionGraph, "detection");
+        Validate(_recognitionGraph, "recognition");
+
+        void Validate(LayerGraph<T> graph, string what)
+        {
+            int run = 0;
+            foreach (var contiguous in graph.ContiguousRuns())
+                LayerContractValidator.ValidateOrThrow(contiguous, $"{nameof(ABCNet<T>)} {what} run {run++}");
+        }
+    }
+
+    /// <summary>
+    /// Declares the model's real wiring: a shared backbone feeding two detection heads, and a separate
+    /// per-instance recognition chain.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// TWO GRAPHS, because ABCNet genuinely has two entry points. The detection graph runs once over the
+    /// image. The recognition graph runs once PER DETECTED INSTANCE over a BezierAlign-rectified strip, so
+    /// it is not reachable from the image input and cannot be a sub-path of the first.
+    /// </para>
+    /// <para>
+    /// The detection graph is where the FAN-OUT lives: both heads read the backbone's output and neither
+    /// feeds the other. That is precisely the structure the inherited sequential training path cannot
+    /// represent — it would run head A into head B — and precisely the structure whose backward needs the
+    /// gradient contributions of both heads SUMMED at the backbone.
+    /// </para>
+    /// <para>
+    /// The recognition graph carries the permute-and-flatten as an EDGE rather than a layer, so the flat
+    /// <c>Layers</c> projection still contains exactly the eight parameter-owning layers that parameter
+    /// counting, cloning and serialization expect.
+    /// </para>
+    /// </remarks>
+    private void BuildGraph()
+    {
         if (Layers.Count != ExpectedLayerCount) return;   // a custom list; its author owns the wiring
 
-        var backbone = new List<ILayer<T>>();
-        for (int i = 0; i < BackboneLayerCount; i++) backbone.Add(Layers[i]);
-        LayerContractValidator.ValidateOrThrow(backbone, $"{nameof(ABCNet<T>)} backbone");
+        var detection = new LayerGraphBuilder<T>();
+        int stem = detection.Add(Layers[0]);
+        int mid = detection.Add(Layers[1], stem);
+        int trunk = detection.Add(Layers[2], mid);
+        int scores = detection.Add(Layers[BackboneLayerCount], trunk);
+        int coords = detection.Add(Layers[BackboneLayerCount + 1], trunk);
+        int stacked = detection.AddJoin(
+            layer: null,
+            inputs: new[] { scores, coords },
+            combine: parts =>
+            {
+                int channelAxis = parts[0].Rank == 4 ? 1 : 0;
+                return Engine.Concat(new[] { parts[0], parts[1] }, channelAxis);
+            },
+            description: "concat score map with the 16 Bezier coordinate channels");
+        _detectionGraph = detection.Output(stacked).Build();
 
-        // Layers 5 and 6 only: 7 is the dense head, reached through the permute+reshape above.
         int recogStart = BackboneLayerCount + DetectionHeadLayerCount;
-        var recognitionConvs = new List<ILayer<T>>
-        {
-            Layers[recogStart],
-            Layers[recogStart + 1],
-        };
-        LayerContractValidator.ValidateOrThrow(recognitionConvs, $"{nameof(ABCNet<T>)} recognition convolutions");
+        var recognition = new LayerGraphBuilder<T>();
+        int r0 = recognition.Add(Layers[recogStart]);
+        int r1 = recognition.Add(Layers[recogStart + 1], r0);
+        int r2 = recognition.AddVia(
+            Layers[ExpectedLayerCount - 1], r1,
+            transform: f =>
+            {
+                int channels = f.Shape[f.Rank - 3];
+                int height = f.Shape[f.Rank - 2];
+                int width = f.Shape[f.Rank - 1];
+                var columnsFirst = Engine.TensorPermute(f, new[] { 2, 0, 1 });
+                return Engine.Reshape(columnsFirst, new[] { width, channels * height });
+            },
+            description: "permute [C,h,w] -> [w,C,h] then flatten to [w, C*h] so each column is classified");
+        _recognitionGraph = recognition.Output(r2).Build();
     }
 
     /// <summary>Runs the shared backbone.</summary>
@@ -290,12 +350,90 @@ public class ABCNet<T> : NeuralNetworkBase<T>
     {
         Guard.NotNull(input);
 
+        // Executed through the declared graph, so the branch structure lives in exactly one place. Written
+        // out by hand here as well, it could drift from what BuildGraph says and the layout validation
+        // would then be checking a shape the forward pass never produces.
+        if (_detectionGraph is not null) return _detectionGraph.Forward(input);
+
         var features = Backbone(input);
         var scores = Layers[BackboneLayerCount].Forward(features);
         var coords = Layers[BackboneLayerCount + 1].Forward(features);
 
         int channelAxis = scores.Rank == 4 ? 1 : 0;
         return Engine.Concat(new[] { scores, coords }, channelAxis);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The inherited resolver walks <c>Layers</c> in list order and hands each layer its predecessor's
+    /// output shape. For this model that is the wrong dataflow twice over: the Bezier head would be sized
+    /// against the SCORE head's single output channel instead of the trunk's <c>FeatureChannels</c>, and
+    /// the recognition branch would be sized against the Bezier head instead of the rectified strip. The
+    /// first is not a subtle mis-size — it fails outright, because the head is a convolution whose input
+    /// depth is then pinned to 1 while every real forward feeds it the full trunk.
+    /// </para>
+    /// <para>
+    /// Resolving through the declared graphs uses the same wiring the forward pass uses, so the two cannot
+    /// drift. The recognition graph starts from the RECTIFIED STRIP rather than the image: BezierAlign
+    /// samples a fixed <c>BezierSampleHeight</c>×<c>BezierSampleWidth</c> grid off the trunk, so its input
+    /// shape is known without running detection first.
+    /// </para>
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (LayerShapesResolved) return;
+
+        if (_detectionGraph is null || _recognitionGraph is null)
+        {
+            // A caller-supplied layer list, whose author owns the wiring: no graph was built, so there is
+            // nothing better on offer than the inherited sequential walk.
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        var inputShape = TryGetArchitectureInputShape();
+        if (inputShape is null)
+        {
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        _detectionGraph.ResolveShapes(inputShape);
+
+        // The strip BezierAlign produces off the trunk: trunk channels over the configured sample grid.
+        // Batch-free by construction — Sample rectifies one instance at a time.
+        _recognitionGraph.ResolveShapes(
+            new[] { _options.FeatureChannels, _options.BezierSampleHeight, _options.BezierSampleWidth });
+
+        MarkLayerShapesResolved();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// GRAPH-DRIVEN, and it has to be. The inherited training forward walks <c>Layers</c> in order, which
+    /// for this model would feed the score head into the coordinate head and the coordinate head into the
+    /// recognition convolutions — a graph this model does not have. That mistake raises nothing: it trains,
+    /// the loss falls, and every generic invariant passes while the computation is wrong. Routing the
+    /// training forward through the same graph the prediction path uses is what makes the two agree by
+    /// construction rather than by review.
+    /// </para>
+    /// <para>
+    /// The tape sees a genuine fan-out here — the trunk feeds both heads — so the backward must SUM the two
+    /// heads' contributions into the shared trunk rather than take either one. That accumulation is the
+    /// tape's, and it is covered by dedicated finite-difference checks
+    /// (<c>FanOutGradientAccumulationTests</c> in the Tensors package) precisely because its failure mode is
+    /// silent: a backward that overwrote instead of accumulating would still produce finite, plausible
+    /// gradients.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Required of every override that does not call base: stochastic layers derive their masks from
+        // RandomSeed, and without this wiring they would train on an unseeded stream.
+        EnsureLayerRandomSeedsWired();
+        return ComputeDetection(input);
     }
 
     /// <inheritdoc />
@@ -430,6 +568,10 @@ public class ABCNet<T> : NeuralNetworkBase<T>
         var strip = BezierAlign.Sample(
             Engine, features, controlPoints, _options.BezierSampleHeight, _options.BezierSampleWidth);
 
+        // Through the declared graph, whose edge transform IS the permute-and-flatten below. Keeping the
+        // sequence in one place is what stops the executed path and the validated path from disagreeing.
+        if (_recognitionGraph is not null) return _recognitionGraph.Forward(strip);
+
         var f = Layers[BackboneLayerCount + DetectionHeadLayerCount].Forward(strip);
         f = Layers[BackboneLayerCount + DetectionHeadLayerCount + 1].Forward(f);
 
@@ -488,20 +630,6 @@ public class ABCNet<T> : NeuralNetworkBase<T>
         }
 
         return decoded;
-    }
-
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     /// <inheritdoc />
