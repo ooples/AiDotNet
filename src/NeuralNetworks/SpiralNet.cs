@@ -519,6 +519,28 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                 "Spiral indices must be set via SetSpiralIndices before calling Predict.");
         }
 
+        // The VERTEX COUNT is fixed by the mesh the spiral indices were computed from, and this is the
+        // one place that can say so. Each level's index table is [numVertices, spiralLength] and the
+        // convolution gathers neighbours through it, so a mesh with more vertices than the table has
+        // rows walks straight off the end - the failure was IndexOutOfRangeException raised from inside
+        // the gather, naming no constraint and reading as an engine defect rather than as a model
+        // stating what it needs.
+        //
+        // Unlike a convolution's spatial extent this genuinely CANNOT be relaxed: spiral ordering is a
+        // property of one specific mesh topology, so a different vertex count is a different mesh and
+        // needs its own indices. Saying so is the fix; accepting it would be wrong.
+        int expectedVertices = _spiralIndicesPerLevel[0].GetLength(0);
+        int vertexAxis = input.Rank >= 3 ? input.Rank - 2 : 0;
+        if (input.Rank >= 2 && input.Shape[vertexAxis] != expectedVertices)
+        {
+            throw new ArgumentException(
+                $"SpiralNet was given a mesh with {input.Shape[vertexAxis]} vertices, but its spiral "
+                + $"indices describe a mesh of {expectedVertices}. Spiral ordering is a property of one "
+                + "specific mesh topology, so a different vertex count is a different mesh: recompute "
+                + $"the indices for it and pass them to {nameof(SetSpiralIndices)}.",
+                nameof(input));
+        }
+
         // Inference MUST run BatchNorm in eval mode (running stats), NOT training
         // mode (per-forward batch stats). The default IsTrainingMode is true on
         // construction, and this override bypasses the base PredictCore's
