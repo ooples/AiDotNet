@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -59,17 +59,33 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
     private int[]? _originalInputShape;
 
-    /// <summary>
-    /// Live parameter count: <c>(C_in·C_out·K) + C_out</c> once input channels are
-    /// resolved; before that, falls back to a 1-input-channel estimate so a
-    /// freshly-constructed model still reports a non-zero <c>ParameterCount</c>.
-    /// </summary>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input channel count arrives. Without this the layer said "I have no
+    /// parameters" AND "nothing is pending" at once -- both false, since it certainly gains weights
+    /// on the first forward. The model-family non-empty invariant accepts either a positive count
+    /// or a pending flag, so MusicSourceSeparator failed it the moment the count became honest.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
+
+    /// <remarks>
+    /// Mirrors <see cref="GetParameters"/>, which returns an EMPTY vector until the shape resolves.
+    /// This guessed <c>inputChannels = 1</c> in that state and reported a full parameter total for
+    /// weights that did not exist, so the two surfaces disagreed for every unresolved instance.
+    /// MusicSourceSeparator is the visible case — its Demucs decoder is built from these — but the
+    /// damage is not limited to the reported number: a parent slices the flat vector by each
+    /// child's ParameterCount, so a child claiming parameters it cannot supply misaligns every
+    /// slice after it during a restore. Same correction as <see cref="Conv1DLayer{T}"/> and
+    /// <see cref="ConvolutionalLayer{T}"/>; "not sized yet" is reported by
+    /// <c>HasUninitializedParameters</c>, never by a fabricated count.
+    /// </remarks>
     public override long ParameterCount
     {
         get
         {
-            int effectiveInputChannels = _inputChannels > 0 ? _inputChannels : 1;
-            return ((long)effectiveInputChannels * _outputChannels * _kernelSize) + _outputChannels;
+            if (!IsShapeResolved) return 0L;
+            return ((long)_inputChannels * _outputChannels * _kernelSize) + _outputChannels;
         }
     }
 
@@ -295,6 +311,15 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
     {
         if (!IsShapeResolved)
         {
+            // Nothing to restore. GetParameters() returns an empty vector while the shape is
+            // deferred, and ParameterCount now agrees with it, so an empty vector here is the
+            // faithful round-trip of "this layer had nothing to save yet" -- not a malformed
+            // payload. Inferring C_in from a length of 0 is impossible, and throwing made a clone
+            // of an un-forwarded model fail outright ("Cannot infer inputChannels ... from 0
+            // parameters"). The layer stays deferred and sizes itself on the first forward,
+            // exactly as it would have without the round-trip.
+            if (parameters.Length == 0) return;
+
             // Layout: kernels [C_in, C_out, 1, K] + biases [C_out]. Solve for C_in.
             int candidateInputChannels = (parameters.Length - _outputChannels) /
                                          (_outputChannels * _kernelSize);
