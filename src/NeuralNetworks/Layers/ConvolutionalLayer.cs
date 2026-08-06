@@ -1219,7 +1219,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// The result shows where each pattern was found in the input.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    /// <remarks>
+    /// Overrides ForwardTraced rather than Forward so this layer is visible to graph tracing: the
+    /// base's Forward records which tensor this call consumed and produced, which is how a model's
+    /// real dataflow is recovered without the model declaring it. A layer that overrides Forward
+    /// directly bypasses that recording and becomes a hole in the traced graph.
+    /// </remarks>
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Shape-inference mode: resolve dims from the input and return a correctly-shaped
         // placeholder WITHOUT allocating the kernel or computing. Lets a model resolve all
