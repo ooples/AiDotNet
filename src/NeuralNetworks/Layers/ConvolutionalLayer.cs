@@ -1,6 +1,7 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Engines;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -41,6 +42,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3")]
+// 2-D convolution consumes and produces spatial feature maps. Batch is OPTIONAL on both sides because
+// this layer is used unbatched ([C,H,W]) inside per-instance paths and batched ([B,C,H,W]) in training,
+// and both are correct — declaring only one would force false annotations at real call sites.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "2-D conv input: spatial feature maps.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Channel count becomes OutputDepth; H and W follow stride/padding.")]
 public partial class ConvolutionalLayer<T> : LayerBase<T>
 {
     /// <inheritdoc />

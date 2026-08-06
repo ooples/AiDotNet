@@ -212,6 +212,61 @@ public class ABCNet<T> : NeuralNetworkBase<T>
         Layers.Add(new ConvolutionalLayer<T>(c / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>));
         Layers.Add(new ConvolutionalLayer<T>(c / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>));
         Layers.Add(new DenseLayer<T>(_options.NumCharacterClasses));
+
+        // Layout contract check. This model's forward pass is BRANCHED and its recognition branch feeds a
+        // dense head a permuted-and-flattened tensor, which is exactly the kind of hand-off that fails deep
+        // inside a forward with an unhelpful message — ABCNet's own scaffold reported
+        // "Expected input depth 1, but got 256" and "shapes must match [128,32,97] vs [17,32,32]" across 16
+        // tests, naming no layer. Validating the declared layouts here names the offending pair up front.
+        //
+        // Reported rather than thrown, because this chain is deliberately NOT a straight pipeline: layers
+        // 3 and 4 are parallel heads reading the same backbone output, so a purely sequential adjacency
+        // check has a legitimate false positive built into it. See ValidateLayerContracts.
+        ValidateLayerContracts();
+    }
+
+    /// <summary>
+    /// Checks the declared layer layouts and throws when the SEQUENTIAL parts of the chain disagree.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ADJACENT IN <c>Layers</c> IS NOT THE SAME AS ADJACENT IN DATAFLOW, and this model breaks that
+    /// assumption in both available ways — which is precisely why it was worth piloting the contract here.
+    /// </para>
+    /// <para>
+    /// (1) BRANCHING: layers 3 and 4 are the two detection heads. Both read layer 2's output and neither
+    /// feeds the other, so treating 2-&gt;3-&gt;4-&gt;5 as a pipeline would report mismatches that are not real.
+    /// </para>
+    /// <para>
+    /// (2) EXPLICIT RESHAPES BETWEEN LAYERS: the recognition branch permutes and flattens
+    /// <c>[C, h, w]</c> into <c>[w, C*h]</c> between the last convolution and the dense head — see
+    /// <see cref="RecognizeRectified"/>. That transformation is real dataflow but it is NOT a layer, so a
+    /// naive adjacency check reports conv-&gt;dense as incompatible. It genuinely is incompatible AS A DIRECT
+    /// HAND-OFF; the reshape is what makes it correct.
+    /// </para>
+    /// <para>
+    /// So only the runs that are actually contiguous get validated: the backbone (0-2) and the two
+    /// recognition convolutions (5-6). The dense head is entered through a reshape and therefore has no
+    /// layout-adjacent predecessor to check against. Validating a false pair would be worse than
+    /// validating nothing — it would train readers to ignore the failure.
+    /// </para>
+    /// </remarks>
+    private void ValidateLayerContracts()
+    {
+        if (Layers.Count != ExpectedLayerCount) return;   // a custom list; its author owns the wiring
+
+        var backbone = new List<ILayer<T>>();
+        for (int i = 0; i < BackboneLayerCount; i++) backbone.Add(Layers[i]);
+        LayerContractValidator.ValidateOrThrow(backbone, $"{nameof(ABCNet<T>)} backbone");
+
+        // Layers 5 and 6 only: 7 is the dense head, reached through the permute+reshape above.
+        int recogStart = BackboneLayerCount + DetectionHeadLayerCount;
+        var recognitionConvs = new List<ILayer<T>>
+        {
+            Layers[recogStart],
+            Layers[recogStart + 1],
+        };
+        LayerContractValidator.ValidateOrThrow(recognitionConvs, $"{nameof(ABCNet<T>)} recognition convolutions");
     }
 
     /// <summary>Runs the shared backbone.</summary>
