@@ -290,6 +290,21 @@ public class ABCNet<T> : NeuralNetworkBase<T>
     /// counting, cloning and serialization expect.
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Both graphs, because this model has two entry points. Declaring them is what stops the base's
+    /// linear reading of <c>Layers</c> from pairing the score head with the Bezier head, and the last
+    /// recognition convolution with the dense head it only reaches through a permute+reshape - neither
+    /// of which is a hand-off that exists.
+    /// </remarks>
+    protected override IEnumerable<LayerGraph<T>>? DeclaredLayerGraphs
+    {
+        get
+        {
+            if (_detectionGraph is null || _recognitionGraph is null) return null;
+            return new[] { _detectionGraph, _recognitionGraph };
+        }
+    }
     private void BuildGraph()
     {
         if (Layers.Count != ExpectedLayerCount) return;   // a custom list; its author owns the wiring
