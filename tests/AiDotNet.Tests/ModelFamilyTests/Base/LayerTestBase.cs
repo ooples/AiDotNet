@@ -397,6 +397,14 @@ public abstract class LayerTestBase
             {
                 throw;
             }
+            catch (System.Exception ex) when (IsResourceExhaustion(ex))
+            {
+                // NOT a shape assumption. Running out of memory says the probe was too big for this
+                // machine right now, which is a statement about the runner and not about the layer;
+                // recording it as a hard-coded-shape defect would send the reader hunting for an
+                // assumption that is not there. Rethrown so it surfaces as the resource failure it is.
+                throw;
+            }
             catch (System.Exception ex) when (IsDeliberateShapeRejection(ex))
             {
                 // A stated constraint. Correct behaviour, and the caller is told what is wrong.
@@ -424,8 +432,24 @@ public abstract class LayerTestBase
     }
 
     /// <summary>An exception that states a shape constraint, as opposed to one that leaks an assumption.</summary>
+    /// <remarks>
+    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
+    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
+    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
+    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
+    /// </remarks>
+    /// <summary>Environmental failure - the machine, not the layer.</summary>
+    private static bool IsResourceExhaustion(System.Exception ex)
+        => ex is System.OutOfMemoryException or System.InsufficientExecutionStackException
+            or System.OperationCanceledException;
+
     private static bool IsDeliberateShapeRejection(System.Exception ex)
-        => ex is System.ArgumentException
+        => ex is AiDotNet.Exceptions.TensorShapeMismatchException
+            or AiDotNet.Exceptions.TensorDimensionException
+            or AiDotNet.Exceptions.TensorRankException
+            or AiDotNet.Exceptions.InvalidInputDimensionException
+            or AiDotNet.Exceptions.VectorLengthMismatchException
+            or System.ArgumentException
             or System.InvalidOperationException
             or System.NotSupportedException
             or System.NotImplementedException
