@@ -46,6 +46,18 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8")]
+// A fully-connected layer maps the LAST axis and treats everything before it as independent positions.
+// It therefore genuinely accepts two forms — [Batch, Features] and [Batch, Time, Features] — which is the
+// case that makes multiple declarations necessary rather than convenient. Batch is optional in both.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Per-position projection: the leading axes are carried through untouched.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
 
