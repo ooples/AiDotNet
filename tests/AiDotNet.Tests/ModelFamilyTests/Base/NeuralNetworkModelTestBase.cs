@@ -3229,16 +3229,48 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int repeats = Math.Max(1, TargetDependenceRepeatCount);
         var accumulator = new double[start.Length];
 
+        // SELF-LIMITING, measured rather than declared per fixture. The first repeat is timed and the
+        // rest are only spent if they fit a wall-clock budget, so an expensive model reduces its own
+        // repeat count instead of waiting for someone to notice a red shard and add another override.
+        //
+        // This exists because the hand-capped approach demonstrably does not hold. RealESRGANVideo and
+        // SECBERT timed out because the generator capped TrainingIterations and MoreData* but never this
+        // probe; InternImage then timed out on the same probe because it is a HAND-WRITTEN fixture and
+        // inherits none of the generator caps. Every new multi-step invariant silently breaks every
+        // hand-capped heavy fixture, and each fix adds one more constant to maintain.
+        //
+        // REPEATS ARE THE RIGHT AXIS TO CUT, and this must not be swapped for steps. Repeats only
+        // average seed noise out of the update-direction cosine. The STEPS carry the signal: a single
+        // Adam step is sign(g), so two targets differing only in magnitude produce identical first steps
+        // and the probe would report a FALSE PASS. Cutting the axis that costs the same but proves less
+        // is the whole point.
+        var budget = System.Diagnostics.Stopwatch.StartNew();
+        int spent = 0;
+
         for (int r = 0; r < repeats; r++)
         {
+            if (r > 0 && budget.Elapsed.TotalSeconds >= TargetDependenceRepeatBudgetSeconds)
+            {
+                // NEVER SILENT. A reduced probe is reduced coverage and has to read as such; a green
+                // test that quietly averaged fewer runs than it claims is worse than a slow one.
+                Console.WriteLine(
+                    $"{GetType().Name}: target-dependence averaged {spent} of {repeats} repeats - "
+                    + $"{budget.Elapsed.TotalSeconds:F1}s against a "
+                    + $"{TargetDependenceRepeatBudgetSeconds:F0}s budget. Steps per repeat unchanged.");
+                break;
+            }
+
             var after = RunGradientStepFrom(probe, network, input, target);
             if (after.Length != start.Length) return new Vector<T>(0);
             for (int i = 0; i < start.Length; i++)
                 accumulator[i] += ConvertToDouble(after[i]) - ConvertToDouble(start[i]);
+            spent++;
         }
 
+        if (spent == 0) return new Vector<T>(0);
+
         var mean = new Vector<T>(start.Length);
-        for (int i = 0; i < start.Length; i++) mean[i] = NumOps.FromDouble(accumulator[i] / repeats);
+        for (int i = 0; i < start.Length; i++) mean[i] = NumOps.FromDouble(accumulator[i] / spent);
         return mean;
     }
 
@@ -3580,6 +3612,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </para>
     /// </remarks>
     protected virtual int TargetDependenceRepeatCount => 3;
+
+    /// <summary>
+    /// Wall-clock seconds the target-dependence probe may spend on REPEATS beyond the first.
+    /// </summary>
+    /// <remarks>
+    /// The durable answer to per-fixture iteration caps: the model reports its own price by running,
+    /// and the probe spends what fits. A cheap model gets every repeat; an expensive one averages fewer
+    /// and says so. Nothing to update when a model gets slower, and no constant to forget when a new
+    /// invariant is added.
+    /// </remarks>
+    protected virtual double TargetDependenceRepeatBudgetSeconds => 20.0;
 
     /// <summary>
     /// Trains <see cref="TargetDependenceStepCount"/> steps from a known parameter vector and returns the
