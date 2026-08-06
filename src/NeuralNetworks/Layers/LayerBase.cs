@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -3587,7 +3587,65 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// - Advanced optimization techniques that need access to all parameters
     /// </para>
     /// </remarks>
-    public abstract Vector<T> GetParameters();
+    /// <remarks>
+    /// <para>
+    /// Concrete, and folds over EXACTLY the three things <see cref="ParameterCount"/> sums:
+    /// <c>Parameters</c>, this layer's registered tensors from <c>GetTrainableParameters()</c>, and
+    /// each entry of <c>GetSubLayers()</c>. Because both members walk one source in one order, they
+    /// cannot describe different tensors — the disagreement is unrepresentable rather than merely
+    /// untested.
+    /// </para>
+    /// <para>
+    /// This was <c>abstract</c>, which is the root of the whole parameter-surface problem: it
+    /// FORCED all 710 layers to hand-write their own walk, while <c>ParameterCount</c> stayed
+    /// virtual with a registry-based default. Two independently written answers to one question,
+    /// per layer, 710 times — and every model-level mismatch in CI is some layer answering them
+    /// differently. PyTorch never had this exposure: <c>nn.Module.parameters()</c> is concrete and
+    /// no module implements it, so a count derived from it cannot drift.
+    /// </para>
+    /// <para>
+    /// Made virtual rather than sealed so the change is non-breaking: every existing override still
+    /// wins, and they can be deleted one at a time with the layer sweep as the gate. A layer that
+    /// genuinely aggregates differently — a GAN reading frozen modules, or weight tying that shares
+    /// one tensor across two slots — can still override, exactly as the note on
+    /// <see cref="ParameterCount"/> anticipates. The point is that doing nothing is now CORRECT,
+    /// where before doing nothing was impossible.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        var values = new List<T>();
+
+        for (int i = 0; i < Parameters.Length; i++)
+            values.Add(Parameters[i]);
+
+        var trainable = GetTrainableParameters();
+        if (trainable is not null)
+        {
+            for (int i = 0; i < trainable.Count; i++)
+            {
+                var t = trainable[i];
+                if (t is null) continue;
+                for (int j = 0; j < t.Length; j++)
+                    values.Add(t.GetFlat(j));
+            }
+        }
+
+        var subs = GetSubLayers();
+        if (subs is not null)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                var s = subs[i];
+                if (s is null) continue;
+                var sp = s.GetParameters();
+                for (int j = 0; j < sp.Length; j++)
+                    values.Add(sp[j]);
+            }
+        }
+
+        return new Vector<T>(values.ToArray());
+    }
 
     /// <summary>
     /// Sets the trainable parameters of the layer.
@@ -3614,6 +3672,23 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// - Setting specific parameter values for testing
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// The exact inverse of <see cref="GetParameters"/>, consuming the flat vector in the same
+    /// order that produces it: <c>Parameters</c>, then this layer's registered tensors, then each
+    /// sub-layer recursively. Get, set and <see cref="ParameterCount"/> therefore fold one
+    /// enumeration in one order, so a vector produced by the getter always restores exactly.
+    /// </para>
+    /// <para>
+    /// This previously assigned <c>Parameters = parameters</c> and nothing else, which was the
+    /// silent half of the same defect as the abstract getter. It length-checked against
+    /// <c>ParameterCount</c> — a count that includes registered tensors and every sub-layer — and
+    /// then dropped all of them on the floor, writing only the base slot. For a composite that is
+    /// a checkpoint restore which reports success and restores nothing, leaving the model on its
+    /// initial weights. It went unnoticed because every composite overrode this method to do the
+    /// distribution by hand; the default was only ever exercised by layers that had no children.
+    /// </para>
+    /// </remarks>
     public virtual void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length != ParameterCount)
@@ -3621,7 +3696,61 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
         }
 
-        Parameters = parameters;
+        var trainableForShape = GetTrainableParameters();
+        var subsForShape = GetSubLayers();
+        bool hasRegistry = (trainableForShape is not null && trainableForShape.Count > 0)
+                        || (subsForShape is not null && subsForShape.Count > 0);
+
+        // A layer with nothing registered keeps the ORIGINAL wholesale semantics: the entire vector
+        // goes into Parameters. Deferred layers depend on that. Conv1DLayer holds the incoming
+        // vector in Parameters until its input width arrives and then hands the whole thing to
+        // ApplyResolvedParameters; slicing it by the CURRENT Parameters.Length instead truncates it,
+        // because pre-resolution that length is a placeholder. That is a real failure, not a
+        // hypothetical: it cut a 144-value restore down to the 32-element placeholder and
+        // MusicSourceSeparator threw "Expected 144 parameters, but got 32" on its first forward.
+        if (!hasRegistry)
+        {
+            Parameters = parameters;
+            return;
+        }
+
+        int index = 0;
+
+        if (Parameters.Length > 0)
+        {
+            var own = new Vector<T>(Parameters.Length);
+            for (int i = 0; i < Parameters.Length; i++)
+                own[i] = parameters[index++];
+            Parameters = own;
+        }
+
+        var trainable = trainableForShape;
+        if (trainable is not null)
+        {
+            for (int i = 0; i < trainable.Count; i++)
+            {
+                var t = trainable[i];
+                if (t is null) continue;
+                for (int j = 0; j < t.Length; j++)
+                    t.SetFlat(j, parameters[index++]);
+            }
+        }
+
+        var subs = subsForShape;
+        if (subs is not null)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                var s = subs[i];
+                if (s is null) continue;
+                long take = s.ParameterCount;
+                if (take <= 0) continue;
+                var slice = new Vector<T>((int)take);
+                for (int j = 0; j < take; j++)
+                    slice[j] = parameters[index++];
+                s.SetParameters(slice);
+            }
+        }
     }
 
     /// <summary>
