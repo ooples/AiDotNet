@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
-public class RRDBLayer<T> : LayerBase<T>
+public partial class RRDBLayer<T> : LayerBase<T>
 {
     #region Fields
 

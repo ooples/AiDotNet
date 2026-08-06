@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = true)]
-public class SpectralNormalizationLayer<T> : LayerBase<T>
+public partial class SpectralNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The underlying layer whose weights will be normalized.

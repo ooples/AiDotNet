@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High,
     TestInputShape = "1, 8, 4", TestConstructorArgs = "8, 16, 2, 32, 16, 4")]
-public class VocosGeneratorLayer<T> : LayerBase<T>
+public partial class VocosGeneratorLayer<T> : LayerBase<T>
 {
     private readonly int _numMels;
     private readonly int _hiddenDim;

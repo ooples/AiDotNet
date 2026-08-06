@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -30,7 +30,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Uses Flash Attention implementation for O(N) memory
 /// </para>
 /// </remarks>
-public class Full3DAttention<T> : LayerBase<T>
+public partial class Full3DAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _numHeads;

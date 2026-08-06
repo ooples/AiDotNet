@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "2, 3, 8, 8",
     TestConstructorArgs = "3, 8, 8, 8, 1, 1, 2, 2, 0.5")]
-public class VideoGigaGANGeneratorLayer<T> : LayerBase<T>
+public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>
 {
     private readonly int _inputChannels;
     private readonly int _inputHeight;

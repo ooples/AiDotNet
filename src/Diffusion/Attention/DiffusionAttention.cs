@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -37,7 +37,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// ```
 /// </para>
 /// </remarks>
-public class DiffusionAttention<T> : LayerBase<T>
+public partial class DiffusionAttention<T> : LayerBase<T>
 {
     /// <summary>
     /// Number of channels.
@@ -349,7 +349,7 @@ public class DiffusionAttention<T> : LayerBase<T>
 /// This enables the model to generate images that match the text description.
 /// </para>
 /// </remarks>
-public class DiffusionCrossAttention<T> : LayerBase<T>
+public partial class DiffusionCrossAttention<T> : LayerBase<T>
 {
     /// <summary>
     /// Query dimension (spatial channels).

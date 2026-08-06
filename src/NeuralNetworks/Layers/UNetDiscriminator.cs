@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 2")]
-public class UNetDiscriminator<T> : LayerBase<T>
+public partial class UNetDiscriminator<T> : LayerBase<T>
 {
     #region Fields
 

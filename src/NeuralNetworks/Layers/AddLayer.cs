@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class AddLayer<T> : LayerBase<T>
+public partial class AddLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Stores the input tensors from the most recent forward pass for use in the backward pass.

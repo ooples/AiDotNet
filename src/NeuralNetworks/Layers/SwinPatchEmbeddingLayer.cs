@@ -26,7 +26,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
-public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
+public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 {
     private readonly int _patchSize;
     private readonly int _embedDim;

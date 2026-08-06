@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1")]
-public class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// The expansion factor for BasicBlock. BasicBlock does not expand channels.

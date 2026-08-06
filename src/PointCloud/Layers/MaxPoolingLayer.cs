@@ -28,7 +28,7 @@ namespace AiDotNet.PointCloud.Layers;
 ///
 /// This is a key component in PointNet for making the network invariant to point order.
 /// </remarks>
-public class MaxPoolingLayer<T> : LayerBase<T>
+public partial class MaxPoolingLayer<T> : LayerBase<T>
 {
     private readonly int _numFeatures;
     private int[]? _maxIndices; // Store indices of max values for backward pass

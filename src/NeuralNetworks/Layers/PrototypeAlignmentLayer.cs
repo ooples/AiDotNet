@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.Medium, TestInputShape = "2, 4", TestConstructorArgs = "4, 3")]
-public class PrototypeAlignmentLayer<T> : LayerBase<T>
+public partial class PrototypeAlignmentLayer<T> : LayerBase<T>
 {
     private readonly int _embedDim;
     private readonly int _numPrototypes;

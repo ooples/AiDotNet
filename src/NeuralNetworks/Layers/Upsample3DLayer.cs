@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2")]
-public class Upsample3DLayer<T> : LayerBase<T>
+public partial class Upsample3DLayer<T> : LayerBase<T>
 {
     #region Properties
 

@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 3")]
-public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly List<DenseBlockLayer<T>> _layers;
     private readonly int _numLayers;

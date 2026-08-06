@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
-public class MaskingLayer<T> : LayerBase<T>
+public partial class MaskingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The value to be masked out in the input tensor.

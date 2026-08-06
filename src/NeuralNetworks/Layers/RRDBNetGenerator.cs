@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
-public class RRDBNetGenerator<T> : LayerBase<T>
+public partial class RRDBNetGenerator<T> : LayerBase<T>
 {
     #region Fields
 

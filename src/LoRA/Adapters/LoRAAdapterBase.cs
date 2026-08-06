@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -33,7 +33,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// The result is parameter-efficient fine-tuning that works across different layer architectures!
 /// </para>
 /// </remarks>
-public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayerSerializationExtras<T>
+public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// The base layer being adapted.

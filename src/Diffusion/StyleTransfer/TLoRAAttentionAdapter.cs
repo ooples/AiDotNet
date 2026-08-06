@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -37,7 +37,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// learnable correction to what it produces. How much freedom that correction has depends on how
 /// noisy the current generation step is — that is the whole idea of T-LoRA.</para>
 /// </remarks>
-public sealed class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionBlockDecorator<T>
+public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionBlockDecorator<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 

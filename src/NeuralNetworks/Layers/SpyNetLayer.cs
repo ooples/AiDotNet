@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 128, 128", TestConstructorArgs = "2")]
-public class SpyNetLayer<T> : LayerBase<T>
+public partial class SpyNetLayer<T> : LayerBase<T>
 {
     #region Fields
 

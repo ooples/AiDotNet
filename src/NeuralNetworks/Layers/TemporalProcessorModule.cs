@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// whose features would actively pull the first frame towards black.
 /// </para>
 /// </remarks>
-public class TemporalProcessorModule<T> : LayerBase<T>
+public partial class TemporalProcessorModule<T> : LayerBase<T>
 {
     #region Fields
 

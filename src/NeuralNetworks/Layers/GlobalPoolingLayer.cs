@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4", TestConstructorArgs = "AiDotNet.Enums.PoolingType.Max")]
-public class GlobalPoolingLayer<T> : LayerBase<T>
+public partial class GlobalPoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The type of pooling operation to apply globally (Max or Average).

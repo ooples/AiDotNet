@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -17,7 +17,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 4 }, 4, 2")]
-public class ContinuumMemorySystemLayer<T> : LayerBase<T>
+public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>
 {
     private readonly DenseLayer<T>[] _mlpBlocks;
     private readonly int[] _updateFrequencies;

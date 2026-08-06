@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Initialization;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -67,7 +67,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 2, Cost = ComputeCost.Medium, TestInputShape = "1, 3", TestConstructorArgs = "3, 16, 8, 2")]
-public class OccupancyNetworkDecoder<T> : LayerBase<T>
+public partial class OccupancyNetworkDecoder<T> : LayerBase<T>
 {
     private readonly int _pointDim;
     private readonly int _hidden;

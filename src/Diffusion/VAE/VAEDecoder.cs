@@ -35,7 +35,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// The result is a high-resolution image reconstructed from the compressed latent.
 /// </para>
 /// </remarks>
-public class VAEDecoder<T> : LayerBase<T>
+public partial class VAEDecoder<T> : LayerBase<T>
 {
     /// <summary>
     /// Post-quant convolution to expand latent channels.
@@ -446,6 +446,13 @@ public class VAEDecoder<T> : LayerBase<T>
     /// <summary>
     /// Updates all learnable parameters using gradient descent.
     /// </summary>
+    // GetParameters / SetParameters are deliberately NOT overridden. LayerBase now implements both
+    // concretely, folding over the same registry ParameterCount sums -- Parameters, this layer's
+    // registered tensors, then each sub-layer -- in one order, so the count, the vector and the
+    // restore cannot describe different tensors. The hand-written versions here walked the child
+    // fields directly while ParameterCount walked the registry, which is why this layer reported 0
+    // against a 56,092-value vector and every model containing it inherited the mismatch.
+
     public override void UpdateParameters(T learningRate)
     {
         _postQuantConv.UpdateParameters(learningRate);
@@ -465,31 +472,6 @@ public class VAEDecoder<T> : LayerBase<T>
         _outputConv.UpdateParameters(learningRate);
     }
 
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        AddParameters(paramsList, _postQuantConv.GetParameters());
-        AddParameters(paramsList, _inputConv.GetParameters());
-
-        foreach (var block in _midBlocks)
-        {
-            AddParameters(paramsList, block.GetParameters());
-        }
-
-        foreach (var block in _upBlocks)
-        {
-            AddParameters(paramsList, block.GetParameters());
-        }
-
-        AddParameters(paramsList, _normOut.GetParameters());
-        AddParameters(paramsList, _outputConv.GetParameters());
-
-        return new Vector<T>(paramsList.ToArray());
-    }
 
     private static void AddParameters(List<T> list, Vector<T> parameters)
     {
@@ -499,40 +481,6 @@ public class VAEDecoder<T> : LayerBase<T>
         }
     }
 
-    /// <summary>
-    /// Sets all trainable parameters from a single vector. Throws
-    /// <see cref="ArgumentException"/> if <paramref name="parameters"/> does not
-    /// match the total parameter length — silently truncating or padding would
-    /// zero-fill some layer params or ignore tail values.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedLength = GetParameters().Length;
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException(
-                $"VAEDecoder parameter length mismatch: expected {expectedLength}, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int index = 0;
-
-        SetLayerParams(_postQuantConv, parameters, ref index);
-        SetLayerParams(_inputConv, parameters, ref index);
-
-        foreach (var block in _midBlocks)
-        {
-            SetLayerParams(block, parameters, ref index);
-        }
-
-        foreach (var block in _upBlocks)
-        {
-            SetLayerParams(block, parameters, ref index);
-        }
-
-        SetLayerParams(_normOut, parameters, ref index);
-        SetLayerParams(_outputConv, parameters, ref index);
-    }
 
     private static void SetLayerParams(ILayer<T> layer, Vector<T> parameters, ref int index)
     {

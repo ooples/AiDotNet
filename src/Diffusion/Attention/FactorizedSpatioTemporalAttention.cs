@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -28,7 +28,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - LayerNorm + residual connections around each attention block
 /// </para>
 /// </remarks>
-public class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
+public partial class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _numHeads;

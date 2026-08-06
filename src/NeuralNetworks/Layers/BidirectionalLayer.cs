@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.RecurrentLayer<double>(8, (AiDotNet.Interfaces.IActivationFunction<double>?)null), true, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class BidirectionalLayer<T> : LayerBase<T>
+public partial class BidirectionalLayer<T> : LayerBase<T>
 {
     private readonly LayerBase<T> _forwardLayer;
     private readonly LayerBase<T> _backwardLayer;

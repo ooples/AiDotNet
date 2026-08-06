@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Engines;
 
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 1, 0.25")]
-public class PReLULayer<T> : LayerBase<T>
+public partial class PReLULayer<T> : LayerBase<T>
 {
     private readonly int _numParameters;
     private readonly int _channelAxis;

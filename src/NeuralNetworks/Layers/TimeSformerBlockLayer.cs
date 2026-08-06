@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -18,7 +18,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = true, TestInputShape = "1, 17, 8", TestConstructorArgs = "8, 2, 32, 4")]
-public sealed class TimeSformerBlockLayer<T> : LayerBase<T>
+public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenSize;
     private readonly int _numHeads;

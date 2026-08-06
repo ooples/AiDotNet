@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// gradients for both heads automatically.
 /// </para>
 /// </remarks>
-public class DuelingCombinationLayer<T> : LayerBase<T>
+public partial class DuelingCombinationLayer<T> : LayerBase<T>
 {
     private readonly int _featureDim;
     private readonly int _actionSize;
