@@ -285,7 +285,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// The result is the original behavior plus the learned Kronecker-factored adaptation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 

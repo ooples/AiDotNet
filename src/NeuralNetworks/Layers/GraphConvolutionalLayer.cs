@@ -769,7 +769,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureDenseAdjacencyForInput(input);
 

@@ -101,7 +101,7 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
     public override long ParameterCount => (long)_channels * _multiplier * _kernelSize + (long)_channels * _multiplier;
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 3)
             throw new ArgumentException($"DepthwiseConv1DLayer requires rank-3 [B, C, T] input; got rank {input.Shape.Length}.", nameof(input));

@@ -80,7 +80,7 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
     /// </summary>
     internal int OutputSize => _outputSize;
 
-    public override Tensor<float> Forward(Tensor<float> input)
+    protected override Tensor<float> ForwardTraced(Tensor<float> input)
     {
         // Industry-standard dense layer rank handling — mirror DenseLayer<T>.Forward:
         // Apply the transformation along the LAST dimension and flatten every leading dim

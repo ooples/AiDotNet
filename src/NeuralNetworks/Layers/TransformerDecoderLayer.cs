@@ -756,7 +756,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// if someone tries to use it. The correct method to use is the one that accepts both inputs.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Decoder-only mode (GPT-style): use self-attention only, skip cross-attention
         // Per Vaswani et al. 2017, the decoder can operate without encoder output

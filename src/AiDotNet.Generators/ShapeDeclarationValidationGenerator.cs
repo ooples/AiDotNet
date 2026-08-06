@@ -70,6 +70,19 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor OverridesForwardDescriptor = new(
+        id: "ADNSHAPE004",
+        title: "Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing",
+        messageFormat: "'{0}' overrides Forward(Tensor<T>) instead of ForwardTraced. Forward is the "
+                       + "single point that records which tensor a layer consumed and produced, which is "
+                       + "how a model's dataflow is recovered without the model declaring it. Overriding "
+                       + "it bypasses that recording, so this layer becomes a HOLE in every traced graph "
+                       + "- silently, because the trace still succeeds and simply omits it. Rename the "
+                       + "override to 'protected override Tensor<T> ForwardTraced'.",
+        category: "AiDotNet.Shapes",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     private static readonly DiagnosticDescriptor ContractWithoutInputLayoutDescriptor = new(
         id: "ADNSHAPE003",
         title: "Type implements IShapeContract but declares no input layout",
@@ -119,6 +132,31 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                     ContractWithoutInputLayoutDescriptor, type.Locations.FirstOrDefault(), type.Name));
             }
 
+            // A layer that overrides Forward is invisible to tracing. Caught at BUILD time because the
+            // failure is otherwise silent: the trace succeeds and simply omits the layer, so the
+            // recovered graph is wrong in a way nothing downstream can detect.
+            //
+            // Scoped to LayerBase descendants, and that scoping is load-bearing rather than tidiness.
+            // Plenty of types declare a Forward(Tensor<T>) that overrides some OTHER base - TabNetClassifier
+            // and ~30 model classes among them - and they are not layers, are not traced, and reporting
+            // them would be 60 false errors telling people to rename methods that are already correct.
+            if (DerivesFromLayerBase(type))
+            {
+            foreach (var member in type.GetMembers("Forward").OfType<IMethodSymbol>())
+            {
+                if (!member.IsOverride) continue;
+                // The dictionary and params overloads are separate methods; only the single-tensor
+                // one is the traced entry point.
+                if (member.Parameters.Length != 1) continue;
+                if (member.Parameters[0].Type is not INamedTypeSymbol { Name: "Tensor" }) continue;
+
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    OverridesForwardDescriptor,
+                    member.Locations.FirstOrDefault() ?? type.Locations.FirstOrDefault(),
+                    type.Name));
+            }
+            }
+
             if (layouts.Count == 0) continue;
 
             foreach (var layout in layouts)
@@ -160,6 +198,17 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                 }
             }
         }
+    }
+
+    /// <summary>True when the type is a layer - the only thing graph tracing observes.</summary>
+    private static bool DerivesFromLayerBase(INamedTypeSymbol type)
+    {
+        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        {
+            if (b.Name == "LayerBase") return true;
+        }
+
+        return false;
     }
 
     private readonly struct Layout

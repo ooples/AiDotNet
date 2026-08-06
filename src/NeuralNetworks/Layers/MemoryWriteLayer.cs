@@ -793,7 +793,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - You want to simplify your code by not having to create empty memory yourself
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Promote rank-1 [features] to rank-2 [1, features] so the downstream
         // TensorMatMul (which requires rank >= 2) works for the standalone

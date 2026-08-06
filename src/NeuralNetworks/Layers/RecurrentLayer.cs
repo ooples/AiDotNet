@@ -334,7 +334,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// The layer saves all inputs, hidden states, and outputs for later use during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor path: resolve _inputSize and allocate weights on first call.
         EnsureInitializedFromInput(input);

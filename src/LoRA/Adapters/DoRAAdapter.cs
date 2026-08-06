@@ -343,7 +343,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
     /// DoRA's approach gives more stable training because we control magnitude separately.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Get base layer parameters and extract weights
         Vector<T> baseParams = _baseLayer.GetParameters();

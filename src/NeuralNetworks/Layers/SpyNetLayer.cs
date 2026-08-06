@@ -191,7 +191,7 @@ public partial class SpyNetLayer<T> : LayerBase<T>
     #region Forward Pass
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 

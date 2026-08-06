@@ -348,7 +348,7 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// The layer saves the input and output for later use during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _inputSize = -1; resolve from
         // input.Shape on first call, then materialize parameter tensors.

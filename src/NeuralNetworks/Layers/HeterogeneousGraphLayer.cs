@@ -353,7 +353,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (_adjacencyMatrices == null || _nodeTypeMap == null)
         {

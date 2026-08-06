@@ -200,7 +200,7 @@ public partial class ReshapeLayer<T> : LayerBase<T>
     /// the amount of water stays the same, but it takes the shape of the new container.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

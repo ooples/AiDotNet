@@ -206,7 +206,7 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Input contract: [B, S, D]. Reject non-paper ranks loudly —
         // CIF only makes sense over a time axis with hidden states.

@@ -163,7 +163,7 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         bool unbatched = input.Shape.Length == 2;
         if (!unbatched && input.Shape.Length != 3)

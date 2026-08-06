@@ -312,7 +312,7 @@ public partial class VAEEncoder<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input image tensor [batch, inputChannels, H, W].</param>
     /// <returns>Concatenated mean and log variance [batch, 2*latentChannels, H/f, W/f].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));

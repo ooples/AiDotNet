@@ -143,7 +143,7 @@ public partial class MeasurementLayer<T> : LayerBase<T>
     /// would be approximately [0.45, 0.55] after normalization.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
         int stateSize = input.Shape[^1];

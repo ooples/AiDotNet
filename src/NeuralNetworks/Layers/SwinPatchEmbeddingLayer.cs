@@ -164,7 +164,7 @@ public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor of shape [batch, channels, height, width].</param>
     /// <returns>Output tensor of shape [batch, numPatches, embedDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 

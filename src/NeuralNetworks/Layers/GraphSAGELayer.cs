@@ -214,7 +214,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (_adjacencyMatrix == null)
         {

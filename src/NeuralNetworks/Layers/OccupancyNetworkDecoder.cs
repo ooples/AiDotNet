@@ -197,7 +197,7 @@ public partial class OccupancyNetworkDecoder<T> : LayerBase<T>
     /// Forward pass: queried point(s) <c>[B, pointDim]</c> (or <c>[pointDim]</c>)
     /// → occupancy logit(s) <c>[B, 1]</c>.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Work in a consistent rank-2 [B, features] layout. A rank-1 [pointDim]
         // query is promoted to [1, pointDim] so the conditional affine (whose

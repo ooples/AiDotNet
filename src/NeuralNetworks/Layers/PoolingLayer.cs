@@ -323,7 +323,7 @@ public partial class PoolingLayer<T> : LayerBase<T>
     /// The method also saves the input for later use in backpropagation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy contract — flip IsShapeResolved on the first forward so
         // chain-walkers and tests see the resolved input/output shapes.

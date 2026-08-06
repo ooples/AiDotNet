@@ -304,7 +304,7 @@ public partial class ReconstructionLayer<T> : LayerBase<T>
     /// start with a rough sketch and gradually add more detail.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var x = _fc1.Forward(FlattenToFeatureMatrix(input));
         x = _fc2.Forward(x);

@@ -127,7 +127,7 @@ public partial class BranchformerBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         bool unbatched = input.Shape.Length == 2;
         if (unbatched)

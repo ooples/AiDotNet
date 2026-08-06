@@ -223,7 +223,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (_adjacencyMatrix == null)
         {

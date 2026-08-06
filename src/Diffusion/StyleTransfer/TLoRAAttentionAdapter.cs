@@ -104,7 +104,7 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
     /// <see cref="TimestepDependentLora{T}"/>), so wrapping a block does not change what the network
     /// computes until training moves A, B or S.
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return PostProcess(_inner.Forward(input));
     }

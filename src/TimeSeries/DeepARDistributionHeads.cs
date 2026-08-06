@@ -208,7 +208,7 @@ internal sealed class DeepARGaussianHead<T> : DeepARDistributionHead<T>
         (_scaleW, _scaleB) = AddProjection(1, random);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input) => Linear(_meanW, _meanB, input);
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => Linear(_meanW, _meanB, input);
 
     public override Tensor<T> ComputeBatchLoss(
         IReadOnlyList<Tensor<T>> hiddenSteps, IReadOnlyList<Tensor<T>> obsSteps, Tensor<T> target)
@@ -300,7 +300,7 @@ internal sealed class DeepARStudentTHead<T> : DeepARDistributionHead<T>
         _stdScale = NumOps.FromDouble(Math.Sqrt(_nu / (_nu - 2.0))); // std = σ·sqrt(ν/(ν−2))
     }
 
-    public override Tensor<T> Forward(Tensor<T> input) => Linear(_meanW, _meanB, input);
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => Linear(_meanW, _meanB, input);
 
     public override Tensor<T> ComputeBatchLoss(
         IReadOnlyList<Tensor<T>> hiddenSteps, IReadOnlyList<Tensor<T>> obsSteps, Tensor<T> target)
@@ -384,7 +384,7 @@ internal sealed class DeepARSplineHead<T> : DeepARDistributionHead<T>
         (_knotW, _knotB) = AddProjection(Grid.Length, random);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input) => Linear(_knotW, _knotB, input);
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => Linear(_knotW, _knotB, input);
 
     // Builds the K monotone knot quantiles for every step as [B, L] tensors (index k → q at Grid[k]).
     // q[0] = obs + raw[0];  q[k] = q[k-1] + softplus(raw[k]) for k>0  → strictly non-decreasing in k.

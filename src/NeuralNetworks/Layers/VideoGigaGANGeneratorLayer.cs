@@ -182,7 +182,7 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         bool unbatched = input.Rank == 4;
         if (!unbatched && input.Rank != 5)

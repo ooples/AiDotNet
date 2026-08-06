@@ -233,7 +233,7 @@ public partial class UpsamplingLayer<T> : LayerBase<T>
     /// but increases the spatial dimensions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

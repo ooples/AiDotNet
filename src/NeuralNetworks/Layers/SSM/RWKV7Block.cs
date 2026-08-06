@@ -670,7 +670,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input) => ForwardWithValueResidual(input, null).Output;
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => ForwardWithValueResidual(input, null).Output;
 
     /// <summary>
     /// Forward pass that also threads the RWKV-7 value residual, mirroring the reference's

@@ -250,7 +250,7 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>
     /// will reflect which specific "a" contexts are currently active based on past inputs.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         // Reshape CellStates from [ColumnCount, CellsPerColumn] to [ColumnCount * CellsPerColumn]

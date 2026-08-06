@@ -260,7 +260,7 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
     /// which adds noise. The gradients will learn to work despite this noise!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer (unchanged)
         Tensor<T> baseOutput = _baseLayer.Forward(input);

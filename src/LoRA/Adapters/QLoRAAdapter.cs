@@ -640,7 +640,7 @@ public class QLoRAAdapter<T> : LoRAAdapterBase<T>
     /// The decompression happens automatically - from the outside, it looks like a normal layer!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Dequantize weights if not cached
         if (_dequantizedWeights == null)

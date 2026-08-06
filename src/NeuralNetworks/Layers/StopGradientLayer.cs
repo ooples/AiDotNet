@@ -37,7 +37,7 @@ public partial class StopGradientLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input) => Engine.StopGradient(input);
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => Engine.StopGradient(input);
 
     /// <inheritdoc/>
     /// <remarks>The barrier passes its input through untouched, so its output shape is its input shape.</remarks>

@@ -198,7 +198,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // x̃ = x + ½·FFN(LN(x))
         var ffn1 = _ffn1Project.Forward(_ffn1Expand.Forward(_ffn1Norm.Forward(input)));

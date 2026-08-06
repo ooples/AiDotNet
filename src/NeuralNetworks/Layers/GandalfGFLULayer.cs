@@ -118,7 +118,7 @@ public partial class GandalfGFLULayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int features = input.Shape[input.Rank - 1];
         if (!_built || _numFeatures != features)

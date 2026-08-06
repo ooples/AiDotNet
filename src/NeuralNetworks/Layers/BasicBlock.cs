@@ -286,7 +286,7 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <returns>The output tensor after the residual connection.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor leaves _hasDownsample / _inChannels unresolved until
         // OnFirstForward observes input.Shape.

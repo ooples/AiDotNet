@@ -316,7 +316,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Check that either adjacency matrix or edge indices are set
         if (_adjacencyMatrix == null && !_useSparseAggregation)

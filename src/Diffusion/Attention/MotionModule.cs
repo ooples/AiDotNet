@@ -121,7 +121,7 @@ public partial class MotionModule<T> : LayerBase<T>
     /// <summary>
     /// Applies the motion module: temporal attention + FFN with residual connections.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
         _lastInput = ShouldCacheForBackward ? input : null;

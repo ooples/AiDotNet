@@ -294,7 +294,7 @@ public partial class UNetDiscriminator<T> : LayerBase<T>
     #region Forward Pass
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
@@ -543,7 +543,7 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
 
     public override bool SupportsTraining => true;
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
@@ -715,7 +715,7 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
 
     public override bool SupportsTraining => true;
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return Forward(input, null);
     }

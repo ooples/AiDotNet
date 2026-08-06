@@ -443,7 +443,7 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     /// Forward pass: takes input tensor, runs through LSTM + VAE projections.
     /// Output is [mean | logVar] concatenated (2 * latentDim).
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var vec = input.ToVector();
         var (mean, logVar) = Encode(vec);
@@ -689,7 +689,7 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return new Vector<T>(p.ToArray());
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastLatent = input;
         var (output, hidden) = DecodeWithCache(input);

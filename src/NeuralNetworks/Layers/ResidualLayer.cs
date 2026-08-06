@@ -457,7 +457,7 @@ public partial class ResidualLayer<T> : LayerBase<T>
     /// flow directly from the input to the output, making it easier to train deep networks.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // #1668: gate backward caches; forward uses the local innerOutput (chained).

@@ -175,7 +175,7 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>
         return rates;
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input));

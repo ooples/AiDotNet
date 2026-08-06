@@ -1060,7 +1060,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// that reflects that understanding.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Until the gate weights are actually allocated (_isInitialized), the real input
         // width is authoritative. A stale _inputSize — copied by Clone (or a parameter-load

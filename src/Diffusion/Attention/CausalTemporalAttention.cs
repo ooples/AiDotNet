@@ -112,7 +112,7 @@ public partial class CausalTemporalAttention<T> : LayerBase<T>
     /// <summary>
     /// Performs causal temporal attention where each frame attends only to past frames.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _hasForwardRun = true;
         return _causalAttention.Forward(input);

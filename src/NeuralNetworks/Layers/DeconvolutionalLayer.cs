@@ -536,7 +536,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// where each stamp design comes from your pattern generators (kernels).
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Shape-inference mode: resolve dims + return a placeholder, no kernel allocation.
         if (IsInferringShapes) return ShapeInferenceOutput(input);

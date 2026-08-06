@@ -515,7 +515,7 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// This is like the RBM saying "based on this input, here are the patterns I can see in it."
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor uses _visibleUnits = -1 sentinel until first forward.
         // OnFirstForward + EnsureInitialized run from the base's

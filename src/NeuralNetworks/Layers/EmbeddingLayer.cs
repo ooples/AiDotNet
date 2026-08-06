@@ -602,7 +602,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// network can process more effectively.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Materialize the embedding tensor before any lookup runs. Lazy by default
         // so unused embedding layers in test construction don't pay the multi-MB

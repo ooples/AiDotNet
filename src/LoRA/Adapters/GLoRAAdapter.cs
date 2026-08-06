@@ -179,7 +179,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - Transform how it represents things (activation adaptation)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);

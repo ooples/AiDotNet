@@ -405,7 +405,7 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
     /// </summary>
     /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
     /// <returns>The output tensor after the inverted residual computation.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor leaves all sub-layers null until OnFirstForward
         // resolves the input channel count and allocates them. Subsequent

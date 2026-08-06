@@ -332,7 +332,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
     /// All three are added together to produce the final output.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Check if restart is needed
         if (ShouldRestart())

@@ -535,7 +535,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     /// This selective focus helps the network learn more effectively.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

@@ -696,7 +696,7 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
         RegisterSubLayer(_bn);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         int numPoints = input.Shape[0];

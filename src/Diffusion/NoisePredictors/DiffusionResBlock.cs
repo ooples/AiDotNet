@@ -255,7 +255,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>
     /// <summary>
     /// Forward pass implementing the DDPM residual block.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
         // Only retain the per-layer backward-activation caches when an eager manual

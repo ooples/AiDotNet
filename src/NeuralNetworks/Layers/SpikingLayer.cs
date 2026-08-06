@@ -774,7 +774,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// real neurons convert inputs into action potentials.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;

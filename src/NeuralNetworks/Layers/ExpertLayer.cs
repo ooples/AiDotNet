@@ -212,7 +212,7 @@ public partial class ExpertLayer<T> : LayerBase<T>
     /// as the data flows through the expert.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-shape support: if construction-time inputShape contained
         // sentinel -1 dims, the chain-resolve in the ctor was skipped

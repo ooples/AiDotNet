@@ -525,7 +525,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// the properties of what they detect.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _inputChannels = -1; resolve from
         // input.Shape on first call. Eager-ctor instances are already

@@ -54,7 +54,7 @@ public sealed partial class InternImageBlockLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         bool unbatched = input.Rank == 3;
         var x = unbatched ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;

@@ -660,7 +660,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// rather than just picking the best label at each position independently.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _sequenceLength = -1; resolve
         // from input.Shape on first call. Eager-ctor instances are

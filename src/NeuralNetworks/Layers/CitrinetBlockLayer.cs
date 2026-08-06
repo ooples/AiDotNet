@@ -170,7 +170,7 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 3)
             throw new ArgumentException($"CitrinetBlockLayer requires rank-3 [B, C, T] input; got rank {input.Shape.Length}.", nameof(input));

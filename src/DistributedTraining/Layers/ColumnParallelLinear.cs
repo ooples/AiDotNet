@@ -82,7 +82,7 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>
         }
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // f: identity forward, all-reduce backward (sums this region's input-gradient contributions).
         var x = _f.Apply(input);

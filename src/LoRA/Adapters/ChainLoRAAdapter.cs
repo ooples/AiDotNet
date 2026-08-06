@@ -399,7 +399,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// to every prediction.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> result = _baseLayer.Forward(input);

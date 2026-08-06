@@ -628,7 +628,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// distribution for each feature.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 

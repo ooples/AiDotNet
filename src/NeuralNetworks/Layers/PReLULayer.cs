@@ -145,7 +145,7 @@ public partial class PReLULayer<T> : LayerBase<T>
     /// <summary>
     /// Performs the forward pass: <c>ReLU(x) - α · ReLU(-x)</c>, all ops on the gradient tape.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // #1668: also clear a previously-cached activation when caching is off (don't leave it pinned).

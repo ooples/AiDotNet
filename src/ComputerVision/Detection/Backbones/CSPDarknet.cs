@@ -359,7 +359,7 @@ internal partial class CSPBlock<T> : LayerBase<T>
         yield return _cv3;
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Hands the children to GetSubLayers() via the generated EnsureSubLayersRegistered().
         EnsureInitializedFromInput(input);
@@ -478,7 +478,7 @@ internal partial class CSPBottleneckBlock<T> : LayerBase<T>
 
     public override bool SupportsTraining => true;
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Hands _cv1/_cv2 to GetSubLayers() via the generated EnsureSubLayersRegistered().
         EnsureInitializedFromInput(input);

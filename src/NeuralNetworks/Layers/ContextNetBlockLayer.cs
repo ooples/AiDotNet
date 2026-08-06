@@ -149,7 +149,7 @@ internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSeri
         }
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 3)
         {

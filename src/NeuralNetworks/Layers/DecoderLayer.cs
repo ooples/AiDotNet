@@ -820,7 +820,7 @@ public partial class DecoderLayer<T> : LayerBase<T>
     /// for both decoder and encoder streams. Use the overload that accepts multiple tensors to supply
     /// a separate encoder output when available.</para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return Forward(input, input);
     }

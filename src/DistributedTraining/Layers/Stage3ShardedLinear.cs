@@ -70,7 +70,7 @@ public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>
         for (int o = 0; o < _outputSize; o++) _bias[o] = NumOps.Zero;
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Materialize the full weight just-in-time (AllGather), use it, then let it be collected.
         var fullWeight = _unshard.Apply(_weightShard);                          // [outputSize, inputSize] (transient)

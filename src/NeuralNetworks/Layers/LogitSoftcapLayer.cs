@@ -37,7 +37,7 @@ public partial class LogitSoftcapLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var output = new Tensor<T>(input._shape);
         var src = input.AsSpan();

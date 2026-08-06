@@ -556,7 +556,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// is the core of how neural networks transform data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // EnsureInitializedFromInput resolves lazy shapes via
         // OnFirstForward and then internally calls EnsureInitialized;

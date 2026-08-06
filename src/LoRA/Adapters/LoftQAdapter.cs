@@ -782,7 +782,7 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
     /// LoftQ's better LoRA parameters lead to better combined results.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Dequantize weights if not cached
         if (_dequantizedWeights == null)

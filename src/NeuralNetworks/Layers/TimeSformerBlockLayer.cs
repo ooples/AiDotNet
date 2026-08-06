@@ -138,7 +138,7 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>
         return Engine.TensorAdd(sequenceOut, ffn);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return Forward(input, _configuredFrames);
     }

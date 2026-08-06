@@ -203,7 +203,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
     /// This element-wise approach lets LoHa learn fine-grained adjustments to each weight independently.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 

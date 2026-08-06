@@ -482,7 +482,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// lower-level features into higher-level concepts.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support

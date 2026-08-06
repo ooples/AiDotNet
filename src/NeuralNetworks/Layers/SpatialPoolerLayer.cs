@@ -348,7 +348,7 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>
     /// and ignore noise or irrelevant details.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Flatten to 1D tensor if needed

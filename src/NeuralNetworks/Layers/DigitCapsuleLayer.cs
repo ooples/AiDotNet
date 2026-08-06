@@ -503,7 +503,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// then gradually giving more weight to experts who agree with the consensus for each outcome.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _inputCapsules =
         // _inputCapsuleDimension = -1; resolve from input.Shape on first

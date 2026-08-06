@@ -73,7 +73,7 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>
             span[i] = numOps.FromDouble(random.NextGaussian(0, stddev));
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Tape-tracked per-point linear map: [N, In] @ [In, Out] + bias -> activation.
         // The prior implementation copied into a Matrix<T>, ran the non-differentiable

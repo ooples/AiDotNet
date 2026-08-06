@@ -163,7 +163,7 @@ public partial class InteractingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input embeddings [batchSize, numFeatures, embeddingDim].</param>
     /// <returns>Feature interactions [batchSize, numFeatures, embeddingDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _inputCache = input;
 

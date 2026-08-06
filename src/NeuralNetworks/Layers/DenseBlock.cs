@@ -207,7 +207,7 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// </summary>
     /// <param name="input">The input tensor [B, C, H, W].</param>
     /// <returns>The output tensor with all layer outputs concatenated.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy gate — drives inner-layer shape resolution so any
         // Deserialize-buffered parameters get a chance to be replayed

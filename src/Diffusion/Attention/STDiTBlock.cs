@@ -150,7 +150,7 @@ public partial class STDiTBlock<T> : LayerBase<T>
     /// <summary>
     /// Applies the STDiT block: spatial attn -> temporal attn -> cross attn -> FFN.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // The residual-stream checkpoints below double as forward locals (each stage
         // feeds the next), so compute them into locals and only mirror them into the

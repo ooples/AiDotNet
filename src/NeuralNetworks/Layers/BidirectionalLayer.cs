@@ -291,7 +291,7 @@ public partial class BidirectionalLayer<T> : LayerBase<T>
     /// the backward layer sees "world Hello", and then the results are combined.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 

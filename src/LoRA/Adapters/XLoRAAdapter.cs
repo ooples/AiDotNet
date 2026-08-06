@@ -249,7 +249,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - All weights sum to 1.0 (thanks to softmax in gating network)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 

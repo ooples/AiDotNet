@@ -497,7 +497,7 @@ public partial class ConcatenateLayer<T> : LayerBase<T>
     /// Instead, you should use the other Forward method that accepts multiple inputs (params Tensor&lt;T&gt;[] inputs).
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         throw new NotSupportedException("ConcatenateLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
     }

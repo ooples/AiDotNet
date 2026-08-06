@@ -141,7 +141,7 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     /// doesn't get updated during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward pass is identical to standard LoRA
         // Frozen matrix A still participates in computation

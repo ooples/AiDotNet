@@ -335,7 +335,7 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLay
     /// The magic: Different tasks produce different outputs even though they share the same base layer!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);

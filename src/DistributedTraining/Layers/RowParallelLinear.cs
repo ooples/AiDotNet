@@ -77,7 +77,7 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>
         }
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var weightT = Engine.TensorTranspose(_weightShard);                  // [localIn, outputSize]
         var partial = Engine.TensorMatMul(input, weightT);                   // [batch, outputSize] (partial)
