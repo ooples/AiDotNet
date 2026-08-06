@@ -931,7 +931,7 @@ internal class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
     /// one timestep on <paramref name="input"/> <c>[inputSize, B]</c> and returns the hidden
     /// state <c>[H, B]</c>.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int batch = input.Shape.Length > 1 ? input.Shape[1] : 1;
         var h0 = new Tensor<T>(new[] { _hiddenSize, batch });

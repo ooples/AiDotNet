@@ -239,7 +239,7 @@ public partial class RRDBLayer<T> : LayerBase<T>
     /// Forward pass: input -> RDB1 -> RDB2 -> RDB3 -> scale + input (global residual)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 

@@ -55,7 +55,7 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>
         Parameters = Vector<T>.Empty(); // No trainable parameters
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _numPoints = input.Shape[0];
 

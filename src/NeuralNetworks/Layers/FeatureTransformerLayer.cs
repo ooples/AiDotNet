@@ -255,7 +255,7 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The input tensor of shape [batch_size, input_dim].</param>
     /// <returns>The transformed output tensor of shape [batch_size, output_dim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _inputCache = input;
         _intermediateOutputs.Clear();

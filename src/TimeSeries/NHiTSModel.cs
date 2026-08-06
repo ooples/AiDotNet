@@ -1036,7 +1036,7 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private Tensor<T>? _lastForwardInput;
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastForwardInput = input;
         return ForwardInternal(input);

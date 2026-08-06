@@ -76,7 +76,7 @@ public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor [batchSize, inputDim].</param>
     /// <returns>Gated output [batchSize, outputDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _inputCache = input;

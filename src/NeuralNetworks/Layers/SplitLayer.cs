@@ -215,7 +215,7 @@ public partial class SplitLayer<T> : LayerBase<T>
     /// an output with shape [10, 5, 20], where 20 is the size of each split.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support

@@ -356,7 +356,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// The key difference from standard LoRA: A and B are shared and frozen, only d and b are trained!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 

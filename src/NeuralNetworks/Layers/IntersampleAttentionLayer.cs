@@ -109,7 +109,7 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor [batchSize, numFeatures, embeddingDim].</param>
     /// <returns>Output with intersample attention applied [batchSize, numFeatures, embeddingDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Registers the four projections with GetSubLayers() via the generated
         // EnsureSubLayersRegistered(); they otherwise stay invisible to every structural walker.

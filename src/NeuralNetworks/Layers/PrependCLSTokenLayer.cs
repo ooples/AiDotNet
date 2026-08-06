@@ -83,7 +83,7 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (input.Shape.Length != 3)

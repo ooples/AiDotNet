@@ -619,7 +619,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// or types of questions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Materialize lazy-init weights before any Q/K/V projection runs — same
         // contract DenseLayer gives for lazy layers.

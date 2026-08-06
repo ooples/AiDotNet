@@ -285,7 +285,7 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>
     /// The method processes the input channel by channel, sliding the pooling window across
     /// the height and width dimensions.
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 

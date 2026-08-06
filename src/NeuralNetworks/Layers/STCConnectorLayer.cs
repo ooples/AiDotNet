@@ -152,7 +152,7 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int rank = input.Rank;
         bool hadExplicitBatch;
@@ -444,7 +444,7 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
 
         public override bool SupportsTraining => true;
 
-        public override Tensor<T> Forward(Tensor<T> input)
+        protected override Tensor<T> ForwardTraced(Tensor<T> input)
         {
             if (input.Rank != 4 || input.Shape[1] != _inputChannels)
             {

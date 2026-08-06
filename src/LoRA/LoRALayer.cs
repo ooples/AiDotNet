@@ -243,7 +243,7 @@ public partial class LoRALayer<T> : LayerBase<T>
     /// The result represents the adaptation that gets added to the base layer's output.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 

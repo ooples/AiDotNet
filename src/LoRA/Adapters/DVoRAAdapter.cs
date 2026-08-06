@@ -509,7 +509,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// Result: Stability of DoRA + efficiency of VeRA = best of both worlds!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 

@@ -248,7 +248,7 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// singular values. This makes computation faster and more focused.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);

@@ -90,7 +90,7 @@ public partial class PrototypeAlignmentLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Built entirely out of Engine ops so the gradient tape records the
         // cosine-similarity → softmax → aggregate chain. The old per-element

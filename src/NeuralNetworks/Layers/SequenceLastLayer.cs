@@ -66,7 +66,7 @@ public partial class SequenceLastLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor of shape [seqLen, features] or [seqLen, batch, features].</param>
     /// <returns>Output tensor of shape [features] or [batch, features].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalShape = input._shape;
         int rank = input.Shape.Length;

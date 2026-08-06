@@ -195,7 +195,7 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // The NER stack passes unbatched [S, D] token representations, so accept rank 2 by
         // promoting to a single-element batch and squeezing the batch axis back off the result.

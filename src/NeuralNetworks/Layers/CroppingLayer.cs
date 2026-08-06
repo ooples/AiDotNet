@@ -405,7 +405,7 @@ public partial class CroppingLayer<T> : LayerBase<T>
     /// Think of it like cutting out the center of a photo and discarding the edges.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Support any rank >= 3: NHWC format where last 3 dims are [H, W, C]

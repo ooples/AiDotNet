@@ -1021,7 +1021,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// like characters, plot, and setting all at once. Each "head" is like focusing on one of these aspects.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return ForwardInternal(input, input, input);
     }

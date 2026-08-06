@@ -454,7 +454,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// but each layer only has one trainable parameter (layerScaling) to control the strength!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 

@@ -262,7 +262,7 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>
     /// </remarks>
     protected override bool IsShapePreserving => true;
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Handle 1D input by treating it as [1, embed] (single position with embedding)
         bool was1D = input.Shape.Length == 1;

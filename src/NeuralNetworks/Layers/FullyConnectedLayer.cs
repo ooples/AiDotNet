@@ -475,7 +475,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// used as the final network output.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Auto-reshape 1D input to [1, N] for matmul compatibility

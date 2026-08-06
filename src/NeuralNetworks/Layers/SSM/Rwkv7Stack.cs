@@ -90,7 +90,7 @@ public partial class Rwkv7Stack<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var current = input;
         // null marks "you are the first layer"; the first block answers with its own value

@@ -1141,7 +1141,7 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
         return new Vector<T>(p.ToArray());
     }
 
-    public override Tensor<T> Forward(Tensor<T> input) => throw new NotSupportedException(
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 
     public AutoformerEncoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
@@ -1322,7 +1322,7 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
         return new Vector<T>(p.ToArray());
     }
 
-    public override Tensor<T> Forward(Tensor<T> input) => throw new NotSupportedException(
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 
     public AutoformerDecoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,

@@ -312,7 +312,7 @@ public partial class AddLayer<T> : LayerBase<T>
     /// try to add just one tensor.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         throw new NotSupportedException("AddLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
     }

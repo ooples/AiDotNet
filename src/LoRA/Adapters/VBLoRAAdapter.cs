@@ -500,7 +500,7 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
     /// but the memory footprint is much smaller when many adapters share banks.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Sync LoRA layer with current bank state before forward pass
         UpdateLoRALayerFromBanks(_loraLayer);

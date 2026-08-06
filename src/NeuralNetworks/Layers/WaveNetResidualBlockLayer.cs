@@ -105,7 +105,7 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Registers the inner convs with GetSubLayers() via the generated
         // EnsureSubLayersRegistered(). Without it they self-initialize on their own first Forward,

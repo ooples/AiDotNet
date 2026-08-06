@@ -660,7 +660,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// 4. Applies activation function
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         if (_spiralIndices == null)

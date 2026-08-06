@@ -122,7 +122,7 @@ public partial class MLPMixerBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Temporal mixing: norm → transpose → MLP across patches → transpose → residual.
         var normed1 = _norm1.Forward(input);

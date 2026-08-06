@@ -160,7 +160,7 @@ public partial class InputLayer<T> : LayerBase<T>
     /// as its purpose is just to feed data into the network.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return input;
     }

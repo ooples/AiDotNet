@@ -242,7 +242,7 @@ public partial class AnomalyDetectorLayer<T> : LayerBase<T>
     /// The output is a tensor with just one value: the anomaly score between 0 and 1.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInputShape = input._shape;
         int rank = input.Shape.Length;

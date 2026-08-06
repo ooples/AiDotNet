@@ -178,7 +178,7 @@ public partial class QuantumLayer<T> : LayerBase<T>
     /// The layer saves the input for later use during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;

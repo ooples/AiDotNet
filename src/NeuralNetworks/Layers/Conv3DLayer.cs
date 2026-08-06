@@ -522,7 +522,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// 4. Apply activation function
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         bool cacheBwd = ShouldCacheForBackward; // #1668: gate all backward caches (arena safety)

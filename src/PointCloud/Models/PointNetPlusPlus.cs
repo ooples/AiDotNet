@@ -1201,7 +1201,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
         return metadata;
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != _inputChannels)
         {

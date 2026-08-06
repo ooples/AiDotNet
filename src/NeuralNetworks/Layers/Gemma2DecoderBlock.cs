@@ -81,7 +81,7 @@ public partial class Gemma2DecoderBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Attention sub-block: x = x + postAttnNorm(Attn(inputNorm(x))).
         var normed = _normInput.Forward(input);

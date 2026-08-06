@@ -532,7 +532,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// [batch, numVertices, OutputChannels].
     /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when eigenbasis/laplacian is not set.</exception>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         if (_eigenvalues == null && _laplacian == null)

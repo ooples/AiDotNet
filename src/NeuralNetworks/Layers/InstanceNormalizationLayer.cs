@@ -164,7 +164,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
     /// - 5D [batch, channels, D, H, W] - normalizes over all spatial dimensions
     /// - ND - generalizes to any number of dimensions
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;

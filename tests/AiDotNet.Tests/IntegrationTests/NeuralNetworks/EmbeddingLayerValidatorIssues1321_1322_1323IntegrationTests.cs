@@ -590,7 +590,7 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         // this layer would fail #1321's outer-input-size validation.
         public override LayerCategory GetLayerCategory() => LayerCategory.Other;
 
-        public override Tensor<float> Forward(Tensor<float> input)
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
             => new Tensor<float>([_vocabSize]);
 
         public override void UpdateParameters(float learningRate) { }
@@ -707,7 +707,7 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
 
         public override LayerCategory GetLayerCategory() => LayerCategory.Embedding;
 
-        public override Tensor<float> Forward(Tensor<float> input)
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {
             // Stub forward: return zeros of the per-token embedding shape
             // for any-rank input. Test cares about validator passthrough,

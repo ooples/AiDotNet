@@ -146,7 +146,7 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>
     /// <param name="input">Packed integer tensor of shape <c>[sequenceLength, 1 + maxWordLength]</c>:
     /// column 0 is the word index, columns 1.. are the word's character indices (zero-padded).</param>
     /// <returns>Per-token representation of shape <c>[sequenceLength, wordEmbeddingDim + charHiddenDim]</c>.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2)
             throw new ArgumentException(

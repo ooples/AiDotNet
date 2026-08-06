@@ -84,7 +84,7 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>
     /// <param name="input">Input tensor of shape [batch, seqLen, dim] where seqLen = H*W.</param>
     /// <returns>Output tensor of shape [batch, seqLen/4, dim*2].</returns>
     /// <exception cref="InvalidOperationException">Thrown if spatial dimensions are not even.</exception>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int batch = input.Shape[0];
         int seqLen = input.Shape[1];

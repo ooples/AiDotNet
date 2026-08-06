@@ -66,7 +66,7 @@ public partial class GatedFusionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int lastAxis = input.Shape.Length - 1;
         if (input.Shape[lastAxis] != 2 * _width)

@@ -221,7 +221,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Forward pass for self-attention (not typically used for cross-attention).
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // For single input, use it as both query and context (self-attention fallback)
         return ForwardCrossAttention(input, input);

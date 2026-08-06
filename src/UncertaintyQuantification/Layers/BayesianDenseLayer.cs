@@ -291,7 +291,7 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     /// <summary>
     /// Performs the forward pass using sampled weights.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (input.Rank == 0)

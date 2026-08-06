@@ -45,7 +45,7 @@ public partial class ConstantScaleLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input) =>
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) =>
         Engine.TensorBroadcastMultiply(input, _scaleTensor);
 
     /// <inheritdoc/>

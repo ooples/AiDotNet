@@ -247,7 +247,7 @@ public partial class MultiplyLayer<T> : LayerBase<T>
     /// Always use Forward(params Tensor<T>[] inputs) instead of Forward(input) with this layer.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         throw new NotSupportedException("MultiplyLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
     }

@@ -92,7 +92,7 @@ public partial class MCDropoutLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <returns>The output tensor with dropout applied if in training or MC mode.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput.Value = input;
 

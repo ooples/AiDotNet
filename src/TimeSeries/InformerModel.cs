@@ -1141,7 +1141,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             for (int i = 0; i < t.Length; i++) p.Add(t[i]);
         return new Vector<T>(p.ToArray());
     }
-    public override Tensor<T> Forward(Tensor<T> input) => throw new NotSupportedException(
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
     public InformerEncoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
@@ -1296,7 +1296,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         for (int i = 0; i < _convBias.Length; i++) p.Add(_convBias[i]);
         return new Vector<T>(p.ToArray());
     }
-    public override Tensor<T> Forward(Tensor<T> input) => throw new NotSupportedException(
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
     public DistillingConvTensor(int embeddingDim, int inputSeqLen, int distillingFactor, int seed = 42)
@@ -1437,7 +1437,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             for (int i = 0; i < t.Length; i++) p.Add(t[i]);
         return new Vector<T>(p.ToArray());
     }
-    public override Tensor<T> Forward(Tensor<T> input) => throw new NotSupportedException(
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
     public InformerDecoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)

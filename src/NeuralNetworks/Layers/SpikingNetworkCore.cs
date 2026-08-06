@@ -160,7 +160,7 @@ public partial class SpikingNetworkCore<T> : LayerBase<T>
     /// Forward pass: input current(s) <c>[B, inputSize]</c> (or <c>[inputSize]</c>)
     /// → time-averaged readout membrane <c>[B, outputSize]</c>.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var x = input.Rank == 1 ? Engine.Reshape(input, [1, input.Length]) : input;
         int batch = x.Shape[0];

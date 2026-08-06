@@ -298,7 +298,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
     #region Forward Pass
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor leaves _inputChannels = -1; resolve from input.Shape
         // and allocate weights on the first Forward.

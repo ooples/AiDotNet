@@ -253,7 +253,7 @@ public partial class GaussianNoiseLayer<T> : LayerBase<T>
     /// They make training more difficult but don't affect the final predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

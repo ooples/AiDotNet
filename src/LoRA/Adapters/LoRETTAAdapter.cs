@@ -325,7 +325,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// even though it looks complex mathematically.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store intermediates for backward pass
         _forwardIntermediates = new List<Tensor<T>>();

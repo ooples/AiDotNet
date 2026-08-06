@@ -262,7 +262,7 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
     /// that works great with full attention at inference!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // If not using shifted attention or not in training mode, use standard LoRA forward
         if (!_useShiftedAttention || !_isTraining)

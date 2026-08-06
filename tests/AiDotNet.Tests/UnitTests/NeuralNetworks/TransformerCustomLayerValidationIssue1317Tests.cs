@@ -50,7 +50,7 @@ public class TransformerCustomLayerValidationIssue1317Tests
     {
         public override bool SupportsTraining => false;
 
-        public override Tensor<float> Forward(Tensor<float> input)
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {
             return input;
         }

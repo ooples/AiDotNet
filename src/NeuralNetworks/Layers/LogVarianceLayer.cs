@@ -239,7 +239,7 @@ public partial class LogVarianceLayer<T> : LayerBase<T>
     /// A small value (epsilon) is added to prevent errors when taking the logarithm of zero or very small numbers.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

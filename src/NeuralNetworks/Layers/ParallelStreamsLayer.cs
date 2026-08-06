@@ -189,7 +189,7 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>
     /// backpropagation will correctly compute gradients for both streams.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));

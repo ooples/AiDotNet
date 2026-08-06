@@ -291,7 +291,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     /// The convolution aggregates features from each edge and its neighbors.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2 || input.Shape[1] != InputChannels)
         {

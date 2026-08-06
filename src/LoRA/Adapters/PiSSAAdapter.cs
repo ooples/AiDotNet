@@ -357,7 +357,7 @@ public class PiSSAAdapter<T> : LoRAAdapterBase<T>
     /// - Uses base layer output + LoRA correction
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!_initializedFromSVD || _residualWeights == null)
         {

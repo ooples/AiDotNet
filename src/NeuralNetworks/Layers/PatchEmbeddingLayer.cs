@@ -439,7 +439,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// ready to be processed by transformer encoder blocks.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 

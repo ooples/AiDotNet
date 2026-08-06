@@ -360,7 +360,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// The result is the original behavior plus the ultra-compressed adaptation!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Cache input for backward pass
         _lastInput = input.Clone();

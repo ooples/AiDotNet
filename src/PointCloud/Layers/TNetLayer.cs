@@ -133,7 +133,7 @@ public partial class TNetLayer<T> : LayerBase<T>
     // breaks training. The generator registers lazily, never from a constructor.
 
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = input;

@@ -222,7 +222,7 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// </summary>
     /// <param name="input">The input tensor [B, C, H, W] or [C, H, W].</param>
     /// <returns>The output tensor with reduced channels and spatial dimensions.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor leaves _conv null until OnFirstForward observes the
         // input channel count and allocates it from compressionFactor.

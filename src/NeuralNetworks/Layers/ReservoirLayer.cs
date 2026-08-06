@@ -262,7 +262,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     /// The reservoir state is both the output of this layer and serves as memory for processing the next input.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length < 1)
             throw new ArgumentException("Input must have at least one dimension.", nameof(input));

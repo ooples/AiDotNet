@@ -197,7 +197,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
     /// transformation goes through a registered sublayer's Forward, so the gradient tape records
     /// the residual additions and sublayer outputs (no custom Backward is needed).
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Sublayer 1: self-attention with a PRE-norm residual — afterAttn = x + Attn(Norm(x)).
         // Pre-LN (Xiong et al. 2020) keeps the residual path un-normalized so gradients flow

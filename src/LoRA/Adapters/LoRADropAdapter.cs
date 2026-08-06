@@ -256,7 +256,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
     /// which is important for stable training and accurate predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);

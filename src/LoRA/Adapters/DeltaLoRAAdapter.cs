@@ -229,7 +229,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// applies the accumulated changes with scaling, allowing for more controlled adaptation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store input for backward pass
         _lastInput = input.Clone();

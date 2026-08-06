@@ -380,7 +380,7 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>
     /// preserving the most important information about each feature.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

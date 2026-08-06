@@ -102,7 +102,7 @@ public partial class TemporalSelfAttention<T> : LayerBase<T>
     /// Spatial positions are folded into the batch dimension so each position independently
     /// attends across the temporal (frames) axis.</param>
     /// <returns>Output tensor with temporal information mixed, same shape as input.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
         _lastInput = ShouldCacheForBackward ? input : null;

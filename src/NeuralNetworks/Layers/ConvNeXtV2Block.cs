@@ -101,7 +101,7 @@ public partial class ConvNeXtV2Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 3)
             throw new ArgumentException($"ConvNeXtV2Block expects rank-3 [B, S, C], got rank {input.Shape.Length}.", nameof(input));

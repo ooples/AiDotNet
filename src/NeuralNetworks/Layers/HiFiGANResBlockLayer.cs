@@ -133,7 +133,7 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // The block's own weights live in the inner convs, which self-initialize on their first
         // Forward, so skipping this looked harmless and the outputs were always correct. What it

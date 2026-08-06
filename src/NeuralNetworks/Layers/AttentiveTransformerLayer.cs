@@ -175,7 +175,7 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>
     /// This method is for ILayer interface compatibility. For actual TabNet usage,
     /// use the overload that accepts both processedFeatures and priorScales.
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Create uniform prior scales (all ones)
         var priorScales = Tensor<T>.CreateDefault([input.Shape[0], _outputDim], NumOps.One);

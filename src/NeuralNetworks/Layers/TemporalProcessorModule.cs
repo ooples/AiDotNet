@@ -169,7 +169,7 @@ public partial class TemporalProcessorModule<T> : LayerBase<T>
     /// Single-input form: no temporal context, so this is the first-frame path and returns the input
     /// unchanged. The two-argument overload is the one the decoder uses.
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input) => Forward(input, null);
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => Forward(input, null);
 
     /// <summary>
     /// Resolves the lazily sized sub-layers once the channel width at this decoder level is known.

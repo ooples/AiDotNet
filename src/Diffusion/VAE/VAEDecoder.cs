@@ -334,7 +334,7 @@ public partial class VAEDecoder<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Latent tensor [batch, latentChannels, H, W].</param>
     /// <returns>Decoded image [batch, outputChannels, H*f, W*f] where f is upsample factor.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));

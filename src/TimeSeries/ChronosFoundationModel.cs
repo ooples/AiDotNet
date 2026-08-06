@@ -1168,7 +1168,7 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         _cachedFfnHidden = null;
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Single-tensor interface: treat as single-position sequence
         var seqInput = new List<Tensor<T>> { input };

@@ -194,7 +194,7 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>
     /// The layer saves all intermediate values for later use during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support

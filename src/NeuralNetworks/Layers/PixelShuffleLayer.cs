@@ -260,7 +260,7 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>
     /// restores the original shape structure.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _originalInputShape = input._shape;

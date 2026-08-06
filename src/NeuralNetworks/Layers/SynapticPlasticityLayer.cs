@@ -597,7 +597,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
     ///   but their connections change strength afterward)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Flatten to 1D tensor if needed
         var inputFlat = input.Shape.Length == 1

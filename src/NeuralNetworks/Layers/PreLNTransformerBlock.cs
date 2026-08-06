@@ -187,7 +187,7 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     /// Forward pass. Routes every shape op through <see cref="LayerBase{T}.Engine"/>
     /// so the gradient tape records the residual additions and sublayer outputs.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Resolve the sequence-preserving block contract from the real tensor when a
         // static chain walk could only provide the feature width. Composite layers

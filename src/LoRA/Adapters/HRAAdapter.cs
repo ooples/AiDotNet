@@ -300,7 +300,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// - Sparse full-rank: The specialists (handle critical details precisely)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Cache input for computing sparse gradients in backward pass
         _cachedInput = input;

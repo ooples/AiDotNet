@@ -339,7 +339,7 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>
     /// A single-channel grid of per-patch scores — probabilities when <c>applySigmoid</c> is true,
     /// logits otherwise. Callers average the grid, which is the paper's "averaging all responses".
     /// </returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (!IsShapeResolved) OnFirstForward(input);

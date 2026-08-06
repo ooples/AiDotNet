@@ -323,7 +323,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// This is much faster than doing it manually for each sample.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 

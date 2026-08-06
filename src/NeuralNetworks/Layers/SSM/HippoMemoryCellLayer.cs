@@ -331,7 +331,7 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank < 2)
             throw new ArgumentException("HiPPO memory input must have a sequence and feature dimension.", nameof(input));

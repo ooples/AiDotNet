@@ -202,7 +202,7 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor of shape [batch, seqLen, dim].</param>
     /// <returns>Output tensor of shape [batch, seqLen, dim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // input: [batch, seq_len, dim]
         int batch = input.Shape[0];

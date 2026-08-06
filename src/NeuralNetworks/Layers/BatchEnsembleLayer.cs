@@ -205,7 +205,7 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
     /// rows belonging to the same input sample.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int batchSize = input.Shape[0];
         int expandedBatchSize = batchSize * _numMembers;

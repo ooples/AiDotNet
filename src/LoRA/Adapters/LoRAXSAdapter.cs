@@ -430,7 +430,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// The adjustment is constrained to the most important pretrained patterns!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!_initializedFromSVD)
         {

@@ -796,7 +796,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// The result shows which patterns were detected in the input data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support

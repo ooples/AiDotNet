@@ -134,7 +134,7 @@ public partial class KairosMultiSizePatchLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Support [contextLength], [B, contextLength], and [B, lookback, channels]
         // inputs.

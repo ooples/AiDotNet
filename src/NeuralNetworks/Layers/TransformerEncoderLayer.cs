@@ -685,7 +685,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// that capture both the content of each element and its relationships to other elements.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor path: resolve _embeddingSize from input.Shape[^1] and construct
         // the inner attention / FFN / norm sublayers on first call.

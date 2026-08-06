@@ -288,7 +288,7 @@ public partial class DropoutLayer<T> : LayerBase<T>
     /// forcing the network to be resilient and not depend too much on any single neuron.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 

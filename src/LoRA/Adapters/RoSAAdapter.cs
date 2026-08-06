@@ -420,7 +420,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// common patterns efficiently, while sparse handles outliers.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // 1. Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);

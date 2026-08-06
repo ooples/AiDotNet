@@ -700,7 +700,7 @@ public partial class GRULayer<T> : LayerBase<T>
     /// - If false: Returns only the final memory state
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Resolve _inputSize from input.Shape[^1] and allocate weights on first call.
         // Idempotent — gated by _isInitialized.
