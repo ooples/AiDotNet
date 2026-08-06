@@ -3441,6 +3441,79 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
         }
     }
+    /// <summary>One-shot latch so the traced chain validation runs on the FIRST forward only.</summary>
+    private bool _chainValidatedFromTrace;
+
+    /// <summary>Runs the forward under a trace and validates the dataflow it reveals.</summary>
+    /// <remarks>
+    /// Wrapped so a diagnostic can never change what Predict returns or throws: the forward runs first,
+    /// its result is what the caller gets, and validation happens afterwards inside its own try.
+    /// </remarks>
+    private Tensor<T> PredictAndValidateChain(Tensor<T> input)
+    {
+        Tensor<T> output;
+        Graph.LayerForwardObserver<T>? trace = null;
+        try
+        {
+            trace = new Graph.LayerForwardObserver<T>();
+        }
+        catch
+        {
+            // Never let the diagnostic stand between a caller and their prediction.
+        }
+
+        try
+        {
+            output = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
+        }
+        finally
+        {
+            trace?.Dispose();
+        }
+
+        if (trace is not null)
+        {
+            try
+            {
+                ReportTracedChainMismatches(trace);
+            }
+            catch
+            {
+                // Diagnostic only.
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>Validates the runs the trace revealed, rather than the ones a list implies.</summary>
+    private void ReportTracedChainMismatches(Graph.LayerForwardObserver<T> trace)
+    {
+        var mismatches = new List<LayerContractValidator.LayoutMismatch>();
+        foreach (var run in trace.ContiguousRuns())
+        {
+            mismatches.AddRange(LayerContractValidator.Validate(run));
+        }
+
+        if (mismatches.Count == 0) return;
+
+        var report = new System.Text.StringBuilder();
+        report.Append(GetType().Name)
+              .Append(": declared layer layouts disagree along the dataflow this model actually ran.");
+        foreach (var m in mismatches)
+        {
+            report.AppendLine();
+            report.Append("  ").Append(m.ProducerName).Append(" -> ").Append(m.ConsumerName)
+                  .Append(": ").Append(m.Message);
+        }
+
+        if (ThrowOnLayerContractMismatch) throw new InvalidOperationException(report.ToString());
+
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+        {
+            System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
+        }
+    }
     protected abstract void InitializeLayers();
 
     /// <summary>
@@ -3645,6 +3718,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
+        // ONE-SHOT chain validation, on the first real forward rather than at construction.
+        //
+        // Validating at construction had to GUESS the topology, because the chain does not exist as a
+        // graph until something runs it - and guessing meant reading Layers as a linear list, which
+        // for a branched model pairs layers that never meet. Measured across every constructible
+        // model, that guess produced four reports and not one was a real defect.
+        //
+        // Here the topology is not guessed, it is OBSERVED: the caller wanted this forward anyway, so
+        // tracing it costs one observer allocation and yields the real dataflow. Runs then come from
+        // the trace, which breaks at branches and rejoins by construction.
+        if (!_chainValidatedFromTrace)
+        {
+            _chainValidatedFromTrace = true;
+            return PredictAndValidateChain(input);
+        }
+
         // Opt-in, default-off (see InferenceArenaSettings). When off this is exactly the
         // pre-#1661 behavior with zero added overhead — one boolean check then PredictCore.
         if (!InferenceArenaSettings.Enabled)
