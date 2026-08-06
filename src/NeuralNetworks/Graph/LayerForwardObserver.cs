@@ -58,10 +58,18 @@ public sealed class LayerForwardObserver<T> : IDisposable
     public IReadOnlyList<(ILayer<T> Layer, Tensor<T> Input, Tensor<T> Output)> Calls => _calls;
 
     /// <summary>Records one layer call. Called by <c>LayerBase.Forward</c>; not for direct use.</summary>
+    /// <remarks>
+    /// FORWARDS TO THE ENCLOSING OBSERVER TOO, so nesting composes instead of stealing. Only one observer
+    /// can be Current, so an inner trace would otherwise silently blind an outer one - and the outer
+    /// caller has no way to detect that its trace came back empty because someone nested inside it. This
+    /// is not hypothetical: the base's own one-shot chain validation traces the first forward, which
+    /// swallowed the trace of any caller who was already observing.
+    /// </remarks>
     public void Record(ILayer<T> layer, Tensor<T> input, Tensor<T> output)
     {
         if (_disposed || layer is null || input is null || output is null) return;
         _calls.Add((layer, input, output));
+        _previous?.Record(layer, input, output);
     }
 
     /// <summary>
