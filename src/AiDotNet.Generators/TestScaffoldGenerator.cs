@@ -1811,6 +1811,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // FP32 is applied above first; retain the full paper architecture and trim only repeated
         // generated training iterations that exceeded the per-test CI budget.
         "RealESRGANVideo", "SlowFast",
+        // SECBERT (SAN-Sig shard): rung 2 of the ladder. Rung 1 (<float>, already applied above) was
+        // not enough on its own — the measured 331.3 s still overran the 180 s memorization gate, and
+        // run 31056926335 recorded it as "Test execution timed out after 180000 milliseconds" rather
+        // than an assertion. Capping MemorizationTaskIterations from 100 to the heavy-model budget of
+        // 15 is the next rung; 15 steps still clears Adam's warm-up hump, so the invariant keeps its
+        // meaning. If this is still over the gate, the remaining rungs are shrink and then HeavyTimeout.
+        "SECBERT",
         // VRT's generated T-Z fixture is already FP32. Its default 50-vs-200
         // MoreData comparison still hit the hard 120-second timeout in isolation,
         // while individual forward/training operations complete. Preserve the
@@ -13853,6 +13860,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // clears it and shows the genuine decrease — the same 15-step budget the memorization task
             // needs — while 15 steps stays well under the 120 s timeout even at ~3 s/step.
             sb.AppendLine("    protected override int TrainingIterations => 5;");
+            // TrainingStep_ShouldDependOnTheTarget is the newest training invariant and the ONLY one
+            // this cap block did not reach, which is why RealESRGANVideo still hit the 120 s gate at
+            // rung 1 (float) plus its existing MoreData cap: the model was capped, the new probe was
+            // not. It runs three conditions (target A, an A repeat as the noise control, target B),
+            // each averaged over TargetDependenceRepeatCount runs of TargetDependenceStepCount steps
+            // — 3*3*3 = 27 optimizer steps by default, the heaviest training probe in the suite.
+            //
+            // Cap the REPEATS to 1 rather than the steps. The steps are load bearing and cannot be
+            // reduced below 2: after a single step the update direction is target-independent by
+            // construction for a scalar-output or sign-only-optimizer model, so a 1-step comparison
+            // measures nothing (see the property's own remarks). The repeats only average away the
+            // model's own stochasticity, so dropping them costs sensitivity — a noisy heavy model
+            // reports INCONCLUSIVE instead of certifying — and never correctness. 1*3 = 3 steps here,
+            // the same budget as any other single training probe.
+            sb.AppendLine("    protected override int TargetDependenceRepeatCount => 1;");
             // Codec-LM fixtures already emit family-specific MoreData overrides above.
             // XTTSv2Clone selects the same 1/2 smoke window there, so avoid defining
             // these generated properties twice while retaining the universal cap.
