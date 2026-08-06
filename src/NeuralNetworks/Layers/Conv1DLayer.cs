@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -50,23 +50,50 @@ public partial class Conv1DLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
     private int[]? _originalInputShape;
 
-    /// <summary>
-    /// Live parameter count. Returns the eventual <c>(C_out·C_in·K) + C_out</c>
-    /// formula once <see cref="OnFirstForward"/> has resolved input
-    /// channels; before that, falls back to <c>(C_out·1·K) + C_out</c>
-    /// (assumes a 1-channel input until proven otherwise) so a
-    /// freshly-constructed model still reports a non-zero
-    /// <c>ParameterCount</c> for the
-    /// <see cref="AiDotNet.Tests.ModelFamilyTests.Base.NeuralNetworkModelTestBase.Parameters_ShouldBeNonEmpty"/>
-    /// invariant — without locking the lazy shape resolution to a wrong
-    /// input channel count.
-    /// </summary>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input channel count arrives. Without this the layer said "I have no
+    /// parameters" AND "nothing is pending" at once -- both false, since it certainly gains weights
+    /// on the first forward. The model-family non-empty invariant accepts either a positive count
+    /// or a pending flag, so MusicSourceSeparator failed it the moment the count became honest.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
+
+    /// <remarks>
+    /// <para>
+    /// Mirrors <see cref="GetParameters"/> in every state, which it previously did not. When the
+    /// input channel count was unknown this GUESSED <c>inputChannels = 1</c> and returned
+    /// <c>outputChannels * 1 * kernelSize + outputChannels</c>, while the getter returned either the
+    /// deferred pending vector or an empty one. A deferred Conv1D therefore claimed 516 parameters
+    /// and handed back 0 — the mismatch MusicSourceSeparator reports, since
+    /// <c>NeuralNetworkBase.ParameterCount</c> sums layer counts while its <c>GetParameters</c> sums
+    /// layer vectors.
+    /// </para>
+    /// <para>
+    /// The guess did second damage through <c>SetParameters</c>: a parent slices the flat vector by
+    /// each child's ParameterCount, so a child claiming 516 while its real resolved size is 144
+    /// misaligns every slice after it. That surfaced as
+    /// <c>"Expected 144 parameters, but got 32"</c> from ApplyResolvedParameters on the first
+    /// forward — a restore that had already silently corrupted the layout.
+    /// </para>
+    /// <para>
+    /// This is the same correction <see cref="ConvolutionalLayer{T}"/> already carries: a deferred
+    /// convolution reports what it actually has, and callers distinguish "no parameters" from "not
+    /// sized yet" via <c>HasUninitializedParameters</c> rather than by reading a fabricated count.
+    /// </para>
+    /// </remarks>
     public override long ParameterCount
     {
         get
         {
-            int effectiveInputChannels = _inputChannels > 0 ? _inputChannels : 1;
-            return ((long)_outputChannels * effectiveInputChannels * _kernelSize) + _outputChannels;
+            if (!IsShapeResolved)
+            {
+                // Exactly what GetParameters() hands back in this state.
+                return _pendingParameters?.Length ?? 0;
+            }
+
+            return ((long)_outputChannels * _inputChannels * _kernelSize) + _outputChannels;
         }
     }
 
@@ -322,6 +349,17 @@ public partial class Conv1DLayer<T> : LayerBase<T>
             // resolves geometry from the ACTUAL input, so a restore reproduces the original exactly.
             // PyTorch cannot do this at all: nn.Conv1d requires in_channels up front and
             // load_state_dict refuses a lazy module until a forward has run.
+            // An EMPTY vector carries nothing to defer. GetParameters() returns empty in this state
+            // when no parameters were ever deferred, and ParameterCount now agrees with it, so
+            // SetParameters(GetParameters()) on an un-forwarded clone legitimately round-trips
+            // "nothing yet". Storing that empty vector as pending made the first forward hand it to
+            // ApplyResolvedParameters, which needs the full complement and threw
+            // "Expected 72 parameters, but got 0" -- a clone failing outright because it faithfully
+            // copied a layer that had nothing to copy. Leaving _pendingParameters null lets the
+            // layer initialize normally on first Forward, which is exactly what it would have done
+            // had the clone never happened.
+            if (parameters.Length == 0) return;
+
             _pendingParameters = parameters.Clone();
             return;
         }
