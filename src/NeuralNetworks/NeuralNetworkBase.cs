@@ -3361,14 +3361,57 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// model that declares a LayerGraph should validate through its own runs instead; ABCNet does.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The model's DECLARED wiring, when it has any. Null means "read Layers as a linear chain".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THIS IS THE FIX FOR THE VALIDATOR'S REAL DEFECT. Validating Layers directly assumes the list IS
+    /// the dataflow, and for a branched model it is not - it is several independent branches flattened
+    /// into one list. Measured across every constructible model, all four surviving layout reports were
+    /// exactly this and none was a defect: TRIE pairs the VISUAL encoder's last convolution with the TEXT
+    /// encoder's first dense; VideoMAE pairs the classification head with the first layer of the
+    /// reconstruction decoder; SAM2's own factory says "other branches must be created separately";
+    /// ABCNet's recognition branch is entered through a permute+reshape.
+    /// </para>
+    /// <para>
+    /// A flat list cannot distinguish a branch boundary from a genuine mismatch - the information is not
+    /// there to recover, which is why no cleverness in the validator can fix this and the model has to
+    /// say. Declaring a graph costs one override and removes the guess entirely: runs come from
+    /// ContiguousRuns, which breaks at a fan-out and at an edge transform, so only layers that genuinely
+    /// meet are ever compared.
+    /// </para>
+    /// <para>
+    /// Returning null is not a failure - the linear reading is correct for the overwhelming majority of
+    /// models. It is only the branched ones that must speak up.
+    /// </para>
+    /// </remarks>
+    protected virtual IEnumerable<Graph.LayerGraph<T>>? DeclaredLayerGraphs => null;
+
     protected void ReportLayerContractMismatches()
     {
         if (Layers is null || Layers.Count < 2) return;
 
-        IReadOnlyList<LayerContractValidator.LayoutMismatch> mismatches;
+        var mismatches = new List<LayerContractValidator.LayoutMismatch>();
         try
         {
-            mismatches = LayerContractValidator.Validate(Layers);
+            var declared = DeclaredLayerGraphs;
+            if (declared is not null)
+            {
+                // Only genuinely-adjacent pairs, per the model's own wiring.
+                foreach (var graph in declared)
+                {
+                    if (graph is null) continue;
+                    foreach (var run in graph.ContiguousRuns())
+                    {
+                        mismatches.AddRange(LayerContractValidator.Validate(run));
+                    }
+                }
+            }
+            else
+            {
+                mismatches.AddRange(LayerContractValidator.Validate(Layers));
+            }
         }
         catch
         {
