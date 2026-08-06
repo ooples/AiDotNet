@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     BatchOptional = true, Direction = TensorLayoutDirection.Output,
     Note = "Channel count becomes OutputDepth; H and W follow stride/padding.")]
-public partial class ConvolutionalLayer<T> : LayerBase<T>
+public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
     /// <remarks>
@@ -59,6 +59,47 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// floor((in + 2*padding - kernel) / stride) + 1.
     /// </remarks>
     protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Convolutional;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The evaluable form of the relation above. <see cref="ShapeRelationKind.Convolutional"/> names the
+    /// rule but carries none of its terms, so nothing can compute a shape from it; these relations read
+    /// THIS instance's <see cref="KernelSize"/>, <see cref="Stride"/> and <see cref="Padding"/>, so a
+    /// stride-2 layer reports the halving and a stride-1 layer does not.
+    /// </para>
+    /// <para>
+    /// Height and Width get separate relations even though this layer applies one square kernel to both.
+    /// They are separate because the INPUTS differ — a 32x64 feature map produces different extents on
+    /// the two axes — and because a future rectangular-kernel overload changes only the two literals
+    /// here rather than the shape of the declaration.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Not yet resolved: OutputDepth is real from construction, but a lazy layer has no input depth
+        // and AxisRelation.Fixed rejects a non-positive size. Claiming nothing beats claiming zero.
+        if (OutputDepth <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputDepth));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, KernelSize, Stride, Padding));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, KernelSize, Stride, Padding));
+
+        return inputRank switch
+        {
+            // Unbatched [C,H,W] in, unbatched out. Emitting a batch axis here would invent an axis the
+            // caller never supplied and the forward never produces.
+            3 => new[] { channels, height, width },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            },
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// Gets the depth (number of channels) of the input data.

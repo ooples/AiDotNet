@@ -48,21 +48,67 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8")]
 // A fully-connected layer maps the LAST axis and treats everything before it as independent positions.
 // It therefore genuinely accepts two forms — [Batch, Features] and [Batch, Time, Features] — which is the
-// case that makes multiple declarations necessary rather than convenient. Batch is optional in both.
+// case that makes multiple declarations necessary rather than convenient.
+//
+// BATCH IS OPTIONAL ONLY ON THE TWO-AXIS FORM, and that is not an oversight. Marking it optional on the
+// three-axis form too would make that declaration also accept rank 2, as [Time, Features] — which is
+// indistinguishable from the [Batch, Features] the other declaration already accepts at that rank. Two
+// declarations claiming the same rank with DIFFERENT axis names is a genuine ambiguity: a resolver cannot
+// tell whether the leading axis of a rank-2 input is Batch or Time, so it cannot name the output axes
+// either, and shape inference has to decline for a case that is in fact completely ordinary. Dropping the
+// flag costs nothing, because an unbatched [Time, Features] input is already covered — this layer carries
+// every leading axis through untouched, so which name it goes by does not change what it computes.
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
     BatchOptional = true, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Direction = TensorLayoutDirection.Input,
     Note = "Per-position projection: the leading axes are carried through untouched.")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
     BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
-public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+    Direction = TensorLayoutDirection.Output)]
+public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _outputSize;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// FEATURE-LAST, and that is the whole content of the declaration. This layer fixes the TRAILING
+    /// axis and passes every leading axis through untouched — the mirror image of a convolution, which
+    /// fixes the leading channel axis. Reading one with the other's rule inverts which axis is a real
+    /// claim by the layer and which was merely carried along.
+    /// </para>
+    /// <para>
+    /// The sequence length is never this layer's to fix. Its parameters are sized by the feature width
+    /// alone, so the same layer is meant to accept any number of time steps; a declaration that pinned
+    /// one would turn a correct layer into one that appears to reject valid inputs.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+
+        return inputRank switch
+        {
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                features,
+            },
+            _ => null,
+        };
+    }
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
     /// </summary>
