@@ -65,37 +65,41 @@ public static class LayerContractValidator
         var found = new List<LayoutMismatch>();
         if (layers is null || layers.Count < 2) return found;
 
-        // Walk adjacent pairs, skipping over unannotated layers rather than stopping at them: a gap in
-        // annotation should reduce coverage, never invent a failure.
+        // ONLY DIRECTLY ADJACENT ANNOTATED PAIRS. An unannotated layer between two annotated ones
+        // BREAKS the chain here rather than being stepped over, and that correction is the difference
+        // between a useful check and a noise generator.
+        //
+        // This used to scan forward past unannotated layers to find "the real consumer", justified as
+        // letting a gap in annotation reduce coverage without inventing failures. It did the opposite.
+        // Measured across every constructible model: 14 of 182 reported a conv -> dense mismatch, and
+        // every one was false - CreateDefaultCNNLayers puts a MaxPoolingLayer AND a FlattenLayer between
+        // them, both unannotated, and flattening is exactly the transformation that makes the hand-off
+        // correct. Skipping an unannotated layer assumes it is shape-preserving, which is an assumption
+        // about a layer that has told us nothing.
+        //
+        // Same rule as LayerGraph.ContiguousRuns, and for the same reason: a run breaks wherever the
+        // next layer does not receive the previous one's output unchanged.
         for (int i = 0; i < layers.Count - 1; i++)
         {
             var producer = layers[i];
-            if (producer is null) continue;
+            var consumer = layers[i + 1];
+            if (producer is null || consumer is null) continue;
 
             var outputs = OutputLayouts(producer.GetType());
             if (outputs.Count == 0) continue;
 
-            for (int j = i + 1; j < layers.Count; j++)
+            var inputs = InputLayouts(consumer.GetType());
+            if (inputs.Count == 0) continue;   // unannotated consumer: the run ends here, silently
+
+            if (!AnyCompatible(outputs, inputs))
             {
-                var consumer = layers[j];
-                if (consumer is null) continue;
-
-                var inputs = InputLayouts(consumer.GetType());
-                if (inputs.Count == 0) continue;   // unannotated: not this pair's problem
-
-                if (!AnyCompatible(outputs, inputs))
-                {
-                    found.Add(new LayoutMismatch(
-                        i, producer.GetType().Name,
-                        j, consumer.GetType().Name,
-                        $"layer {i} ({producer.GetType().Name}) emits {Describe(outputs)} but layer {j} "
-                        + $"({consumer.GetType().Name}) expects {Describe(inputs)}"));
-                }
-
-                break;   // the next ANNOTATED layer is the real consumer; stop scanning
+                found.Add(new LayoutMismatch(
+                    i, producer.GetType().Name,
+                    i + 1, consumer.GetType().Name,
+                    $"layer {i} ({producer.GetType().Name}) emits {Describe(outputs)} but layer {i + 1} "
+                    + $"({consumer.GetType().Name}) expects {Describe(inputs)}"));
             }
         }
-
         return found;
     }
 

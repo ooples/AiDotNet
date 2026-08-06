@@ -3020,6 +3020,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (!_layerOnlyInitialized && Layers.Count == 0)
             {
                 InitializeLayers();
+                ReportLayerContractMismatches();
             }
             _layerOnlyInitialized = true;
             ResolveLazyLayerShapes();
@@ -3040,6 +3041,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             // Initialize network-specific layers
             InitializeLayers();
+            ReportLayerContractMismatches();
 
             // Pre-resolve lazy layers' shapes from the architecture so
             // ParameterCount / GetParameters / Clone / ONNX export work
@@ -3324,6 +3326,78 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <b>For Beginners:</b> This method sets up all the layers in your neural network according to the architecture 
     /// you've defined. It's like assembling the parts of your network before you can use it.
     /// </remarks>
+    /// <summary>
+    /// Whether a layout disagreement in the assembled chain THROWS. Reporting-only for now.
+    /// </summary>
+    /// <remarks>
+    /// Off by default because the blast radius has to be measured before it can be enforced, and the
+    /// measurement is not obviously small: DenseLayer accepts a convolution's [Batch, Channels, Height,
+    /// Width] without complaint and maps WIDTH as its feature axis, so conv -> dense adjacency is both
+    /// genuinely worth flagging AND potentially common. Turning a throw loose across every model before
+    /// counting how many it hits would be the same mistake as trusting an unverified shape annotation.
+    /// </remarks>
+    protected virtual bool ThrowOnLayerContractMismatch => false;
+
+    /// <summary>
+    /// Checks the freshly assembled chain's declared layouts and reports any disagreement.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// RUNS WHERE THE CHAIN BECOMES REAL. A model built entirely from LayerHelper defaults has no chain
+    /// until InitializeLayers has run, and several layer types resolve their input depth lazily after
+    /// that, so no compile-time analyzer can see it. Checking here is the earliest honest moment - before
+    /// any forward pass, so a mismatch is reported against the two layers that disagree rather than
+    /// surfacing later as an IndexOutOfRangeException from inside a kernel that names neither.
+    /// </para>
+    /// <para>
+    /// Compares DECLARATIONS, never tensors, which is what makes it work with lazy layers: a layer can
+    /// declare it consumes [Batch, Channels, Height, Width] long before it knows how many channels.
+    /// Unannotated layers are skipped, so a gap in annotation reduces coverage and never invents a
+    /// failure.
+    /// </para>
+    /// <para>
+    /// Uses the LINEAR reading of Layers, which is correct for the overwhelming majority of models and
+    /// wrong for branched ones - exactly the case that produced ABCNet's false conv -> dense report. A
+    /// model that declares a LayerGraph should validate through its own runs instead; ABCNet does.
+    /// </para>
+    /// </remarks>
+    protected void ReportLayerContractMismatches()
+    {
+        if (Layers is null || Layers.Count < 2) return;
+
+        IReadOnlyList<LayerContractValidator.LayoutMismatch> mismatches;
+        try
+        {
+            mismatches = LayerContractValidator.Validate(Layers);
+        }
+        catch
+        {
+            // Validation is a diagnostic. It must never be the reason a model fails to construct.
+            return;
+        }
+
+        if (mismatches.Count == 0) return;
+
+        var report = new System.Text.StringBuilder();
+        report.Append(GetType().Name).Append(": declared layer layouts disagree in the assembled chain.");
+        foreach (var m in mismatches)
+        {
+            report.AppendLine();
+            report.Append("  [").Append(m.ProducerIndex).Append("] ").Append(m.ProducerName)
+                  .Append(" -> [").Append(m.ConsumerIndex).Append("] ").Append(m.ConsumerName)
+                  .Append(": ").Append(m.Message);
+        }
+
+        if (ThrowOnLayerContractMismatch)
+        {
+            throw new InvalidOperationException(report.ToString());
+        }
+
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+        {
+            System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
+        }
+    }
     protected abstract void InitializeLayers();
 
     /// <summary>
