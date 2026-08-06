@@ -1512,7 +1512,29 @@ jobs:
           # `|| true` keeps an OOM-killed or non-zero harness from taking the upload step
           # with it. The findings are written incrementally, so a dead run still has evidence
           # on disk -- losing it to a skipped upload is the one outcome with no diagnostic value.
-          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \n            --filter 'FullyQualifiedName~${{ matrix.sweep }}' \n            --logger 'console;verbosity=detailed' \n            --logger 'trx;LogFileName=sweep.trx' \n            --results-directory TestResults || true
+          # Real newlines, not the literal backslash-n a previous edit wrote here: bash passed
+          # those through as four bare `n` arguments and MSBuild rejected the command with
+          # MSB1008 ("Only one project can be specified"). The sweep never ran at all, and
+          # `|| true` turned that infrastructure failure into a GREEN job -- the harness
+          # reported success three times while measuring nothing.
+          #
+          # `|| true` is kept so a genuinely dead harness cannot skip the upload of findings,
+          # but the output is inspected afterwards: if the harness could not START, or produced
+          # no summary, that is an infrastructure fault and fails loudly. A reporter that cannot
+          # tell "nothing to report" from "never ran" is worse than no reporter.
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
+            --filter "FullyQualifiedName~${{ matrix.sweep }}" \
+            --logger 'console;verbosity=detailed' \
+            --logger 'trx;LogFileName=sweep.trx' \
+            --results-directory TestResults 2>&1 | tee sweep-output.txt || true
+          if grep -qE 'MSBUILD : error|MSB1008|error MSB[0-9]|No test source files' sweep-output.txt; then
+            echo '::error::Sweep harness failed to START -- infrastructure fault, not a finding.'
+            exit 1
+          fi
+          if ! grep -qE 'Passed!|Failed!|Total tests' sweep-output.txt; then
+            echo '::error::Sweep produced no test summary -- it did not run to completion.'
+            exit 1
+          fi
 
       - name: Upload sweep report
         if: always()
@@ -1520,6 +1542,7 @@ jobs:
         with:
           name: parameter-sweep-${{ matrix.sweep }}-${{ github.sha }}
           path: |
+            sweep-output.txt
             /tmp/parameter-enumeration-parity.tsv
             /tmp/parameter-count-violations.txt
             /tmp/chunk-parity.txt
