@@ -34759,7 +34759,7 @@ public static class LayerHelper<T>
                 "dilationCycle must be in [1, 30] so that 1 << (i % dilationCycle) stays within the int range.");
 
         var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
-        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
+        var linearOutput = (IActivationFunction<T>)new IdentityActivation<T>();
 
         // Input 1x1 conv: mel channels -> hidden channels.
         yield return new Conv1DLayer<T>(
@@ -34778,11 +34778,26 @@ public static class LayerHelper<T>
             yield return new WaveNetResidualBlockLayer<T>(hiddenChannels, kernelSize: 3, dilation: dilation);
         }
 
-        // Output 1x1 conv -> waveform channel(s) + tanh.
+        // Output 1x1 conv -> waveform channel(s), LINEAR.
+        //
+        // NO OUTPUT TANH, and that is the paper for both consumers of this factory. Parallel WaveGAN
+        // (Yamamoto 2020 Fig. 1) ends the generator with ReLU -> 1x1 conv -> ReLU -> 1x1 conv, and
+        // WaveGlow (Prenger 2019 Sec. 2) ends each coupling layer's WN with a zero-initialised 1x1
+        // conv emitting (log s, t). Neither squashes the output. Tanh belongs INSIDE the gated block
+        // (tanh . sigmoid), where WaveNetResidualBlockLayer already has it.
+        //
+        // It was also killing training outright, which is how it was found. Measured on WaveGlow: the
+        // untrained output spans [-0.859, 0.799] with 0% of samples saturated, and after a SINGLE
+        // Adam step EVERY output is exactly 1.0 - 100% saturated. tanh'(x) = 1 - tanh(x)^2 is then
+        // identically zero, so the gradient dies and the loss freezes at 0.38766 from step 2 through
+        // step 200 while Adam keeps stepping on zero gradients. Adam's first step moves every
+        // parameter by ~lr in the sign direction at once, which is more than enough to leave tanh's
+        // linear region, and once outside nothing brings it back. Same failure class as the
+        // StandardVAE decoder saturation.
         yield return new Conv1DLayer<T>(
             inputChannels: hiddenChannels, outputChannels: outputDim,
             kernelSize: 1, dilation: 1, stride: 1, padding: null,
-            activation: tanhActivation);
+            activation: linearOutput);
     }
 
     /// <summary>
