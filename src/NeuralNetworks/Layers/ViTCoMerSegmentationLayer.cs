@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 3, 32, 32",
     TestConstructorArgs = "3, 32, 32, 16, new int[] { 8, 12, 16, 24 }, new int[] { 1, 1, 1, 1 }, 8, 4, 0.0")]
-public class ViTCoMerSegmentationLayer<T> : LayerBase<T>
+public partial class ViTCoMerSegmentationLayer<T> : LayerBase<T>
 {
     private readonly int _inputChannels;
     private readonly int _inputHeight;

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public class WordCharEmbeddingLayer<T> : LayerBase<T>
+public partial class WordCharEmbeddingLayer<T> : LayerBase<T>
 {
     private readonly DenseLayer<T> _wordEmbedding;
     private readonly DenseLayer<T> _charEmbedding;

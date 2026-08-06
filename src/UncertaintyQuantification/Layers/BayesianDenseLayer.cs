@@ -28,7 +28,7 @@ namespace AiDotNet.UncertaintyQuantification.Layers;
 /// to express uncertainty in its predictions.
 /// </para>
 /// </remarks>
-public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
+public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
 {
     private readonly Random _rng;
     private readonly object _rngLock = new();

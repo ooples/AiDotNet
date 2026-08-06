@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers.SSM;
+﻿namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
 /// <summary>
 /// A stack of <see cref="RWKV7Block{T}"/> layers that threads the RWKV-7 value residual between them.
@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// thought, not just the one below it. A plain chain has nowhere to put that, so instead one object
 /// holds the whole run of layers and hands the first layer's answer along as it goes.</para>
 /// </remarks>
-public class Rwkv7Stack<T> : LayerBase<T>
+public partial class Rwkv7Stack<T> : LayerBase<T>
 {
     private readonly List<RWKV7Block<T>> _blocks;
 

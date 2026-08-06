@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "8")]
-public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     // Non-readonly: lazy ctor leaves these null until OnFirstForward
     // observes input.Shape and allocates each against the resolved

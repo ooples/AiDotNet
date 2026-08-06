@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
@@ -1051,7 +1051,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 /// - Input: Many points, basic features (XYZ)
 /// - Output: Fewer points, rich features (learned patterns)
 /// </remarks>
-public class SetAbstractionLayer<T> : LayerBase<T>
+public partial class SetAbstractionLayer<T> : LayerBase<T>
 {
     private sealed class ScaleBranch
     {

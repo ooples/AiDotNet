@@ -27,7 +27,7 @@ namespace AiDotNet.UncertaintyQuantification.Layers;
 /// - Safety-critical applications (knowing when to defer to a human expert)
 /// </para>
 /// </remarks>
-public class MCDropoutLayer<T> : LayerBase<T>
+public partial class MCDropoutLayer<T> : LayerBase<T>
 {
     private readonly double _dropoutRate;
     private readonly T _scale;

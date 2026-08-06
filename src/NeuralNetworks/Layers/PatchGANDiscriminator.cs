@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// this be dropped into any model's adversarial objective.
 /// </para>
 /// </remarks>
-public class PatchGANDiscriminator<T> : LayerBase<T>
+public partial class PatchGANDiscriminator<T> : LayerBase<T>
 {
     #region Constants
 

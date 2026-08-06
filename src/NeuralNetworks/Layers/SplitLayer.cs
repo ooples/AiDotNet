@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4", TestConstructorArgs = "2")]
-public class SplitLayer<T> : LayerBase<T>
+public partial class SplitLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The number of parts to split the input tensor into.

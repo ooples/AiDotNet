@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
@@ -665,7 +665,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 /// - Later layers: Neighbors are semantically similar points
 /// - Graph structure adapts as features evolve
 /// </remarks>
-public class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly int _inputChannels;
     private readonly int _outputChannels;

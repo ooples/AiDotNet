@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -30,7 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 16, 4, 2")]
-public class TimeMoEBlockLayer<T> : LayerBase<T>
+public partial class TimeMoEBlockLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenDim;
     private readonly int _numHeads;

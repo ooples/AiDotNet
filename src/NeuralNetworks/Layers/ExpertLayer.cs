@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
-public class ExpertLayer<T> : LayerBase<T>
+public partial class ExpertLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The sequence of layers that make up this expert.

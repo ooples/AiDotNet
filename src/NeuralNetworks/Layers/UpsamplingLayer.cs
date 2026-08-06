@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2")]
-public class UpsamplingLayer<T> : LayerBase<T>
+public partial class UpsamplingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The factor by which to increase spatial dimensions.

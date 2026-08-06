@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
+public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
 {
     private readonly int _numFeatures;
     private readonly int _numBins;

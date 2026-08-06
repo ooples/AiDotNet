@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Tabular;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class FeatureTransformerLayer<T> : LayerBase<T>
+public partial class FeatureTransformerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _outputDim;

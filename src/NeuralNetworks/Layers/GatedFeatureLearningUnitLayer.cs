@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 
@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
+public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
 {
     private int _inputDim;
     private readonly int _outputDim;

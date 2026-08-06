@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Residual)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.ILayer<double>?)null, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ResidualLayer<T> : LayerBase<T>
+public partial class ResidualLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The inner layer that transforms the input before being added back to the original input.

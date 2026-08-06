@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -27,7 +27,7 @@ namespace AiDotNet.PointCloud.Layers;
 /// - Learning shape patterns in point clouds
 /// - Building blocks for PointNet / DGCNN-style architectures
 /// </remarks>
-public class PointConvolutionLayer<T> : LayerBase<T>
+public partial class PointConvolutionLayer<T> : LayerBase<T>
 {
     private readonly int _inputChannels;
     private readonly int _outputChannels;

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High)]
-public class LambdaLayer<T> : LayerBase<T>
+public partial class LambdaLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The user-provided function that defines the forward pass transformation.

@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true)]
-public class TimeDistributedLayer<T> : LayerBase<T>
+public partial class TimeDistributedLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The inner layer that is applied to each time step.

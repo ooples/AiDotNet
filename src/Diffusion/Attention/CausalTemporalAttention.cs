@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
@@ -31,7 +31,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Combined with spatial attention for full spatio-temporal modeling
 /// </para>
 /// </remarks>
-public class CausalTemporalAttention<T> : LayerBase<T>
+public partial class CausalTemporalAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _numHeads;

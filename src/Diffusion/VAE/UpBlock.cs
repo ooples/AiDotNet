@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
-public class UpBlock<T> : LayerBase<T>
+public partial class UpBlock<T> : LayerBase<T>
 {
     /// <summary>
     /// Transposed convolution for upsampling.

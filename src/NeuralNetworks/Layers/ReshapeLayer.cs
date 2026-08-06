@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 2, 2 }")]
-public class ReshapeLayer<T> : LayerBase<T>
+public partial class ReshapeLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The shape of the input tensor, excluding the batch dimension.

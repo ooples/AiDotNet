@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
-public class VAEResBlock<T> : LayerBase<T>
+public partial class VAEResBlock<T> : LayerBase<T>
 {
     /// <summary>
     /// First GroupNorm layer.

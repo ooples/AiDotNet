@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 1")]
-public class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// The expansion factor for BottleneckBlock. Output channels = base channels * 4.

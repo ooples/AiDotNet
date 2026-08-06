@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -263,6 +263,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         sb.AppendLine($"partial class {className}{typeParams}");
         sb.AppendLine("{");
 
+
         // GetTrainableParameters
         bool hasOptional = paramFields.Any(p => p.Optional);
         if (paramFields.Count > 0)
@@ -504,7 +505,11 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Returns parameter roles for per-role optimizer configuration (e.g., weight decay exemption for biases).");
             sb.AppendLine("    /// Auto-generated from [TrainableParameter(Role = \"...\")] attributes.");
             sb.AppendLine("    /// </summary>");
-            sb.AppendLine($"    public virtual System.Collections.Generic.Dictionary<string, string> GetParameterRoles()");
+            // `virtual` is illegal on a member of a sealed type (CS0549), and three sealed
+            // layers -- ColumnParallelLinear, RowParallelLinear, Stage3ShardedLinear -- hit
+            // exactly that once they became partial. A sealed class cannot be derived from, so
+            // the modifier carries no meaning there anyway.
+            sb.AppendLine($"    public {(classSymbol.IsSealed ? "" : "virtual ")}System.Collections.Generic.Dictionary<string, string> GetParameterRoles()");
             sb.AppendLine("    {");
             sb.AppendLine($"        return new System.Collections.Generic.Dictionary<string, string>");
             sb.AppendLine("        {");

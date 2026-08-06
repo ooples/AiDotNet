@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, NormalizesInput = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 0.5")]
-public class AnomalyDetectorLayer<T> : LayerBase<T>
+public partial class AnomalyDetectorLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The threshold for determining anomalous inputs based on the anomaly score.

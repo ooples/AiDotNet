@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// trainable — the tape treats them as input data.
 /// </para>
 /// </remarks>
-public class NoisyDenseLayer<T> : LayerBase<T>
+public partial class NoisyDenseLayer<T> : LayerBase<T>
 {
     private readonly int _inputSize;
     private readonly int _outputSize;

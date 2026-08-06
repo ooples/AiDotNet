@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 2, 2", TestConstructorArgs = "")]
-public class FlattenLayer<T> : LayerBase<T>
+public partial class FlattenLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The shape of the input tensor.

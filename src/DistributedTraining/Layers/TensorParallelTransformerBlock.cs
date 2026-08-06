@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -23,7 +23,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public sealed class TensorParallelTransformerBlock<T> : LayerBase<T>
+public sealed partial class TensorParallelTransformerBlock<T> : LayerBase<T>
 {
     private readonly LayerNormalizationLayer<T> _ln1;
     private readonly LayerNormalizationLayer<T> _ln2;
