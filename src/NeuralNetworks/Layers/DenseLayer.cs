@@ -67,6 +67,18 @@ namespace AiDotNet.NeuralNetworks.Layers;
     BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output)]
+// Rank 1 and rank 4 are declared because this layer ACCEPTS them - measured, not assumed:
+// [12] -> [5] and [1,4,6,6] -> [1,4,6,5]. Leaving them undeclared made shape inference decline
+// on cases the layer handles, and a contract that declines on working input is one callers learn
+// to route around. The rank-4 axes are named [Batch, Channels, Height, Features] rather than with
+// anonymous placeholders because that is precisely the convolution hand-off - and it makes the
+// consequence legible: fed a feature map, this layer maps WIDTH as the feature axis.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
 
@@ -89,22 +101,40 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// </remarks>
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
-        if (_outputSize <= 0) return null;
+        if (_outputSize <= 0 || inputRank < 1) return null;
 
+        // RANK-POLYMORPHIC, and measured rather than assumed. This layer maps the LAST axis and passes
+        // every leading axis through untouched, at any rank:
+        //
+        //     [12]        -> [5]
+        //     [4,12]      -> [4,5]
+        //     [2,7,12]    -> [2,7,5]
+        //     [1,4,6,6]   -> [1,4,6,5]
+        //
+        // Enumerating rank 2 and rank 3 by hand, as the [TensorLayout] declarations above still do, was
+        // therefore incomplete: it made shape inference decline for ranks this layer handles perfectly
+        // well, and a contract that declines on a working case is a contract callers learn to ignore.
+        // Expressing it as code rather than as attributes is the point - an attribute cannot enumerate
+        // every rank, and "the last axis, whatever the rank" is the actual rule.
+        //
+        // NOTE for chain validation: feeding a convolution's [Batch, Channels, Height, Width] straight
+        // in yields [Batch, Channels, Height, outputSize] - it maps WIDTH as the feature axis. That is
+        // rarely what an author means; it is why conv -> dense normally needs an explicit flatten, and
+        // why this layer accepting it silently is worth flagging rather than celebrating.
         var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
 
+        // Enumerated rather than generated, because every leading axis needs a DISTINCT role: axis roles
+        // are how a relation refers to its input, so two anonymous placeholders in one layout cannot be
+        // told apart and the whole naming is refused. Ranks beyond four decline honestly.
         return inputRank switch
         {
-            2 => new[]
+            1 => new[] { features },
+            2 => new[] { Pass(TensorAxis.Batch), features },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
+            4 => new[]
             {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                features,
-            },
-            3 => new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
-                features,
+                Pass(TensorAxis.Batch), Pass(TensorAxis.Channels), Pass(TensorAxis.Height), features,
             },
             _ => null,
         };
