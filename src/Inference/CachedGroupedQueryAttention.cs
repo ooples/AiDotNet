@@ -408,12 +408,6 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
-    {
-        // Simplified for inference-focused layer
-    }
-
-    /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
         int qSize = _queryWeights.Rows * _queryWeights.Columns;

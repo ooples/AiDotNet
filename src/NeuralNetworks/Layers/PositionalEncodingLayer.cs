@@ -383,30 +383,6 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the positional encoding layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is part of the training process, but since PositionalEncodingLayer has no trainable parameters,
-    /// this method does nothing. The positional encodings are fixed and do not change during training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
-    /// 
-    /// However, since PositionalEncodingLayer uses fixed encodings that are calculated once at initialization
-    /// and don't change during training, this method is empty.
-    /// 
-    /// This is different from layers like Dense or Convolutional layers, which have weights and biases
-    /// that get updated during training. The positional encodings are based on a mathematical formula
-    /// rather than learned from data.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
     /// Gets all trainable parameters from the positional encoding layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since PositionalEncodingLayer has no trainable parameters.</returns>

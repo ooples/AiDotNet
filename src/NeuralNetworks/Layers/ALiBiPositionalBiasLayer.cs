@@ -272,17 +272,13 @@ internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters
-    }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
-    }
+
+    // GetParameters is deliberately NOT overridden. This layer has no trainable weights, but it
+    // DOES own a registered buffer -- the ALiBi slope table -- and returning Vector<T>.Empty()
+    // excluded it from every checkpoint. LayerBase now folds registered buffers into the flat
+    // vector alongside parameters, so the slopes save and restore with the model while staying
+    // invisible to the optimizer, which reads GetTrainableParameters() and still sees nothing here.
 
     /// <inheritdoc />
     public override void ResetState()

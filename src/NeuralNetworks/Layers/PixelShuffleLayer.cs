@@ -426,12 +426,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>
     #region Parameter Management
 
     /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update - this is a purely structural layer
-    }
-
-    /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Empty();

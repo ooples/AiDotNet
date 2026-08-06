@@ -1131,8 +1131,6 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();
@@ -1309,8 +1307,6 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();

@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
@@ -650,6 +650,182 @@ public abstract class LayerTestBase
             Assert.True(count > 0,
                 "Layer is expected to have trainable parameters but ParameterCount is 0.");
         }
+    }
+
+    // =========================================================================
+    // DIAGNOSTIC: is this layer's GetParameters() override redundant?
+    // Reports, never asserts. Output feeds the override-deletion work list.
+    // =========================================================================
+
+    /// <summary>
+    /// Records whether this layer's hand-written <c>GetParameters()</c> is value-for-value
+    /// identical to what <see cref="LayerBase{T}"/> now produces, and is therefore deletable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>GetParameters</c> used to be ABSTRACT, which forced all 710 layers to hand-write a walk of
+    /// their own tensors while <c>ParameterCount</c> stayed virtual with a registry-based default —
+    /// two independently written answers to one question, per layer, and the source of every
+    /// model-level count mismatch. The base implements it now, so most of those overrides are dead
+    /// weight. Most, not all: this reports which.
+    /// </para>
+    /// <para>
+    /// Equal LENGTH is not sufficient evidence to delete one. The base emits <c>Parameters</c>, then
+    /// registered tensors, then sub-layers in REGISTRATION order; a hand-written getter uses field
+    /// order. Where those differ the totals still match while the layout silently changes, which
+    /// invalidates saved checkpoints and mis-pairs <c>SetParameters</c> — worse than the bug this
+    /// work set out to fix, and invisible to a count-based test. Four layers really do differ this
+    /// way (ViTCoMerSegmentationLayer, VideoGigaGANGeneratorLayer, VocosGeneratorLayer, NBEATSBlock),
+    /// so the comparison is elementwise on VALUES.
+    /// </para>
+    /// <para>
+    /// It runs here, on <c>LayerTestBase</c>, rather than as a standalone sweep because the 254
+    /// generated layer classes construct their layer correctly and probe a Forward first. A sweep
+    /// driven by default constructors reached 35 layers and could only compare unresolved ones,
+    /// where both sides are empty and the comparison proves nothing either way.
+    /// </para>
+    /// <para>
+    /// Never asserts. A legitimately different override — weight tying that shares one tensor across
+    /// slots, a GAN reading frozen modules — is correct, not a defect.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_ReportOverrideRedundancy()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        var type = layer.GetType();
+
+        var gp = type.GetMethod("GetParameters",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+            null, Type.EmptyTypes, null);
+        // Nothing to report when the layer already relies on the base implementation.
+        if (gp is null || gp.DeclaringType is null
+            || gp.DeclaringType.Name.StartsWith("LayerBase", StringComparison.Ordinal))
+        {
+            Record(type, "INHERITS");
+            return;
+        }
+
+        ProbeForward(layer);
+
+        Vector<double> actual;
+        try { actual = layer.GetParameters(); }
+        catch { Record(type, "UNMEASURABLE"); return; }
+
+        List<double> expected;
+        try { expected = BaseOrderValues(layer); }
+        catch (Exception ex)
+        {
+            // Sparse-backed layers cannot be flattened generically: GetFlat throws on a sparse
+            // tensor, and SparseLinearLayer reads _weights.Values[nz] through a sparse-only API.
+            // Those layers must keep their override, so "cannot reconstruct" is a legitimate
+            // verdict here -- not a test failure. A diagnostic that breaks the suite it reports
+            // on is worse than no diagnostic.
+            Record(type, $"UNMEASURABLE {ex.GetType().Name}");
+            return;
+        }
+
+        if (actual.Length == 0 && expected.Count == 0) { Record(type, "UNRESOLVED"); return; }
+
+        bool same = expected.Count == actual.Length;
+        for (int i = 0; i < actual.Length && same; i++)
+            if (Math.Abs(actual[i] - expected[i]) > 1e-12) same = false;
+
+        // Distinguish the THREE ways an override can diverge, because they need opposite fixes:
+        //   UNREGISTERED - the override returns MORE than the registry holds, so the layer owns
+        //                  tensors it never declared via [TrainableParameter]/RegisterTrainable-
+        //                  Parameter. The base cannot see them. This is the automation gap: attribute
+        //                  the fields and the generator registers them, after which the override is
+        //                  removable. Deleting first silently drops those weights -- FinBERT went
+        //                  from 6,603 parameters to 819 exactly this way.
+        //   OVERCOUNT    - the registry holds more than the override returns; the override is hiding
+        //                  something the base would expose.
+        //   ORDER        - same length, different values: field order vs registration order. Keep
+        //                  the override, or realign registration deliberately.
+        string verdict =
+            same ? $"REDUNDANT {actual.Length}"
+            : expected.Count < actual.Length ? $"UNREGISTERED {actual.Length}/{expected.Count}"
+            : expected.Count > actual.Length ? $"OVERCOUNT {actual.Length}/{expected.Count}"
+            : $"ORDER {actual.Length}";
+        Record(type, verdict);
+    }
+
+    /// <summary>Reproduces LayerBase.GetParameters' order: Parameters, own tensors, then sub-layers.</summary>
+    private static List<double> BaseOrderValues(ILayer<double> layer)
+    {
+        var values = new List<double>();
+        var t = layer.GetType();
+
+        var pField = t.GetField("Parameters",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.FlattenHierarchy);
+        if (pField?.GetValue(layer) is Vector<double> own)
+            for (int i = 0; i < own.Length; i++) values.Add(own[i]);
+
+        // GetTrainableParameters is declared on LayerBase<T>, not on ILayer<T>.
+        if (t.GetMethod("GetTrainableParameters",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                ?.Invoke(layer, null) is System.Collections.IEnumerable tensors)
+        {
+            foreach (var obj in tensors)
+            {
+                if (obj is not Tensor<double> ten) continue;
+                // Mirror LayerBase exactly: a sparse tensor contributes its STORED entries read
+                // through DataVector, never a densified GetFlat walk. Reconstructing in any other
+                // order or extent would compare the override against something the base does not
+                // actually produce, which is worse than not measuring at all.
+                if (ten is SparseTensor<double> sp)
+                    for (int i = 0; i < sp.NonZeroCount; i++) values.Add(sp.DataVector[i]);
+                else
+                    for (int i = 0; i < ten.Length; i++) values.Add(ten.GetFlat(i));
+            }
+        }
+
+        foreach (var sub in layer.GetSubLayers())
+        {
+            if (sub is null) continue;
+            var sv = sub.GetParameters();
+            for (int i = 0; i < sv.Length; i++) values.Add(sv[i]);
+        }
+
+        return values;
+    }
+
+    private void ProbeForward(ILayer<double> layer)
+    {
+        using var probe = new Tensor<double>(InputShape);
+        for (int i = 0; i < probe.Length; i++) probe[i] = 0.01 * (i + 1);
+        try { layer.Forward(probe); }
+        catch
+        {
+            try
+            {
+                layer.GetType().GetMethod("Forward", new[] { typeof(Tensor<double>[]) })
+                    ?.Invoke(layer, new object[] { new[] { probe, probe } });
+            }
+            catch { /* unprobeable; compare whatever state the ctor produced */ }
+        }
+    }
+
+    private static readonly object _redundancyLock = new();
+
+    private static void Record(Type layerType, string verdict)
+    {
+        // Appended to a shared file rather than ITestOutputHelper: the verdict is only useful
+        // aggregated across all 254 generated classes, and per-test output is not collectable
+        // that way. Best-effort — a diagnostic must never fail the suite it reports on.
+        try
+        {
+            lock (_redundancyLock)
+            {
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "override-redundancy.txt"),
+                    $"{verdict}\t{layerType.FullName}{Environment.NewLine}");
+            }
+        }
+        catch { }
     }
 
     // =========================================================================

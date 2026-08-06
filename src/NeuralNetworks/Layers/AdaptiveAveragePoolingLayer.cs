@@ -367,15 +367,6 @@ public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters. Pooling layers have no trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused).</param>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters
-    }
-
-    /// <summary>
     /// Gets all trainable parameters. Returns empty for pooling layers.
     /// </summary>
     /// <returns>An empty vector.</returns>

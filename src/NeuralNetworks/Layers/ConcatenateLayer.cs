@@ -424,28 +424,6 @@ public partial class ConcatenateLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a no-op for concatenate layers since they have no trainable parameters to update.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method doesn't do anything for concatenate layers because there are no parameters to update.
-    /// 
-    /// Unlike layers with weights and biases that need to be updated during training,
-    /// the concatenate layer just passes data through without learning any parameters.
-    /// 
-    /// This method is still required to be implemented because all layers must follow
-    /// the same interface, but it doesn't actually do anything for this type of layer.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in a concatenate layer
-    }
-
-    /// <summary>
     /// Declares named input ports for this multi-input layer.
     /// </summary>
     private IReadOnlyList<LayerPort>? _inputPortsCache;

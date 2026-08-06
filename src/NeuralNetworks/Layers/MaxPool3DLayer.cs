@@ -326,15 +326,6 @@ public partial class MaxPool3DLayer<T> : LayerBase<T>
     #region Parameter Management
 
     /// <summary>
-    /// Updates parameters. Max pooling has no trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused).</param>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Max pooling has no trainable parameters - nothing to update
-    }
-
-    /// <summary>
     /// <summary>
     /// Returns layer-specific metadata for serialization (PoolSize, Stride).
     /// </summary>

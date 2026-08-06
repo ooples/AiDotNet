@@ -65,8 +65,5 @@ internal sealed class PANNsPoolingLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients() => Vector<T>.Empty();
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate) { }
-
-    /// <inheritdoc/>
     public override void ResetState() { }
 }

@@ -923,8 +923,6 @@ internal class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
     public override long ParameterCount => _wx.Length + _wh.Length + _bias.Length;
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { /* tape-based optimizer updates registered params */ }
-
     /// <summary>
     /// Single-step forward from a zero initial state (satisfies the <c>ILayer</c> contract).
     /// The model drives the recurrence via <see cref="Step"/>; this convenience overload runs

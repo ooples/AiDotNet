@@ -382,19 +382,6 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         return Engine.Reshape(input, new[] { 1, 1, embeddingDimension });
     }
 
-    /// <summary>
-    /// Legacy scalar-learning-rate parameter update. Tape-based training flows through
-    /// <see cref="SetParameters"/> after <c>GradientTape&lt;T&gt;</c> computes gradients and
-    /// the optimizer applies them, so this override is a no-op. The hand-rolled SPSA /
-    /// blame-on-step fallback that used private <c>_*Gradient</c> fields was deleted along
-    /// with those fields once the Forward path moved to <c>Engine.FlashAttention</c>.
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No-op: weights are updated via SetParameters(Vector<T>) after the tape
-        // computes gradients through Engine.FlashAttention + FlashAttentionBackward.
-    }
-
     /// <inheritdoc />
     public override long ParameterCount => _queryWeights.Length * 4 + _outputBias.Length;
 

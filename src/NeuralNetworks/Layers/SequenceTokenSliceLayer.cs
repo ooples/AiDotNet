@@ -128,11 +128,6 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
-    {
-    }
-
-    /// <inheritdoc />
     public override void ResetState()
     {
         // Stateless: nothing to reset between calls.

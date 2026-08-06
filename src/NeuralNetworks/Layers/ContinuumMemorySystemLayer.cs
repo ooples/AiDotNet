@@ -404,20 +404,6 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>
     public int[] ChunkSizes => _chunkSizes;
 
     /// <summary>
-    /// Updates parameters using the specified learning rate.
-    /// This is a no-op for CMS because parameters are updated exclusively via UpdateLevelParameters
-    /// when chunk counters trigger (i ≡ 0 mod C(ℓ)). Updating here would double-apply gradients.
-    /// </summary>
-    /// <param name="learningRate">Learning rate (unused - each level has its own rate)</param>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No-op: Parameters are updated via UpdateLevelParameters during Backward pass
-        // when chunk counters reach their thresholds. Updating here would cause
-        // double application of gradients since MLP blocks are already updated
-        // in UpdateLevelParameters using Modified Gradient Descent (Equations 27-29).
-    }
-
-    /// <summary>
     /// Gets all parameters from all MLP blocks in the chain.
     /// Returns a concatenated vector of all parameters from all levels.
     /// </summary>

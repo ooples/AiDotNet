@@ -922,8 +922,6 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override bool SupportsTraining => true;
     public override void ResetState() { _lastForwardInput = null; }
-    public override void UpdateParameters(T learningRate) { /* tape-based optimizer updates registered params */ }
-
     public override Vector<T> GetParameters()
     {
         var allParams = new List<T>();

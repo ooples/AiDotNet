@@ -1176,12 +1176,6 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         return seqOutput.Count > 0 ? seqOutput[seqOutput.Count - 1] : input;
     }
 
-    public override void UpdateParameters(T learningRate)
-    {
-        // Apply gradient descent to all weight tensors
-        // Gradients are computed and applied by the model's ApplyGradients method
-    }
-
     public override Vector<T> GetParameters()
     {
         var allParams = new List<T>();

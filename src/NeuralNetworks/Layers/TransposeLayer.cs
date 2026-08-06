@@ -122,12 +122,6 @@ public partial class TransposeLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters.
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Empty();

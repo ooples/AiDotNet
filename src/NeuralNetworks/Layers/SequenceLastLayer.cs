@@ -197,14 +197,6 @@ public partial class SequenceLastLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Update parameters is a no-op since this layer has no trainable parameters.
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update
-    }
-
-    /// <summary>
     /// Reset state is a no-op since this layer maintains no state between forward passes.
     /// </summary>
     public override void ResetState()

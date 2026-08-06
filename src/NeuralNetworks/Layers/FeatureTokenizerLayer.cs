@@ -151,17 +151,6 @@ public partial class FeatureTokenizerLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // This is a tape-trained layer: its weight/bias tensors are registered via
-        // RegisterTrainableParameter and updated in place by the gradient-tape optimizer
-        // (TrainWithTape), which is the path every model using this layer takes. There is no
-        // per-layer gradient state to drive an eager SGD step from here, so this override is
-        // intentionally empty rather than throwing — a generic optimizer walk that reaches it
-        // must not fault. (DenseLayer-style eager SGD is not applicable to tape-only layers.)
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         if (!_initialized) return new Vector<T>(0);

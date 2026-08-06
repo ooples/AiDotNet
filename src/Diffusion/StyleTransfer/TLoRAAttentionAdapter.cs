@@ -306,14 +306,6 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No gradients are accumulated on the adapter by this layer's own backward path, so there is
-        // nothing to step here. Training flows through the model's parameter vector
-        // (GetParameters/SetParameters), which is how LatentDiffusionModelBase drives updates.
-    }
-
-    /// <inheritdoc/>
     public override void ResetState()
     {
         _inner.ResetState();

@@ -1242,6 +1242,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 held++;
                 if (!exposedSet.Contains(child)) missing++;
             }
+            // Numeric containers can never hold a child layer, and walking them is actively
+            // harmful. Tensor<T> implements IEnumerable, so this branch used to iterate EVERY
+            // SCALAR of every weight tensor looking for layers -- millions of comparisons per
+            // model that cannot possibly match -- and on a SparseTensor the enumerator calls
+            // GetFlat, which throws outright ("GetFlat is not supported on sparse tensors").
+            // That is the SparseNeuralNetwork failure in CI: not a missing sub-layer at all, but
+            // the reachability probe crashing on the weights it should never have inspected.
+            else if (value is Tensor<T> or Vector<T> or Matrix<T>)
+            {
+                continue;
+            }
             else if (value is System.Collections.IEnumerable seq and not string)
             {
                 foreach (var item in seq)

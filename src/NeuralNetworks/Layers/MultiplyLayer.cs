@@ -425,29 +425,6 @@ public partial class MultiplyLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the multiply layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is part of the training process, but since MultiplyLayer has no trainable parameters,
-    /// this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
-    /// 
-    /// However, since MultiplyLayer just performs a fixed mathematical operation (multiplication) and doesn't
-    /// have any internal values that can be learned or adjusted, this method is empty.
-    /// 
-    /// This is unlike layers such as Dense or Convolutional layers, which have weights and biases
-    /// that get updated during training.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
     /// Gets all trainable parameters from the multiply layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since MultiplyLayer has no trainable parameters.</returns>

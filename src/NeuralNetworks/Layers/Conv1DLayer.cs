@@ -297,16 +297,6 @@ public partial class Conv1DLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Tape-based autodiff drives parameter updates through the
-        // engine's optimizer integration; manual UpdateParameters is a
-        // legacy hook kept only for API completeness. No-op here — the
-        // tape's Backward pass already accumulated and applied gradients
-        // to _kernels / _biases via the registered trainable parameters.
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         if (!IsShapeResolved)

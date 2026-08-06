@@ -179,11 +179,34 @@ public class ALiBiPositionalBiasLayerTests
     }
 
 
+    /// <summary>
+    /// The flat vector carries the registered SLOPE BUFFER, and no trainable parameters.
+    /// </summary>
+    /// <remarks>
+    /// This asserted an empty vector, which encoded a real defect rather than the intended
+    /// contract: the ALiBi slopes are registered state the layer needs in order to reproduce its
+    /// bias after a reload, and excluding them meant a saved model came back without them. The
+    /// layer still has NO trainable parameters -- GetTrainableParameters() is empty and the
+    /// optimizer sees nothing here -- so the invariant worth pinning is that the count matches the
+    /// vector and the buffer survives the round trip, not that the vector is empty.
+    /// </remarks>
     [Fact(Timeout = 120000)]
-    public async Task GetParameters_ReturnsEmpty()
+    public async Task GetParameters_CarriesTheSlopeBufferAndNothingTrainable()
     {
+        await Task.Yield();
         var layer = new ALiBiPositionalBiasLayer<float>(4);
-        Assert.Equal(0, layer.GetParameters().Length);
+
+        var parameters = layer.GetParameters();
+        Assert.Equal((int)layer.ParameterCount, parameters.Length);
+        Assert.Equal(0, layer.GetTrainableParameters().Count);
+        Assert.True(parameters.Length > 0, "the registered slope buffer must be present in the flat vector");
+
+        // and it must survive a round trip
+        var restored = new ALiBiPositionalBiasLayer<float>(4);
+        restored.SetParameters(parameters);
+        var again = restored.GetParameters();
+        Assert.Equal(parameters.Length, again.Length);
+        for (int i = 0; i < parameters.Length; i++) Assert.Equal(parameters[i], again[i], 6);
     }
 
     [Fact(Timeout = 120000)]

@@ -283,12 +283,6 @@ public partial class BranchformerBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    /// <remarks>Tape-based autodiff drives the update; no manual gradient step here.</remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-    }
-
-    /// <inheritdoc/>
     public override void ResetState()
     {
         foreach (var c in Children) c.ResetState();

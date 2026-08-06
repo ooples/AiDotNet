@@ -319,12 +319,6 @@ public partial class ConvNeXtV2Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    /// <remarks>Tape-based autodiff drives the update; no manual gradient step here.</remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-    }
-
-    /// <inheritdoc/>
     /// <remarks>
     /// Publishes the block geometry. The expansion ratio is NOT always 3x — APNet2's bounded CI
     /// fixtures use other ratios — so deserialization must read the real value rather than infer

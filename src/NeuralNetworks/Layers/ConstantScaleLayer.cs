@@ -69,8 +69,5 @@ public partial class ConstantScaleLayer<T> : LayerBase<T>
     public override void ClearGradients() { base.ClearGradients(); }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate) { /* no-op */ }
-
-    /// <inheritdoc/>
     public override void ResetState() { /* no-op */ }
 }

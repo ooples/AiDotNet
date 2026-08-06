@@ -389,15 +389,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>
     #region Parameter Management
 
     /// <summary>
-    /// Updates parameters. This layer has no trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused).</param>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters to update
-    }
-
-    /// <summary>
     /// Gets all trainable parameters. This layer has none.
     /// </summary>
     /// <returns>An empty vector.</returns>

@@ -357,30 +357,6 @@ public partial class SplitLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a no-op for the split layer since it has no trainable parameters to update.
-    /// It is implemented to satisfy the interface requirements of LayerBase.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method doesn't do anything in the split layer.
-    /// 
-    /// Since the split layer doesn't have any trainable parameters:
-    /// - There's nothing to update during training
-    /// - This method exists just to fulfill the requirements of being a layer
-    /// 
-    /// Other layers would use this method to update their weights and biases,
-    /// but the split layer simply passes data through without modification.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since this layer has no trainable parameters.</returns>

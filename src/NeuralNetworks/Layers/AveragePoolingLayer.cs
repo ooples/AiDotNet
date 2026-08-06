@@ -395,25 +395,6 @@ public partial class AveragePoolingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the layer's parameters during training.
-    /// </summary>
-    /// <param name="learningRate">The learning rate that controls how much parameters change.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method is part of the neural network training process.
-    ///
-    /// During training, most layers need to update their internal values (parameters) to learn
-    /// from data. However, average pooling layers don't have any trainable parameters - they just
-    /// compute the average of values in each window.
-    ///
-    /// Think of it like a simple rule that doesn't need to be adjusted: "Always compute the average."
-    /// Since this rule never changes, there's nothing to update in this method.
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Average pooling layer doesn't have trainable parameters
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of the layer.
     /// </summary>
     /// <returns>An empty vector since average pooling layers have no trainable parameters.</returns>

@@ -288,31 +288,6 @@ public partial class LambdaLayer<T> : LayerBase<T>
 
 
     /// <summary>
-    /// Update parameters is a no-op for the lambda layer since it typically doesn't have trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused in this layer).</param>
-    /// <remarks>
-    /// <para>
-    /// This method is implemented as required by the LayerBase interface but typically does nothing for the LambdaLayer
-    /// since most custom transformations don't have trainable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method exists but typically does nothing for Lambda layers.
-    /// 
-    /// Since Lambda layers:
-    /// - Usually don't have their own weights or biases
-    /// - Rely on the custom functions you provide
-    /// 
-    /// This method is included only because all layers must have this method,
-    /// but it doesn't usually do anything for Lambda layers. If your custom functions
-    /// have parameters that need updating, you would need to handle that separately.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Lambda layers typically don't have trainable parameters
-    }
-
-    /// <summary>
     /// Returns an empty vector since the lambda layer typically has no trainable parameters.
     /// </summary>
     /// <returns>An empty vector.</returns>

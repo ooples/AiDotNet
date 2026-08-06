@@ -377,29 +377,6 @@ public partial class PaddingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the padding layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is part of the training process, but since PaddingLayer has no trainable parameters,
-    /// this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
-    /// 
-    /// However, since PaddingLayer just performs a fixed operation (adding zeros around the edges) and doesn't
-    /// have any internal values that can be learned or adjusted, this method is empty.
-    /// 
-    /// This is unlike layers such as Dense or Convolutional layers, which have weights and biases
-    /// that get updated during training.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in a padding layer
-    }
-
-    /// <summary>
     /// Gets all trainable parameters from the padding layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since PaddingLayer has no trainable parameters.</returns>

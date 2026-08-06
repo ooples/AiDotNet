@@ -127,11 +127,6 @@ public partial class TemporalShiftLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-    }
-
-    /// <inheritdoc/>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();

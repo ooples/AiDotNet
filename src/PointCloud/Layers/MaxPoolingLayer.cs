@@ -67,11 +67,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>
         return pooledOutput;
     }
 
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update
-    }
-
     public override void ClearGradients()
     {
         // No gradients to clear

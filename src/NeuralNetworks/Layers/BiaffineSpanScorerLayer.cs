@@ -413,16 +413,6 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Tape-based autodiff drives the update through the optimizer and the registered trainable
-    /// tensors, so there is no manual gradient step here. The boundary FFNNs are updated through
-    /// their own registration as sub-layers.
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
     /// Publishes the geometry deserialization needs. Without it the helper falls back to
     /// defaults (spanDim = 150) and rebuilds a differently-shaped layer, which surfaces as a
     /// parameter-count mismatch on clone rather than as a missing-metadata error.

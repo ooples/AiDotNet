@@ -424,33 +424,6 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>
 
 
     /// <summary>
-    /// Updates the parameters of the layer.
-    /// </summary>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is empty in the current implementation as the layer does not have traditional trainable parameters
-    /// updated through gradient descent. Instead, learning occurs in the Learn method which directly updates cell states.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is included for compatibility but doesn't do anything in this layer.
-    /// 
-    /// The reason this method is empty:
-    /// - This layer doesn't use traditional gradient-based parameter updates
-    /// - Instead, it learns by directly modifying cell states in the Learn method
-    /// - This method is included only to satisfy the requirements of the LayerBase class
-    /// 
-    /// Think of it like this: while standard neural network layers learn through small
-    /// adjustments based on error gradients, this layer learns through its specialized
-    /// temporal learning algorithm implemented in the Learn method.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // In this implementation, we don't have trainable parameters to update
-        // The learning is done in the Learn method by adjusting cell states
-    }
-
-    /// <summary>
     /// Gets all cell states of the layer as a single vector.
     /// </summary>
     /// <returns>A vector containing all cell states.</returns>

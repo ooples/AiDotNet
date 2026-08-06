@@ -317,28 +317,6 @@ public partial class MaskingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer based on the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is empty because the MaskingLayer has no trainable parameters to update.
-    /// However, it must be implemented to satisfy the base class contract.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update the layer's internal values during training.
-    /// 
-    /// However, since this layer doesn't have any trainable parameters:
-    /// - There's nothing to update
-    /// - The method exists but doesn't do anything
-    /// - This is normal for layers that perform fixed operations
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since this layer has no trainable parameters.</returns>

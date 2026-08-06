@@ -491,31 +491,6 @@ public partial class CroppingLayer<T> : LayerBase<T>
     private int[]? _gpuCachedInputShape;
 
     /// <summary>
-    /// Updates the layer's parameters using the specified learning rate.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the update.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a no-operation for cropping layers, as they have no trainable parameters to update.
-    /// It is implemented to satisfy the abstract method requirement from the base class.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is empty because cropping layers don't learn.
-    /// 
-    /// Since cropping layers:
-    /// - Have no adjustable parameters
-    /// - Always perform the same fixed operation
-    /// - Don't change their behavior based on training
-    ///
-    /// This method exists but does nothing. It's like having a bike pedal
-    /// that's not connected to the chain - you can push it, but it won't change anything.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in a cropping layer
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.
     /// </summary>
     /// <returns>An empty vector, as cropping layers have no trainable parameters.</returns>

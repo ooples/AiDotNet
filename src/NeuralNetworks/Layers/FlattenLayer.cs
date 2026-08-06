@@ -252,32 +252,6 @@ public partial class FlattenLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer based on the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the flatten layer has no
-    /// trainable parameters to update, so it performs no operation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method does nothing for flatten layers because they have no adjustable weights.
-    /// 
-    /// Unlike most layers (like convolutional or fully connected layers):
-    /// - Flatten layers don't have weights or biases to learn
-    /// - They just rearrange the data without modifying it
-    /// - There's nothing to update during training
-    /// 
-    /// This method exists only to fulfill the requirements of the base layer class.
-    /// The flatten layer participates in training by reorganizing activations and gradients,
-    /// not by updating internal parameters.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // FlattenLayer has no parameters to update
-    }
-
-    /// <summary>
     /// Gets the trainable parameters of the layer.
     /// </summary>
     /// <returns>

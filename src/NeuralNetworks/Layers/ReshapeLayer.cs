@@ -213,33 +213,6 @@ public partial class ReshapeLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the reshape layer.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is required by the LayerBase class but does nothing in the ReshapeLayer because this layer
-    /// has no trainable parameters to update. The ReshapeLayer only transforms the data structure without
-    /// applying any learned transformations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is empty because the layer has no internal values to update.
-    /// 
-    /// Unlike most layers in a neural network, the reshape layer doesn't have any
-    /// weights or biases that need to be adjusted during training. It's purely a 
-    /// geometric transformation of the data structure.
-    /// 
-    /// The actual learning happens in other layers of the network that have
-    /// trainable parameters like weights and biases.
-    /// 
-    /// This method exists only because all layers in the network must implement it.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // ReshapeLayer has no parameters to update
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of the reshape layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since this layer has no trainable parameters.</returns>

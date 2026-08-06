@@ -322,29 +322,6 @@ public partial class MeanLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the mean layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is part of the training process, but since MeanLayer has no trainable parameters,
-    /// this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
-    /// 
-    /// However, since MeanLayer just performs a fixed mathematical operation (averaging) and doesn't
-    /// have any internal values that can be learned or adjusted, this method is empty.
-    /// 
-    /// This is unlike layers such as Dense or Convolutional layers, which have weights and biases
-    /// that get updated during training.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // MeanLayer has no learnable parameters, so this method is empty
-    }
-
-    /// <summary>
     /// Gets all trainable parameters from the mean layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since MeanLayer has no trainable parameters.</returns>

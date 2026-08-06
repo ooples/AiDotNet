@@ -140,13 +140,6 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Tape-based autodiff applies gradients to the registered trainable parameters; the manual
-        // hook is a no-op (mirrors Conv1DLayer).
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameters()
         => Vector<T>.Concatenate(new Vector<T>(_kernel.ToArray()), new Vector<T>(_bias.ToArray()));
 

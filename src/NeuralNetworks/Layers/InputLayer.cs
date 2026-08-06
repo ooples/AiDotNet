@@ -166,31 +166,6 @@ public partial class InputLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Update parameters is a no-op for the input layer since it has no trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused in this layer).</param>
-    /// <remarks>
-    /// <para>
-    /// This method is implemented as required by the LayerBase interface but does nothing for the InputLayer
-    /// since it has no parameters to update.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method exists but does nothing because there's nothing to update.
-    /// 
-    /// Since the input layer:
-    /// - Has no weights or biases
-    /// - Doesn't transform the data
-    /// - Doesn't learn from training
-    /// 
-    /// This method is included only because all layers must have this method,
-    /// but it doesn't actually do anything for the input layer.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Input layer has no parameters to update
-    }
-
-    /// <summary>
     /// Returns an empty vector since the input layer has no trainable parameters.
     /// </summary>
     /// <returns>An empty vector.</returns>

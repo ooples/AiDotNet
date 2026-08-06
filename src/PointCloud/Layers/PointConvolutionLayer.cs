@@ -148,13 +148,6 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>
         for (int i = 0; i < b.Length; i++) b[i] = parameters[idx++];
     }
 
-    public override void UpdateParameters(T learningRate)
-    {
-        // No-op: _weights / _biases are registered trainable tensors updated through the
-        // tape optimizer's Step (there is no manual per-layer gradient buffer). Retained
-        // for the ILayer contract and legacy per-layer training drivers.
-    }
-
     public override void ClearGradients()
     {
         // No-op: gradients live on the tape, not in a per-layer buffer.

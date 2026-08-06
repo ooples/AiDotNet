@@ -274,46 +274,6 @@ public partial class ActivationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the layer's internal parameters during training.
-    /// <para>
-    /// This method is part of the training process where layers adjust their parameters
-    /// (weights and biases) based on the gradients calculated during backpropagation.
-    /// </para>
-    /// <para>
-    /// For activation layers, this method does nothing because they have no trainable parameters.
-    /// Unlike layers such as Dense layers which need to update their weights and biases,
-    /// activation layers simply apply a fixed mathematical function.
-    /// </para>
-    /// </summary>
-    /// <param name="learningRate">How quickly the network should learn from new data. Higher values mean bigger parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is called during the training process after the forward and backward passes have been completed.
-    /// For layers with trainable parameters, this method would update those parameters based on the gradients
-    /// calculated during backpropagation and the provided learning rate. However, since activation layers have
-    /// no trainable parameters, this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would update the layer's internal values during training, but activation layers have nothing to update.
-    /// 
-    /// In neural networks, training involves adjusting parameters to reduce errors.
-    /// This method is where those adjustments happen, but activation layers don't have
-    /// any adjustable parameters, so this method is empty.
-    /// 
-    /// For comparison:
-    /// - In a Dense layer, this would update weights and biases
-    /// - In a BatchNorm layer, this would update scale and shift parameters
-    /// - In this ActivationLayer, there's nothing to update
-    /// 
-    /// The learning rate parameter controls how big the updates would be if there
-    /// were any parameters to update - higher values mean bigger changes.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Activation layer has no parameters to update
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of this layer as a flat vector.
     /// <para>
     /// This method is useful for operations that need to work with all parameters at once,

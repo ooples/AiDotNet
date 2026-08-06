@@ -116,8 +116,6 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { /* tape-based optimizer updates registered params */ }
-
     public override long ParameterCount
     {
         get

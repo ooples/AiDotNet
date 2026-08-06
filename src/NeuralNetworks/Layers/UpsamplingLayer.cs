@@ -267,32 +267,6 @@ public partial class UpsamplingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is empty as the upsampling layer does not have any trainable parameters to update.
-    /// It is included to conform to the base class interface.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method does nothing because this layer has no learnable values.
-    /// 
-    /// The upsampling layer:
-    /// - Performs a fixed, predefined operation (repeating values)
-    /// - Has no weights or biases to adjust during training
-    /// - Only passes gradients backward without changing itself
-    /// 
-    /// This method exists only to satisfy the requirements of the base layer class,
-    /// similar to how a purely functional node in a network would need to implement
-    /// this method even though it has nothing to update.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.
     /// </summary>
     /// <returns>An empty vector, as the layer has no trainable parameters.</returns>

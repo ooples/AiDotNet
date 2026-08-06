@@ -188,17 +188,6 @@ public partial class PReLULayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_alpha);
     }
 
-    /// <summary>
-    /// Legacy scalar-learning-rate parameter update. Tape-based training uses
-    /// <see cref="SetParameters"/> after computing gradients via <c>GradientTape&lt;T&gt;</c>,
-    /// so this override is a no-op.
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Tape-based training flows through SetParameters after the optimizer applies the update.
-        // The scalar-LR path is not used for this layer.
-    }
-
     /// <inheritdoc/>
     public override void ResetState()
     {

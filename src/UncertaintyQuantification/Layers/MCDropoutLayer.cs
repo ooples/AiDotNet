@@ -125,14 +125,6 @@ public partial class MCDropoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters (no-op for dropout layers).
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update
-    }
-
-    /// <summary>
     /// Gets the trainable parameters (empty for dropout layers).
     /// </summary>
     public override Vector<T> GetParameters()

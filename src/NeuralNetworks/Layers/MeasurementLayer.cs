@@ -289,29 +289,6 @@ public partial class MeasurementLayer<T> : LayerBase<T>
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
     /// <summary>
-    /// Updates the parameters of the measurement layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is part of the training process, but since MeasurementLayer has no trainable parameters,
-    /// this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
-    /// 
-    /// However, since MeasurementLayer just performs a fixed mathematical operation (quantum measurement)
-    /// and doesn't have any internal values that can be learned or adjusted, this method is empty.
-    /// 
-    /// The measurement process follows the fundamental rules of quantum mechanics, which are 
-    /// constant rather than learnable parameters.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // MeasurementLayer doesn't have trainable parameters
-    }
-
-    /// <summary>
     /// Gets all trainable parameters from the measurement layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since MeasurementLayer has no trainable parameters.</returns>

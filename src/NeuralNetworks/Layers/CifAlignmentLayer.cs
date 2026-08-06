@@ -417,15 +417,6 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Tape-based autodiff drives the alpha predictor's updates
-        // through its own UpdateParameters / Optimizer integration; no
-        // manual step here. The CIF integrate-and-fire path is
-        // parameter-free.
-    }
-
-    /// <inheritdoc/>
     public override void ResetState()
     {
         _alphaPredictor.ResetState();

@@ -357,32 +357,6 @@ public partial class DropoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer based on the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the dropout layer has no
-    /// trainable parameters to update, so it performs no operation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method does nothing for dropout layers because they have no adjustable weights.
-    /// 
-    /// Unlike most layers (like convolutional or dense layers):
-    /// - Dropout layers don't have weights or biases to learn
-    /// - They just apply a random on/off pattern and scaling
-    /// - There's nothing to update during training
-    /// 
-    /// This method exists only to fulfill the requirements of the base layer class.
-    /// The dropout layer participates in training by modifying activations and gradients,
-    /// not by updating internal parameters.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Dropout layer has no parameters to update
-    }
-
-    /// <summary>
     /// Gets the trainable parameters of the layer.
     /// </summary>
     /// <returns>

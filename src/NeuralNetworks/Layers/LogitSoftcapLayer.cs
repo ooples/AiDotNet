@@ -70,8 +70,5 @@ public partial class LogitSoftcapLayer<T> : LayerBase<T>
     public override void ClearGradients() { }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate) { }
-
-    /// <inheritdoc/>
     public override void ResetState() { }
 }

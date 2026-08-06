@@ -205,12 +205,6 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    /// <remarks>Tape-based autodiff drives the update; no manual gradient step here.</remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-    }
-
-    /// <inheritdoc/>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();

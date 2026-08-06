@@ -1132,8 +1132,6 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();
@@ -1288,7 +1286,6 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();
@@ -1426,7 +1423,6 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();

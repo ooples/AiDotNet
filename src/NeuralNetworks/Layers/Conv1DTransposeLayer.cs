@@ -288,13 +288,6 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Tape autodiff drives updates through the registered trainable parameters;
-        // this manual hook is a no-op (parity with Conv1DLayer / DeconvolutionalLayer).
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         if (!IsShapeResolved)

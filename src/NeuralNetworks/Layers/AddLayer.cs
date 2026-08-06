@@ -372,37 +372,6 @@ public partial class AddLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the layer's internal parameters during training.
-    /// </summary>
-    /// <param name="learningRate">How quickly the network should learn from new data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is called during the training process after the forward and backward passes have been completed.
-    /// For layers with trainable parameters, this method would update those parameters based on the gradients
-    /// calculated during backpropagation and the provided learning rate. However, since addition layers have
-    /// no trainable parameters, this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would update the layer's internal values during training, but addition layers have nothing to update.
-    /// 
-    /// In neural networks, training involves adjusting parameters to reduce errors.
-    /// This method is where those adjustments happen, but addition layers don't have
-    /// any adjustable parameters, so this method is empty.
-    /// 
-    /// For comparison:
-    /// - In a Dense layer, this would update weights and biases
-    /// - In a BatchNorm layer, this would update scale and shift parameters
-    /// - In this AddLayer, there's nothing to update
-    /// 
-    /// The learning rate parameter controls how big the updates would be if there
-    /// were any parameters to update - higher values mean bigger changes.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of this layer as a flat vector.
     /// </summary>
     /// <returns>An empty vector since addition layers have no trainable parameters.</returns>

@@ -544,32 +544,6 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer based on the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the global pooling layer has no
-    /// trainable parameters to update, so it performs no operation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method does nothing because pooling layers have no adjustable weights.
-    /// 
-    /// Unlike layers like convolutional or fully connected layers:
-    /// - Global pooling layers don't have weights or biases to learn
-    /// - They perform a fixed operation (finding maximum or average values)
-    /// - There's nothing to update during training
-    /// 
-    /// This method exists only to fulfill the requirements of the base layer class.
-    /// The pooling layer influences the network by reducing dimensions and providing
-    /// translation invariance, not by learning parameters.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in a pooling layer
-    }
-
-    /// <summary>
     /// Gets the trainable parameters of the layer.
     /// </summary>
     /// <returns>

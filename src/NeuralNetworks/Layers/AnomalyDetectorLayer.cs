@@ -582,28 +582,6 @@ public partial class AnomalyDetectorLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer.
-    /// </summary>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is empty in the current implementation as the layer does not have trainable parameters
-    /// updated through gradient descent.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is included for compatibility but doesn't do anything in this layer.
-    /// 
-    /// The reason this method is empty:
-    /// - This layer doesn't have weights or biases to update
-    /// - It performs calculations based on fixed formulas rather than learned parameters
-    /// - This method is included only to satisfy the requirements of the LayerBase class
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
     /// Gets all parameters of the layer as a single vector.
     /// </summary>
     /// <returns>An empty vector as this layer has no trainable parameters.</returns>

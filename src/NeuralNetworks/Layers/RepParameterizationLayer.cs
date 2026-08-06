@@ -429,34 +429,6 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the reparameterization layer.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is required by the LayerBase class but does nothing in the RepParameterizationLayer
-    /// because this layer has no trainable parameters to update. The learning happens in the encoder
-    /// network that produces the means and log variances.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is empty because the layer has no internal values to update.
-    /// 
-    /// Unlike most layers in a neural network, the reparameterization layer doesn't have any
-    /// weights or biases that need to be adjusted during training. It's more like a mathematical
-    /// operation that passes gradients through.
-    /// 
-    /// The actual learning happens in:
-    /// - The encoder network that produces the means and log variances
-    /// - The decoder network that processes the samples this layer produces
-    /// 
-    /// This method exists only because all layers in the network must implement it.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of the reparameterization layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since this layer has no trainable parameters.</returns>

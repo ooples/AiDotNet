@@ -4,6 +4,7 @@ using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -2677,7 +2678,30 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// its ability to extract useful patterns from inputs.
     /// </para>
     /// </remarks>
-    public abstract void UpdateParameters(T learningRate);
+    /// <remarks>
+    /// <para>
+    /// Concrete and INTENTIONALLY EMPTY. This is a legacy hook: tape-based autodiff drives
+    /// parameter updates through the engine's optimizer integration, so by the time anything could
+    /// call this, the tape's backward pass has already accumulated and applied gradients to the
+    /// registered trainable tensors. 75 layers already implement it as an explicit no-op for
+    /// exactly that reason; making the base do the same lets them stop restating it.
+    /// </para>
+    /// <para>
+    /// A base that performed the obvious SGD step would be actively WRONG here — it would apply
+    /// gradients the tape has already applied, double-stepping every parameter. That failure mode
+    /// is not hypothetical: double-updating a composite's children is what collapsed HiFiGAN to
+    /// uniform output earlier in this work, with an L2 distance of exactly zero between distinct
+    /// inputs after training.
+    /// </para>
+    /// <para>
+    /// Layers implementing a genuine manual step (DenseLayer's velocity/GPU path,
+    /// FullyConnectedLayer's direct descent) continue to override, and 254 do. The change is only
+    /// that an empty body no longer has to be written out to satisfy an abstract member.
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParameters(T learningRate)
+    {
+    }
 
     /// <summary>
     /// Gets the types of activation functions used by this layer.
@@ -3505,9 +3529,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
                 for (int i = 0; i < trainable.Count; i++)
                 {
                     var t = trainable[i];
-                    if (t is not null) total += t.Length;
+                    // Sparse tensors contribute their STORED entries, not their dense extent --
+                    // structural zeros are not trainable. Using t.Length here counted them, which
+                    // is why a sparse layer's count only matched its vector while the layer
+                    // overrode both members by hand.
+                    if (t is not null) total += TrainableScalarCount(t);
                 }
             }
+
+            total += BufferScalarCount();
+
             var subs = GetSubLayers();
             if (subs is not null)
             {
@@ -3657,6 +3688,88 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// where before doing nothing was impossible.
     /// </para>
     /// </remarks>
+
+    /// <summary>
+    /// Number of TRAINABLE scalars in a parameter tensor: the stored (non-zero) entries for a
+    /// sparse tensor, the full length for a dense one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A sparse tensor's structural zeros are not parameters. They have no gradient, no optimizer
+    /// state, and no meaning to restore, so counting them would inflate every total and make
+    /// <c>SetParameters</c> demand values that do not exist. This matches
+    /// <c>SparseLinearLayer.ParameterCount</c> (<c>NonZeroCount + OutputFeatures</c>) and mirrors
+    /// <c>torch.autograd.gradcheck</c>'s masked semantics, which walk a sparse tensor's stored
+    /// entries via <c>indices()/values()</c> and never densify.
+    /// </para>
+    /// <para>
+    /// This is where the library goes past PyTorch rather than matching it:
+    /// <c>torch.nn.utils.parameters_to_vector</c> has no sparse path at all — it calls
+    /// <c>view(-1)</c>, which throws on a sparse tensor — so a model holding sparse parameters
+    /// cannot use the flat-vector API in PyTorch. Here the flat surface works for both layouts,
+    /// and the sparse case is the CHEAPER one, since only nnz values are moved instead of a
+    /// densified buffer.
+    /// </para>
+    /// </remarks>
+
+    /// <summary>
+    /// Registered non-trainable persistent state, folded into the parameter surfaces so a
+    /// checkpoint carries it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Buffers are state the optimizer must never touch but a saved model cannot do without:
+    /// BatchNormalization's running mean and variance, ALiBi's slope table, a reservoir's fixed
+    /// weights. The optimizer set stays separate and unchanged -- it reads
+    /// <c>GetTrainableParameters()</c>, which does NOT include these, so nothing here can be
+    /// trained by accident. Only the serialization surface widens.
+    /// </para>
+    /// <para>
+    /// Leaving them out is a real defect, not a tidiness issue: without running statistics in the
+    /// vector, a BatchNorm model reloads with its normalization reset and quietly predicts
+    /// differently after a round-trip, with nothing failing to say so.
+    /// </para>
+    /// <para>
+    /// This is past what PyTorch offers rather than a copy of it. There, <c>parameters()</c> and
+    /// <c>state_dict()</c> are separate surfaces a caller must know to choose between, and
+    /// <c>parameters_to_vector</c> supports neither buffers nor sparse tensors at all. Here one flat
+    /// vector covers parameters and buffers, dense and sparse, with <c>ParameterCount</c> as a
+    /// checked invariant over it -- a contract <c>state_dict()</c> does not have.
+    /// </para>
+    /// </remarks>
+    private int BufferScalarCount()
+    {
+        var buffers = GetRegisteredBuffers();
+        if (buffers is null) return 0;
+        int n = 0;
+        for (int i = 0; i < buffers.Count; i++)
+        {
+            var b = buffers[i].Tensor;
+            if (b is not null) n += TrainableScalarCount(b);
+        }
+        return n;
+    }
+
+    private static int TrainableScalarCount(Tensor<T> t)
+        => t is SparseTensor<T> sp ? sp.NonZeroCount : t.Length;
+
+    /// <summary>Reads the i-th trainable scalar, honouring sparse payload layout.</summary>
+    /// <remarks>
+    /// Sparse reads go through <c>DataVector</c>, never the <c>Values</c> property: that property
+    /// is <c>DataVector.ToArray()</c> and allocates a fresh copy on EVERY access, so writing
+    /// through it silently updates a throwaway array. The same copy-versus-view trap already cost
+    /// this repo a false gradient-check failure.
+    /// </remarks>
+    private static T ReadTrainableScalar(Tensor<T> t, int i)
+        => t is SparseTensor<T> sp ? sp.DataVector[i] : t.GetFlat(i);
+
+    /// <summary>Writes the i-th trainable scalar, honouring sparse payload layout.</summary>
+    private static void WriteTrainableScalar(Tensor<T> t, int i, T value)
+    {
+        if (t is SparseTensor<T> sp) sp.DataVector[i] = value;
+        else t.SetFlat(i, value);
+    }
+
     public virtual Vector<T> GetParameters()
     {
         var values = new List<T>();
@@ -3671,8 +3784,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             {
                 var t = trainable[i];
                 if (t is null) continue;
-                for (int j = 0; j < t.Length; j++)
-                    values.Add(t.GetFlat(j));
+                int n = TrainableScalarCount(t);
+                for (int j = 0; j < n; j++)
+                    values.Add(ReadTrainableScalar(t, j));
+            }
+        }
+
+        var bufs = GetRegisteredBuffers();
+        if (bufs is not null)
+        {
+            for (int i = 0; i < bufs.Count; i++)
+            {
+                var b = bufs[i].Tensor;
+                if (b is null) continue;
+                int bn = TrainableScalarCount(b);
+                for (int j = 0; j < bn; j++) values.Add(ReadTrainableScalar(b, j));
             }
         }
 
@@ -3744,7 +3870,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         var trainableForShape = GetTrainableParameters();
         var subsForShape = GetSubLayers();
         bool hasRegistry = (trainableForShape is not null && trainableForShape.Count > 0)
-                        || (subsForShape is not null && subsForShape.Count > 0);
+                        || (subsForShape is not null && subsForShape.Count > 0)
+                        || BufferScalarCount() > 0;
 
         // A layer with nothing registered keeps the ORIGINAL wholesale semantics: the entire vector
         // goes into Parameters. Deferred layers depend on that. Conv1DLayer holds the incoming
@@ -3776,8 +3903,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             {
                 var t = trainable[i];
                 if (t is null) continue;
-                for (int j = 0; j < t.Length; j++)
-                    t.SetFlat(j, parameters[index++]);
+                int n = TrainableScalarCount(t);
+                for (int j = 0; j < n; j++)
+                    WriteTrainableScalar(t, j, parameters[index++]);
+            }
+        }
+
+        var bufs = GetRegisteredBuffers();
+        if (bufs is not null)
+        {
+            for (int i = 0; i < bufs.Count; i++)
+            {
+                var b = bufs[i].Tensor;
+                if (b is null) continue;
+                int bn = TrainableScalarCount(b);
+                for (int j = 0; j < bn; j++) WriteTrainableScalar(b, j, parameters[index++]);
             }
         }
 
@@ -4517,31 +4657,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </summary>
     public virtual IReadOnlyList<ILayer<T>> GetSubLayers() => _registeredSubLayers;
 
-    /// <summary>
-    /// Notifies the engine that a registered persistent tensor's data has changed.
-    /// </summary>
-    /// <param name="tensor">The tensor whose data has been modified.</param>
-    /// <remarks>
-    /// <para>
-    /// Call this method after modifying a registered tensor's data (e.g., during parameter updates).
-    /// The engine will re-upload the data to GPU on the next operation that uses the tensor.
-    /// </para>
-    /// <para><b>For Beginners:</b> When you change the values in a registered tensor (like updating
-    /// weights during training), you need to tell the GPU that the copy it has is outdated.
-    /// This method does that - it tells the GPU "hey, this data changed, please get a fresh copy."
-    /// </para>
-    /// <para><b>Usage Pattern:</b></para>
-    /// <para>
-    /// Call after UpdateParameters modifies weights:
-    /// <code>
-    /// public override void UpdateParameters(T learningRate)
-    /// {
-    ///     // Update weights using gradients
-    ///     _weights = _weights.Subtract(_weightGradients.Multiply(learningRate));
-    ///
-    ///     // Notify engine that GPU copy is stale
-    ///     InvalidateTrainableParameter(_weights);
-    /// }
     /// </code>
     /// </para>
     /// </remarks>

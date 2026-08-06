@@ -175,21 +175,6 @@ public partial class PrototypeAlignmentLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// No-op by design. Prototypes were registered with
-    /// <see cref="LayerBase{T}.RegisterTrainableParameter"/>, so the tape-based
-    /// <c>NeuralNetworkBase.TrainWithTape</c> path updates them through the optimizer's
-    /// <c>Step(TapeStepContext)</c>. For non-tape training paths (legacy per-layer
-    /// <c>UpdateParameters(learningRate)</c> flow), the parameter is still addressable
-    /// via <see cref="GetParameters"/> / <see cref="SetParameters"/> so external
-    /// drivers can apply updates explicitly — there is no internal gradient buffer to
-    /// consume here.
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         var vec = new T[_numPrototypes * _embedDim];
