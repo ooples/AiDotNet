@@ -3514,6 +3514,182 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
         }
     }
+    /// <summary>
+    /// Produces one target per declared output from the single target the caller supplied.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The generic training surface passes ONE (input, expectedOutput) pair, so a composite objective
+    /// needs a target per term. Where the supplied target already matches an output element-for-element
+    /// it is used directly; otherwise the output's own values are used as a self-target, which
+    /// contributes ZERO loss and zero gradient for that term.
+    /// </para>
+    /// <para>
+    /// A zero term is the honest fallback: it leaves the branch unsupervised, exactly as before, rather
+    /// than inventing a target that would train the branch toward a number nobody chose. A caller who
+    /// wants real supervision for every head passes real targets - which is what the dedicated
+    /// multi-target training overloads and the declaration-aware test harness are for.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Replaces a single-output loss with the model's DECLARED weighted objective, on the tape.
+    /// </summary>
+    /// <param name="lossTensor">The single-output loss already computed.</param>
+    /// <param name="input">The input this step is training on.</param>
+    /// <returns>The composed objective, or the original loss when no composite is declared.</returns>
+    /// <remarks>
+    /// <para>
+    /// A model whose paper objective is a weighted sum over several heads cannot express it through one
+    /// prediction tensor: whatever the prediction omits gets no gradient, so that branch trains not at
+    /// all - silently, because the loss still falls and every generic invariant still passes. ABCNet is
+    /// the case in hand; its recognition head was never supervised and nothing noticed.
+    /// </para>
+    /// <para>
+    /// SHARED BY EVERY TAPE-LOSS PATH, and that is the point of extracting it. This class computes a
+    /// tape loss in four places - the main TrainWithTape, the gradient-accumulation chunk loop, the
+    /// streaming path, and the standalone tape helper. Wiring the objective into ONE of them left the
+    /// composite silently inert for any model that happened to route through another, which is exactly
+    /// the bug this method exists to prevent recurring.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> ApplyCompositeObjective(Tensor<T> lossTensor, Tensor<T> input)
+    {
+        if (this is not ICompositeLoss<T> composite) return lossTensor;
+
+        var specs = composite.DeclaredOutputs;
+        if (specs is null || specs.Count == 0) return lossTensor;
+
+        var outputs = composite.ComputeOutputs(input);
+        if (outputs is null || outputs.Count != specs.Count) return lossTensor;
+
+        var targets = SplitCompositeTargets(specs, outputs, lossTensor);
+        if (targets.Count != specs.Count) return lossTensor;
+
+        // REPLACE ONLY IF SOMETHING IS ACTUALLY SUPERVISED. Without caller-supplied per-output
+        // targets, every head whose shape does not match the single supplied target falls back to a
+        // self-target and contributes exactly zero. Substituting an all-zero objective for a working
+        // single-output loss does not merely fail to help - it stops the model training at all, which
+        // is how this first went wrong: ABCNet's GradientFlow and Training_ShouldChangeParameters both
+        // went red with "no parameters changed".
+        if (!_compositeTargetsAreReal) return lossTensor;
+
+        Tensor<T>? total = null;
+        for (int i = 0; i < specs.Count; i++)
+        {
+            if (specs[i].Loss is not LossFunctionBase<T> termLoss) continue;
+            if (outputs[i] is null || targets[i] is null) continue;
+
+            var term = termLoss.ComputeTapeLoss(outputs[i], targets[i]);
+            if (Math.Abs(specs[i].Weight - 1.0) > double.Epsilon)
+            {
+                term = Engine.TensorMultiplyScalar(term, NumOps.FromDouble(specs[i].Weight));
+            }
+
+            total = total is null ? term : Engine.TensorAdd(total, term);
+        }
+
+        // Replaces rather than adds: the declaration IS the objective, and adding both would
+        // double-count whichever head the single prediction already represented.
+        return total ?? lossTensor;
+    }
+
+    /// <summary>Whether the last target split produced at least one genuinely supervised term.</summary>
+    private bool _compositeTargetsAreReal;
+
+    /// <summary>Targets supplied per declared output for the next training step, if any.</summary>
+    private IReadOnlyList<Tensor<T>>? _compositeTargets;
+
+    /// <summary>
+    /// Trains a composite-objective model with ONE TARGET PER DECLARED OUTPUT.
+    /// </summary>
+    /// <param name="input">The model input.</param>
+    /// <param name="targets">One target per entry of <c>ICompositeLoss.DeclaredOutputs</c>, in order.</param>
+    /// <remarks>
+    /// <para>
+    /// The single-target Train cannot supervise a multi-head objective: it has one tensor and the
+    /// declaration has several outputs of different shapes, so every head the tensor does not match
+    /// falls back to a self-target and contributes NO gradient. That is honest but it leaves the branch
+    /// untrained, which is the defect this whole mechanism exists to fix.
+    /// </para>
+    /// <para>
+    /// The declaration is what makes this callable without guesswork: a caller - or a test harness -
+    /// reads DeclaredOutputs, sees each head's name and the shape its output takes, and supplies a
+    /// matching target. Neither PyTorch nor Keras can do that, because in neither does the model state
+    /// what it needs.
+    /// </para>
+    /// </remarks>
+    public void Train(Tensor<T> input, IReadOnlyList<Tensor<T>> targets)
+    {
+        if (this is not ICompositeLoss<T>)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} does not declare a composite objective (it does not implement "
+                + "ICompositeLoss), so there is nothing for per-output targets to line up with. Use "
+                + "Train(input, expectedOutput).");
+        }
+
+        Guard.NotNull(input);
+        Guard.NotNull(targets);
+
+        _compositeTargets = targets;
+        try
+        {
+            // The primary target is the first head's, so the single-output plumbing still has
+            // something shaped correctly to work with; the composite path overrides the objective.
+            Train(input, targets.Count > 0 ? targets[0] : input);
+        }
+        finally
+        {
+            _compositeTargets = null;
+        }
+    }
+
+    private List<Tensor<T>> SplitCompositeTargets(
+        IReadOnlyList<OutputSpec<T>> specs, IReadOnlyList<Tensor<T>> outputs, Tensor<T>? supplied)
+    {
+        // Caller-supplied per-output targets win outright - they are the only ones that can supervise
+        // a head whose shape differs from the primary prediction.
+        if (_compositeTargets is not null && _compositeTargets.Count == specs.Count)
+        {
+            _compositeTargetsAreReal = true;
+            return new List<Tensor<T>>(_compositeTargets);
+        }
+
+        _compositeTargetsAreReal = false;
+
+        var targets = new List<Tensor<T>>(specs.Count);
+        for (int i = 0; i < specs.Count && i < outputs.Count; i++)
+        {
+            var output = outputs[i];
+            // A declared output the model did not produce leaves nothing to score; the supplied
+            // target is the only sensible stand-in and the term contributes what it contributes.
+            if (output is null)
+            {
+                if (supplied is not null) targets.Add(supplied);
+                continue;
+            }
+
+            if (supplied is not null && supplied.Length == output.Length)
+            {
+                var suppliedShape = supplied.Shape.ToArray();
+                var outputShape = output.Shape.ToArray();
+                _compositeTargetsAreReal = true;
+                targets.Add(suppliedShape.Length == outputShape.Length
+                        && Enumerable.SequenceEqual(suppliedShape, outputShape)
+                    ? supplied
+                    : Engine.Reshape(supplied, outputShape));
+                continue;
+            }
+
+            // No target of the right size for this head. Detached so the self-target is a CONSTANT -
+            // left attached it would be a target that moves with the prediction, which trains the head
+            // toward whatever it already says.
+            targets.Add(Engine.StopGradient(output));
+        }
+
+        return targets;
+    }
+
     protected abstract void InitializeLayers();
 
     /// <summary>
@@ -4079,7 +4255,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // Align target to prediction shape — same policy as TrainWithTape.
                 var alignedTarget = AlignTargetToOutputShape(prediction, yChunk);
 
-                var lossTensor = loss.ComputeTapeLoss(prediction, alignedTarget);
+                var lossTensor = ApplyCompositeObjective(
+                    loss.ComputeTapeLoss(prediction, alignedTarget), xChunk);
                 T chunkLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
 
                 // Weight each chunk's loss by its sample count so a final
@@ -7276,6 +7453,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         var lossTensor = loss.ComputeTapeLoss(output, expected);
+
+        lossTensor = ApplyCompositeObjective(lossTensor, input);
+
         LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         // Sources = layer-owned trainable params + network-level extras
         // (cls/pos tokens, etc.), exactly the set the eager path optimizes.
@@ -7897,7 +8077,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // (zero-alloc) rather than Shape.ToArray().
             expected = AlignTargetToOutputShape(output, expected);
 
-            var lossTensor = loss.ComputeTapeLoss(output, expected);
+            // Same declared objective as every other tape-loss path. Wiring only some of them left the
+            // composite inert for whichever path a model happened to take - ABCNet took this one.
+            var lossTensor = ApplyCompositeObjective(loss.ComputeTapeLoss(output, expected), input);
 
             // ---------------- Mixed-precision (#1354) — scale loss before backward ----------------
             // Multiply the tape-tracked loss by LossScaler.Scale so the backward
@@ -7972,7 +8154,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 {
                     tgt = Engine.Reshape(tgt, pred._shape);
                 }
-                return loss.ComputeTapeLoss(pred, tgt);
+                return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
             }
 
             // ---------------- Mixed-precision (#1354) — unscale gradients + overflow check ----------------
@@ -8934,7 +9116,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // (matches the eager path's direction at TrainWithTape:2509-2512).
                     if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
                         tgt = Engine.Reshape(tgt, pred._shape);
-                    return loss.ComputeTapeLoss(pred, tgt);
+                    return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
                 },
                 optimizerType: fusedType,
                 learningRate: lr,
@@ -12435,7 +12617,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         Tensor<T> lossTensor;
         if (resolved is LossFunctions.LossFunctionBase<T> tapeLoss)
         {
-            lossTensor = tapeLoss.ComputeTapeLoss(prediction, target);
+            // Same declared objective as every other tape-loss path; wiring only some of them left
+            // the composite silently inert for whichever path a model happened to take.
+            lossTensor = ApplyCompositeObjective(tapeLoss.ComputeTapeLoss(prediction, target), input);
             // Record the scalar loss so GetLastLoss() reflects this gradient step. The
             // IGradientComputable fast-path (used by every gradient-based optimizer's
             // CalculateGradient) previously left LastLoss stale/zero, so callers reading the

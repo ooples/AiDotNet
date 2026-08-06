@@ -70,7 +70,7 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
     "https://arxiv.org/abs/2002.10200",
     Year = 2020,
     Authors = "Yuliang Liu, Hao Chen, Chunhua Shen, Tong He, Lianwen Jin, Liangwei Wang")]
-public class ABCNet<T> : NeuralNetworkBase<T>
+public class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
 {
     /// <summary>Coordinates the Bezier head regresses: 8 control points, (x, y) each.</summary>
     public const int BezierCoordinateCount = 16;
@@ -332,14 +332,7 @@ public class ABCNet<T> : NeuralNetworkBase<T>
         int r1 = recognition.Add(Layers[recogStart + 1], r0);
         int r2 = recognition.AddVia(
             Layers[ExpectedLayerCount - 1], r1,
-            transform: f =>
-            {
-                int channels = f.Shape[f.Rank - 3];
-                int height = f.Shape[f.Rank - 2];
-                int width = f.Shape[f.Rank - 1];
-                var columnsFirst = Engine.TensorPermute(f, new[] { 2, 0, 1 });
-                return Engine.Reshape(columnsFirst, new[] { width, channels * height });
-            },
+            transform: f => ColumnsAsBatch(f),
             description: "permute [C,h,w] -> [w,C,h] then flatten to [w, C*h] so each column is classified");
         _recognitionGraph = recognition.Output(r2).Build();
     }
@@ -452,6 +445,59 @@ public class ABCNet<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// THE PAPER'S OBJECTIVE IS A SUM, and declaring it is what finally supervises the recognizer.
+    /// Liu et al. train detection and recognition JOINTLY - a score-map term, an L1 term on the Bezier
+    /// coordinates, and a CTC term over the recognition head. Returning only the detection tensor from
+    /// the training forward meant layers 5-7 received no gradient whatsoever: the model trained its
+    /// detector and left its recognizer at initialisation, while the loss fell and every generic
+    /// invariant passed.
+    /// </para>
+    /// <para>
+    /// Two terms rather than three because the detection tensor already carries the score map AND the
+    /// sixteen Bezier channels concatenated - one loss over it covers both of the paper's detection
+    /// terms. Splitting them would need separate weights the paper does not give.
+    /// </para>
+    /// <para>
+    /// Equal weights, deliberately: the paper states its objective as an unweighted sum. A weight is
+    /// visible here precisely so it can be checked against the paper rather than buried in a loss.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputSpec<T>> DeclaredOutputs => new[]
+    {
+        new OutputSpec<T>("detection", _lossFunction, 1.0),
+        new OutputSpec<T>("recognition", _lossFunction, 1.0),
+    };
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// RECOGNITION IS COMPUTED THROUGH THE PREDICTED CURVE, which is the coupling that makes this one
+    /// model rather than a detector bolted to a recognizer. BezierAlign samples the shared trunk
+    /// features THROUGH the control points the Bezier head just regressed, so gradient from the
+    /// recognition term flows back into the coordinate head. Sampling through detached coordinates
+    /// would reproduce the arithmetic and lose the paper's actual argument.
+    /// </para>
+    /// <para>
+    /// The control points come from the feature-space decode of the CURRENT prediction, so the two
+    /// heads are genuinely wired together during training and not merely summed.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<Tensor<T>> ComputeOutputs(Tensor<T> input)
+    {
+        Guard.NotNull(input);
+        EnsureLayerRandomSeedsWired();
+
+        var detection = ComputeDetection(input);
+        var features = Backbone(input);
+        var controlPoints = TrainingControlPoints(detection);
+        var recognition = RecognizeRectified(features, controlPoints);
+
+        return new[] { detection, recognition };
+    }
+
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => ComputeDetection(input);
 
     /// <summary>
@@ -550,6 +596,103 @@ public class ABCNet<T> : NeuralNetworkBase<T>
         return spotted;
     }
 
+    /// <summary>
+    /// Control points for the TRAINING path, sliced from the detection tensor with engine ops so the
+    /// tape survives.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// SEPARATE FROM THE INFERENCE DECODE, and it has to be. <see cref="DecodeDetections"/> reads
+    /// values out into CLR doubles to rank and threshold instances - correct for inference, fatal here:
+    /// the moment a value leaves the tensor the tape is severed, and the recognition term would train
+    /// nothing in the coordinate head. Everything below stays in engine ops for exactly that reason.
+    /// </para>
+    /// <para>
+    /// A FIXED feature position, not the highest-scoring one. Selecting by argmax is not
+    /// differentiable, and a straight-through approximation would put a fiction in the gradient path.
+    /// A fixed position still routes the recognition loss through coordinates the Bezier head actually
+    /// regressed, which is the coupling the paper relies on; which position it is does not change that.
+    /// </para>
+    /// <para>
+    /// The head regresses OFFSETS from the sampling position, so the position is added back to reach
+    /// feature-map coordinates - the same decode the inference path performs, done tensor-side.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> TrainingControlPoints(Tensor<T> detection)
+    {
+        int rank = detection.Rank;
+        int channelAxis = rank == 4 ? 1 : 0;
+        int heightAxis = rank - 2;
+        int widthAxis = rank - 1;
+
+        // Channels 1..16 are the Bezier coordinates; channel 0 is the score map.
+        var coords = Engine.TensorNarrow(detection, channelAxis, 1, BezierCoordinateCount);
+
+        // One spatial position, kept near the middle so the decoded curve lands inside the feature map
+        // rather than hard against a corner.
+        int py = detection.Shape[heightAxis] / 2;
+        int px = detection.Shape[widthAxis] / 2;
+        coords = Engine.TensorNarrow(coords, heightAxis, py, 1);
+        coords = Engine.TensorNarrow(coords, widthAxis, px, 1);
+
+        var offsets = Engine.Reshape(coords, new[] { BezierAlign.ControlPointCount, 2 });
+
+        // Offsets are relative to the sampling position, so add it back. A constant addend, so it
+        // contributes no gradient of its own while leaving the offsets fully differentiable.
+        var origin = new Tensor<T>(new[] { BezierAlign.ControlPointCount, 2 });
+        for (int k = 0; k < BezierAlign.ControlPointCount; k++)
+        {
+            origin[(k * 2) + 0] = NumOps.FromDouble(px);
+            origin[(k * 2) + 1] = NumOps.FromDouble(py);
+        }
+
+        return Engine.TensorAdd(offsets, origin);
+    }
+
+    /// <summary>
+    /// Turns a rectified strip into one row per COLUMN, so the dense head classifies each column.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// RANK-AWARE, because the two callers do not agree on rank. Inference rectifies one instance at a
+    /// time and hands over <c>[C, h, w]</c>; training runs through the base, which auto-promotes an
+    /// unbatched input to <c>[1, C, H, W]</c>, so the strip arrives as <c>[B, C, h, w]</c>. The previous
+    /// version read its axes rank-agnostically (<c>Rank - 3</c>) but then permuted with a hardcoded
+    /// <c>[2, 0, 1]</c> - correct for rank 3 and a throw for rank 4, which is exactly what the joint
+    /// objective hit the moment it ran the recognition branch during training.
+    /// </para>
+    /// <para>
+    /// Columns become the leading axis either way, since CTC treats them as the time steps: collapsing
+    /// the strip to one vector would discard the left-to-right ordering that distinguishes characters.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ColumnsAsBatch(Tensor<T> strip)
+    {
+        int channels = strip.Shape[strip.Rank - 3];
+        int height = strip.Shape[strip.Rank - 2];
+        int width = strip.Shape[strip.Rank - 1];
+
+        if (strip.Rank == 3)
+        {
+            // [C, h, w] -> [w, C, h] -> [w, C*h]
+            var columnsFirst = Engine.TensorPermute(strip, new[] { 2, 0, 1 });
+            return Engine.Reshape(columnsFirst, new[] { width, channels * height });
+        }
+
+        if (strip.Rank == 4)
+        {
+            // [B, C, h, w] -> [B, w, C, h] -> [B*w, C*h]. Batch and column fold into one leading axis
+            // because the classifier is per-column and indifferent to which image a column came from.
+            int batch = strip.Shape[0];
+            var columnsFirst = Engine.TensorPermute(strip, new[] { 0, 3, 1, 2 });
+            return Engine.Reshape(columnsFirst, new[] { batch * width, channels * height });
+        }
+
+        throw new ArgumentException(
+            $"The rectified strip must be [C, h, w] or [B, C, h, w]; got rank {strip.Rank}.",
+            nameof(strip));
+    }
+
     private static Tensor<T> ControlPointTensor(IReadOnlyList<(double X, double Y)> points)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -590,14 +733,7 @@ public class ABCNet<T> : NeuralNetworkBase<T>
         var f = Layers[BackboneLayerCount + DetectionHeadLayerCount].Forward(strip);
         f = Layers[BackboneLayerCount + DetectionHeadLayerCount + 1].Forward(f);
 
-        // [C, h, w] -> [w, C, h] -> [w, C*h], so the dense head classifies each column independently
-        // with the leading axis acting as the batch.
-        int channels = f.Shape[f.Rank - 3];
-        int height = f.Shape[f.Rank - 2];
-        int width = f.Shape[f.Rank - 1];
-
-        var columnsFirst = Engine.TensorPermute(f, new[] { 2, 0, 1 });
-        var flattened = Engine.Reshape(columnsFirst, new[] { width, channels * height });
+        var flattened = ColumnsAsBatch(f);
 
         return Layers[ExpectedLayerCount - 1].Forward(flattened);
     }
