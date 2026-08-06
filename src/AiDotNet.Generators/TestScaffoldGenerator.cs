@@ -11058,6 +11058,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 56, 56 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
             }
+            else if (model.ClassName == "RealESRGANVideo")
+            {
+                // Rung 3 of the ladder (float -> cap -> SHRINK -> HeavyTimeout). Rungs 1 and 2 are both
+                // already applied — <float> in Fp32TestClassNames and the heavy-model iteration caps —
+                // and the target-dependence probe still measured 62.5 s against a 120 s gate on a
+                // 16-core box. CI runs on 4 cores, so that margin is not safe.
+                //
+                // Halve the FRAMES, exactly as VideoCLIP does above and for the same reason: the RRDB
+                // stack (23 blocks x 5 dense layers at the paper default) runs once PER FRAME, so the
+                // frame count is a linear multiplier on every training step. Two frames still exercise
+                // the temporal alignment path that makes this a video super-resolution model rather
+                // than an image one.
+                //
+                // Spatial size and ScaleFactor are deliberately untouched: this is a super-resolution
+                // model whose output is ScaleFactor x the input, so changing either would move the
+                // input/output contract that its other 15 tests currently pass against. Frames are the
+                // one axis that scales cost without touching that relationship.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 32, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            }
             else
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
