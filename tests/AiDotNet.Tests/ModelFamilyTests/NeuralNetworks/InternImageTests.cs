@@ -55,6 +55,17 @@ public class InternImageTests : SegmentationTestBase<float>
     // DCNv3 blocks while keeping the invariant within its execution budget.
     protected override int MemorizationTaskIterations => 10;
 
+    // Same reason as every cap above, for the target-dependence probe: its default is
+    // TargetDependenceStepCount (3) x TargetDependenceRepeatCount (3) = nine full backward passes
+    // through all 30 DCNv3 blocks, which alone exceeds the 120-second gate.
+    //
+    // ONE repeat, not fewer steps. The repeats average away seed noise in the update-direction
+    // cosine, whereas the three STEPS are what carry the signal: a single Adam step is sign(g), so
+    // two targets that differ only in magnitude produce identical first steps and the probe would
+    // report a false pass. Cutting the axis that costs the same but proves less is the whole point
+    // of the cap rung.
+    protected override int TargetDependenceRepeatCount => 1;
+
     protected override INeuralNetworkModel<float> CreateNetwork()
     {
         var architecture = new NeuralNetworkArchitecture<float>(
