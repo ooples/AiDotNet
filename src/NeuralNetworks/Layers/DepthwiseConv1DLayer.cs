@@ -106,6 +106,22 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
         if (input.Shape.Length != 3)
             throw new ArgumentException($"DepthwiseConv1DLayer requires rank-3 [B, C, T] input; got rank {input.Shape.Length}.", nameof(input));
 
+        // The channel count is a HARD constraint for a depthwise convolution, not a preference: the
+        // kernel is [channels, multiplier, kernelSize], one filter per input channel, so there is no
+        // filter for a channel this layer was not built for. Without this check the mismatch reached
+        // Engine.DepthwiseConv1D and surfaced as IndexOutOfRangeException from inside the kernel — an
+        // error that names no constraint, points at no caller mistake, and is indistinguishable from an
+        // engine defect. Unlike the sequence length above, which really is free, this one cannot be
+        // rebound: the parameters are sized by it.
+        if (input.Shape[1] != _channels)
+        {
+            throw new ArgumentException(
+                $"DepthwiseConv1DLayer was built for {_channels} channel(s) and received "
+                + $"{input.Shape[1]}. A depthwise convolution holds one filter per input channel, so the "
+                + "channel count is fixed at construction; only the batch and sequence length are free.",
+                nameof(input));
+        }
+
         // Bind the real sequence length so GetOutputShape() reports the actual T_out (the ctor only
         // resolved against a placeholder T since the real length is unknown until the first forward —
         // mirrors Conv1DLayer.OnFirstForward). The parameter count is unaffected (conv is

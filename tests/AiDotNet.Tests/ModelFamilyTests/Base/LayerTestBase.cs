@@ -334,6 +334,131 @@ public abstract class LayerTestBase
     }
 
     // =========================================================================
+    // INVARIANT 1b: A layer either HANDLES a nearby input shape or REJECTS it
+    //               deliberately — it never crashes from the inside.
+    // =========================================================================
+
+    /// <summary>
+    /// Whether the shape-robustness sweep applies. Override to <c>false</c> ONLY for a layer whose input
+    /// shape is genuinely not perturbable, never to silence a crash.
+    /// </summary>
+    protected virtual bool ShapeRobustnessApplicable => true;
+
+    /// <summary>
+    /// Feeds the layer input shapes one step away from its declared one, and requires every outcome to be
+    /// either a real output or a deliberate rejection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE DISTINCTION IS THE WHOLE TEST. A layer is entitled to require a specific input shape — a patch
+    /// embedding needs its extent divisible by the patch size, and saying so is correct behaviour. What a
+    /// layer is not entitled to do is ASSUME a shape silently and then fail from inside a kernel with
+    /// <c>IndexOutOfRangeException</c> or <c>NullReferenceException</c>. Those name no constraint, point
+    /// at no caller mistake, and are indistinguishable from an engine defect; every one of them is a
+    /// hard-coded assumption that was never written down.
+    /// </para>
+    /// <para>
+    /// This is what makes shape support real rather than declared. A layer that works at 16x16 and
+    /// crashes at 17x16 passes every other invariant in this file, because they all run at exactly one
+    /// shape — which is precisely how such an assumption survives.
+    /// </para>
+    /// <para>
+    /// The recovered shape relation is reported alongside any failure, because "what did this layer
+    /// actually do to the shapes it accepted" is the first question after such a crash.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 60000)]
+    public async Task Forward_NearbyShapes_AreHandledOrDeliberatelyRejected()
+    {
+        await Task.Yield();
+        if (!ShapeRobustnessApplicable) return;
+        using var _arena = TensorArena.Create();
+
+        var probes = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.ProbeShapes(InputShape);
+        var observations = new List<(int[] Input, int[] Output)>();
+        var crashes = new List<string>();
+
+        foreach (var shape in probes)
+        {
+            try
+            {
+                var output = CreateLayer().Forward(CreateRandomTensor(shape));
+                var outShape = output.Shape.ToArray();
+
+                Assert.True(
+                    outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0),
+                    $"Input [{string.Join(",", shape)}] was accepted but produced the degenerate output "
+                    + $"shape [{string.Join(",", outShape)}]. Accepting a shape and then emitting nothing "
+                    + "is worse than rejecting it, because the caller gets no signal at all.");
+
+                observations.Add((shape, outShape));
+            }
+            catch (Xunit.Sdk.XunitException)
+            {
+                throw;
+            }
+            catch (System.Exception ex) when (IsDeliberateShapeRejection(ex))
+            {
+                // A stated constraint. Correct behaviour, and the caller is told what is wrong.
+            }
+            catch (System.Exception ex)
+            {
+                crashes.Add(
+                    $"  input [{string.Join(",", shape)}] -> {ex.GetType().Name}: "
+                    + $"{ex.Message.Split('\n')[0]}");
+            }
+        }
+
+        if (crashes.Count > 0)
+        {
+            string relation = DescribeDiscoveredRelation(observations);
+            Assert.Fail(
+                $"{CreateLayer().GetType().Name} crashed from the INSIDE on input shapes one step away "
+                + $"from its declared [{string.Join(",", InputShape)}]:\n"
+                + string.Join("\n", crashes)
+                + "\n\nThese are not shape validations — they name no constraint and point at no caller "
+                + "mistake, so they read as engine defects. Either accept these shapes, or reject them "
+                + "with an ArgumentException that says what this layer requires.\n"
+                + $"Shape relation recovered from the shapes it DID accept: {relation}");
+        }
+    }
+
+    /// <summary>An exception that states a shape constraint, as opposed to one that leaks an assumption.</summary>
+    private static bool IsDeliberateShapeRejection(System.Exception ex)
+        => ex is System.ArgumentException
+            or System.InvalidOperationException
+            or System.NotSupportedException
+            or System.NotImplementedException
+            or System.RankException;
+
+    /// <summary>Best-effort symbolic summary of what the layer did to the shapes it accepted.</summary>
+    private static string DescribeDiscoveredRelation(List<(int[] Input, int[] Output)> observations)
+    {
+        if (observations.Count < 2) return "(too few accepted shapes to recover one)";
+
+        int inRank = observations[0].Input.Length;
+        int outRank = observations[0].Output.Length;
+        if (observations.Any(o => o.Input.Length != inRank || o.Output.Length != outRank))
+            return "(the accepted shapes do not share a rank, so no single relation describes them)";
+
+        // Positional placeholders: this sweep runs on layers that mostly carry no axis-role annotation,
+        // and inventing roles for them would be a claim the layer never made.
+        var inAxes = Enumerable.Range(0, inRank).Select(i => (AiDotNet.Enums.TensorAxis)i).ToArray();
+        var outAxes = Enumerable.Range(0, outRank).Select(i => (AiDotNet.Enums.TensorAxis)i).ToArray();
+
+        try
+        {
+            var findings = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.Fit(inAxes, outAxes, observations);
+            return string.Join(
+                ", ", findings.Select((f, i) => $"out[{i}] = {f.Relation?.ToString() ?? "?"}"));
+        }
+        catch
+        {
+            return "(relation recovery failed)";
+        }
+    }
+
+    // =========================================================================
     // INVARIANT 2: Forward is deterministic (same input -> same output)
     // Unless the layer has stochastic behavior (dropout), two calls with the
     // same input must produce bit-identical output.
