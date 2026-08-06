@@ -158,6 +158,21 @@ internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSeri
                 nameof(input));
         }
 
+        // Checked HERE as well as in the inner depthwise convolution, deliberately. The block's first
+        // depthwise stage holds one filter per input channel, so a mismatch is fatal either way — but
+        // caught only there, the message names a layer the caller never constructed and quotes a channel
+        // count they never passed. A caller who built a ContextNetBlockLayer should be told what
+        // ContextNetBlockLayer requires. Without either check this reached the engine as
+        // IndexOutOfRangeException, which named nothing at all.
+        if (input.Shape[1] != _inputChannels)
+        {
+            throw new ArgumentException(
+                $"ContextNetBlockLayer was built for {_inputChannels} input channel(s) and received "
+                + $"{input.Shape[1]}. Its depthwise stage holds one filter per input channel, so the "
+                + "channel count is fixed at construction; only the batch and sequence length are free.",
+                nameof(input));
+        }
+
         // Registers the depthwise / pointwise / batch-norm children with GetSubLayers() via the
         // generated EnsureSubLayersRegistered(); they otherwise stay invisible to structural walkers.
         EnsureInitializedFromInput(input);
