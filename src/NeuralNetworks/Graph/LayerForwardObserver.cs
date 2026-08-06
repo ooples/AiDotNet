@@ -45,11 +45,31 @@ public sealed class LayerForwardObserver<T> : IDisposable
     /// <c>AsyncLocal</c> rather than a plain static so concurrent traces on different threads cannot
     /// interleave into one another's recordings — the test suite runs fixtures in parallel by default.
     /// </remarks>
-    public static LayerForwardObserver<T>? Current => s_current.Value;
+    public static LayerForwardObserver<T>? Current => s_active == 0 ? null : s_current.Value;
+
+    /// <summary>
+    /// How many observers exist process-wide. Read INSTEAD of the AsyncLocal on the common path.
+    /// </summary>
+    /// <remarks>
+    /// This is a hot-path guard, not bookkeeping. <c>LayerBase.Forward</c> consults <see cref="Current"/>
+    /// on EVERY layer call in the library, and <c>AsyncLocal&lt;T&gt;.Value</c> costs roughly 20-50ns
+    /// against ~1ns for a static int - a cost paid per layer, per step, per model, in production as well
+    /// as in tests. Measured consequence of getting this wrong: with the AsyncLocal read unconditional,
+    /// a full-suite run went from a handful of timeouts to 315, purely from the added per-forward cost
+    /// under load.
+    ///
+    /// A plain int is sufficient because it only ever gates whether the AsyncLocal is worth reading. When
+    /// it is zero no observer exists anywhere, so the answer is null without further work; when it is
+    /// non-zero the AsyncLocal decides whether one exists on THIS context. A stale read can only cost one
+    /// unnecessary AsyncLocal lookup, never a missed recording, because the count is incremented before
+    /// the observer becomes reachable.
+    /// </remarks>
+    private static int s_active;
 
     /// <summary>Begins recording, restoring whatever was recording before on dispose.</summary>
     public LayerForwardObserver()
     {
+        Interlocked.Increment(ref s_active);
         _previous = s_current.Value;
         s_current.Value = this;
     }
@@ -174,5 +194,6 @@ public sealed class LayerForwardObserver<T> : IDisposable
         if (_disposed) return;
         _disposed = true;
         s_current.Value = _previous;
+        Interlocked.Decrement(ref s_active);
     }
 }
