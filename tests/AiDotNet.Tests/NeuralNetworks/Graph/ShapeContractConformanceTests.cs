@@ -131,6 +131,32 @@ public class ShapeContractConformanceTests
         AssertContractMatchesForward(new DenseLayer<double>(outputSize: 5), 2, 7, 12);
     }
 
+    [Theory]
+    [InlineData(new[] { 12 })]
+    [InlineData(new[] { 4, 12 })]
+    [InlineData(new[] { 2, 7, 12 })]
+    [InlineData(new[] { 2, 3, 4, 12 })]
+    public void Dense_IsRankPolymorphic_AndTheContractCoversEveryRankItAccepts(int[] inputShape)
+    {
+        // Measured, not assumed: this layer maps the LAST axis at every rank and passes the leading axes
+        // through - [1,4,6,6] really does become [1,4,6,5]. The contract originally enumerated only rank 2
+        // and rank 3, so inference DECLINED on ranks the layer handles perfectly well, and a contract that
+        // declines on a working case is one callers learn to route around.
+        AssertContractMatchesForward(new DenseLayer<double>(outputSize: 5), inputShape);
+    }
+
+    [Fact]
+    public void Dense_FedAConvolutionOutput_MapsTheWidthAxis_WhichIsWhyFlattenExists()
+    {
+        // Pins the behaviour that makes conv -> dense worth FLAGGING rather than trusting. Fed a
+        // [Batch, Channels, Height, Width] map, Dense does not flatten - it treats Width as the feature
+        // axis and leaves the rest alone. That is a legal computation and almost never the intended one,
+        // which is exactly the silent-wrongness this shape system exists to surface.
+        var layer = new DenseLayer<double>(outputSize: 5);
+
+        Assert.Equal(new[] { 1, 4, 6, 5 }, ShapeInference.InferOutputShape(layer, new[] { 1, 4, 6, 6 }));
+    }
+
     [Fact]
     public void Dense_AcceptsAnySequenceLength_WithoutRedeclaring()
     {
