@@ -692,7 +692,7 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         if (_noiseSignal is not null && _noiseSignal.Shape[^1] == length) return _noiseSignal;
 
         // Fixed seed: the noise is part of the model, not a per-call random draw. See _noiseSignal.
-        var rng = new Random(20210715);
+        var rng = RandomHelper.CreateSeededRandom(20210715);
         var noise = new Tensor<T>([1, 1, length]);
         for (int n = 0; n < length; n++)
             noise[0, 0, n] = NumOps.FromDouble(rng.NextDouble() * 2.0 - 1.0);
