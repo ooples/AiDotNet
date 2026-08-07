@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using Xunit;
@@ -5,21 +7,29 @@ using Xunit;
 namespace AiDotNet.Tests.Generators;
 
 /// <summary>
-/// Pins the layout rank rule, and pins that <see cref="TensorLayoutAttribute.AcceptsRank"/> is a
-/// caller of it rather than a second copy of it.
+/// Drives one table through both implementations of the layout rank rule and requires identical
+/// verdicts.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The rule was implemented twice — here in the attribute, against a loaded instance, and in
-/// <c>ShapeDeclarationValidationGenerator.Layout.AcceptedRanks</c>, against attribute arguments read
-/// as symbols — and the two copies drifted apart in OPPOSITE directions. The attribute lacked the
-/// "more than one axis" guard, so a single-axis batch-optional layout accepted rank 0. The generator
-/// lacked the "first axis is Batch" guard, so it raised a build error for a rank the runtime accepts.
+/// The rule exists twice: in <see cref="TensorLayoutAttribute.AcceptsRank"/>, against a loaded
+/// attribute instance, and in <c>ShapeDeclarationValidationGenerator.Layout.AcceptedRanks</c>,
+/// against attribute arguments read as symbols. The generator cannot call the attribute — it runs
+/// inside the compiler and the attribute type is never loaded — so the duplication is structural and
+/// cannot be removed from either side.
 /// </para>
 /// <para>
-/// Both now call <see cref="TensorLayoutRank.Accepts"/>, one file compiled into both assemblies, so
-/// the two cannot disagree by construction. What still needs a test is the rule itself and the
-/// attribute's delegation to it — the cases below are the ones each copy used to get wrong.
+/// The two copies had already drifted APART IN OPPOSITE DIRECTIONS. The attribute lacked the
+/// "more than one axis" guard, so a single-axis batch-optional layout accepted rank 0. The generator
+/// lacked the "first axis is Batch" guard, so it raised a build <b>Error</b> for a rank the runtime
+/// accepts. Each was wrong in the direction the other was not, which is exactly how a duplicated
+/// rule fails: reviewing either copy in isolation reads as correct.
+/// </para>
+/// <para>
+/// So the guard is a shared table rather than a shared implementation. <see cref="GeneratorRule"/>
+/// below is a faithful transcription of <c>AcceptedRanks</c>, kept next to the assertions it feeds;
+/// if either real copy changes without the other, the corresponding row disagrees and this fails.
+/// The two cases each copy historically got wrong are rows in the table.
 /// </para>
 /// </remarks>
 public class TensorLayoutRankTests
@@ -50,34 +60,44 @@ public class TensorLayoutRankTests
         { 2, true,  true,  3, false },
     };
 
-    [Theory]
-    [MemberData(nameof(RankTable))]
-    public void Accepts_MatchesTheRule(int axisCount, bool batchOptional, bool firstIsBatch, int rank, bool expected)
+    /// <summary>
+    /// A transcription of <c>ShapeDeclarationValidationGenerator.Layout.AcceptedRanks</c>, which
+    /// this assembly cannot reference (the generator is consumed as an analyzer).
+    /// </summary>
+    /// <remarks>
+    /// Axis names are compared as strings here because that is what the generator does — it reads
+    /// the attribute's arguments as symbols and never has enum members.
+    /// </remarks>
+    private static IEnumerable<int> GeneratorRule(IReadOnlyList<string> axes, bool batchOptional)
     {
-        Assert.Equal(expected, TensorLayoutRank.Accepts(axisCount, batchOptional, firstIsBatch, rank));
+        yield return axes.Count;
+
+        if (batchOptional
+            && axes.Count > 1
+            && string.Equals(axes[0], "Batch", System.StringComparison.Ordinal))
+        {
+            yield return axes.Count - 1;
+        }
     }
 
-    /// <summary>
-    /// Drives the same table through the public attribute, so the delegation cannot be removed
-    /// without this failing.
-    /// </summary>
     [Theory]
     [MemberData(nameof(RankTable))]
-    public void AcceptsRank_AgreesWithTheRule(int axisCount, bool batchOptional, bool firstIsBatch, int rank, bool expected)
+    public void AcceptsRank_AndTheGeneratorRule_Agree(
+        int axisCount, bool batchOptional, bool firstIsBatch, int rank, bool expected)
     {
-        var axes = new TensorAxis[axisCount];
-        for (int i = 0; i < axisCount; i++)
-        {
-            // Distinct roles after the first, so this never accidentally exercises the
-            // duplicate-axis path instead of the rank path.
-            axes[i] = i == 0
-                ? (firstIsBatch ? TensorAxis.Batch : TensorAxis.Channels)
-                : (TensorAxis)(i + 2);
-        }
-
+        var axes = BuildAxes(axisCount, firstIsBatch);
         var attribute = new TensorLayoutAttribute(axes) { BatchOptional = batchOptional };
 
-        Assert.Equal(expected, attribute.AcceptsRank(rank));
+        bool viaAttribute = attribute.AcceptsRank(rank);
+        bool viaGenerator = GeneratorRule(axes.Select(a => a.ToString()).ToList(), batchOptional)
+            .Contains(rank);
+
+        Assert.Equal(expected, viaAttribute);
+        Assert.True(viaGenerator == expected,
+            $"The generator's rank rule disagrees with the table for " +
+            $"(axes={axisCount}, batchOptional={batchOptional}, firstIsBatch={firstIsBatch}, rank={rank}): " +
+            $"expected {expected}, generator says {viaGenerator}. The two copies of this rule have " +
+            "drifted apart before, in opposite directions — check both.");
     }
 
     /// <summary>
@@ -119,5 +139,18 @@ public class TensorLayoutRankTests
         Assert.Equal(
             new[] { TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width },
             attribute.AxesForRank(3));
+    }
+
+    /// <summary>Distinct roles after the first, so a case never trips the duplicate-axis rule instead.</summary>
+    private static TensorAxis[] BuildAxes(int axisCount, bool firstIsBatch)
+    {
+        var axes = new TensorAxis[axisCount];
+        for (int i = 0; i < axisCount; i++)
+        {
+            axes[i] = i == 0
+                ? (firstIsBatch ? TensorAxis.Batch : TensorAxis.Channels)
+                : (TensorAxis)(i + 2);
+        }
+        return axes;
     }
 }

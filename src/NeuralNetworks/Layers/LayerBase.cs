@@ -3359,40 +3359,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             metadata["VectorActivationType"] = VectorActivation.GetType().AssemblyQualifiedName ?? VectorActivation.GetType().FullName ?? string.Empty;
         }
 
-        // THIS IS THE LINK BETWEEN GetMetadata AND THE GENERATED WRITER. LayerStateGenerator
-        // emits `internal override void WriteConstructionState` on each annotated layer, and
-        // ADN0054 tells an author who overrides GetMetadata to call base.GetMetadata() first
-        // -- advice that is only correct if base.GetMetadata is what invokes the generated
-        // writer. Without this call the generated override had no caller and no base member
-        // to override, so every [LayerState] value was silently absent from the saved model
-        // and the generated factory's HasAll check failed on load, falling back to exactly
-        // the shape-inference path this generator exists to replace.
-        WriteConstructionState(metadata);
-
         return metadata;
-    }
-
-    /// <summary>
-    /// Writes this layer's constructor-level state into <paramref name="metadata"/>.
-    /// </summary>
-    /// <param name="metadata">The metadata dictionary being assembled by <see cref="GetMetadata"/>.</param>
-    /// <remarks>
-    /// <para>
-    /// The base implementation writes nothing. <c>LayerStateGenerator</c> overrides this on every
-    /// layer with <c>[LayerState]</c> constructor parameters, writing one entry per marked parameter
-    /// through <see cref="AiDotNet.Serialization.LayerStateBag"/>, and the generated factory reads
-    /// those same keys back to call that same constructor.
-    /// </para>
-    /// <para>
-    /// A SEPARATE MEMBER RATHER THAN GENERATING INTO GetMetadata. A layer may legitimately override
-    /// <see cref="GetMetadata"/> to add its own entries, and a generated partial cannot merge with a
-    /// hand-written override of the same method. Keeping the generated half on its own virtual member
-    /// means the two never collide, and it is why ADN0054 is a Warning about forgetting
-    /// <c>base.GetMetadata()</c> rather than an Error about a duplicate member.
-    /// </para>
-    /// </remarks>
-    internal virtual void WriteConstructionState(Dictionary<string, string> metadata)
-    {
     }
 
     /// <summary>

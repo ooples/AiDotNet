@@ -20,15 +20,4 @@
     <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!--
-      THE SHARED RANK RULE. Compiled into this assembly as well as into AiDotNet, so the
-      layout-rank decision has exactly one implementation. The generator cannot reference
-      the AiDotNet assembly (it runs inside the compiler, and referencing the project it
-      analyses would be circular), and the rule has no Roslyn or reflection dependency, so
-      sharing the source file is what removes the duplication rather than papering over it.
-    -->
-    <Compile Include="..\Attributes\TensorLayoutRank.cs" Link="Shared\TensorLayoutRank.cs" />
-  </ItemGroup>
-
 </Project>

@@ -361,26 +361,26 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
         public bool BatchOptional { get; }
         public string DirectionName => IsInput ? "input" : "output";
 
-        /// <summary>The ranks this layout accepts, newest-first is not meaningful here.</summary>
+        /// <summary>The ranks this layout accepts, including the unbatched form.</summary>
         /// <remarks>
-        /// THE RULE IS NOT RESTATED HERE ANY MORE. It used to be, and the two copies had drifted
-        /// apart in opposite directions -- this one dropped the "first axis is Batch" guard and so
-        /// reported a build ERROR for a rank the runtime accepts; the attribute dropped the "more
-        /// than one axis" guard and so accepted rank 0. Both now call
-        /// <see cref="AiDotNet.Attributes.TensorLayoutRank.Accepts"/>, which is one file compiled
-        /// into both assemblies. The generator still cannot call the ATTRIBUTE -- it runs inside the
-        /// compiler against symbols, not loaded types -- but the rule itself needs neither
-        /// reflection nor Roslyn, only an axis count, two flags and a rank.
+        /// THE SECOND COPY OF ONE RULE. TensorLayoutAttribute.AcceptsRank is the first, and the two
+        /// had already drifted APART IN OPPOSITE DIRECTIONS: this copy dropped `Axes[0] == Batch`
+        /// and so reported a build ERROR for a rank the runtime accepts, while the attribute dropped
+        /// `Axes.Length > 1` and so accepted rank 0. Both guards are present in both copies now.
+        ///
+        /// The generator cannot call the attribute: it runs inside the compiler against symbols, not
+        /// loaded types, so the attribute type is never loaded. The rule is therefore restated here
+        /// with its conditions spelled out, and TensorLayoutRankTests drives one shared table through
+        /// this restatement and through TensorLayoutAttribute.AcceptsRank so a future divergence is a
+        /// test failure rather than a silent disagreement.
         /// </remarks>
         public IEnumerable<int> AcceptedRanks()
         {
             yield return Axes.Count;
 
-            bool firstIsBatch = Axes.Count > 0
-                && string.Equals(Axes[0], "Batch", System.StringComparison.Ordinal);
-
-            if (AiDotNet.Attributes.TensorLayoutRank.Accepts(
-                    Axes.Count, BatchOptional, firstIsBatch, Axes.Count - 1))
+            if (BatchOptional
+                && Axes.Count > 1
+                && string.Equals(Axes[0], "Batch", System.StringComparison.Ordinal))
             {
                 yield return Axes.Count - 1;
             }
