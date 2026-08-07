@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
@@ -11,8 +12,49 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests mathematical invariants: trend recovery, translation equivariance,
 /// training-vs-test error, residual analysis, and extrapolation consistency.
 /// </summary>
-public abstract class TimeSeriesModelTestBase : System.IDisposable
+/// <remarks>
+/// Generic over the model element type <typeparamref name="T"/> so heavy time-series models can opt
+/// into &lt;float&gt; via the Fp32 float-selection path (halving per-step compute + footprint). A
+/// non-generic <see cref="TimeSeriesModelTestBase"/> shim (= <c>&lt;double&gt;</c>) below keeps the
+/// default double models unchanged. The test data, math, and assertions stay in <c>double</c>; only
+/// the model's Train/Predict boundary is converted to/from <typeparamref name="T"/>.
+/// </remarks>
+public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
 {
+    /// <summary>Numeric operations for the model's element type <typeparamref name="T"/>.</summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Converts a double test matrix to the model's element type (identity when T == double).</summary>
+    protected static Matrix<T> ToT(Matrix<double> m)
+    {
+        if (typeof(T) == typeof(double)) return (Matrix<T>)(object)m;
+        var r = new Matrix<T>(m.Rows, m.Columns);
+        for (int i = 0; i < m.Rows; i++)
+            for (int j = 0; j < m.Columns; j++)
+                r[i, j] = NumOps.FromDouble(m[i, j]);
+        return r;
+    }
+
+    /// <summary>Converts a double test vector to the model's element type (identity when T == double).</summary>
+    protected static Vector<T> ToT(Vector<double> v)
+    {
+        if (typeof(T) == typeof(double)) return (Vector<T>)(object)v;
+        var r = new Vector<T>(v.Length);
+        for (int i = 0; i < v.Length; i++)
+            r[i] = NumOps.FromDouble(v[i]);
+        return r;
+    }
+
+    /// <summary>Converts a model output vector back to double for the double-precision assertions.</summary>
+    protected static Vector<double> ToD(Vector<T> v)
+    {
+        if (typeof(T) == typeof(double)) return (Vector<double>)(object)v;
+        var r = new Vector<double>(v.Length);
+        for (int i = 0; i < v.Length; i++)
+            r[i] = NumOps.ToDouble(v[i]);
+        return r;
+    }
+
     /// <summary>
     /// Reclaim memory between tests (shared model-family teardown). xUnit constructs a fresh
     /// test-class instance per test and calls Dispose() afterward, so this clears the
@@ -41,7 +83,7 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
     {
     }
 
-    protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
+    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateModel();
 
     protected virtual int TrainLength => 100;
     protected virtual int TestLength => 20;
@@ -74,7 +116,7 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.1);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
 
         // Forecast 20 steps ahead. For autoregressive models (ARIMA, AR, etc.),
         // the input matrix rows = number of forecast steps (input values may be ignored).
@@ -84,7 +126,7 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         for (int i = 0; i < 20; i++)
             forecastX[i, 0] = TrainLength + i;
 
-        var forecast = model.Predict(forecastX);
+        var forecast = ToD(model.Predict(ToT(forecastX)));
 
         if (ModelTestHelpers.AllFinite(forecast) && forecast.Length >= 2)
         {
@@ -127,13 +169,13 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         for (int i = 0; i < trainY2.Length; i++)
             shiftedY[i] = trainY2[i] + shift;
 
-        model1.Train(trainX1, trainY1);
-        model2.Train(trainX2, shiftedY);
+        model1.Train(ToT(trainX1), ToT(trainY1));
+        model2.Train(ToT(trainX2), ToT(shiftedY));
 
         var testX = new Matrix<double>(1, 1);
         testX[0, 0] = 50.0;
-        var pred1 = model1.Predict(testX);
-        var pred2 = model2.Predict(testX);
+        var pred1 = ToD(model1.Predict(ToT(testX)));
+        var pred2 = ToD(model2.Predict(ToT(testX)));
 
         if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
         {
@@ -165,12 +207,12 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.5);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
 
         // Forecast the same number of steps as training data.
         // For regression-style models, these match the training positions.
         // For autoregressive models, these are N-step-ahead forecasts.
-        var predictions = model.Predict(trainX);
+        var predictions = ToD(model.Predict(ToT(trainX)));
 
         if (ModelTestHelpers.AllFinite(predictions) && predictions.Length == trainY.Length)
         {
@@ -214,12 +256,12 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.5);
 
-        model.Train(trainX, trainY);
-        var trainPred = model.Predict(trainX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var trainPred = ToD(model.Predict(ToT(trainX)));
 
         // Use adjacent time points as "test" (in-distribution)
         var (testX, testY) = ModelTestHelpers.GenerateTimeSeriesData(TestLength, ModelTestHelpers.CreateSeededRandom(99), noise: 0.5);
-        var testPred = model.Predict(testX);
+        var testPred = ToD(model.Predict(ToT(testX)));
 
         if (ModelTestHelpers.AllFinite(trainPred) && ModelTestHelpers.AllFinite(testPred))
         {
@@ -246,8 +288,8 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.5);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(trainX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(trainX)));
 
         if (ModelTestHelpers.AllFinite(predictions))
         {
@@ -285,13 +327,13 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         for (int i = 0; i < trainY2.Length; i++)
             scaledY[i] = trainY2[i] * scale;
 
-        model1.Train(trainX1, trainY1);
-        model2.Train(trainX2, scaledY);
+        model1.Train(ToT(trainX1), ToT(trainY1));
+        model2.Train(ToT(trainX2), ToT(scaledY));
 
         var testX = new Matrix<double>(1, 1);
         testX[0, 0] = 50.0;
-        var pred1 = model1.Predict(testX);
-        var pred2 = model2.Predict(testX);
+        var pred1 = ToD(model1.Predict(ToT(testX)));
+        var pred2 = ToD(model2.Predict(ToT(testX)));
 
         if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2) && Math.Abs(pred1[0]) > 0.01)
         {
@@ -321,14 +363,14 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         // Train with small data
         var modelSmall = CreateModel();
         var (trainXSmall, trainYSmall) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng1, noise: 0.5);
-        modelSmall.Train(trainXSmall, trainYSmall);
-        var predSmall = modelSmall.Predict(trainXSmall);
+        modelSmall.Train(ToT(trainXSmall), ToT(trainYSmall));
+        var predSmall = ToD(modelSmall.Predict(ToT(trainXSmall)));
 
         // Train with 2x data
         var modelLarge = CreateModel();
         var (trainXLarge, trainYLarge) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength * 2, rng2, noise: 0.5);
-        modelLarge.Train(trainXLarge, trainYLarge);
-        var predLarge = modelLarge.Predict(trainXLarge);
+        modelLarge.Train(ToT(trainXLarge), ToT(trainYLarge));
+        var predLarge = ToD(modelLarge.Predict(ToT(trainXLarge)));
 
         if (ModelTestHelpers.AllFinite(predSmall) && predSmall.Length == trainYSmall.Length &&
             ModelTestHelpers.AllFinite(predLarge) && predLarge.Length == trainYLarge.Length)
@@ -355,9 +397,9 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         var (testX, _) = ModelTestHelpers.GenerateTimeSeriesData(TestLength, rng);
-        var predictions = model.Predict(testX);
+        var predictions = ToD(model.Predict(ToT(testX)));
 
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -375,10 +417,11 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         var (testX, _) = ModelTestHelpers.GenerateTimeSeriesData(TestLength, rng);
-        var pred1 = model.Predict(testX);
-        var pred2 = model.Predict(testX);
+        var testXT = ToT(testX);
+        var pred1 = ToD(model.Predict(testXT));
+        var pred2 = ToD(model.Predict(testXT));
 
         for (int i = 0; i < pred1.Length; i++)
             Assert.Equal(pred1[i], pred2[i]);
@@ -393,9 +436,9 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         var (testX, _) = ModelTestHelpers.GenerateTimeSeriesData(TestLength, rng);
-        Assert.Equal(TestLength, model.Predict(testX).Length);
+        Assert.Equal(TestLength, model.Predict(ToT(testX)).Length);
     }
 
     [Fact(Timeout = 60000)]
@@ -407,11 +450,12 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
         var (testX, _) = ModelTestHelpers.GenerateTimeSeriesData(TestLength, rng);
+        var testXT = ToT(testX);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         var cloned = model.Clone();
-        var pred1 = model.Predict(testX);
-        var pred2 = cloned.Predict(testX);
+        var pred1 = ToD(model.Predict(testXT));
+        var pred2 = ToD(cloned.Predict(testXT));
 
         for (int i = 0; i < pred1.Length; i++)
             Assert.Equal(pred1[i], pred2[i]);
@@ -426,7 +470,7 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         Assert.NotNull(model.GetModelMetadata());
     }
 
@@ -439,12 +483,12 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
 
         // Not all time series models implement IParameterizable (e.g., STLDecomposition,
         // InterventionAnalysis are parameter-free). Per Liskov substitution, only check
         // models that expose parameters via IParameterizable.
-        if (model is IParameterizable<double, Matrix<double>, Vector<double>> parameterizable)
+        if (model is IParameterizable<T, Matrix<T>, Vector<T>> parameterizable)
         {
             Assert.True(parameterizable.GetParameters().Length > 0, "Trained parameterizable model should have parameters.");
         }
@@ -452,7 +496,7 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         {
             // Non-parameterizable models should still produce valid predictions after training
             var (testX, _) = ModelTestHelpers.GenerateTimeSeriesData(5, ModelTestHelpers.CreateSeededRandom(99));
-            var prediction = model.Predict(testX);
+            var prediction = model.Predict(ToT(testX));
             Assert.NotNull(prediction);
             Assert.True(prediction.Length > 0, "Non-parameterizable model should still produce predictions after training.");
         }
@@ -469,9 +513,9 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
-        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
+        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToT(trainY));
 
-        var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiDotNet.AiModelBuilder<T, Matrix<T>, Vector<T>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(CreateModel())
             .BuildAsync()
@@ -489,9 +533,9 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
-        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
+        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToT(trainY));
 
-        var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiDotNet.AiModelBuilder<T, Matrix<T>, Vector<T>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(model)
             .BuildAsync()
@@ -503,7 +547,7 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         // industry-standard OUT-OF-SAMPLE evaluation: score the forecast against the held-out
         // future actuals, not in-sample training data. The training window is the builder's
         // 70/15/15 split, read back from the result so the held-out slice aligns exactly.
-        int trainLen = result.OptimizationResult?.TrainingResult?.Y is Vector<double> trainedY
+        int trainLen = result.OptimizationResult?.TrainingResult?.Y is Vector<T> trainedY
             ? trainedY.Length
             : (int)(TrainLength * 0.7);
         int horizon = TrainLength - trainLen;
@@ -512,12 +556,12 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         Vector<double> predictions;
         Vector<double> actual;
 
-        if (model is IMultivariateForecastModel<double> multivariate && multivariate.VariableCount > 1)
+        if (model is IMultivariateForecastModel<T> multivariate && multivariate.VariableCount > 1)
         {
             // Genuinely multivariate models forecast the multivariate series they were trained on;
             // compare the flattened forecast against the flattened held-out future of that series
             // (the facade flattens [horizon x variables] row-major).
-            predictions = result.Predict(new Matrix<double>(horizon, multivariate.VariableCount));
+            predictions = ToD(result.Predict(new Matrix<T>(horizon, multivariate.VariableCount)));
             int cols = Math.Min(multivariate.VariableCount, trainX.Columns);
             actual = new Vector<double>(horizon * cols);
             int k = 0;
@@ -525,7 +569,7 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
                 for (int j = 0; j < cols; j++)
                     actual[k++] = trainX[trainLen + i, j];
         }
-        else if (model is IExogenousForecastModel<double>)
+        else if (model is IExogenousForecastModel<T>)
         {
             // Exogenous models (ARIMAX, dynamic regression) forecast the target from FUTURE
             // exogenous regressors: feed the actual held-out exogenous rows and compare against
@@ -534,14 +578,14 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
             for (int i = 0; i < horizon; i++)
                 for (int j = 0; j < trainX.Columns; j++)
                     futureExogenous[i, j] = trainX[trainLen + i, j];
-            predictions = result.Predict(futureExogenous);
+            predictions = ToD(result.Predict(ToT(futureExogenous)));
             actual = SliceForecastTarget(trainY, trainLen, horizon);
         }
         else
         {
             // Univariate models forecast the target series `horizon` steps ahead (the input
             // matrix only carries the horizon as its row count).
-            predictions = result.Predict(new Matrix<double>(horizon, trainX.Columns));
+            predictions = ToD(result.Predict(new Matrix<T>(horizon, trainX.Columns)));
             actual = SliceForecastTarget(trainY, trainLen, horizon);
         }
 
@@ -588,11 +632,11 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
     /// trained value of each variable (row-major) for multivariate models.
     /// </summary>
     private static Vector<double> BuildNaiveBaseline(
-        IFullModel<double, Matrix<double>, Vector<double>> model,
+        IFullModel<T, Matrix<T>, Vector<T>> model,
         Matrix<double> trainX, Vector<double> trainY, int trainLen, int horizon, int length)
     {
         var naive = new Vector<double>(length);
-        if (model is IMultivariateForecastModel<double> multivariate && multivariate.VariableCount > 1)
+        if (model is IMultivariateForecastModel<T> multivariate && multivariate.VariableCount > 1)
         {
             int cols = Math.Min(multivariate.VariableCount, trainX.Columns);
             int k = 0;
@@ -621,3 +665,10 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         return sum / a.Length;
     }
 }
+
+/// <summary>
+/// Non-generic <c>&lt;double&gt;</c> shim so existing double time-series model tests keep compiling
+/// unchanged while heavy models can opt into <see cref="TimeSeriesModelTestBase{T}"/> at
+/// <c>&lt;float&gt;</c> via the Fp32 float-selection path.
+/// </summary>
+public abstract class TimeSeriesModelTestBase : TimeSeriesModelTestBase<double> { }

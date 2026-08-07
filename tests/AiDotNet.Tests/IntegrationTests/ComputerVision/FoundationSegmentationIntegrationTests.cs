@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
 /// <summary>
 /// Integration tests for Foundation segmentation models: SAM, SAM 2.1, SAM-HQ,
-/// Mask2Former, OneFormer, MaskDINO, OMGSeg, EoMT, QueryMeldNet, UNINEXT, U2Seg, XDecoder.
+/// Mask2Former, OneFormer, MaskDINO, OMGSeg, EoMT, MixedQueryTransformer, UNINEXT, U2Seg, XDecoder.
 /// </summary>
 public class FoundationSegmentationIntegrationTests : IDisposable
 {
@@ -296,28 +296,28 @@ public class FoundationSegmentationIntegrationTests : IDisposable
 
     #endregion
 
-    #region QueryMeldNet
+    #region MixedQueryTransformer
 
     [Fact(Timeout = 120000)]
-    public async Task QueryMeldNet_Construction_Succeeds()
+    public async Task MixedQueryTransformer_Construction_Succeeds()
     {
-        var model = new QueryMeldNet<float>(Arch(), modelSize: QueryMeldNetModelSize.R50);
+        var model = new MixedQueryTransformer<float>(Arch(), modelSize: MixedQueryTransformerModelSize.R50);
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task QueryMeldNet_Predict_ReturnsOutput()
+    public async Task MixedQueryTransformer_Predict_ReturnsOutput()
     {
-        var model = new QueryMeldNet<float>(Arch(), modelSize: QueryMeldNetModelSize.R50);
+        var model = new MixedQueryTransformer<float>(Arch(), modelSize: MixedQueryTransformerModelSize.R50);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task QueryMeldNet_Dispose_DoesNotThrow()
+    public async Task MixedQueryTransformer_Dispose_DoesNotThrow()
     {
-        var model = new QueryMeldNet<float>(Arch());
+        var model = new MixedQueryTransformer<float>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
 

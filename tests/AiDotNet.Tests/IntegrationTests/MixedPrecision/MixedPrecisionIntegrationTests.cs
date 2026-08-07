@@ -1653,7 +1653,7 @@ public class MixedPrecisionIntegrationTests
         public bool TestShouldUseFP32 => ShouldUseFP32;
         public MixedPrecisionType TestCurrentPrecision => CurrentPrecision;
 
-        public override Tensor<float> Forward(Tensor<float> input)
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {
             // Simple pass-through for testing
             return input;

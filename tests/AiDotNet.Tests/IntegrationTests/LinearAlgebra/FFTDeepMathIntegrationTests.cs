@@ -61,6 +61,45 @@ public class FFTDeepMathIntegrationTests
         Assert.Equal(7.0, recovered[0], Tolerance);
     }
 
+    [Theory]
+    [InlineData(3)]
+    [InlineData(5)]
+    [InlineData(15)]
+    [InlineData(400)]
+    public void FFT_Forward_Inverse_Roundtrip_ArbitraryLength(int length)
+    {
+        var x = new Vector<double>(length);
+        for (int i = 0; i < length; i++)
+            x[i] = Math.Sin(0.17 * i) + (0.25 * Math.Cos(0.31 * i));
+
+        var recovered = FFT.Inverse(FFT.Forward(x));
+
+        for (int i = 0; i < length; i++)
+            Assert.Equal(x[i], recovered[i], LooseTolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FFT_Forward_NonPowerOfTwo_MatchesDirectDft()
+    {
+        var x = new Vector<double>(new double[] { 1.5, -2.0, 0.25, 4.0, -1.0 });
+        var actual = FFT.Forward(x);
+
+        for (int k = 0; k < x.Length; k++)
+        {
+            double expectedReal = 0;
+            double expectedImaginary = 0;
+            for (int sample = 0; sample < x.Length; sample++)
+            {
+                double angle = -2.0 * Math.PI * k * sample / x.Length;
+                expectedReal += x[sample] * Math.Cos(angle);
+                expectedImaginary += x[sample] * Math.Sin(angle);
+            }
+
+            Assert.Equal(expectedReal, actual[k].Real, Tolerance);
+            Assert.Equal(expectedImaginary, actual[k].Imaginary, Tolerance);
+        }
+    }
+
     #endregion
 
     #region DC Component (X[0] = sum of all samples)

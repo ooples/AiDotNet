@@ -22,6 +22,12 @@ public class DefaultConstructionTests
     /// </summary>
     private static readonly TimeSpan ConstructionTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// How long to let a timed-out construction actually finish before moving on, so its CPU cost
+    /// is not charged to the next model measured. Bounded so a true deadlock cannot hang the suite.
+    /// </summary>
+    private static readonly TimeSpan StragglerDrainTimeout = TimeSpan.FromSeconds(30);
+
     public DefaultConstructionTests(ITestOutputHelper output)
     {
         _output = output;
@@ -92,6 +98,7 @@ public class DefaultConstructionTests
         var types = GetDefaultConstructableModelTypes().ToList();
         var failures = new List<(string TypeName, string Error)>();
         var timeouts = new List<string>();
+        var undrained = new List<string>();
         var successes = 0;
 
         foreach (var closedType in types)
@@ -114,9 +121,23 @@ public class DefaultConstructionTests
                 if (!task.Wait(ConstructionTimeout))
                 {
                     timeouts.Add(typeName);
-                    failures.Add((typeName,
-                        $"Construction timed out (>{ConstructionTimeout.TotalSeconds}s)"));
                     _output.WriteLine($"TIMEOUT: {closedType.Name} (>{ConstructionTimeout.TotalSeconds}s)");
+
+                    // Drain the straggler before measuring the next model. Task.Wait() only stops
+                    // WAITING — the construction keeps running on its thread pool thread. Without
+                    // this, every timed-out model's CPU cost is charged to its innocent successors,
+                    // so one genuinely slow constructor cascades into a string of spurious timeouts
+                    // further down the list. That made this test order- and load-dependent: CI
+                    // reported DreamerAgent, a busy dev machine reported VideoCLIP instead, and
+                    // "fix the named model, watch a different one appear" looked like whack-a-mole
+                    // when it was one leak.
+                    //
+                    // Bounded, so a genuine deadlock cannot hang the suite; anything still running
+                    // after the drain is counted and reported rather than silently accumulating.
+                    if (!task.Wait(StragglerDrainTimeout))
+                    {
+                        undrained.Add(typeName);
+                    }
                     continue;
                 }
 
@@ -162,7 +183,26 @@ public class DefaultConstructionTests
             }
         }
 
-        // Only fail on actual exceptions, not timeouts
+        if (undrained.Count > 0)
+        {
+            _output.WriteLine(
+                $"\n{undrained.Count} construction(s) were still running after the " +
+                $"{StragglerDrainTimeout.TotalSeconds}s drain — a genuine deadlock, or a constructor " +
+                "far slower than the gate. Measurements taken after these are less reliable:");
+            foreach (var tn in undrained)
+            {
+                _output.WriteLine($"  UNDRAINED: {tn}");
+            }
+        }
+
+        // Gate on genuine constructor EXCEPTIONS only, never on timeouts. This comment always said
+        // exactly that, but timeouts were being added to `failures` as well, so they gated the shard
+        // regardless — the code did the opposite of what it documented.
+        //
+        // A timeout here is a statement about how loaded the machine was, not about whether the
+        // model can be constructed: this same sweep named DreamerAgent on CI and VideoCLIP on a busy
+        // dev box, from identical source. Reporting them is useful; failing the build on them turns
+        // machine load into a red shard and sends people to fix models that were never broken.
         Assert.True(failures.Count == 0,
             $"{failures.Count} model(s) threw exceptions during default construction:\n" +
             string.Join("\n", failures.Select(f => $"  {f.TypeName}: {f.Error}")));

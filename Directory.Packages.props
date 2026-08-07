@@ -273,12 +273,38 @@
          replaces the broken external FaissNet IVF/PQ path.
 
          Bumped 0.118.0 -> 0.119.0: replaces the unpublished 0.118.10-q8 development pin with the
-         released package containing the serving branch's required Tensors APIs. Managed and native
-         packages are coreleased in lockstep. -->
+         released package containing the serving branch's required Tensors APIs.
+
+         Bumped 0.119.0 -> 0.120.3: brings the 0.120.0 fused-linear live-gradient fix and the
+         compiled-training COW/parameter-view fixes from AiDotNet.Tensors #901. Version 0.120.2
+         predates #901; 0.120.3 privatizes registered shared parameter views before graph
+         specialization captures writable storage, preserving clone isolation without disabling
+         fused compiled training.
+
+         Bumped 0.120.4 -> 0.120.5: brings AiDotNet.Tensors #906 saved-state pinning against
+         pool/arena reuse and #907's corrected LSTM GPU forward/backward kernels.
+
+         Bumped 0.120.5 -> 0.120.6: brings the newly released autodiff/GradientTape fixes,
+         data-derived compiled-plan identity fix (#913), differentiable MelSpectrogram and corrected
+         Spectrogram adjoint (#911), plus the net471 compatibility completion (#910).
+
+
+         MERGE RESOLUTION (origin/master): master moved Tensors and OpenBLAS to 0.121.0 while leaving
+         OneDNN and CLBlast at 0.119.0. Taking the MAXIMUM of each side rather than either wholesale:
+         master's 0.121.0 is newer than this branch's 0.120.6 for Tensors/OpenBLAS and supersedes it,
+         but accepting master's 0.119.0 for OneDNN/CLBlast would REGRESS past #906's saved-state
+         pinning and #907's corrected LSTM GPU kernels, which this branch's work depends on. That
+         breaks the strict lockstep the previous comment claimed, so the claim is removed rather than
+         left contradicting the versions below.
+
+         Bumped 0.120.6 -> 0.121.0: brings AiDotNet.Tensors #925, which prevents full-span
+         autodiff views from being returned to the tensor pool while the graph still owns them. -->
+
     <PackageVersion Include="AiDotNet.Tensors" Version="0.121.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.120.6" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.121.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.120.6" />
+
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />

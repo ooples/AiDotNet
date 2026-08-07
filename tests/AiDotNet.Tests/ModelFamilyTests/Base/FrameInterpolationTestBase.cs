@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for frame interpolation models. Inherits video NN invariants
 /// and adds interpolation-specific: output between inputs and non-empty output.
 /// </summary>
-public abstract class FrameInterpolationTestBase : VideoNNModelTestBase
+public abstract class FrameInterpolationTestBase<T> : VideoNNModelTestBase<T>
 {
     [Fact(Timeout = 120000)]
     public async Task InterpolatedFrame_ShouldBeBetweenInputs()
@@ -29,7 +29,9 @@ public abstract class FrameInterpolationTestBase : VideoNNModelTestBase
         // At minimum, both should produce finite output
         for (int i = 0; i < Math.Min(out1.Length, out2.Length); i++)
         {
-            Assert.False(double.IsNaN(out1[i]) || double.IsNaN(out2[i]),
+            double value1 = ConvertToDouble(out1[i]);
+            double value2 = ConvertToDouble(out2[i]);
+            Assert.False(double.IsNaN(value1) || double.IsNaN(value2),
                 $"Frame interpolation output[{i}] is NaN.");
         }
     }
@@ -46,3 +48,6 @@ public abstract class FrameInterpolationTestBase : VideoNNModelTestBase
         Assert.True(output.Length > 0, "Frame interpolation produced empty output.");
     }
 }
+
+/// <summary>Default double-precision alias for existing frame-interpolation tests.</summary>
+public abstract class FrameInterpolationTestBase : FrameInterpolationTestBase<double> { }

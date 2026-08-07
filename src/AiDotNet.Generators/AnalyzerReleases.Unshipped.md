@@ -20,3 +20,16 @@ AIDN052 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenera
 AIDN060 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double field in generic <T> class
 AIDN061 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[] field in generic <T> class
 AIDN062 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[,]/double[][] field in generic <T> class
+ADN0050 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0051 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0052 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0053 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0054 | AiDotNet.Serialization | Warning | LayerStateGenerator
+ADNTEST001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Float test scaffold rewrite was a no-op
+ADNTEST002 | AiDotNet.TestScaffold | Disabled | TestScaffoldGenerator, Generated scaffold architecture size disagrees with its InputShape
+ADNTEST003 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, Two models share a simple name with no registered owner
+ADNSHAPE001 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Two tensor layouts accept the same rank with different axis names
+ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A tensor layout repeats an axis role
+ADNSHAPE003 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
+ADNSHAPE004 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing
+ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage

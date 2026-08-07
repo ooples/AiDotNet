@@ -22,15 +22,17 @@ public class OnlineLearningDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SGDRegressor_OneStep_SquaredError_HandComputed()
     {
-        // Hand-computed single SGD step with squared error loss:
+        // Hand-computed single SGD step with squared error loss. scikit-learn's SGDRegressor
+        // squared loss is 0.5*(pred-y)^2, so the gradient w.r.t. the prediction is exactly the
+        // residual (NO factor of 2):
         // x=[1.0], y=2.0, lr=0.1, init w=[0], b=0
         // pred = 0*1 + 0 = 0
         // residual = 0 - 2 = -2
-        // gradient_multiplier = 2*(-2) = -4
-        // w gradient = -4 * 1 + 0.0001*0 = -4 (L2 term is 0)
-        // w_new = 0 - 0.1*(-4) = 0.4
-        // b gradient = -4
-        // b_new = 0 - 0.1*(-4) = 0.4
+        // gradient_multiplier = residual = -2
+        // w gradient = -2 * 1 + 0.0*0 = -2 (L2 term is 0)
+        // w_new = 0 - 0.1*(-2) = 0.2
+        // b gradient = -2
+        // b_new = 0 - 0.1*(-2) = 0.2
         var sgd = new OnlineSGDRegressor<double>(
             learningRate: 0.1,
             learningRateSchedule: LearningRateSchedule.Constant,
@@ -45,29 +47,30 @@ public class OnlineLearningDeepMathIntegrationTests
         double bias = sgd.GetBias();
 
         Assert.NotNull(weights);
-        Assert.Equal(0.4, weights[0], MediumTolerance);
-        Assert.Equal(0.4, bias, MediumTolerance);
+        Assert.Equal(0.2, weights[0], MediumTolerance);
+        Assert.Equal(0.2, bias, MediumTolerance);
 
-        // Prediction after one step: 0.4*1 + 0.4 = 0.8
+        // Prediction after one step: 0.2*1 + 0.2 = 0.4
         double pred = sgd.PredictSingle(x);
-        Assert.Equal(0.8, pred, MediumTolerance);
+        Assert.Equal(0.4, pred, MediumTolerance);
     }
 
     [Fact(Timeout = 120000)]
     public async Task SGDRegressor_OneStep_WithL2Regularization_HandComputed()
     {
-        // Same as above but with L2=0.1:
-        // w gradient = -4 + 0.1*0 = -4 (still -4 since w=0 initially)
-        // After first step they're the same. Let's do 2 steps.
-        // Step 1: same as above → w=0.4, b=0.4
+        // Same as above (scikit-learn convention: grad_mult = residual, no factor of 2) but with L2=0.1.
+        // Step 1: x=[1], y=2, w=0, b=0
+        //   pred = 0, residual = -2, grad_mult = -2
+        //   w_gradient = -2*1 + 0.1*0 = -2 ; w_new = 0 - 0.1*(-2) = 0.2
+        //   b_gradient = -2 (no L2 on bias) ; b_new = 0.2
         // Step 2: x=[1], y=2
-        //   pred = 0.4*1 + 0.4 = 0.8
-        //   residual = 0.8 - 2 = -1.2
-        //   grad_mult = 2*(-1.2) = -2.4
-        //   w_gradient = -2.4*1 + 0.1*0.4 = -2.4 + 0.04 = -2.36
-        //   w_new = 0.4 - 0.1*(-2.36) = 0.4 + 0.236 = 0.636
-        //   b_gradient = -2.4 (no L2 on bias)
-        //   b_new = 0.4 - 0.1*(-2.4) = 0.4 + 0.24 = 0.64
+        //   pred = 0.2*1 + 0.2 = 0.4
+        //   residual = 0.4 - 2 = -1.6
+        //   grad_mult = -1.6
+        //   w_gradient = -1.6*1 + 0.1*0.2 = -1.6 + 0.02 = -1.58
+        //   w_new = 0.2 - 0.1*(-1.58) = 0.2 + 0.158 = 0.358
+        //   b_gradient = -1.6 (no L2 on bias)
+        //   b_new = 0.2 - 0.1*(-1.6) = 0.2 + 0.16 = 0.36
         var sgd = new OnlineSGDRegressor<double>(
             learningRate: 0.1,
             learningRateSchedule: LearningRateSchedule.Constant,
@@ -83,8 +86,8 @@ public class OnlineLearningDeepMathIntegrationTests
         double bias = sgd.GetBias();
 
         Assert.NotNull(weights);
-        Assert.Equal(0.636, weights[0], MediumTolerance);
-        Assert.Equal(0.64, bias, MediumTolerance);
+        Assert.Equal(0.358, weights[0], MediumTolerance);
+        Assert.Equal(0.36, bias, MediumTolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -113,12 +116,13 @@ public class OnlineLearningDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SGDRegressor_HuberLoss_LargeError_LinearGradient()
     {
-        // For large errors (|residual| > epsilon), Huber gradient = 2*epsilon*sign(residual)
+        // For large errors (|residual| > epsilon) the scikit-learn Huber gradient is
+        // epsilon*sign(residual) (linear region, NO factor of 2).
         // epsilon=0.1, x=[1], y=100 (huge error)
         // pred = 0, residual = 0-100 = -100, |residual| = 100 >> 0.1
-        // Huber gradient = 2*0.1*sign(-100) = -0.2
-        // w_new = 0 - 0.1*(-0.2*1) = 0.02
-        // b_new = 0 - 0.1*(-0.2) = 0.02
+        // Huber gradient = 0.1*sign(-100) = -0.1
+        // w_new = 0 - 0.1*(-0.1*1) = 0.01
+        // b_new = 0 - 0.1*(-0.1) = 0.01
         var sgd = new OnlineSGDRegressor<double>(
             learningRate: 0.1, learningRateSchedule: LearningRateSchedule.Constant,
             l2Penalty: 0.0, loss: SGDLossType.Huber, epsilon: 0.1);
@@ -126,8 +130,8 @@ public class OnlineLearningDeepMathIntegrationTests
         var x = new Vector<double>(new double[] { 1.0 });
         sgd.PartialFit(x, 100.0);
 
-        Assert.Equal(0.02, sgd.GetWeights()[0], MediumTolerance);
-        Assert.Equal(0.02, sgd.GetBias(), MediumTolerance);
+        Assert.Equal(0.01, sgd.GetWeights()[0], MediumTolerance);
+        Assert.Equal(0.01, sgd.GetBias(), MediumTolerance);
     }
 
     [Fact(Timeout = 120000)]
