@@ -84,11 +84,14 @@ internal static class Im2Col3DHelper
         long mOffset = m.LogicalToStorageIndex(0);
 
         // Zero-fill only logical destination elements so views cannot clear unrelated storage.
+        // Uses the numeric zero rather than default(T): T is a tensor element type, so zero is what
+        // is meant, and it needs no suppression for an unconstrained generic.
+        var zero = MathHelper.GetNumericOperations<T>().Zero;
         for (int row = 0; row < rowsTotal; row++)
         {
             long mRow = mOffset + (long)row * mStrides[0];
             for (int col = 0; col < colsPerRow; col++)
-                mData[mRow + (long)col * mStrides[1]] = default!;
+                mData[mRow + (long)col * mStrides[1]] = zero;
         }
 
         // For each output spatial position, copy the receptive field into the
@@ -192,6 +195,8 @@ internal static class Im2Col3DHelper
         long mOffset = m.LogicalToStorageIndex(0);
 
         // Clear only logical destination elements; x may be a view over larger storage.
+        // Numeric zero rather than default(T), for the same reason as Im2Col3D above.
+        var zeroFill = MathHelper.GetNumericOperations<T>().Zero;
         for (int bi = 0; bi < b; bi++)
         {
             long xBaseB = xOffset + (long)bi * xStrides[0];
@@ -205,7 +210,7 @@ internal static class Im2Col3DHelper
                     {
                         long xBaseH = xBaseD + (long)hh * xStrides[3];
                         for (int ww = 0; ww < iw; ww++)
-                            xData[xBaseH + (long)ww * xStrides[4]] = default!;
+                            xData[xBaseH + (long)ww * xStrides[4]] = zeroFill;
                     }
                 }
             }
