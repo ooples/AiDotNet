@@ -1515,6 +1515,17 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             }
         }
 
+        // Move the engine's persistent-tensor registration onto the new tensor, in place. Training
+        // itself already follows the resize — the generated GetTrainableParameters() reads the
+        // _weights FIELD — but _registeredTensors is a separate list, and leaving it on the dead
+        // tensor means a GPU engine keeps a persistent handle on weights no forward reads while the
+        // live ones are never marked persistent, disposal unregisters the wrong tensor, and the old
+        // matrix stays reachable for the layer's lifetime. Positional replace, not
+        // unregister+register: the latter appends, and SetTrainableParameters pairs by index against
+        // GetTrainableParameters()' (weights, biases) order, so reordering would hand a clone its
+        // biases as weights.
+        ReplaceTrainableParameter(_weights, resizedWeights, PersistentTensorRole.Weights);
+
         _weights = resizedWeights;
         _weightsGradient = null;
         UpdateInputShape([actualInputSize]);
