@@ -20,6 +20,7 @@ public class OWSMOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        Seed = other.Seed;
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
