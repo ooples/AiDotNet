@@ -454,7 +454,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // softmax over neighbours; dropout on the normalized coefficients, §3.3) but expresses
         // every step with Engine ops that reference the ACTUAL parameter tensors, so autodiff
         // derives exact gradients for _weights, _attentionWeights and _bias.
-        var adjacency = _adjacencyMatrix!;
+        // Validated on entry to Forward (see the _useSparseAggregation check), but the compiler
+        // cannot carry that across the call, so state the requirement where it is relied on.
+        var adjacency = _adjacencyMatrix
+            ?? throw new InvalidOperationException(
+                "The dense attention path requires an adjacency matrix; call SetAdjacencyMatrix first.");
         bool adjacency2D = adjacency.Shape.Length == 2;
         T maskNegInf = NumOps.FromDouble(-1e9);
 
@@ -530,9 +534,15 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 denseHeadSum = denseHeadSum is null ? headOutput : Engine.TensorAdd(denseHeadSum, headOutput);
         }
 
-        var combinedHeads = _concatenateHeads
+        // denseHeadSum is accumulated in the head loop above and is non-null whenever heads are
+        // averaged rather than concatenated, since _numHeads is at least one. Assert it so the
+        // averaging branch cannot silently dereference null if that ever stops holding.
+        if (!_concatenateHeads && denseHeadSum is null)
+            throw new InvalidOperationException("Head averaging was requested but no head outputs were accumulated.");
+
+        var combinedHeads = _concatenateHeads || denseHeadSum is null
             ? Engine.Concat(denseHeadOutputs, 2)
-            : Engine.TensorDivideScalar(denseHeadSum!, NumOps.FromDouble(_numHeads));
+            : Engine.TensorDivideScalar(denseHeadSum, NumOps.FromDouble(_numHeads));
         var denseBias = Engine.Reshape(_bias, [1, 1, _combinedOutputFeatures]);
         output = Engine.TensorBroadcastAdd(combinedHeads, denseBias);
 

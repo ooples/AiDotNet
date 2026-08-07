@@ -1232,7 +1232,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             gpuEngine.SgdMomentumUpdateGpu(_weights, _weightsGradient, _weightsVelocity, lr, 0.0f, 0.0f);
             if (_useBias)
-                gpuEngine.SgdMomentumUpdateGpu(_bias, _biasGradient!, _biasVelocity!, lr, 0.0f, 0.0f);
+            {
+                // _useBias implies both were allocated alongside _bias. Stating it here means a
+                // future path that enables the bias without allocating them fails with a name.
+                if (_biasGradient is null || _biasVelocity is null)
+                    throw new InvalidOperationException("Bias updates were requested but the bias gradient/velocity buffers are missing.");
+                gpuEngine.SgdMomentumUpdateGpu(_bias, _biasGradient, _biasVelocity, lr, 0.0f, 0.0f);
+            }
         }
         else
         {
@@ -1242,7 +1248,9 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             if (_useBias)
             {
-                var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient!, learningRate);
+                if (_biasGradient is null)
+                    throw new InvalidOperationException("Bias updates were requested but the bias gradient buffer is missing.");
+                var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient, learningRate);
                 _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
             }
 
@@ -1355,9 +1363,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (!_useBias)
             return new Vector<T>(_weightsGradient.ToArray());
 
+        // Reached only when the bias is enabled, which is also what allocates this buffer.
+        if (_biasGradient is null)
+            throw new InvalidOperationException("Bias gradients were requested but the bias gradient buffer is missing.");
+
         return Vector<T>.Concatenate(
             new Vector<T>(_weightsGradient.ToArray()),
-            new Vector<T>(_biasGradient!.ToArray())
+            new Vector<T>(_biasGradient.ToArray())
         );
     }
 
