@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -226,24 +227,45 @@ public class FlashAttentionFusedCompiledTrainingIssue1346Tests
         // exact explicit [batch, seq, dim] shape that Train will replay.
         var prediction = model.ForwardForTraining(input);
         int classOffset = prediction.Length - NumClasses;
-        int targetClass = 0;
-        float selectedPrediction = prediction[classOffset];
-        for (int c = 1; c < NumClasses; c++)
+
+        // THE SELECTED CLASS MUST NOT SATURATE THE CLAMP. The head is DenseLayer<float> with
+        // IdentityActivation, so these are raw LOGITS and are routinely negative -- and picking the
+        // lowest-scoring class picked the one most likely to be. Every negative or near-zero value
+        // clamps to 1e-7, so expectedLoss became the constant 16.118..., the precondition
+        // `expectedLoss > 0` was guaranteed by the floor and could not fail, and the test compared
+        // the fused readout against a saturated constant instead of a computed cross-entropy. The
+        // logarithm the remarks above say this verifies was never exercised on a meaningful input.
+        //
+        // So the class is chosen from those the clamp leaves alone: the lowest scorer strictly
+        // inside (1e-7, 1]. That keeps the "hardest class" intent -- CCE is largest there, so the
+        // historic silent-zero bug still fails loudly -- while making -log() run on a real value.
+        const float ClampFloor = 1e-7f;
+        int targetClass = -1;
+        float selectedPrediction = 0.0f;
+        for (int c = 0; c < NumClasses; c++)
         {
             float candidate = prediction[classOffset + c];
-            if (candidate < selectedPrediction)
+            if (candidate <= ClampFloor || candidate > 1.0f) continue;
+            if (targetClass < 0 || candidate < selectedPrediction)
             {
                 selectedPrediction = candidate;
                 targetClass = c;
             }
         }
 
-        // Math.Clamp(float,...) does not exist on net471; Max/Min is equivalent and multi-targets.
-        float clampedPrediction = Math.Max(1e-7f, Math.Min(1.0f, selectedPrediction));
-        float expectedLoss = -MathF.Log(clampedPrediction);
+        // A falsifiable precondition, unlike the one it replaces. If the initialized model emits no
+        // logit in range, the reference cannot be computed and the fixture -- not the fused path --
+        // is what needs changing, so say so rather than silently measuring the clamp.
+        Assert.True(targetClass >= 0,
+            "Reference precondition failed: no class logit fell inside (1e-7, 1], so every " +
+            "cross-entropy reference would saturate the clamp floor and the comparison would be " +
+            "against a constant. Logits were: " +
+            string.Join(", ", Enumerable.Range(0, NumClasses).Select(c => prediction[classOffset + c])));
+
+        float expectedLoss = -MathF.Log(selectedPrediction);
         Assert.True(expectedLoss > 0.0f,
             $"Reference precondition failed: selected class {targetClass} had " +
-            $"prediction={selectedPrediction}, clamped={clampedPrediction}.");
+            $"prediction={selectedPrediction}.");
 
         var target = BuildOneHotTarget(targetClass);
         model.SetTrainingMode(true);

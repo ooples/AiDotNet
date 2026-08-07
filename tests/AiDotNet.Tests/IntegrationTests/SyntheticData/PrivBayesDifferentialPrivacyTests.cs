@@ -250,9 +250,18 @@ public class PrivBayesDifferentialPrivacyTests
         loose /= draws;
 
         _out.WriteLine($"mean |error| eps=0.02 -> {tight:F5}; eps=5.0 -> {loose:F5}");
-        Assert.True(tight > loose,
-            $"A tighter budget (eps=0.02, error {tight:F5}) did not distort more than a loose one " +
-            $"(eps=5.0, error {loose:F5}), so the privacy budget is not calibrating the noise.");
+        // A MARGIN, NOT A STRICT INEQUALITY. `tight > loose` over two noisy averages of 5 draws is a
+        // coin flip whenever they land close, and a marginal result counted as a PASS -- so the guard
+        // was weak in both directions: it could flake red on a near-tie and go green on a barely
+        // -calibrated mechanism. The eps gap here is 250x, so the separation should not be marginal;
+        // requiring it to be substantial is what makes a near-tie a finding rather than a coin toss.
+        const double RequiredSeparationFactor = 1.5;
+        Assert.True(tight > loose * RequiredSeparationFactor,
+            $"A tighter budget (eps=0.02, error {tight:F5}) did not distort at least " +
+            $"{RequiredSeparationFactor}x more than a loose one (eps=5.0, error {loose:F5}; ratio " +
+            $"{(loose > 0 ? tight / loose : double.PositiveInfinity):F3}). Across a 250x epsilon gap " +
+            "the separation should not be marginal, so a ratio near 1.0 means the privacy budget is " +
+            "not calibrating the noise.");
     }
 
     #endregion
