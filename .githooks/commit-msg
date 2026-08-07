@@ -25,8 +25,28 @@ script="$repo_root/.github/scripts/commit-msg-autofix.py"
 if [ -f "$script" ] && command -v python3 >/dev/null 2>&1; then
     # The fixer reads the raw message on stdin and prints the corrected message.
     # It leaves already-compliant messages (and Merge/Revert/bot commits) unchanged.
-    if fixed="$(python3 "$script" < "$msg_file" 2>/dev/null)"; then
+    #
+    # STDERR IS KEPT, NOT DISCARDED. Sending it to /dev/null meant a broken fixer
+    # produced no signal at all: the developer saw a normal commit and never
+    # learned the hook had stopped working.
+    fixed="$(python3 "$script" < "$msg_file" 2>/tmp/commit-msg-autofix.err)"
+    status=$?
+    err="$(cat /tmp/commit-msg-autofix.err 2>/dev/null || true)"
+    rm -f /tmp/commit-msg-autofix.err
+
+    # EMPTY OUTPUT MUST NOT OVERWRITE THE MESSAGE. Accepting any exit-0 result
+    # included an empty stdout, which wrote a lone newline into the message file.
+    # Git then aborts with "Aborting commit due to empty commit message" and the
+    # message the developer typed is GONE -- the exact destructive outcome the
+    # header promises this hook does not have. A fixer that returns nothing is a
+    # broken fixer, so the original message stands.
+    if [ "$status" -eq 0 ] && [ -n "${fixed//[[:space:]]/}" ]; then
         printf '%s\n' "$fixed" > "$msg_file"
+    else
+        echo "commit-msg: autofix did not run; keeping your message as written." >&2
+        if [ -n "$err" ]; then
+            echo "commit-msg: $err" >&2
+        fi
     fi
 fi
 

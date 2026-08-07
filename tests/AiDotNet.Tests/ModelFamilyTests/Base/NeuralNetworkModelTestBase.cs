@@ -347,6 +347,26 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// Reports the declared input shape alongside the model's own error, so the fixture is
     /// implicated directly rather than leaving a downstream symptom to be traced back by hand.
     /// </remarks>
+    /// <summary>
+    /// <see cref="EffectiveOutputShape"/>, but first reports a warm-up shape rejection.
+    /// </summary>
+    /// <remarks>
+    /// THE GUARD HAD NO CALLER. ThrowIfWarmUpRejectedInputShape was written, documented and
+    /// invoked by nothing, so s_warmUpFailures was populated and never read: a fixture whose
+    /// declared InputShape the model rejects still failed, just later and as an
+    /// unrelated-looking symptom -- which is precisely what the guard exists to prevent.
+    /// Routing the shape-dependent invariants through this property fires it at the point the
+    /// fixture and the model first have to agree.
+    /// </remarks>
+    protected int[] ShapeCheckedOutputShape
+    {
+        get
+        {
+            ThrowIfWarmUpRejectedInputShape();
+            return EffectiveOutputShape;
+        }
+    }
+
     protected void ThrowIfWarmUpRejectedInputShape()
     {
         // Populate the cache if this is the first access.
@@ -667,7 +687,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
-        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
+        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
 
         // Measure initial loss (model's objective — MSE for most families, the model's own loss for
         // raw-logit cross-entropy LMs where MSE is meaningless; see MeasureLoss).
@@ -717,7 +737,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
 
         // Materialize lazy-initialized parameter tensors via a warmup
         // forward pass BEFORE snapshotting. Lazy layers (LayerNormalization
@@ -910,7 +930,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // scaffold-generated override. Plain CreateRandomTensor here
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
-        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var trainTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(trainInput, trainTarget);
 
@@ -991,7 +1011,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
 
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(input, target);
@@ -1220,8 +1240,24 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             string.Join("\n  ", offenders));
     }
 
+    /// <summary>Walks the layer tree, recording layers held in fields but not exposed.</summary>
+    /// <remarks>
+    /// A VISITED SET, because the recursion was otherwise unbounded. A child holding a
+    /// back-reference to its parent -- or any cycle in the layer graph -- recursed forever and
+    /// took the whole test host down with a StackOverflowException, which xUnit cannot catch or
+    /// report: the shard dies and every OTHER test in it is lost with no failure message. A
+    /// diamond (two parents sharing one child) also re-walked the shared subtree once per path,
+    /// which is exponential on a deep graph and reported the same offender repeatedly.
+    /// </remarks>
     private static void CheckReachable(ILayer<T> layer, List<string> offenders)
+        => CheckReachable(layer, offenders, new HashSet<object>(IdentityComparer.Instance));
+
+    private static void CheckReachable(ILayer<T> layer, List<string> offenders, HashSet<object> visited)
     {
+        // Identity, not equality: two distinct layers can compare equal by value and must
+        // still both be walked.
+        if (!visited.Add(layer)) return;
+
         var exposed = layer.GetSubLayers();
         // Explicit comparer rather than the BCL's ReferenceEqualityComparer: that name also resolves
         // to an internal AiDotNet type in this compilation, which the Release build picks and then
@@ -1257,7 +1293,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             offenders.Add($"{layer.GetType().Name}: holds {held} child layer(s), " +
                           $"{missing} not exposed by GetSubLayers() (exposed {exposed.Count})");
 
-        foreach (var sub in exposed) CheckReachable(sub, offenders);
+        foreach (var sub in exposed) CheckReachable(sub, offenders, visited);
     }
 
     [Fact(Timeout = 120000)]
@@ -1354,7 +1390,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // scaffold-generated override. Plain CreateRandomTensor here
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
-        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var trainTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(trainInput, trainTarget);
 
@@ -1430,7 +1466,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!TrainingInvariantsNotApplicable(network))
         {
             var input = CreateRandomTensor(InputShape, rng);
-            var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+            var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
             network.Train(input, target);
         }
         var metadata = network.GetModelMetadata();
@@ -1509,7 +1545,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (TrainingInvariantsNotApplicable(network1)) return;
 
         var input = CreateRandomTensor(InputShape, rng1);
-        var target = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(EffectiveOutputShape, rng1), rng1);
+        var target = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng1), rng1);
         var input2 = CreateRandomTensor(InputShape, rng2);
         // Use the CreateRandomTargetTensor hook so type-constrained
         // target families (NER + CRF) get legal labels — matches the
@@ -1517,7 +1553,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // line 466/696. Softmax-CE models additionally get a well-posed
         // (one-hot, sums-to-1) target so "more training doesn't degrade"
         // is measured against a reachable objective.
-        var target2 = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(EffectiveOutputShape, rng2), rng2);
+        var target2 = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng2), rng2);
 
         // Run a probe Predict on network1 BEFORE cloning so any lazy
         // layers (PyTorch-style LazyConv2d / FullyConnectedLayer's lazy
@@ -1595,8 +1631,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // improve still passes while one that actively degrades does not.
         if (lossLong > lossUntrained + MoreDataTolerance)
         {
-            var shortParams = network1.GetParameters();
-            var longParams = network2.GetParameters();
+            // NAMED FOR THE MODEL THEY COME FROM. network1 is trained for longIters and
+            // network2 for shortIters, so the previous names were exactly inverted; the message
+            // text then re-inverted them, which made the printed output correct by accident and
+            // the code actively misleading to anyone editing it.
+            var longParams = network1.GetParameters();
+            var shortParams = network2.GetParameters();
             double shortParamNormSq = 0.0;
             double longParamNormSq = 0.0;
             int shortNonFinite = 0;
@@ -1619,8 +1659,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 $"baseline ({lossUntrained:R}) + tolerance ({MoreDataTolerance:R}). " +
                 $"A second run over {shortIters} iterations on independently-seeded data reached " +
                 $"{lossShort:R}. Parameter diagnostics: " +
-                $"long count={shortParams.Length}, L2={Math.Sqrt(shortParamNormSq):R}, nonfinite={shortNonFinite}; " +
-                $"short count={longParams.Length}, L2={Math.Sqrt(longParamNormSq):R}, nonfinite={longNonFinite}.");
+                $"long count={longParams.Length}, L2={Math.Sqrt(longParamNormSq):R}, nonfinite={longNonFinite}; " +
+                $"short count={shortParams.Length}, L2={Math.Sqrt(shortParamNormSq):R}, nonfinite={shortNonFinite}.");
         }
     }
 
@@ -1677,7 +1717,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (TrainingInvariantsNotApplicable(network)) return;
         if (!TrainingErrorInvariantApplicable) return;
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
 
         for (int i = 0; i < TrainingIterations * 3; i++)
             network.Train(input, target);
@@ -1702,7 +1742,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         //
         // The train-side numbers were the honest ones all along: ~0.167 is E[(U-U')^2] for two
         // independent uniforms, which is what an untrained model should score.
-        var testTarget = CreateRandomTargetTensor(EffectiveOutputShape, ModelTestHelpers.CreateSeededRandom(100));
+        var testTarget = CreateRandomTargetTensor(ShapeCheckedOutputShape, ModelTestHelpers.CreateSeededRandom(100));
         double testMSE = MeasureLoss(network, network.Predict(testInput), testTarget);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
@@ -1729,7 +1769,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
 
         // Materialize lazy-initialized parameter tensors via a warmup
         // forward pass — see Training_ShouldChangeParameters for the
@@ -1888,7 +1928,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (TrainingInvariantsNotApplicable(network)) return;
         if (!OptimizerStepParamL2InvariantApplicable) return;
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
 
         // Materialize lazy-initialized parameters via a warmup forward
         // pass BEFORE measuring L2. Some layers (LayerNormalization with
@@ -2066,7 +2106,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // UNIFORM-RANDOM target whose loss is pinned at 0.5*V*ln(V) with essentially no reachable
         // descent, so this invariant reported "loss did not strictly decrease" for a model that was
         // simply being given an unfittable objective.
-        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
+        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
 
         // First step establishes the baseline loss.
         network.Train(input, target);
@@ -2549,15 +2589,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        if (!GradientCheckApplicable) return;
+        // A GREEN RESULT MUST NOT LOOK THE SAME AS AN UNRUN ONE. The gate defaults to false by
+        // design -- broad enablement is the separate #1872 rollout -- but a bare  made
+        // that indistinguishable from a model whose gradients were checked and passed. Every
+        // skip is now recorded with its reason, so the report says which models this invariant
+        // actually covered and the rollout has a worklist instead of a silence.
+        if (!GradientCheckApplicable)
+        {
+            ReportGradientFinding(GradientReportFile, GetType().FullName ?? GetType().Name,
+                "NOT RUN: GradientCheckApplicable is false for this fixture (see #1872 rollout). "
+                + "This invariant did not execute; its green result carries no information.");
+            return;
+        }
 
         using var network = CreateNetwork();
-        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn) return;
+        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
+        {
+            ReportGradientFinding(GradientReportFile, GetType().FullName ?? GetType().Name,
+                "NOT RUN: the fixture is not a NeuralNetworkBase<T>, so finite differencing has no "
+                + "entry point. Green here means the check was skipped, not that gradients agree.");
+            return;
+        }
         if (TrainingInvariantsNotApplicable(network)) return;
 
         var rng = ModelTestHelpers.CreateSeededRandom();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
 
         // Deterministic forward: eval mode turns Dropout into an identity, so the loss is a
         // fixed function of the parameters. A stochastic training-mode mask would make the
@@ -2863,8 +2920,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!GradientCorrectnessInvariantApplicable) return;
 
         var input = CreateRandomTensor(InputShape, rng);
-        var targetA = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
-        var targetB = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
+        var targetA = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
+        var targetB = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
 
         // FIXTURE GUARD, and it is not a formality — without it this invariant manufactures findings.
         // MakeTargetWellPosedForLoss projects a target into the shape its loss can actually use, and for
@@ -3062,7 +3119,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             {
                 network.Train(input, targetA);
                 parameterProbe.Restore();
-                if (MaxAbsParamDelta(p0, parameterProbe.SampleCurrent()) != 0.0)
+                // NaN IS NOT "CHANGED". MaxAbsParamDelta returns NaN when the vectors differ
+                // in length, and `NaN != 0.0` is TRUE -- so a length mismatch, which means the
+                // probe is comparing two different parameter sets and the result is
+                // meaningless, was reported as "restoring did not take effect". The two states
+                // need different reports, so the mismatch is separated out.
+                var __restored = MaxAbsParamDelta(p0, parameterProbe.SampleCurrent());
+                if (double.IsNaN(__restored))
+                {
+                    ReportGradientFinding(GradientReportFile, model,
+                        "SKIPPED: parameter vectors changed length across Restore, so no delta can be "
+                        + "computed and this invariant has nothing to compare.");
+                    return;
+                }
+                if (__restored != 0.0)
                 {
                     ReportGradientFinding(GradientReportFile, model,
                         "SKIPPED: restoring through GetParameterChunks did not take effect, so this model's "
@@ -3106,7 +3176,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // Training_ShouldChangeParameters and GradientFlow_ShouldBeNonZeroAndFinite. Duplicating
         // their assertions here would report the same defect twice under two names; when they are
         // already failing this comparison has nothing to say, so it stands down.
-        if (CountNonFiniteParams(stepA) > 0 || MaxAbsParamDelta(p0, stepA) == 0.0)
+        // The mirror of the case above: `NaN == 0.0` is FALSE, so a length mismatch slipped
+        // PAST this stand-down and the invariant ran on two incomparable vectors. Treated as
+        // "nothing to say" here, which is what an uncomputable delta means.
+        var __stepDelta = MaxAbsParamDelta(p0, stepA);
+        if (CountNonFiniteParams(stepA) > 0 || __stepDelta == 0.0 || double.IsNaN(__stepDelta))
         {
             ReportGradientFinding(GradientReportFile, model,
                 "SKIPPED: the step did not move the parameters finitely, which Training_ShouldChangeParameters "
@@ -3484,7 +3558,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!GradientCorrectnessInvariantApplicable) return;
 
         var input = CreateRandomTensor(InputShape, rng);
-        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
+        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(ShapeCheckedOutputShape, rng), rng);
         network.SetTrainingMode(true);
         try { network.Predict(input); }
         catch (InvalidOperationException) { /* warmed by Train below */ }
@@ -3765,7 +3839,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             var dir = Environment.GetEnvironmentVariable("AIDOTNET_GRADIENT_REPORT_DIR")
                       ?? Path.Combine(Path.GetTempPath(), "aidotnet-gradient-invariant");
             Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, file), $"{model}\t{message}{Environment.NewLine}");
+
+            // ONE FILE PER PROCESS AND CLASS, because xUnit runs a shard's test classes in
+            // PARALLEL and every one of them appended to the same two fixed names. Concurrent
+            // File.AppendAllText on one path throws IOException on a sharing violation, and the
+            // bare catch below then DROPPED the finding -- so the worklist this report exists to
+            // produce was silently incomplete, and incomplete in exactly the busy shards where
+            // the findings matter most.
+            //
+            // A per-writer suffix removes the contention entirely rather than retrying into it;
+            // the consumer already globs this directory.
+            var stem = Path.GetFileNameWithoutExtension(file);
+            var ext = Path.GetExtension(file);
+            var unique = $"{stem}.{Environment.ProcessId}-{Environment.CurrentManagedThreadId}{ext}";
+            File.AppendAllText(Path.Combine(dir, unique), $"{model}\t{message}{Environment.NewLine}");
         }
         catch { /* reporting is best-effort */ }
     }

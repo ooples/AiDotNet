@@ -427,7 +427,19 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 // RegisterTrainableParameter) to avoid role-based dedup -- layers like
                 // MultiHeadAttentionLayer carry several parameters with the same role
                 // (e.g. 4 x Weights) that replace-by-role logic would collapse to one.
-                sb.AppendLine($"        if (RegisteredTrainableParameterCount == {paramFields.Count})");
+                // AGAINST THE REAL REGISTRY. `RegisteredTrainableParameterCount` does not
+                // exist on LayerBase -- GetTrainableParameters() returns _registeredTensors --
+                // so for these layers the generator emitted code that DOES NOT COMPILE. The
+                // quick path is also narrowed to identity: the positional swap is only valid
+                // when the registry already holds exactly these tensors in this order, which is
+                // what makes a positional assignment mean the same thing on both sides.
+                sb.AppendLine("        var __registered = base.GetTrainableParameters();");
+                sb.Append("        bool __identical = __registered.Count == ").Append(paramFields.Count).AppendLine(";");
+                for (int i = 0; i < paramFields.Count; i++)
+                {
+                    sb.AppendLine($"        __identical = __identical && global::System.Object.ReferenceEquals(__registered[{i}], {paramFields[i].Name});");
+                }
+                sb.AppendLine("        if (__identical)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            base.SetTrainableParameters(parameters);");
                 sb.AppendLine("            return;");
@@ -538,7 +550,17 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// </summary>");
             sb.AppendLine("    private void EnsureSubLayersRegistered()");
             sb.AppendLine("    {");
-            sb.AppendLine("        if (_subLayersRegistered) return;");
+            // THE LATCH IS FOR FIELDS, NOT FOR COLLECTIONS. Individual sub-layer fields are
+            // assigned in the constructor, so registering once is enough for them. A
+            // collection is different: composites commonly fill their child list lazily --
+            // during shape resolution or on the first forward pass -- and the latch had
+            // already fired by then, so those children were NEVER registered. They then have
+            // no gradients, no optimizer entry and no export, silently.
+            //
+            // Fields are latched; collections are re-scanned on every call and skip children
+            // already registered, so a later fill is picked up and an early one is not
+            // duplicated.
+            sb.AppendLine("        bool __firstRun = !_subLayersRegistered;");
             sb.AppendLine("        _subLayersRegistered = true;");
             foreach (var sl in subLayerFields)
             {
@@ -556,15 +578,22 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     sb.AppendLine("        }");
                 }
                 else if (sl.IsNullable)
-                    sb.AppendLine($"        if ({sl.Name} is not null) RegisterSubLayer({sl.Name});");
+                    sb.AppendLine($"        if (__firstRun && {sl.Name} is not null) RegisterSubLayer({sl.Name});");
                 else
-                    sb.AppendLine($"        RegisterSubLayer({sl.Name});");
+                    sb.AppendLine($"        if (__firstRun) RegisterSubLayer({sl.Name});");
             }
             sb.AppendLine("    }");
             sb.AppendLine();
             // Emitted only when the layer does not write its own; a hand-written override is
             // respected rather than duplicated (which is what the class-level skip used to do,
             // at the cost of the accessors above).
+            // EnsureSubLayersRegistered has exactly two call sites: the generated
+            // GetTrainableParameters (emitted only when there ARE parameter fields) and the
+            // generated EnsureInitialized (emitted only when the class does not declare its
+            // own). A pure composite -- children in a List, no [TrainableParameter] fields,
+            // hand-written EnsureInitialized -- satisfied neither, so the method was emitted
+            // and never called and its children were never registered. Nothing reported it,
+            // because generating dead code is not an error.
             if (!DeclaresAny(classSymbol, "EnsureInitialized"))
             {
                 sb.AppendLine("    /// <summary>");
@@ -596,13 +625,32 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     }
 
     /// <summary>True when the class itself declares any of the named members.</summary>
+    /// <summary>True when the class already declares one of the methods this generator emits.</summary>
+    /// <remarks>
+    /// MATCHED ON SIGNATURE, NOT NAME. Any member sharing the name suppressed the whole
+    /// class's generation -- an unrelated overload such as
+    /// `GetTrainableParameters(bool includeFrozen)` was enough. That silently reintroduced
+    /// stale parameter rebinding, or dropped sub-layer registration, for a class whose author
+    /// had not overridden anything the generator writes.
+    /// </remarks>
     private static bool DeclaresAny(INamedTypeSymbol type, params string[] names)
     {
         foreach (var name in names)
         {
             foreach (var member in type.GetMembers(name))
             {
-                if (member is IMethodSymbol) return true;
+                if (member is not IMethodSymbol m) continue;
+
+                // The generated shapes, exactly:
+                //   EnsureInitialized()
+                //   GetTrainableParameters()
+                //   SetTrainableParameters(IReadOnlyList<Tensor<T>>)
+                bool matches = name switch
+                {
+                    "SetTrainableParameters" => m.Parameters.Length == 1,
+                    _ => m.Parameters.Length == 0,
+                };
+                if (matches) return true;
             }
         }
         return false;
@@ -654,8 +702,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         {
             // Only walk types that are actually enumerable, so a Func<TLayer> or similar
             // single-argument generic is not mistaken for a collection of layers.
-            var enumerable = named.AllInterfaces.Any(i =>
-                i.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>");
+            // SELF INCLUDED. AllInterfaces does NOT contain the type itself, so a field
+            // declared exactly as IEnumerable<ILayer<T>> -- which the XML summary advertises
+            // as supported -- reported false, was skipped, and its children were never
+            // registered. The declared-interface case is the one most likely to be written by
+            // hand, so it was the documented case that silently did nothing.
+            var enumerable = named.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>"
+                || named.AllInterfaces.Any(i =>
+                    i.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>");
             if (enumerable && IsLayerType(named.TypeArguments[0]))
                 return true;
         }

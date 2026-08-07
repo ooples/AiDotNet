@@ -148,7 +148,19 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                 // The dictionary and params overloads are separate methods; only the single-tensor
                 // one is the traced entry point.
                 if (member.Parameters.Length != 1) continue;
-                if (member.Parameters[0].Type is not INamedTypeSymbol { Name: "Tensor" }) continue;
+                // FULLY QUALIFIED. `Name: "Tensor"` accepted any type called Tensor from any
+                // namespace or referenced package. ADNSHAPE004 is an Error that GATES THE
+                // BUILD, so a false positive here is a hard break on correct code -- and the
+                // comment above already explains that this scoping is load-bearing rather
+                // than tidiness.
+                if (member.Parameters[0].Type is not INamedTypeSymbol tensorParam) continue;
+                if (tensorParam.ConstructedFrom.ToDisplayString() != "AiDotNet.LinearAlgebra.Tensor<T>"
+                    && tensorParam.ConstructedFrom.ToDisplayString(new SymbolDisplayFormat(
+                        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces))
+                       != "AiDotNet.LinearAlgebra.Tensor")
+                {
+                    continue;
+                }
 
                 spc.ReportDiagnostic(Diagnostic.Create(
                     OverridesForwardDescriptor,
@@ -167,7 +179,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                 if (dupe is not null)
                 {
                     spc.ReportDiagnostic(Diagnostic.Create(
-                        DuplicateAxisDescriptor, type.Locations.FirstOrDefault(),
+                        DuplicateAxisDescriptor, layout.Location ?? type.Locations.FirstOrDefault(),
                         type.Name, layout.DirectionName, string.Join(", ", layout.Axes), dupe.Key));
                 }
             }
@@ -190,7 +202,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                         else if (!list.Contains(rendered))
                         {
                             spc.ReportDiagnostic(Diagnostic.Create(
-                                AmbiguousRankDescriptor, type.Locations.FirstOrDefault(),
+                                AmbiguousRankDescriptor, layout.Location ?? type.Locations.FirstOrDefault(),
                                 type.Name, group.Key ? "input" : "output", rank, list[0], rendered));
                             list.Add(rendered);
                         }
@@ -205,7 +217,15 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
     {
         for (var b = type.BaseType; b is not null; b = b.BaseType)
         {
-            if (b.Name == "LayerBase") return true;
+            // Namespace-qualified for the same reason: any base type named LayerBase from
+            // any assembly previously satisfied this, widening an Error diagnostic onto
+            // unrelated hierarchies.
+            if (b.ConstructedFrom.ToDisplayString(new SymbolDisplayFormat(
+                    typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces))
+                == "AiDotNet.NeuralNetworks.Layers.LayerBase")
+            {
+                return true;
+            }
         }
 
         return false;
@@ -213,12 +233,18 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
 
     private readonly struct Layout
     {
-        public Layout(List<string> axes, bool isInput, bool batchOptional)
+        public Layout(List<string> axes, bool isInput, bool batchOptional, Location? location)
         {
             Axes = axes;
             IsInput = isInput;
             BatchOptional = batchOptional;
+            // THE OFFENDING ATTRIBUTE, not the class name. Reporting on the type left the
+            // author with a red squiggle on the class and several [TensorLayout] attributes
+            // to choose between, for an Error that stops their build.
+            Location = location;
         }
+
+        public Location? Location { get; }
 
         public List<string> Axes { get; }
         public bool IsInput { get; }
@@ -228,8 +254,26 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
         public IEnumerable<int> AcceptedRanks()
         {
             yield return Axes.Count;
-            // A batch-optional layout also accepts the form with the leading axis dropped.
-            if (BatchOptional && Axes.Count > 1) yield return Axes.Count - 1;
+
+            // THE SAME THREE CONDITIONS AS TensorLayoutAttribute.AcceptsRank, and
+            // the leading-axis test is the one that was missing here. This copy
+            // dropped `Axes[0] == Batch`, so a batch-optional layout whose first
+            // axis is NOT Batch was reported as accepting rank-1-less at build
+            // time -- a build error for a shape the runtime accepts, and the exact
+            // mirror of the attribute's own omission (it lacked `Axes.Length > 1`
+            // and so accepted rank 0). Two copies of one rule drifted apart in
+            // opposite directions, each wrong in the direction the other was not.
+            //
+            // The generator cannot call the attribute: it runs inside the compiler
+            // against symbols, not loaded types. So the rule is restated with the
+            // conditions spelled out and cross-referenced, and the two are kept in
+            // step by the shared-rank test in the attribute's own suite.
+            if (BatchOptional
+                && Axes.Count > 1
+                && string.Equals(Axes[0], "Batch", System.StringComparison.Ordinal))
+            {
+                yield return Axes.Count - 1;
+            }
         }
 
         public IEnumerable<string> AxesForRank(int rank)
@@ -260,7 +304,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
             if (named.Key == "Direction" && named.Value.Value is int d) isInput = d == 0;
         }
 
-        return new Layout(axes, isInput, batchOptional);
+        return new Layout(axes, isInput, batchOptional, attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation());
     }
 
     private static string RenderAxis(TypedConstant constant)
