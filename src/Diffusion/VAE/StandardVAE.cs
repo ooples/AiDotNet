@@ -69,6 +69,17 @@ namespace AiDotNet.Diffusion.VAE;
     [ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114")]
 public class StandardVAE<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Same layers, same order, as the previous GetParameters walked. The two preamble
+    /// calls are kept because an unresolved lazy layer contributes nothing, and the
+    /// old getter resolved shapes for exactly that reason.</remarks>
+    protected override void RegisterComponents()
+    {
+        EnsureLayersInitialized();
+        TriggerLazyShapeResolution();
+        foreach (var layer in EnumerateAllLayers()) RegisterParameterComponent(layer);
+    }
+
     /// <summary>
     /// Standard Stable Diffusion latent scale factor.
     /// </summary>
@@ -198,32 +209,6 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override double LatentScaleFactor => _latentScaleFactor;
-
-    /// <inheritdoc />
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from EnumerateAllLayers -- the same layers GetParameters walks, in the same
-    /// order -- so the count cannot drift from the vector it describes. It previously called a
-    /// hand-written arithmetic estimate over channel multipliers; VideoUNetPredictor had the
-    /// same construction and was nine times out (32,385,924 against a real 295,840,220), and a
-    /// flat parameter vector is paired by LENGTH on restore. Lazy shapes are resolved first for
-    /// the same reason GetParameters resolves them: an unresolved layer contributes 0 and the
-    /// two surfaces would disagree only until the first forward.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            EnsureLayersInitialized();
-            TriggerLazyShapeResolution();
-            long total = 0;
-            foreach (var layer in EnumerateAllLayers())
-            {
-                if (layer is not null) total += layer.ParameterCount;
-            }
-            return total;
-        }
-    }
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -580,29 +565,6 @@ public class StandardVAE<T> : VAEModelBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes so the vector matches ParameterCount even
-        // before the first real forward (lazy layers otherwise contribute 0).
-        TriggerLazyShapeResolution();
-
-        // Single-allocation concat over the same layers GetParameterChunks walks.
-        // The previous List<T> + per-element Add + ToArray triple-copied the whole
-        // parameter vector (~3x), OOM'ing the runner when a paper-scale VAE is
-        // materialised (e.g. during a foundation model's Clone). Vector<T>.Concatenate
-        // pre-sizes one result and vectorized-copies each layer's params in once.
-        var parts = new List<Vector<T>>();
-        foreach (var layer in EnumerateAllLayers())
-        {
-            if (layer == null) continue;
-            parts.Add(layer.GetParameters());
-        }
-
-        return Vector<T>.Concatenate(parts.ToArray());
-    }
-
-    /// <inheritdoc />
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
         EnsureLayersInitialized();
@@ -649,38 +611,6 @@ public class StandardVAE<T> : VAEModelBase<T>
             foreach (var parameter in EnumerateMaterializedParameters(subLayer))
                 yield return parameter;
         }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes first so each layer's slice is sized to its
-        // real parameter count; otherwise lazy layers size to 0 and incoming
-        // values are silently dropped (the round-trip bug).
-        _preserveMaterializedParameters = true;
-        TriggerLazyShapeResolution();
-
-        var index = 0;
-
-        SetLayerParameters(_inputConv, parameters, ref index);
-
-        foreach (var layer in _encoderLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_meanConv, parameters, ref index);
-        SetLayerParameters(_logVarConv, parameters, ref index);
-        SetLayerParameters(_quantConv, parameters, ref index);
-        SetLayerParameters(_postQuantConv, parameters, ref index);
-
-        foreach (var layer in _decoderLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_outputConv, parameters, ref index);
     }
 
     private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)

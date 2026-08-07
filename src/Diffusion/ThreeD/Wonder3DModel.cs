@@ -100,6 +100,15 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ResearchPaper("Wonder3D: Single Image to 3D using Cross-Domain Diffusion", "https://arxiv.org/abs/2310.15008", Year = 2024, Authors = "Long et al.")]
 public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     private const int LATENT_CHANNELS = 4;
@@ -138,21 +147,7 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
     public override bool SupportsNovelView => true;
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => false;
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            // Trigger lazy shape resolution so the count reflects the arch-derived
-            // total, not just already-materialized layers — callers that size a
-            // buffer off ParameterCount must see the same count SetParameters
-            // validates against. Same lazy-init pattern as SDXLTurboModel /
-            // RealESRGANModel (PR #1562).
-            _unet.TriggerLazyShapeResolution();
-            _vae.TriggerLazyShapeResolution();
-            return _unet.ParameterCount + _vae.ParameterCount;
-        }
-    }
+
 
     /// <summary>
     /// Gets the number of canonical viewpoints generated simultaneously.
@@ -221,39 +216,7 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Resolve lazy layers first so the returned vector length matches
-        // ParameterCount (see ParameterCount remarks).
-        _unet.TriggerLazyShapeResolution();
-        _vae.TriggerLazyShapeResolution();
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
-        for (int i = 0; i < unetParams.Length; i++) combined[i] = unetParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[unetParams.Length + i] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Resolve lazy layers BEFORE reading the per-sub-model counts the
-        // incoming vector is validated against (see ParameterCount remarks).
-        _unet.TriggerLazyShapeResolution();
-        _vae.TriggerLazyShapeResolution();
-        var unetCount = checked((int)_unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-        if (parameters.Length != unetCount + vaeCount)
-            throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < unetCount; i++) unetParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[unetCount + i];
-        _unet.SetParameters(unetParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 
