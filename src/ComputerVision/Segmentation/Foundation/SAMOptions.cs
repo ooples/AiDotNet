@@ -31,6 +31,11 @@ public class SAMOptions : NeuralNetworkOptions
         AdamBeta1 = other.AdamBeta1;
         AdamBeta2 = other.AdamBeta2;
         AdamEpsilon = other.AdamEpsilon;
+        WarmupSteps = other.WarmupSteps;
+        MaskFocalWeight = other.MaskFocalWeight;
+        MaskDiceWeight = other.MaskDiceWeight;
+        FocalAlpha = other.FocalAlpha;
+        FocalGamma = other.FocalGamma;
     }
 
     /// <summary>
