@@ -473,7 +473,12 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     public double Epsilon => _epsilon;
 
     /// <summary>Gets the number of passes used by the offline Train wrapper.</summary>
-    public int BatchEpochs => _batchEpochs;
+    /// <remarks>
+    /// INTERNAL, not public. Users configure models through AiModelBuilder / AiModelResult, and the
+    /// constructor already takes batchEpochs -- a public getter adds a second entry point to the same
+    /// value outside the facade. Kept accessible to the test assembly via InternalsVisibleTo.
+    /// </remarks>
+    internal int BatchEpochs => _batchEpochs;
 
     /// <summary>
     /// Computes the epsilon-insensitive loss on the provided data.

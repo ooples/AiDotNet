@@ -214,6 +214,15 @@ public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
         const double tol = 1e-3;
         const int nIterNoChange = 5;
 
+        // AN EMPTY BATCH IS NOT A TRAINING RUN. With no rows the mean loss below is 0.0 / 0 = NaN,
+        // and every early-stopping comparison against NaN is false -- so the loop ran all 1000
+        // epochs, learned nothing, and reported no error. Returning early leaves the existing
+        // row/length mismatch validation (performed by PartialFit) untouched for non-empty input.
+        if (x.Rows == 0 || y.Length == 0)
+        {
+            return;
+        }
+
         double bestLoss = double.PositiveInfinity;
         int noImprovementEpochs = 0;
 
