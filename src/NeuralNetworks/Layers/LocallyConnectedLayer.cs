@@ -543,7 +543,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// positions, each position has its own specialized filter.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support

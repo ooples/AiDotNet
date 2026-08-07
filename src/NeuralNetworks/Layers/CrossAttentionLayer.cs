@@ -33,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
 public partial class CrossAttentionLayer<T> : LayerBase<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _sequenceLength;
     private readonly int _queryDim;
     private readonly int _contextDim;
     private readonly int _headCount;
@@ -104,10 +107,30 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <param name="queryDim">Dimension of query features (spatial channels).</param>
     /// <param name="contextDim">Dimension of context features (text embedding).</param>
     /// <param name="headCount">Number of attention heads.</param>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Cross-attention emits one vector per QUERY position, so its output length is its input
+    /// length; only the feature width is fixed, at queryDim.
+    ///
+    /// The declared shape used to be [sequenceLength, queryDim], where sequenceLength is the
+    /// constructor's "maximum sequence length for queries" and defaults to 64. That is a
+    /// CAPACITY, not what the layer produces: a forward over 4 query positions still emits 4.
+    /// Every consumer reading the declaration believed the sequence was 64 long, and because
+    /// chain resolution seeds each layer from the previous layer's declaration, the wrong length
+    /// propagated into the attention and decoder layers downstream -- which then reported
+    /// [64, 32] and [4, 32] while producing [4, 32] and [2, 32].
+    /// </remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <param name="sequenceLength">Maximum sequence length for queries.</param>
-    public CrossAttentionLayer(int queryDim, int contextDim, int headCount, int sequenceLength = 64)
-        : base(new[] { sequenceLength, queryDim }, new[] { sequenceLength, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
+    public CrossAttentionLayer(
+        [LayerState] int queryDim,
+        [LayerState] int contextDim,
+        [LayerState] int headCount,
+        [LayerState] int sequenceLength = 64)
+        : base(new[] { -1, queryDim }, new[] { -1, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         _queryDim = queryDim;
         _contextDim = contextDim;
         _headCount = headCount;
@@ -198,7 +221,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Forward pass for self-attention (not typically used for cross-attention).
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // For single input, use it as both query and context (self-attention fallback)
         return ForwardCrossAttention(input, input);

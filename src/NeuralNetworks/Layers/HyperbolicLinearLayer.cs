@@ -125,9 +125,9 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <param name="curvature">Curvature of hyperbolic space (default -1).</param>
     /// <param name="activationFunction">Optional activation function.</param>
     public HyperbolicLinearLayer(
-        int inputFeatures,
-        int outputFeatures,
-        double curvature = -1.0,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
+        [LayerState] double curvature = -1.0,
         IActivationFunction<T>? activationFunction = null)
         : base(
             [inputFeatures],
@@ -179,7 +179,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [inputFeatures] or [batch, inputFeatures].</param>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 

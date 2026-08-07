@@ -3,6 +3,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Attributes;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -35,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class FeatureTokenizerLayer<T> : LayerBase<T>
+public partial class FeatureTokenizerLayer<T> : LayerBase<T>
 {
     private int _numFeatures;
     private readonly int _embeddingDim;
@@ -61,7 +63,9 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="numFeatures">Expected number of input features.</param>
     /// <param name="embeddingDim">Embedding dimension per feature token.</param>
-    public FeatureTokenizerLayer(int numFeatures, int embeddingDim)
+    public FeatureTokenizerLayer(
+        [LayerState] int numFeatures,
+        [LayerState] int embeddingDim)
         : this(embeddingDim)
     {
         if (numFeatures > 0)
@@ -121,7 +125,7 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int features = input.Shape[input.Rank - 1];
         if (!_initialized || _numFeatures != features)

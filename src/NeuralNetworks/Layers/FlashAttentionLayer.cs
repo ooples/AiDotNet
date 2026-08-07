@@ -266,7 +266,7 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// - Uses online softmax for numerical stability
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
         var input3D = NormalizeTo3D(input, out int batchSize, out int sequenceLength, out int embeddingDimension);

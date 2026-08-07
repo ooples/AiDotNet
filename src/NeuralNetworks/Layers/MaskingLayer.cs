@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
-public class MaskingLayer<T> : LayerBase<T>
+public partial class MaskingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The value to be masked out in the input tensor.
@@ -200,7 +200,7 @@ public class MaskingLayer<T> : LayerBase<T>
     /// - But the zeros now have special meaning - they'll be ignored by subsequent layers
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

@@ -331,7 +331,9 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// Larger dimensions can capture more information but require more computation and memory.
     /// </para>
     /// </remarks>
-    public EmbeddingLayer(int vocabularySize, int embeddingDimension)
+    public EmbeddingLayer(
+        [LayerState] int vocabularySize,
+        [LayerState] int embeddingDimension)
         : base([1], [embeddingDimension])
     {
         AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
@@ -366,6 +368,22 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         lock (InitializationLock)
         {
             if (_embeddingInitialized) return;
+
+            // A deserializer, ParameterBuffer, or copy-on-write clone can install a
+            // fully materialized embedding tensor before this fresh layer has ever
+            // executed Forward. In that case the tensor is the authoritative trained
+            // state. Treat it exactly like PyTorch treats a materialized lazy module:
+            // synchronize the runtime latch/registration without allocating over it.
+            // Reinitializing here silently replaced the COW-shared trained table on a
+            // clone's first prediction (UniAudio Clone_AfterTraining).
+            if (WeightsAlreadyAllocated(_embeddingTensor, _vocabularySize, _embeddingDimension))
+            {
+                RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
+                if (_projectionWeights.Length > 0)
+                    RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
+                _embeddingInitialized = true;
+                return;
+            }
 
             // Streaming-aware allocation: PaLM-E-scale models have
             // vocab × embed embedding matrices in the multi-GB range
@@ -584,7 +602,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// network can process more effectively.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Materialize the embedding tensor before any lookup runs. Lazy by default
         // so unused embedding layers in test construction don't pay the multi-MB

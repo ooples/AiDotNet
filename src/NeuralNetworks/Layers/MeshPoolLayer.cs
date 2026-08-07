@@ -222,7 +222,7 @@ public partial class MeshPoolLayer<T> : LayerBase<T>
     /// This method requires edge adjacency to be set via <see cref="SetEdgeAdjacency"/> before calling.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2 || input.Shape[1] != InputChannels)
         {
