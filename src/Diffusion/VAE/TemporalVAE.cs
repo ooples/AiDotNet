@@ -192,7 +192,26 @@ public class TemporalVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived from EnumerateAllLayers, which yields exactly the layers GetParameters walks, in
+    /// the same order -- so the two cannot disagree. It previously called a hand-written
+    /// arithmetic estimate over channel multipliers, which described nothing that existed; a flat
+    /// parameter vector is paired by LENGTH on restore, so a count that does not match the vector
+    /// silently restores a checkpoint into the wrong tensors.
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var layer in EnumerateAllLayers())
+            {
+                if (layer is not null) total += layer.ParameterCount;
+            }
+            return total;
+        }
+    }
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -746,47 +765,6 @@ public class TemporalVAE<T> : VAEModelBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
-    {
-        long count = 0;
-
-        // Input conv
-        count += _inputChannels * _baseChannels * 9 + _baseChannels;
-
-        // Encoder blocks
-        for (int level = 0; level < _channelMultipliers.Length; level++)
-        {
-            var channels = _baseChannels * _channelMultipliers[level];
-            count += channels * channels * 2; // Spatial
-            count += _numTemporalLayers * channels * channels; // Temporal
-            if (level < _channelMultipliers.Length - 1)
-            {
-                count += channels * channels * 9; // Downsample
-            }
-        }
-
-        // Latent projections
-        var lastChannels = _baseChannels * _channelMultipliers[^1];
-        count += lastChannels * _latentChannels * 9 * 2; // mean + logvar
-        count += _latentChannels * lastChannels * 9; // post-quant
-
-        // Decoder blocks (similar to encoder)
-        for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
-        {
-            var channels = _baseChannels * _channelMultipliers[level];
-            count += channels * channels * 2;
-            count += _numTemporalLayers * channels * channels;
-            if (level > 0)
-            {
-                count += channels * channels * 9;
-            }
-        }
-
-        // Output conv
-        count += _baseChannels * _inputChannels * 9 + _inputChannels;
-
-        return (int)Math.Min(count, int.MaxValue);
-    }
 
     /// <inheritdoc />
     public override Vector<T> GetParameters()
