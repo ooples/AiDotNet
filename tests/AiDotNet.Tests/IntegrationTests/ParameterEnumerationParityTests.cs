@@ -70,6 +70,17 @@ public class ParameterEnumerationParityTests
     /// </remarks>
     private const long MaxParametersToMaterialize = 50_000_000L;
 
+    /// <summary>How many elements the base-vs-override comparison inspects before stopping.</summary>
+    /// <remarks>
+    /// A bound on the REPORT's cost, not on its meaning: the verdict needs the first differing
+    /// element, and the defect this harness looks for -- an override returning different tensors
+    /// than the base -- diverges at the start of the vector, not at element 49,999,999. Unbounded,
+    /// a single model at <see cref="MaxParametersToMaterialize"/> could spend the harness's entire
+    /// 30-minute budget on reflection calls and produce no report at all. A capped comparison says
+    /// so in its note.
+    /// </remarks>
+    private const long MaxElementsToCompare = 1_000_000L;
+
     /// <summary>Bounded so one pathological constructor cannot stall the sweep.</summary>
     private static readonly TimeSpan ConstructionTimeout = TimeSpan.FromSeconds(10);
 
@@ -119,16 +130,25 @@ public class ParameterEnumerationParityTests
         // timeout, an OOM, a developer stopping it -- would otherwise produce nothing at all
         // despite having done nearly all the work. Partial evidence is still evidence; the file
         // is the deliverable, the console output is a convenience.
+        // DISPOSED ON EVERY PATH, AND A FAILURE TO OPEN IS REPORTED. The manual dispose ran only
+        // on the normal path, so a throw from the enumeration below -- Assembly.GetTypes() raises
+        // ReflectionTypeLoadException, and this sweep calls it -- leaked the handle and left the
+        // partial file this comment calls "the deliverable" unflushed. The empty catch was the
+        // other half: with the file unopenable, every Record() silently wrote nowhere.
         StreamWriter? tsv = null;
         try
         {
             tsv = new StreamWriter(TsvPath, append: false) { AutoFlush = true };
             tsv.WriteLine("Type\tVerdict\tDeclared\tActualLength\tBaseDerived\tOverridesCount\tOverridesGet\tNote");
         }
-        catch
+        catch (Exception ex)
         {
             tsv = null;
+            _output.WriteLine($"NOTE: could not open {TsvPath} ({ex.GetType().Name}: {ex.Message}); " +
+                              "the summary below is the only record of this run.");
         }
+
+        using var _tsvHandle = tsv;
 
         void Record(Row r)
         {
@@ -245,8 +265,16 @@ public class ParameterEnumerationParityTests
             }
         }
 
-        tsv?.Dispose();
         WriteReport(rows);
+
+        // THE HARNESS GATES ITSELF, NOT THE PARITY RESULT. A reporting sweep still has to have
+        // reported: with only Unmeasurable rows -- or none at all -- this held a 30-minute CI slot
+        // and returned green having established nothing.
+        int measured = rows.Count(r => r.Verdict != Verdict.Unmeasurable);
+        Assert.True(measured > 0,
+            "The parameter-enumeration sweep produced no measured verdict. It holds a 30-minute " +
+            $"slot, so this is an infrastructure failure, not a clean report. Rows: {rows.Count}, " +
+            $"all of them Unmeasurable.");
     }
 
     private void WriteReport(List<Row> rows)
@@ -467,11 +495,31 @@ public class ParameterEnumerationParityTests
             var indexer = baseVec.GetType().GetProperty("Item", new[] { typeof(int) });
             if (indexer is null) { note = "vector not indexable; length-only comparison"; return true; }
 
-            for (int i = 0; i < ownLength; i++)
+            // BOUNDED, AND THE ARGUMENT ARRAY IS REUSED. MaxParametersToMaterialize is 50,000,000,
+            // so a model near that cap made this loop perform 100 million PropertyInfo.GetValue
+            // calls, allocate 100 million object[] argument arrays, and box 100 million values.
+            // Reflection property access costs roughly two orders of magnitude more than a direct
+            // index, so ONE large model could consume the whole 30-minute budget and the report
+            // this harness exists to produce would never be written.
+            //
+            // The verdict only needs the FIRST differing element, and a divergence in tensor
+            // identity shows up within the first few million entries in practice -- the failure
+            // mode is "the override returns different tensors", not "one element in fifty million
+            // drifted". Where the scan is cut short the note says so, so a bounded PASS never reads
+            // as an exhaustive one.
+            long scanLimit = Math.Min(ownLength, MaxElementsToCompare);
+            var index = new object[1];
+            for (long i = 0; i < scanLimit; i++)
             {
-                var a = indexer.GetValue(ownVec, new object[] { i });
-                var b = indexer.GetValue(baseVec, new object[] { i });
+                index[0] = (int)i;
+                var a = indexer.GetValue(ownVec, index);
+                var b = indexer.GetValue(baseVec, index);
                 if (!Equals(a, b)) { note = $"element {i} differs"; return false; }
+            }
+
+            if (scanLimit < ownLength)
+            {
+                note = $"first {scanLimit:N0} of {ownLength:N0} elements match; scan capped";
             }
             return true;
         }
