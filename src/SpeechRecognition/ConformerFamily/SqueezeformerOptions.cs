@@ -39,7 +39,12 @@ public class SqueezeformerOptions : ModelOptions
         WarmupSteps = other.WarmupSteps;
         WeightDecay = other.WeightDecay;
         Language = other.Language;
-        Vocabulary = other.Vocabulary;
+        // CLONED, NOT SHARED. `Vocabulary = other.Vocabulary` hands the copy the SAME array
+        // instance, so a later write through either options object is seen by both -- the copy
+        // constructor exists precisely to prevent that coupling, and for a reference type a bare
+        // assignment does not. Null is preserved as null rather than becoming an empty array,
+        // which would silently change "unset" into "set to nothing".
+        Vocabulary = (string[])other.Vocabulary.Clone();
         UseLayerNormalization = other.UseLayerNormalization;
     }
 
