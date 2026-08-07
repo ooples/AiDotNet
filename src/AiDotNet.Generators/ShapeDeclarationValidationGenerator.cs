@@ -277,9 +277,16 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
     /// reference, would never be equal across builds, and would defeat the pipeline caching this
     /// projection exists to restore.
     /// </remarks>
-    private const char ArgSeparator = '';
+    private const char ArgSeparator = '\u001f';
 
-    private const string ArgSeparatorText = "";
+    /// <summary>The same separator as text, derived so the two cannot drift apart.</summary>
+    /// <remarks>
+    /// ESCAPED, NOT A RAW CONTROL CHARACTER, and derived rather than repeated. A literal U+001F is
+    /// valid C# but invisible in a diff and easy for an editor or a text filter to drop -- and if
+    /// the text form silently became "", string.Join would concatenate every argument into one and
+    /// Args.Split would then throw at report time. Neither failure would be visible in review.
+    /// </remarks>
+    private static readonly string ArgSeparatorText = ArgSeparator.ToString();
 
     /// <summary>A diagnostic reduced to primitives so it neither roots a Compilation nor breaks equality.</summary>
     private readonly struct ShapeFinding : System.IEquatable<ShapeFinding>

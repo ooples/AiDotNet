@@ -193,10 +193,13 @@ public class HarmTaxonomyModeratorTests
         moderator.EvaluateVideo(Frames(600), 30.0);
         int sampledForLong = moderator.LastSampledFrameCount;
 
-        Assert.Equal(sampledForShort, sampledForLong);
-        Assert.True(sampledForLong <= MultimodalVideoModerator<double>.TaxonomyFrameBudget,
-            $"A 600-frame video was sampled {sampledForLong} times against a budget of " +
-            $"{MultimodalVideoModerator<double>.TaxonomyFrameBudget}. The budget is a rate, not a constant.");
+        // EXACTLY THE BUDGET, NOT AT MOST. "Equal counts and <= budget" is satisfied by a sampler
+        // that reads ZERO frames, which is the degenerate this assertion is meant to exclude. Both
+        // fixtures are longer than the budget (30 and 600 frames against 14), so a constant-budget
+        // sampler must consume all 14 for each call -- fewer means it is not sampling, more means
+        // it is rate-based.
+        Assert.Equal(MultimodalVideoModerator<double>.TaxonomyFrameBudget, sampledForShort);
+        Assert.Equal(MultimodalVideoModerator<double>.TaxonomyFrameBudget, sampledForLong);
     }
 
     [Fact]

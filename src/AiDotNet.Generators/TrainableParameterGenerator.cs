@@ -33,6 +33,12 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     private const string TrainableParameterAttributeName = "AiDotNet.Attributes.TrainableParameterAttribute";
     private const string LayerBaseTypeName = "AiDotNet.NeuralNetworks.Layers.LayerBase";
     private const string TensorTypeName = "AiDotNet.Tensors.LinearAlgebra.Tensor";
+
+    /// <summary>Namespace-qualified, generics omitted — so a match cannot depend on parameter names.</summary>
+    private static readonly SymbolDisplayFormat NamespaceQualifiedNoGenerics =
+        new SymbolDisplayFormat(
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+            genericsOptions: SymbolDisplayGenericsOptions.None);
     private const string ILayerTypeName = "AiDotNet.Interfaces.ILayer";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -752,8 +758,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             if (IsLayerType(element)) return true;
 
             // Dictionary<TKey, TLayer> and friends enumerate as KeyValuePair<TKey, TLayer>.
+            //
+            // MATCHED WITHOUT THE GENERIC PARAMETER NAMES. Comparing the display string against
+            // "System.Collections.Generic.KeyValuePair<TKey, TValue>" depends on what the BCL happens
+            // to call those parameters -- the same fragility the IEnumerable<T> match above was
+            // changed to avoid, so it would have been inconsistent as well as brittle. The format
+            // below omits generics entirely, leaving the arity check to carry that half.
             if (element is INamedTypeSymbol { TypeArguments.Length: 2 } pair
-                && pair.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.KeyValuePair<TKey, TValue>"
+                && pair.OriginalDefinition.ToDisplayString(NamespaceQualifiedNoGenerics)
+                    == "System.Collections.Generic.KeyValuePair"
                 && IsLayerType(pair.TypeArguments[1]))
             {
                 isKeyed = true;

@@ -1417,7 +1417,18 @@ jobs:
             $memSampler = [powershell]::Create()
             [void]$memSampler.AddScript({
               param($tracePath)
-              $traceLineCount = 0
+
+              # A HELD READ POSITION, NOT A RE-READ. `Get-Content | Select-Object -Skip N` still
+              # opens the file and enumerates every line before discarding the first N, so each
+              # two-second tick re-read the whole trace and the sampler's own I/O grew quadratically
+              # across a long heavy shard -- on the one job already documented as memory-bound.
+              #
+              # The reader is opened once with FileShare.ReadWrite so the test host can keep
+              # appending, and each tick reads only what has arrived since. Both handles are disposed
+              # in the finally below, which runs when the runspace is stopped.
+              $traceStream = $null
+              $traceReader = $null
+              try {
               while ($true) {
                 # A THROW HERE ENDS THE SAMPLER SILENTLY. The runspace's IAsyncResult is discarded
                 # at BeginInvoke and nobody calls EndInvoke, so any exception is swallowed whole:
@@ -1429,14 +1440,21 @@ jobs:
                 # this reads it, so a read can hit a sharing violation; and Select-String returns
                 # $null when there is no match, making .Line a property access on $null.
                 try {
-                  if (Test-Path $tracePath) {
-                    # INCREMENTAL, NOT A FULL RE-READ. Get-Content read the WHOLE trace every two
-                    # seconds, so on a long shard the sampler's own cost grows with the run it is
-                    # supposed to be observing.
-                    $traceLines = @(Get-Content -Path $tracePath -ErrorAction Stop | Select-Object -Skip $traceLineCount)
-                    foreach ($line in $traceLines) {
+                  if ($null -eq $traceReader -and (Test-Path $tracePath)) {
+                    # ReadWrite sharing: the test host holds this file open for append.
+                    $traceStream = [System.IO.FileStream]::new(
+                      $tracePath,
+                      [System.IO.FileMode]::Open,
+                      [System.IO.FileAccess]::Read,
+                      [System.IO.FileShare]::ReadWrite)
+                    $traceReader = [System.IO.StreamReader]::new($traceStream)
+                  }
+
+                  if ($null -ne $traceReader) {
+                    # StreamReader returns null at end-of-stream and resumes from the same position
+                    # on the next tick once more has been appended, so this reads each line once.
+                    while ($null -ne ($line = $traceReader.ReadLine())) {
                       [Console]::Out.WriteLine($line)
-                      $traceLineCount++
                     }
                   }
                   $memLine = Select-String -Path /proc/meminfo -Pattern '^MemAvailable:' -ErrorAction Stop | Select-Object -First 1
@@ -1451,6 +1469,11 @@ jobs:
                 }
                 Start-Sleep -Seconds 2
               }
+              }
+              finally {
+                # The runspace is torn down with Stop(), so this is where the handles are released.
+                if ($null -ne $traceReader) { try { $traceReader.Dispose() } catch { } }
+                if ($null -ne $traceStream) { try { $traceStream.Dispose() } catch { } }
               }
             })
             [void]$memSampler.AddArgument($testTrace)

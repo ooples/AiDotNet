@@ -194,7 +194,17 @@ if ($failed.Count -eq 0) {
   # The step is only reached on job failure, so an empty failure set here means
   # the job failed for a NON-test reason (coverage upload, a post-step, the
   # runner). Flag that so it is not mistaken for a flake.
-  if ($total -gt 0 -and $executed -lt $total) {
+  # ORDER MATTERS, AND UNPARSEABLE COMES FIRST. With a TRX that could not be parsed, the
+  # failed-test set is UNKNOWN -- so concluding 'the cause is outside the test results' is a
+  # statement the script has no evidence for, and the malformed-TRX warning that would have
+  # said so sat after the `return` below and never ran.
+  if ($unparseableTrx.Count -gt 0) {
+    Add-Summary (":warning: **$($unparseableTrx.Count) result file(s) could not be parsed**, so the " +
+                 'failed-test set for this shard is UNKNOWN. The digest below is incomplete; this is' +
+                 ' NOT evidence that the failure lies outside the test results.')
+    foreach ($e in $unparseableTrx) { Add-Summary ('    ' + $e) }
+  }
+  elseif ($total -gt 0 -and $executed -lt $total) {
     Add-Summary (":warning: **Only $executed of $total discovered tests executed -- $($total - $executed) never ran.** " +
                  'This shard is TRUNCATED. No failure was recorded because the host died before' +
                  ' one could be written, not because the suite passed.')

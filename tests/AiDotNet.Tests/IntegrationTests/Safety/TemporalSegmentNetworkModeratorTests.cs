@@ -114,6 +114,8 @@ public class TemporalSegmentNetworkModeratorTests
     public void EveryConsensusFunction_IsAccepted_AndDeterministic()
     {
         var frames = Frames(60);
+        var perMode = new Dictionary<SegmentalConsensus, IReadOnlyList<SafetyFinding>>();
+
         foreach (SegmentalConsensus consensus in (SegmentalConsensus[])Enum.GetValues(typeof(SegmentalConsensus)))
         {
             var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 4, consensus: consensus);
@@ -129,7 +131,23 @@ public class TemporalSegmentNetworkModeratorTests
                 Assert.Equal(first[i].Category, second[i].Category);
                 Assert.Equal(first[i].Confidence, second[i].Confidence, 12);
             }
+
+            perMode[consensus] = first;
         }
+
+        // THE MODES MUST BE DISTINGUISHABLE FROM EACH OTHER. Accepting each mode and checking it
+        // repeats itself is satisfied when Average, Max and Weighted are all wired to one code path
+        // -- which would make DefaultConsensus_IsAverage_ThePapersBest assert a preference between
+        // three names for the same computation. The paper reports 93.5 / 91.6 / 92.4 on UCF101
+        // precisely because they are different functions.
+        var confidenceProfiles = perMode.Values
+            .Select(fs => string.Join(",", fs.Select(f => f.Confidence.ToString("F12"))))
+            .ToList();
+
+        Assert.True(confidenceProfiles.Distinct().Count() > 1,
+            "Every SegmentalConsensus mode produced identical findings, so the consensus function " +
+            "is not being applied -- all modes appear to share one code path. Modes: " +
+            string.Join(", ", perMode.Keys));
     }
 
     [Fact]

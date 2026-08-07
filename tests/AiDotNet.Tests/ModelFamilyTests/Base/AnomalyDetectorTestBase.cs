@@ -90,10 +90,15 @@ public abstract class AnomalyDetectorTestBase<T>
             normalMean /= normalScores.Length;
             outlierMean /= outlierScores.Length;
 
-            // Outliers should score differently than normal points
-            Assert.True(Math.Abs(outlierMean - normalMean) > 1e-6,
+            // DIRECTIONAL, NOT MERELY DIFFERENT. |outlier - normal| > 1e-6 was satisfied by a
+            // detector that scored outliers LOWER than normal points -- an inverted detector,
+            // which is worse than an insensitive one because every downstream threshold then
+            // selects exactly the wrong rows. The method is named Outliers_ShouldHaveHigherScores
+            // and that is the contract asserted here.
+            Assert.True(outlierMean > normalMean,
                 $"Normal mean score = {normalMean:F4}, outlier mean = {outlierMean:F4}. " +
-                "Anomaly detector doesn't distinguish outliers from normal data.");
+                "Outliers must score HIGHER than normal points; an equal score means the detector " +
+                "does not distinguish them, and a lower score means it ranks them backwards.");
         }
     }
 

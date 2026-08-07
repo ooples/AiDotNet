@@ -35,8 +35,21 @@ if [ -f "$script" ] && command -v python3 >/dev/null 2>&1; then
     # host another user can pre-create the path as a symlink and have the
     # redirection write through it. mktemp gives a fresh 0600 file per invocation,
     # and the trap removes it on every exit path including the failure ones.
-    err_file="$(mktemp "${TMPDIR:-/tmp}/commit-msg-autofix.XXXXXX")"
-    trap 'rm -f "$err_file"' EXIT
+    # ERREXIT AGAIN, ON THE LINE THAT SETS UP THE GUARD. A bare assignment from a
+    # command substitution takes the substitution's status, so a failing mktemp --
+    # full disk, unwritable $TMPDIR, a noexec or quota mount -- killed the hook right
+    # here and git rejected the commit, with no message, which is exactly the
+    # no-op-on-failure contract the header promises. Same protection as the fixer
+    # call below: run it in a compound list so errexit cannot fire, then fall back
+    # to discarding stderr rather than to failing the commit.
+    err_file=""
+    err_file="$(mktemp "${TMPDIR:-/tmp}/commit-msg-autofix.XXXXXX" 2>/dev/null)" || err_file=""
+    if [ -z "$err_file" ]; then
+        err_file=/dev/null
+        echo "commit-msg: could not create a temp file for the fixer's stderr; continuing without it." >&2
+    else
+        trap 'rm -f "$err_file"' EXIT
+    fi
 
     # ERREXIT MUST NOT FIRE HERE. `set -e` is on, and a bare assignment from a
     # command substitution takes the substitution's exit status, so a fixer that

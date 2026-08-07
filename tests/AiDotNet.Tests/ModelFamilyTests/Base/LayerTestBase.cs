@@ -492,11 +492,17 @@ public abstract class LayerTestBase
     }
 
     /// <summary>The words a shape validation message uses when it states a constraint.</summary>
+    /// <remarks>
+    /// SHAPE-SPECIFIC ONLY. An earlier list also carried "expected", "size", "must be", "must have"
+    /// and "mismatch" -- none of which is evidence of a SHAPE constraint. `ArgumentException("Expected
+    /// a non-null value.")` matched, so an internal argument failure was accepted as deliberate shape
+    /// validation, which is the exact conflation this invariant exists to prevent. Every term below
+    /// names a tensor axis or an extent and cannot appear in a generic argument message by accident.
+    /// </remarks>
     private static readonly string[] ShapeConstraintVocabulary =
     {
-        "shape", "dimension", "rank", "axis", "axes", "length", "size",
-        "height", "width", "channel", "batch", "divisible", "expected",
-        "must be", "must have", "does not match", "mismatch",
+        "shape", "dimension", "dimensions", "rank", "axis", "axes",
+        "height", "width", "channel", "channels", "batch", "divisible",
     };
 
     private static bool NamesAShapeConstraint(string? message)

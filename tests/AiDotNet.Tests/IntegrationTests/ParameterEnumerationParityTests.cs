@@ -105,6 +105,18 @@ public class ParameterEnumerationParityTests
         /// </summary>
         MandatoryOverride,
 
+        /// <summary>
+        /// Counts and the compared PREFIX of the vectors agree, but the element scan was capped, so
+        /// full equality is unproven.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately not <see cref="Redundant"/>. Redundant means "safe to delete", and a capped
+        /// comparison cannot support that: an override differing only after the cap would be
+        /// recommended for deletion on the strength of a prefix. The cap keeps the harness inside its
+        /// budget; this verdict keeps the report honest about what the cap cost.
+        /// </remarks>
+        PartiallyVerified,
+
         /// <summary>Could not be measured (construction failed or timed out).</summary>
         Unmeasurable,
     }
@@ -235,7 +247,7 @@ public class ParameterEnumerationParityTests
                     note = $"override {declared} vs inherited {baseDerived} " +
                            "(tensors outside Layers, or a different counting rule)";
                 }
-                else if (!BaseVectorMatches(instance, out long baseLen, out string? vecNote)
+                else if (!BaseVectorMatches(instance, out long baseLen, out string? vecNote, out bool vecComplete)
                          && !(vecNote?.Contains("BadImageFormat", StringComparison.Ordinal) ?? false))
                 {
                     // Same count, different tensors. This is the case a count-only comparison would
@@ -244,6 +256,16 @@ public class ParameterEnumerationParityTests
                     verdict = Verdict.LoadBearing;
                     note = $"counts agree ({declared}) but vectors differ: {vecNote ?? "unknown"}" +
                            (baseLen >= 0 ? $" [base length {baseLen}]" : string.Empty);
+                }
+                else if (!vecComplete)
+                {
+                    // A CAPPED SCAN IS NOT PROOF. Recording Redundant here would have told a reader
+                    // the override is safe to delete on the strength of a compared prefix -- and the
+                    // "scan capped" note was discarded with it, so nothing in the report said the
+                    // comparison had been bounded at all.
+                    verdict = Verdict.PartiallyVerified;
+                    note = $"counts agree ({declared}) and the compared portion matches, but the " +
+                           $"comparison was not exhaustive: {vecNote ?? "unknown extent"}";
                 }
                 else
                 {
@@ -471,9 +493,18 @@ public class ParameterEnumerationParityTests
     /// the same size, and a saved checkpoint would then restore into the wrong ones.
     /// </summary>
     private static bool BaseVectorMatches(object instance, out long baseLength, out string? note)
+        => BaseVectorMatches(instance, out baseLength, out note, out _);
+
+    /// <param name="complete">
+    /// False when the element scan stopped at <see cref="MaxElementsToCompare"/>, so a `true` result
+    /// means "the compared prefix matches", not "the vectors are equal".
+    /// </param>
+    private static bool BaseVectorMatches(
+        object instance, out long baseLength, out string? note, out bool complete)
     {
         baseLength = -1;
         note = null;
+        complete = true;
         try
         {
             var invoker = BaseGetParametersInvoker(instance.GetType());
@@ -493,7 +524,14 @@ public class ParameterEnumerationParityTests
             if (baseLength != ownLength) { note = $"length {ownLength} vs base {baseLength}"; return false; }
 
             var indexer = baseVec.GetType().GetProperty("Item", new[] { typeof(int) });
-            if (indexer is null) { note = "vector not indexable; length-only comparison"; return true; }
+            if (indexer is null)
+            {
+                // A length-only comparison is not a full one either, so it is reported the same way
+                // rather than being quietly promoted to proof of equality.
+                complete = false;
+                note = "vector not indexable; length-only comparison";
+                return true;
+            }
 
             // BOUNDED, AND THE ARGUMENT ARRAY IS REUSED. MaxParametersToMaterialize is 50,000,000,
             // so a model near that cap made this loop perform 100 million PropertyInfo.GetValue
@@ -519,6 +557,7 @@ public class ParameterEnumerationParityTests
 
             if (scanLimit < ownLength)
             {
+                complete = false;
                 note = $"first {scanLimit:N0} of {ownLength:N0} elements match; scan capped";
             }
             return true;
