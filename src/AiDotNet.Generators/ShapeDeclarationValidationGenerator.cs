@@ -270,6 +270,17 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
         public override int GetHashCode() => (TypeKey?.GetHashCode() ?? 0) * 397 ^ Findings.Length;
     }
 
+    /// <summary>Separates diagnostic arguments inside the joined <c>Args</c> string.</summary>
+    /// <remarks>
+    /// A unit separator, because it cannot occur in a type or member name and so cannot split one
+    /// argument into two. Joined rather than kept as an object[] because an array compares by
+    /// reference, would never be equal across builds, and would defeat the pipeline caching this
+    /// projection exists to restore.
+    /// </remarks>
+    private const char ArgSeparator = '';
+
+    private const string ArgSeparatorText = "";
+
     /// <summary>A diagnostic reduced to primitives so it neither roots a Compilation nor breaks equality.</summary>
     private readonly struct ShapeFinding : System.IEquatable<ShapeFinding>
     {
@@ -284,7 +295,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
             StartChar = ls?.StartLinePosition.Character ?? 0;
             EndLine = ls?.EndLinePosition.Line ?? 0;
             EndChar = ls?.EndLinePosition.Character ?? 0;
-            Args = string.Join("", args.Select(a => a?.ToString() ?? string.Empty));
+            Args = string.Join(ArgSeparatorText, args.Select(a => a?.ToString() ?? string.Empty));
         }
         public DiagnosticDescriptor Descriptor { get; }
         public string FilePath { get; }
@@ -304,7 +315,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                     new Microsoft.CodeAnalysis.Text.LinePositionSpan(
                         new Microsoft.CodeAnalysis.Text.LinePosition(StartLine, StartChar),
                         new Microsoft.CodeAnalysis.Text.LinePosition(EndLine, EndChar)));
-            return Diagnostic.Create(Descriptor, loc, Args.Length == 0 ? new object[0] : Args.Split(''));
+            return Diagnostic.Create(Descriptor, loc, Args.Length == 0 ? new object[0] : Args.Split(ArgSeparator));
         }
         public bool Equals(ShapeFinding o) => ReferenceEquals(Descriptor, o.Descriptor) && FilePath == o.FilePath && Start == o.Start && Args == o.Args;
         public override bool Equals(object? o) => o is ShapeFinding f && Equals(f);
@@ -350,26 +361,26 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
         public bool BatchOptional { get; }
         public string DirectionName => IsInput ? "input" : "output";
 
+        /// <summary>The ranks this layout accepts, newest-first is not meaningful here.</summary>
+        /// <remarks>
+        /// THE RULE IS NOT RESTATED HERE ANY MORE. It used to be, and the two copies had drifted
+        /// apart in opposite directions -- this one dropped the "first axis is Batch" guard and so
+        /// reported a build ERROR for a rank the runtime accepts; the attribute dropped the "more
+        /// than one axis" guard and so accepted rank 0. Both now call
+        /// <see cref="AiDotNet.Attributes.TensorLayoutRank.Accepts"/>, which is one file compiled
+        /// into both assemblies. The generator still cannot call the ATTRIBUTE -- it runs inside the
+        /// compiler against symbols, not loaded types -- but the rule itself needs neither
+        /// reflection nor Roslyn, only an axis count, two flags and a rank.
+        /// </remarks>
         public IEnumerable<int> AcceptedRanks()
         {
             yield return Axes.Count;
 
-            // THE SAME THREE CONDITIONS AS TensorLayoutAttribute.AcceptsRank, and
-            // the leading-axis test is the one that was missing here. This copy
-            // dropped `Axes[0] == Batch`, so a batch-optional layout whose first
-            // axis is NOT Batch was reported as accepting rank-1-less at build
-            // time -- a build error for a shape the runtime accepts, and the exact
-            // mirror of the attribute's own omission (it lacked `Axes.Length > 1`
-            // and so accepted rank 0). Two copies of one rule drifted apart in
-            // opposite directions, each wrong in the direction the other was not.
-            //
-            // The generator cannot call the attribute: it runs inside the compiler
-            // against symbols, not loaded types. So the rule is restated with the
-            // conditions spelled out and cross-referenced, and the two are kept in
-            // step by the shared-rank test in the attribute's own suite.
-            if (BatchOptional
-                && Axes.Count > 1
-                && string.Equals(Axes[0], "Batch", System.StringComparison.Ordinal))
+            bool firstIsBatch = Axes.Count > 0
+                && string.Equals(Axes[0], "Batch", System.StringComparison.Ordinal);
+
+            if (AiDotNet.Attributes.TensorLayoutRank.Accepts(
+                    Axes.Count, BatchOptional, firstIsBatch, Axes.Count - 1))
             {
                 yield return Axes.Count - 1;
             }

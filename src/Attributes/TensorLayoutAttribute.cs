@@ -84,24 +84,21 @@ public sealed class TensorLayoutAttribute : Attribute
     /// </summary>
     public bool AcceptsRank(int rank)
     {
-        if (rank == Axes.Length) return true;
-
-        // ONE RULE, AND THIS IS IT. The same decision was implemented a second
-        // time in ShapeDeclarationValidationGenerator.Layout, and the two copies
-        // had already drifted APART IN OPPOSITE DIRECTIONS: this one lacked the
-        // `Axes.Length > 1` guard, so a single-axis batch-optional layout accepted
-        // rank 0; the generator lacked the `Axes[0] == Batch` guard, so it
-        // reported a build error for a rank the runtime would have accepted. A
-        // rule duplicated in two places is a rule that will disagree with itself,
-        // so the generator now calls this method instead of restating it.
+        // ONE RULE, ONE IMPLEMENTATION. The same decision was implemented a second time in
+        // ShapeDeclarationValidationGenerator.Layout.AcceptedRanks, and the two copies had drifted
+        // APART IN OPPOSITE DIRECTIONS: this one lacked the "more than one axis" guard, so a
+        // single-axis batch-optional layout accepted rank 0; the generator lacked the "first axis
+        // is Batch" guard, so it reported a build error for a rank the runtime would have accepted.
         //
-        // `Axes.Length > 1` rather than `> 0`: dropping the batch axis from a
-        // one-axis layout leaves a rank-0 tensor, which is a scalar, not an
-        // unbatched form of anything.
-        return BatchOptional
-            && Axes.Length > 1
-            && Axes[0] == TensorAxis.Batch
-            && rank == Axes.Length - 1;
+        // The generator cannot call THIS METHOD -- it runs inside the compiler against symbols and
+        // the attribute type is not loaded -- but the rule expressed over primitives needs neither
+        // reflection nor Roslyn, so TensorLayoutRank is compiled into both assemblies and both
+        // callers go through it. There is nothing left to keep in step.
+        return TensorLayoutRank.Accepts(
+            Axes.Length,
+            BatchOptional,
+            Axes.Length > 0 && Axes[0] == TensorAxis.Batch,
+            rank);
     }
 
     /// <summary>
