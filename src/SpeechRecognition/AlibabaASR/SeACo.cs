@@ -675,7 +675,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var order = new List<int>(mismatched);
         if (order.Count < substitutions)
         {
-            var rng = new Random(GlmSamplerSeed);
+            var rng = RandomHelper.CreateSeededRandom(GlmSamplerSeed);
             for (int n = 0; n < comparable && order.Count < substitutions; n++)
             {
                 if (!mismatched.Contains(n) && rng.NextDouble() < 0.5) order.Add(n);
@@ -838,7 +838,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         // r_b: this batch may be inactive entirely, in which case the default <blank> hotword applies
         // and NO position is treated as a hotword.
-        var rng = new Random(HotwordSamplingSeed);
+        var rng = RandomHelper.CreateSeededRandom(HotwordSamplingSeed);
         if (rng.NextDouble() >= _options.HotwordBatchRatio)
         {
             return _ => false;
