@@ -266,7 +266,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
         // GetTrainableParameters
         bool hasOptional = paramFields.Any(p => p.Optional);
-        if (paramFields.Count > 0)
+        // EMITTED WHENEVER IT WILL HAVE A CALLER. Gating on paramFields alone left a pure
+        // composite -- children in a List, no [TrainableParameter] fields of its own, a
+        // hand-written EnsureInitialized -- with EnsureSubLayersRegistered emitted and NOTHING
+        // calling it. Its children were then never registered: no gradients, no optimizer
+        // entry, no export, and nothing reported it, because generating dead code is not an
+        // error. Sub-layers contribute parameters, so a class that owns any is a class whose
+        // GetTrainableParameters must exist.
+        if (paramFields.Count > 0 || subLayerFields.Count > 0)
         {
             sb.AppendLine("    /// <summary>");
             sb.AppendLine("    /// Returns all trainable parameter tensors marked with [TrainableParameter].");
