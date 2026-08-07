@@ -51,11 +51,9 @@ public sealed class LayerStateAttribute : Attribute
     /// key. Set <see cref="Key"/> to the exact spelling the existing metadata uses.
     /// </para>
     /// <para>
-    /// This remark previously promised case-insensitive lookup, which was never implemented. That is
-    /// worth stating rather than quietly deleting: a caller who relied on it got no error, because a
-    /// missed key falls back to the parameter's default — the layer rebuilds with the wrong value and
-    /// nothing reports it. Documenting the real behaviour is the fix; making the lookup insensitive
-    /// would instead hide genuine key mismatches.
+    /// A mismatched key does not raise an error: the generated factory's presence check fails, the
+    /// parameter falls back to its default, and the layer rebuilds with the wrong value silently. Copy
+    /// the existing key rather than retyping it.
     /// </para>
     /// </remarks>
     public string? Key { get; set; }

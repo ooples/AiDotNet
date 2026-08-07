@@ -20,11 +20,20 @@ namespace AiDotNet.Generators;
 /// correctly declared an axis dynamic, the branch handed its constructor a <c>-1</c>.
 /// </para>
 /// <para>
-/// For each annotated constructor this emits (a) a <c>GetMetadata</c> override on the layer writing
-/// every marked parameter, and (b) an entry in a central factory keyed by open generic type that
-/// reconstructs the layer by calling that same constructor. Because both halves are derived from one
-/// declaration, they cannot drift apart — which is the failure mode Keras's hand-written
-/// <c>get_config</c>/<c>from_config</c> pairs are subject to and cannot detect.
+/// For each annotated constructor this emits (a) an <c>internal override void WriteConstructionState</c>
+/// on the layer writing every marked parameter, and (b) an entry in a central factory keyed by open
+/// generic type that reconstructs the layer by calling that same constructor. Because both halves are
+/// derived from one declaration, they cannot drift apart — which is the failure mode Keras's
+/// hand-written <c>get_config</c>/<c>from_config</c> pairs are subject to and cannot detect.
+/// </para>
+/// <para>
+/// WHERE THE GENERATED WRITER IS CALLED FROM: <c>LayerBase.GetMetadata</c> invokes
+/// <c>WriteConstructionState</c> as its last step, and <c>LayerBase</c> supplies the empty virtual
+/// base that the generated member overrides. That chain is what makes ADN0054's advice correct — an
+/// author who overrides <c>GetMetadata</c> without calling <c>base.GetMetadata()</c> skips the
+/// generated writer entirely, and every <c>[LayerState]</c> value is silently absent from the save.
+/// A separate member rather than generating into <c>GetMetadata</c> itself, because a generated
+/// partial cannot merge with a hand-written override of the same method.
 /// </para>
 /// </remarks>
 [Generator]
@@ -47,7 +56,8 @@ public class LayerStateGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor UnsupportedType = new(
         "ADN0052",
         "[LayerState] parameter type cannot be serialized",
-        "'{0}' marks parameter '{1}' of type '{2}' as [LayerState], but only integral, floating-point, bool, string, enum and int[] values can round-trip through layer metadata",
+        "'{0}' marks parameter '{1}' of type '{2}' as [LayerState], but only int, long, float, double, bool, "
+            + "string, enum, int[] and interface values can round-trip through layer metadata",
         "AiDotNet.Serialization", DiagnosticSeverity.Error, true);
 
     private static readonly DiagnosticDescriptor Unsuppliable = new(
@@ -441,7 +451,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             }
 
             var read = p.NeedsConvert
-                ? ConvertExpression(p)
+                ? ConvertExpression(p, model.TypeParameters.Count > 0 ? model.TypeParameters[0] : "T")
                 : $"this.{p.BackingMember}";
             sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.Format({read});");
         }
@@ -455,18 +465,34 @@ public class LayerStateGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    private static string ConvertExpression(ParamModel p)
+    /// <summary>Reads a value stored in the layer's numeric type parameter back as a primitive.</summary>
+    /// <remarks>
+    /// THROUGH THE LIBRARY'S NUMERIC ABSTRACTION, NOT System.Convert.
+    /// <c>System.Convert.ToDouble(object, IFormatProvider)</c> throws <c>InvalidCastException</c> when
+    /// the boxed value does not implement <c>IConvertible</c>. This library is generic over its numeric
+    /// type through <c>INumericOperations&lt;T&gt;</c>, NOT through <c>IConvertible</c>, so any custom
+    /// numeric struct failed here -- at SAVE time, on a trained model, inside generated code the author
+    /// never wrote and cannot open. <c>MathHelper.GetNumericOperations&lt;T&gt;().ToDouble</c> is the
+    /// path the rest of the codebase uses and carries no such requirement.
+    ///
+    /// Only <c>ToDouble</c> is used, with a C# conversion to the declared parameter type on top: it is
+    /// the one conversion every <c>INumericOperations&lt;T&gt;</c> implementation provides. The integral
+    /// cases go through <c>Math.Round</c> rather than a bare cast so they keep <c>Convert.ToInt32</c>'s
+    /// round-half-to-even behaviour instead of silently truncating a value that floating-point error
+    /// left at 63.9999999.
+    /// </remarks>
+    private static string ConvertExpression(ParamModel p, string numericTypeParameter)
     {
-        var converter = p.Kind switch
-        {
-            ValueKind.Int32 => "ToInt32",
-            ValueKind.Int64 => "ToInt64",
-            ValueKind.Single => "ToSingle",
-            _ => "ToDouble",
-        };
+        var asDouble = $"global::AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<{numericTypeParameter}>()" +
+                       $".ToDouble(this.{p.BackingMember})";
 
-        return $"global::System.Convert.{converter}((object)this.{p.BackingMember}!, " +
-               "global::System.Globalization.CultureInfo.InvariantCulture)";
+        return p.Kind switch
+        {
+            ValueKind.Int32 => $"(int)global::System.Math.Round({asDouble}, global::System.MidpointRounding.ToEven)",
+            ValueKind.Int64 => $"(long)global::System.Math.Round({asDouble}, global::System.MidpointRounding.ToEven)",
+            ValueKind.Single => $"(float)({asDouble})",
+            _ => asDouble,
+        };
     }
 
     private static string EmitFactories(List<LayerModel> models)
