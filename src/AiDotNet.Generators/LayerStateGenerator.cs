@@ -56,6 +56,23 @@ public class LayerStateGenerator : IIncrementalGenerator
         "'{0}' cannot be rebuilt: parameter '{1}' of type '{2}' is required but is neither marked [LayerState], an activation function, nor optional; mark it, give it a default, or exclude this constructor",
         "AiDotNet.Serialization", DiagnosticSeverity.Error, true);
 
+    private static readonly DiagnosticDescriptor NotALayer = new(
+        "ADN0056",
+        "[LayerState] is only supported on a class deriving from LayerBase",
+        "'{0}' is a {1} and marks constructor parameters [LayerState], but the generated writer is "
+            + "an `internal override` that only exists on LayerBase. Emitting it here produces compiler "
+            + "errors inside generated code; move the type under LayerBase or drop the attribute",
+        "AiDotNet.Serialization", DiagnosticSeverity.Error, true);
+
+    private static readonly DiagnosticDescriptor UnsupportedArity = new(
+        "ADN0055",
+        "[LayerState] layer cannot be registered in the generated factory",
+        "'{0}' has [LayerState] parameters and {1} type parameter(s), but the generated factory "
+            + "only registers layers with exactly one (the numeric type). Its state IS saved and "
+            + "nothing can rebuild it, so deserialization falls back to the shape-inference path "
+            + "this generator exists to replace; give the layer a single type parameter or exclude it",
+        "AiDotNet.Serialization", DiagnosticSeverity.Warning, true);
+
     private static readonly DiagnosticDescriptor HandWrittenMetadata = new(
         "ADN0054",
         "Hand-written GetMetadata may drift from [LayerState]",
@@ -85,12 +102,34 @@ public class LayerStateGenerator : IIncrementalGenerator
         if (marked.Count == 0) return null;
 
         var type = ctor.ContainingType;
+
+        // THE HOST TYPE MUST BE ABLE TO CARRY THE GENERATED MEMBER. Analyze accepted any
+        // constructor whose parameters carried [LayerState] and then emitted
+        // `partial class {TypeName}` with `internal override void WriteConstructionState`.
+        // A struct, a record, or a class not derived from LayerBase produced a raw C#
+        // compiler error pointing INTO generated source -- an error about code the author
+        // never wrote and cannot open. Refused here with a diagnostic on the declaration
+        // instead.
+        if (type.TypeKind != TypeKind.Class || type.IsRecord || !DerivesFromLayerBase(type))
+        {
+            return new LayerModel
+            {
+                TypeName = type.Name,
+                Location = syntax.Identifier.GetLocation(),
+                Diagnostics =
+                {
+                    Diagnostic.Create(
+                        NotALayer, syntax.Identifier.GetLocation(), type.Name, type.TypeKind.ToString().ToLowerInvariant()),
+                },
+            };
+        }
         var model = new LayerModel
         {
             Namespace = type.ContainingNamespace.IsGlobalNamespace
                 ? null
                 : type.ContainingNamespace.ToDisplayString(),
             TypeName = type.Name,
+            ContainingTypes = ContainingChain(type),
             TypeParameters = type.TypeParameters.Select(tp => tp.Name).ToList(),
             BaseFqn = type.ConstructedFrom.ToDisplayString(UnqualifiedGenerics),
             Location = syntax.Identifier.GetLocation(),
@@ -104,7 +143,19 @@ public class LayerStateGenerator : IIncrementalGenerator
                 .SelectMany(m => m.DeclaringSyntaxReferences)
                 .Select(r => r.GetSyntax())
                 .OfType<MethodDeclarationSyntax>()
-                .Any(d => d.ToString().IndexOf("base.GetMetadata", System.StringComparison.Ordinal) < 0),
+                // SEMANTIC, NOT SUBSTRING. Scanning the method's full text for
+                // "base.GetMetadata" fired on the string appearing in a comment or a string
+                // literal, and MISSED a real call written `base . GetMetadata()`. Both
+                // directions are wrong for a diagnostic whose whole job is telling the author
+                // their metadata will silently not be written. Now an actual invocation of a
+                // member access on `base` named GetMetadata.
+                .All(d => !d.DescendantNodes()
+                    .OfType<InvocationExpressionSyntax>()
+                    .Any(inv => inv.Expression is MemberAccessExpressionSyntax
+                    {
+                        Expression: BaseExpressionSyntax,
+                        Name.Identifier.ValueText: "GetMetadata",
+                    })),
         };
 
         foreach (var p in ctor.Parameters)
@@ -142,6 +193,9 @@ public class LayerStateGenerator : IIncrementalGenerator
             else if (p.IsOptional)
             {
                 info.UseDefault = true;
+                // Taken from the symbol, so the emitted argument is the value the
+                // constructor signature actually promises.
+                info.DefaultExpression = RenderDefault(p);
             }
             else
             {
@@ -204,11 +258,21 @@ public class LayerStateGenerator : IIncrementalGenerator
         };
     }
 
+    /// <summary>True when the parameter is one of AiDotNet's activation interfaces.</summary>
+    /// <remarks>
+    /// MATCHED FULLY QUALIFIED. Comparing the bare simple name meant ANY interface called
+    /// IActivationFunction, from any namespace or any referenced package, was treated as a
+    /// restorable activation -- and the generated factory then emitted
+    /// `scalarActivation as global::AiDotNet.Interfaces.IActivationFunction&lt;T&gt;`, a cast
+    /// that yields null for the foreign type. The layer rebuilds with NO activation and
+    /// nothing reports it.
+    /// </remarks>
     private static bool IsActivation(ITypeSymbol type, out bool vector)
     {
-        var name = (type as INamedTypeSymbol)?.ConstructedFrom.Name ?? type.Name;
-        vector = name == "IVectorActivationFunction";
-        return vector || name == "IActivationFunction";
+        var fqn = ((type as INamedTypeSymbol)?.ConstructedFrom ?? type)
+            .ToDisplayString(UnqualifiedGenerics);
+        vector = fqn == "AiDotNet.Interfaces.IVectorActivationFunction";
+        return vector || fqn == "AiDotNet.Interfaces.IActivationFunction";
     }
 
     private static string? FindBackingMember(INamedTypeSymbol type, IParameterSymbol p, out bool needsConvert)
@@ -238,10 +302,10 @@ public class LayerStateGenerator : IIncrementalGenerator
                         // Layers routinely keep a numeric constructor argument converted to their
                         // own numeric type (a double rate stored as T). That is still the value the
                         // constructor was given, so read it back through a conversion.
-                        case IFieldSymbol f2 when IsNumericTypeParameter(f2.Type, p.Type):
+                        case IFieldSymbol f2 when IsNumericTypeParameter(f2.Type, p.Type, type):
                             needsConvert = true;
                             return f2.Name;
-                        case IPropertySymbol { GetMethod: not null } prop2 when IsNumericTypeParameter(prop2.Type, p.Type):
+                        case IPropertySymbol { GetMethod: not null } prop2 when IsNumericTypeParameter(prop2.Type, p.Type, type):
                             needsConvert = true;
                             return prop2.Name;
                     }
@@ -252,12 +316,26 @@ public class LayerStateGenerator : IIncrementalGenerator
         return null;
     }
 
-    /// <summary>True when the member is held as the layer's generic numeric type.</summary>
-    private static bool IsNumericTypeParameter(ITypeSymbol member, ITypeSymbol parameter)
-        => member is ITypeParameterSymbol
-           && parameter.SpecialType is SpecialType.System_Double
-              or SpecialType.System_Single
-              or SpecialType.System_Int32;
+    /// <summary>True when the member is held as THE LAYER'S numeric type parameter.</summary>
+    /// <remarks>
+    /// WHICH type parameter is the whole question, and the old test did not ask it:
+    /// `member is ITypeParameterSymbol` matched ANY type parameter on the type. A field typed
+    /// as an unrelated parameter -- TState, TKey, a second generic -- was classified as the
+    /// numeric one and the emitted Convert threw at SAVE time, the worst moment to find it:
+    /// the model is already trained. The layer's numeric type is by convention its FIRST type
+    /// parameter, so the member must be exactly that one.
+    /// </remarks>
+    private static bool IsNumericTypeParameter(ITypeSymbol member, ITypeSymbol parameter, INamedTypeSymbol containingType)
+    {
+        if (member is not ITypeParameterSymbol tp) return false;
+
+        var numeric = containingType.TypeParameters.Length > 0 ? containingType.TypeParameters[0] : null;
+        if (numeric is null || !SymbolEqualityComparer.Default.Equals(tp, numeric)) return false;
+
+        return parameter.SpecialType is SpecialType.System_Double
+            or SpecialType.System_Single
+            or SpecialType.System_Int32;
+    }
 
     private static bool SameType(ITypeSymbol a, ITypeSymbol b)
         => Unwrap(a).ToDisplayString(FullyQualified) == Unwrap(b).ToDisplayString(FullyQualified);
@@ -283,13 +361,36 @@ public class LayerStateGenerator : IIncrementalGenerator
         var byType = models
             .Where(m => m.IsValid)
             .GroupBy(m => m.BaseFqn)
-            .Select(g => g.First())
+            // DETERMINISTIC. `g.First()` took whatever order Collect() yielded, and Roslyn
+            // does not document that collected results keep source order -- for a type split
+            // across partial files the per-file order is undefined, so a layer annotating two
+            // constructors could generate a different factory between builds. Ordering on the
+            // constructor's own location also makes "first by source order" true.
+            .Select(g => g
+                .OrderBy(m => m.Location.SourceTree?.FilePath ?? string.Empty, System.StringComparer.Ordinal)
+                .ThenBy(m => m.Location.SourceSpan.Start)
+                .First())
             .OrderBy(m => m.BaseFqn, System.StringComparer.Ordinal)
             .ToList();
 
         foreach (var model in byType)
         {
-            spc.AddSource($"{model.TypeName}.LayerState.g.cs", SourceText(EmitWriter(model)));
+            // UNIQUE OR THE BUILD THROWS. Built from the SIMPLE name (which also drops
+            // arity) while the grouping key is namespace-qualified, so two annotated layers
+            // both named DenseLayer in different namespaces emitted the same file name and
+            // AddSource threw on the duplicate. Derived from the same key the grouping uses.
+            // A LAYER THAT SAVES BUT CANNOT BE REBUILT IS REPORTED, not skipped in silence.
+            // The factory registers only single-type-parameter layers, so a non-generic layer
+            // or one declared Foo<T, TState> wrote its [LayerState] values to metadata and had
+            // no TryCreate entry: deserialization silently fell back to the shape-inference
+            // path this generator was built to replace, which is the -1 bug it fixes.
+            if (model.TypeParameters.Count != 1)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    UnsupportedArity, model.Location, model.TypeName, model.TypeParameters.Count));
+            }
+
+            spc.AddSource($"{HintName(model)}.LayerState.g.cs", SourceText(EmitWriter(model)));
         }
 
         spc.AddSource("GeneratedLayerFactories.g.cs", SourceText(EmitFactories(byType)));
@@ -314,6 +415,17 @@ public class LayerStateGenerator : IIncrementalGenerator
             ? string.Empty
             : "<" + string.Join(", ", model.TypeParameters) + ">";
 
+        // REOPEN EVERY CONTAINING TYPE. Writing the partial straight at namespace scope
+        // put a nested layer's generated member on a DIFFERENT type than the one it belongs
+        // to, so the `internal override` had no base member and the build failed inside
+        // generated code -- an error about source the author never wrote. Each outer type is
+        // reopened as a partial carrying its own generics.
+        foreach (var outer in model.ContainingTypes)
+        {
+            sb.AppendLine($"partial class {outer}");
+            sb.AppendLine("{");
+        }
+
         sb.AppendLine($"partial class {model.TypeName}{generics}");
         sb.AppendLine("{");
         sb.AppendLine("    /// <inheritdoc/>");
@@ -335,6 +447,11 @@ public class LayerStateGenerator : IIncrementalGenerator
         }
         sb.AppendLine("    }");
         sb.AppendLine("}");
+        // Close the outer types opened above.
+        for (int i = 0; i < model.ContainingTypes.Count; i++)
+        {
+            sb.AppendLine("}");
+        }
         return sb.ToString();
     }
 
@@ -432,7 +549,9 @@ public class LayerStateGenerator : IIncrementalGenerator
             return $"{p.Name}: {source} as {iface}";
         }
 
-        if (p.UseDefault) return $"{p.Name}: default!";
+        // THE PARAMETER'S DEFAULT, NOT THE TYPE'S. Falls back to `default!` only when the
+        // declaration genuinely has no value to render.
+        if (p.UseDefault) return $"{p.Name}: {p.DefaultExpression ?? "default!"}";
 
         var read = p.Kind switch
         {
@@ -472,6 +591,80 @@ public class LayerStateGenerator : IIncrementalGenerator
         Component,
     }
 
+    /// <summary>True when the type derives from AiDotNet's LayerBase.</summary>
+    private static bool DerivesFromLayerBase(INamedTypeSymbol type)
+    {
+        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        {
+            if (b.ConstructedFrom.ToDisplayString(UnqualifiedGenerics) == "AiDotNet.NeuralNetworks.Layers.LayerBase")
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>The outer types a nested declaration must reopen, outermost first.</summary>
+    private static List<string> ContainingChain(INamedTypeSymbol type)
+    {
+        var chain = new List<string>();
+        for (var outer = type.ContainingType; outer is not null; outer = outer.ContainingType)
+        {
+            var generics = outer.TypeParameters.Length == 0
+                ? string.Empty
+                : "<" + string.Join(", ", outer.TypeParameters.Select(tp => tp.Name)) + ">";
+            chain.Insert(0, outer.Name + generics);
+        }
+        return chain;
+    }
+
+    /// <summary>A file-name-safe, collision-free stem derived from the type's full name.</summary>
+    private static string HintName(LayerModel model)
+    {
+        var sb = new StringBuilder(model.BaseFqn.Length);
+        foreach (var ch in model.BaseFqn)
+        {
+            sb.Append(char.IsLetterOrDigit(ch) || ch == '_' ? ch : '_');
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Renders an optional parameter's declared default as a C# expression.</summary>
+    /// <remarks>
+    /// Returns null when the default cannot be rendered faithfully rather than guessing: a
+    /// wrong default is worse than an explicit `default!`, because it is a value the
+    /// constructor never promised and nothing downstream can tell it from a real one.
+    /// </remarks>
+    private static string? RenderDefault(IParameterSymbol p)
+    {
+        if (!p.HasExplicitDefaultValue) return null;
+        var v = p.ExplicitDefaultValue;
+
+        if (v is null) return p.Type.IsValueType ? "default" : "null";
+
+        // Enums arrive as their underlying integral value, so the declared enum type is cast
+        // back on -- a bare number does not compile against an enum-typed parameter.
+        if (p.Type.TypeKind == TypeKind.Enum)
+        {
+            return $"({p.Type.ToDisplayString(FullyQualified)}){System.Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture)}";
+        }
+
+        // INVARIANT CULTURE and explicit suffixes: on a comma-decimal machine ToString()
+        // renders 0.5 as "0,5", which is not valid C#, and an unsuffixed 0.5 does not compile
+        // against a float parameter.
+        return v switch
+        {
+            bool b => b ? "true" : "false",
+            string str => SymbolDisplay.FormatLiteral(str, quote: true),
+            char c => SymbolDisplay.FormatLiteral(c, quote: true),
+            float f => f.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "f",
+            double d => d.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "d",
+            decimal m => m.ToString(System.Globalization.CultureInfo.InvariantCulture) + "m",
+            long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture) + "L",
+            _ => System.Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture),
+        };
+    }
+
     private sealed class ParamModel
     {
         public string Name = string.Empty;
@@ -482,6 +675,14 @@ public class LayerStateGenerator : IIncrementalGenerator
         public bool IsActivation;
         public bool IsVectorActivation;
         public bool UseDefault;
+        /// <summary>The parameter's DECLARED default rendered as C#, or null if it has none.</summary>
+        /// <remarks>
+        /// `default!` is the default of the TYPE, not of the PARAMETER. Every optional
+        /// parameter with a non-zero default was rebuilt wrong and silently: `useBias = true`
+        /// came back false, `dropoutRate = 0.5` came back 0.0, `heads = 8` came back 0. The
+        /// layer loads without error and behaves differently from the one that was saved.
+        /// </remarks>
+        public string? DefaultExpression;
         public bool NeedsConvert;
         public ValueKind Kind;
     }
@@ -492,6 +693,15 @@ public class LayerStateGenerator : IIncrementalGenerator
         public string TypeName = string.Empty;
         public List<string> TypeParameters = new();
         public string BaseFqn = string.Empty;
+
+        /// <summary>Outer types, outermost first, each as it must be REOPENED in generated code.</summary>
+        /// <remarks>
+        /// A layer declared inside another type had its `partial class` emitted at NAMESPACE
+        /// scope, so `WriteConstructionState` never joined the real class and `internal
+        /// override` on a namespace-level type with no such base member failed to compile --
+        /// a generator error surfacing as a raw C# error in code the author never wrote.
+        /// </remarks>
+        public List<string> ContainingTypes = new();
 
         /// <summary>The type as <c>typeof(X&lt;&gt;)</c> renders it.</summary>
         public string OpenGenericFqn => TypeParameters.Count == 0
