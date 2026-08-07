@@ -277,7 +277,7 @@ public class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         TryAutoEnableWeightStreaming();
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
