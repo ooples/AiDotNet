@@ -41,6 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class DeconvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -316,19 +317,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool HasUninitializedParameters => !IsShapeResolved;
 
-    public override long ParameterCount => _kernels.Length > 0
-        ? _kernels.Length + _biases.Length
-        // Deferred-shape mode: weights aren't materialised yet (e.g. resolved via
-        // ResolveShapesOnly so a parent can read ParameterCount without allocating
-        // the kernel). Once the shape is resolved InputDepth is known, so report the
-        // exact count from dims — kernel layout is [InputDepth, OutputDepth,
-        // KernelSize, KernelSize] plus an OutputDepth-length bias. This equals the
-        // materialised _kernels.Length + _biases.Length, so ParameterCount stays
-        // consistent with GetParameters().Length. Returns 0 only while InputDepth is
-        // still the unresolved -1 sentinel.
-        : InputDepth > 0
-            ? (long)InputDepth * OutputDepth * KernelSize * KernelSize + OutputDepth
-            : 0;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -764,40 +752,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all kernel weights and biases.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts all trainable parameters (kernel weights and biases) from the layer
-    /// and returns them as a single vector. This is useful for optimization algorithms that operate
-    /// on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method gathers all the learned values from the layer.
-    /// 
-    /// The parameters include:
-    /// - All values from all pattern generators (kernels)
-    /// - All bias values
-    /// 
-    /// These are combined into a single long list (vector), which can be used for:
-    /// - Saving the model
-    /// - Sharing parameters between layers
-    /// - Advanced optimization techniques
-    /// 
-    /// This provides access to all the "knowledge" the layer has learned.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Deferred-shape layer cloned before its first Forward has empty
-        // _kernels/_biases placeholders. Return an empty vector so Clone
-        // can roundtrip via SetParameters; the cloned layer materialises
-        // its real weights when its first Forward fires.
-        if (!IsShapeResolved) return new Vector<T>(0);
-        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
     /// Sets all trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -832,42 +786,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     {
         _kernelsGradient = null;
         _biasesGradient = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters: derive inputDepth from vector length.
-        // Layout: kernels [inputDepth, outputDepth, K, K] + biases [outputDepth].
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            int kernelArea = OutputDepth * KernelSize * KernelSize;
-            if (OutputDepth <= 0 || kernelArea <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on deferred-shape DeconvolutionalLayer before OutputDepth/KernelSize are known.");
-            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
-            if (candidateInputDepth <= 0
-                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputDepth for DeconvolutionalLayer from {parameters.Length} parameters.");
-            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
-        }
-
-        int expectedLength = _kernels.Length + _biases.Length;
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
-        }
-
-        var kernelVec = parameters.Slice(0, _kernels.Length);
-        var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
-
-        _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize], kernelVec);
-        _biases = new Tensor<T>([OutputDepth], biasVec);
-
-        // Invalidate GPU cache after parameter update
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

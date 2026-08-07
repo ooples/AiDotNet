@@ -1,4 +1,5 @@
-﻿using AiDotNet.Helpers;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -37,6 +38,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// learnable correction to what it produces. How much freedom that correction has depends on how
 /// noisy the current generation step is — that is the whole idea of T-LoRA.</para>
 /// </remarks>
+[AutoParameters]
 public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionBlockDecorator<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
@@ -202,26 +204,6 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
         + _adapter.SingularValues.Length;
 
     /// <summary>
-    /// Returns the wrapped block's parameters followed by the adapter's A, B and S.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The inner block's weights are included, and must be. In this library
-    /// <c>GetParameters</c>/<c>SetParameters</c> is the FULL-STATE contract that clone, save and load
-    /// are built on, not merely the optimizer's view — the flat concatenation has to be
-    /// index-identical across the pair. Reporting only the adapter would silently drop the base
-    /// attention weights from the model's state, so a round-trip or a <c>Clone</c> would return a
-    /// network with re-initialized attention.
-    /// </para>
-    /// <para>
-    /// The paper's "freeze W" is therefore expressed where it belongs — in what training updates, not
-    /// in what serialization can see. <see cref="TrainableParameterOffset"/> gives callers the index
-    /// where the adapter's block begins so an optimizer can restrict itself to it.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters() => _inner.GetParameters();
-
-    /// <summary>
     /// The adapter's own trainable state — A, then B, then S — kept OUT of
     /// <see cref="GetParameters"/> on purpose.
     /// </summary>
@@ -294,16 +276,6 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
     }
 
 
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Forwards straight to the wrapped block, so the decorator consumes exactly the vector the bare
-    /// block would. Adapter state goes through <see cref="SetAdapterState"/>.
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _inner.SetParameters(parameters);
-    }
 
     /// <inheritdoc/>
     public override void ResetState()

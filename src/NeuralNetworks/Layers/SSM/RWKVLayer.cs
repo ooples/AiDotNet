@@ -62,6 +62,12 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+// [AutoParameters]: every non-nullable tensor field here is a trainable parameter unless it opts
+// out. Before this, the layer registered its 8 weight matrices and silently omitted 10 more
+// LEARNED tensors -- _timeMixR/K/V and _channelMixR/K (the mixing coefficients RWKV is named
+// for), _bonus, and both LayerNorm affine pairs. The optimizer never updated them, so the layer
+// only partly trained and nothing reported it.
+[AutoParameters]
 public partial class RWKVLayer<T> : LayerBase<T>
 {
     // Configuration
@@ -169,17 +175,6 @@ public partial class RWKVLayer<T> : LayerBase<T>
     /// Gets the dimension per head.
     /// </summary>
     public int HeadDimension => _headDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _timeMixR.Length + _timeMixK.Length + _timeMixV.Length +
-        _receptanceWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length +
-        _decayBias.Length + _bonus.Length +
-        _channelMixR.Length + _channelMixK.Length +
-        _channelKeyWeights.Length + _channelValueWeights.Length + _channelReceptanceWeights.Length +
-        _normGamma1.Length + _normBeta1.Length + _normGamma2.Length + _normBeta2.Length;
 
     /// <summary>
     /// Creates a new RWKV layer.
@@ -547,37 +542,6 @@ public partial class RWKVLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_channelValueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_channelReceptanceWeights, PersistentTensorRole.Weights);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     private Tensor<T>[] GetAllTensors() =>

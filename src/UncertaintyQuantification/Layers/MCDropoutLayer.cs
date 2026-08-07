@@ -1,4 +1,5 @@
-﻿using System.Threading;
+﻿using AiDotNet.Attributes;
+using System.Threading;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
@@ -27,6 +28,7 @@ namespace AiDotNet.UncertaintyQuantification.Layers;
 /// - Safety-critical applications (knowing when to defer to a human expert)
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class MCDropoutLayer<T> : LayerBase<T>
 {
     private readonly double _dropoutRate;
@@ -122,25 +124,6 @@ public partial class MCDropoutLayer<T> : LayerBase<T>
 
         var outputTensor = Tensor<T>.FromVector(outputVector);
         return input.Shape.Length > 1 ? Engine.Reshape(outputTensor, input._shape) : outputTensor;
-    }
-
-    /// <summary>
-    /// Gets the trainable parameters (empty for dropout layers).
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return new Vector<T>(0);
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters (no-op for dropout layers).
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-        {
-            throw new ArgumentException($"Expected 0 parameters, but got {parameters.Length}");
-        }
     }
 
     /// <summary>

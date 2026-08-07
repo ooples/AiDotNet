@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2")]
+[AutoParameters]
 public partial class UpsamplingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -264,32 +265,6 @@ public partial class UpsamplingLayer<T> : LayerBase<T>
         }
 
         return gpuEngine.UpsampleGpu(input, _scaleFactor);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector, as the layer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector as the upsampling layer does not have any trainable parameters.
-    /// It is included to conform to the base class interface.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because this layer has no learnable values.
-    /// 
-    /// Since the upsampling layer:
-    /// - Has no weights or biases
-    /// - Performs a fixed operation that doesn't need to be learned
-    /// - Only transforms the input according to predefined rules
-    /// 
-    /// It returns an empty vector, indicating to the optimization process that
-    /// there are no parameters to update for this layer.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // This layer doesn't have any trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

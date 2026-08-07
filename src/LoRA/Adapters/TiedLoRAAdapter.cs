@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -57,7 +58,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// we capture most of the adaptation capability with minimal parameters.
 /// </para>
 /// </remarks>
-public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Shared trainable matrix A (inputSize × rank) used by all Tied-LoRA adapters.
@@ -125,37 +127,6 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Stored intermediate value (B_shared * A_shared * input) from forward pass.
     /// </summary>
     private Matrix<T>? _lastIntermediate;
-
-    /// <summary>
-    /// Flag indicating whether this adapter instance has completed initialization.
-    /// </summary>
-    private bool _isInitialized;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// Tied-LoRA only trains a single scaling factor per layer (plus the base layer if not frozen).
-    /// The shared matrices contribute to the parameter count only once across all layers.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Guard against being called during base class construction before initialization
-            if (!_isInitialized)
-            {
-                // During construction, delegate to base which computes full parameter count
-                return base.ParameterCount;
-            }
-
-            // long throughout — base layer can be > int.MaxValue on
-            // foundation models. Closes #1271.7Bnn.
-            long tiedLoraParams = 1L; // Single scaling factor
-            long baseParams = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
-            return baseParams + tiedLoraParams;
-        }
-    }
 
     /// <summary>
     /// Gets the layer-specific scaling factor.
@@ -252,9 +223,6 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         // Initialize layer-specific scaling factor to 1.0 (no initial effect)
         _layerScaling = NumOps.One;
         _layerScalingGradient = NumOps.Zero;
-
-        // Mark as initialized so ParameterCount returns the reduced count
-        _isInitialized = true;
 
         // Reallocate Parameters to the reduced size (just scaling factor + base if not frozen)
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
@@ -556,30 +524,6 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromScaling();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters (layer scaling factor only, or base + scaling if base not frozen).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateScalingFromParameters();
     }
 
     /// <summary>

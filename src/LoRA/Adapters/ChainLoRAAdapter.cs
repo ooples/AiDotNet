@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using System;
 using System.Collections.Generic;
@@ -98,7 +99,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// </code>
 /// </para>
 /// </remarks>
-public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// The chain of LoRA adapters applied sequentially.
@@ -320,53 +322,6 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Gets the total number of parameters in the chain (base layer + all unfrozen adapters).
-    /// </summary>
-    /// <remarks>
-    /// This count includes parameters from the base layer (if not frozen) plus all unfrozen adapters in the chain.
-    /// Frozen adapters don't contribute to the parameter count since they no longer receive gradient updates.
-    /// Returns the cached _currentParameterCount once the chain is initialized, or computes it on-the-fly
-    /// during construction to handle base class initialization.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // If chain is not yet initialized (during base construction), compute on-the-fly.
-            // Accumulator is `long` so an arbitrarily-deep chain over a
-            // base layer with > int.MaxValue parameters doesn't truncate
-            // before the helper sees it. Closes #1271.7BnU.
-            if (_adapterChain == null || _currentParameterCount == 0)
-            {
-                long count = 0L;
-
-                // Add base layer parameters if not frozen and baseLayer exists
-                if (_baseLayer != null && !_freezeBaseLayer)
-                {
-                    count += _baseLayer.ParameterCount;
-                }
-
-                // Add unmerged adapter parameters from chain
-                if (_adapterChain != null && _mergedStatus != null)
-                {
-                    for (int i = 0; i < _chainLength; i++)
-                    {
-                        if (!_mergedStatus[i])
-                        {
-                            count += _adapterChain[i].ParameterCount;
-                        }
-                    }
-                }
-
-                return count;
-            }
-
-            // Otherwise return cached value
-            return _currentParameterCount;
-        }
-    }
-
-    /// <summary>
     /// Gets the number of adapters that are still trainable (not frozen).
     /// </summary>
     /// <returns>Count of unfrozen adapters.</returns>
@@ -443,31 +398,6 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromChain();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters from base layer (if not frozen) and all unfrozen adapters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters.</param>
-    /// <exception cref="ArgumentException">Thrown when parameter count doesn't match.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateChainFromParameters();
     }
 
     /// <summary>

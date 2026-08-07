@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4, 4 }); for (int i = 0; i < 4; i++) { adj[0, i, i] = 1.0; if (i > 0) adj[0, i, i-1] = 1.0; if (i < 3) adj[0, i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+[AutoParameters]
 public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -98,8 +99,6 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     private Tensor<T>? _selfWeightsGradient;
     private Tensor<T>? _biasGradient;
 
-    /// <inheritdoc/>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -1140,21 +1139,6 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_preTransformWeights.ToArray()),
-            new Vector<T>(_preTransformBias.ToArray()),
-            new Vector<T>(_postAggregationWeights1.ToArray()),
-            new Vector<T>(_postAggregationBias1.ToArray()),
-            new Vector<T>(_postAggregationWeights2.ToArray()),
-            new Vector<T>(_postAggregationBias2.ToArray()),
-            new Vector<T>(_selfWeights.ToArray()),
-            new Vector<T>(_bias.ToArray())
-        );
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         var gPreTransformWeights = _preTransformWeightsGradient != null ? new Vector<T>(_preTransformWeightsGradient.ToArray()) : new Vector<T>(_preTransformWeights.Length);
@@ -1180,59 +1164,6 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         _postAggregationBias2Gradient = null;
         _selfWeightsGradient = null;
         _biasGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int preTransformWeightCount = _preTransformWeights.Length;
-        int preTransformBiasCount = _preTransformBias.Length;
-        int post1WeightCount = _postAggregationWeights1.Length;
-        int post1BiasCount = _postAggregationBias1.Length;
-        int post2WeightCount = _postAggregationWeights2.Length;
-        int post2BiasCount = _postAggregationBias2.Length;
-        int selfWeightCount = _selfWeights.Length;
-        int biasCount = _bias.Length;
-
-        int totalParams = preTransformWeightCount + preTransformBiasCount +
-                         post1WeightCount + post1BiasCount +
-                         post2WeightCount + post2BiasCount +
-                         selfWeightCount + biasCount;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException(
-                $"Expected {totalParams} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        int index = 0;
-
-        _preTransformWeights = Tensor<T>.FromVector(parameters.SubVector(index, preTransformWeightCount))
-            .Reshape(_preTransformWeights._shape);
-        index += preTransformWeightCount;
-
-        _preTransformBias = Tensor<T>.FromVector(parameters.SubVector(index, preTransformBiasCount));
-        index += preTransformBiasCount;
-
-        _postAggregationWeights1 = Tensor<T>.FromVector(parameters.SubVector(index, post1WeightCount))
-            .Reshape(_postAggregationWeights1._shape);
-        index += post1WeightCount;
-
-        _postAggregationBias1 = Tensor<T>.FromVector(parameters.SubVector(index, post1BiasCount));
-        index += post1BiasCount;
-
-        _postAggregationWeights2 = Tensor<T>.FromVector(parameters.SubVector(index, post2WeightCount))
-            .Reshape(_postAggregationWeights2._shape);
-        index += post2WeightCount;
-
-        _postAggregationBias2 = Tensor<T>.FromVector(parameters.SubVector(index, post2BiasCount));
-        index += post2BiasCount;
-
-        _selfWeights = Tensor<T>.FromVector(parameters.SubVector(index, selfWeightCount))
-            .Reshape(_selfWeights._shape);
-        index += selfWeightCount;
-
-        _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));
     }
 
     /// <inheritdoc/>

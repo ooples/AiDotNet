@@ -39,6 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+[AutoParameters]
 public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -168,9 +169,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// for efficient attention computation on large graphs.
     /// </remarks>
     protected override bool SupportsGpuExecution => !_concatenateHeads;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _weights.Length + _attentionWeights.Length + _bias.Length;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -846,46 +844,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             : new Vector<T>(_bias.Length);
 
         return Vector<T>.Concatenate(weightsGrad, attnGrad, biasGrad);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_attentionWeights.ToArray()),
-            new Vector<T>(_bias.ToArray())
-        );
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int weightsCount = _weights.Length;
-        int attnCount = _attentionWeights.Length;
-        int biasCount = _bias.Length;
-        int totalParams = weightsCount + attnCount + biasCount;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        _weights = Tensor<T>.FromVector(parameters.SubVector(index, weightsCount)).Reshape(_weights._shape);
-        index += weightsCount;
-
-        _attentionWeights = Tensor<T>.FromVector(parameters.SubVector(index, attnCount))
-            .Reshape(_attentionWeights._shape);
-        index += attnCount;
-
-        _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_attentionWeights);
-        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <summary>

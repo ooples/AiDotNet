@@ -46,6 +46,7 @@ public enum SpatialTransformerDataFormat
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -338,28 +339,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     private readonly int _outputWidth;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training through backpropagation.
-    /// </summary>
-    /// <value>
-    /// Always returns <c>true</c> as spatial transformer layers have trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the spatial transformer layer can be trained. The layer contains trainable parameters
-    /// in the localization network that are updated during the training process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer contains numbers (parameters) that can be adjusted during training
-    /// - It will improve its performance as it sees more examples
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// The spatial transformer will gradually learn the best transformations for the task at hand.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -894,42 +873,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the layer (localization network weights and biases) and combines them
-    /// into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer into a single list.
-    /// 
-    /// The parameters:
-    /// - Are the weights and biases of the localization network
-    /// - Are converted from matrices and vectors to a single long list (vector)
-    /// - Can be used to save the state of the layer or apply optimization techniques
-    /// 
-    /// This method is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatW1 = new Vector<T>(_localizationWeights1.ToArray());
-        var flatB1 = new Vector<T>(_localizationBias1.ToArray());
-        var flatW2 = new Vector<T>(_localizationWeights2.ToArray());
-        var flatB2 = new Vector<T>(_localizationBias2.ToArray());
-
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(flatW1, flatB1),
-            Vector<T>.Concatenate(flatW2, flatB2));
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -1005,39 +948,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             ResolveFromShape(new[] { inH, inW });
         }
         base.Deserialize(reader);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int w1Size = _localizationWeights1.Shape[0] * _localizationWeights1.Shape[1];
-        int b1Size = _localizationBias1.Shape[0];
-        int w2Size = _localizationWeights2.Shape[0] * _localizationWeights2.Shape[1];
-        int b2Size = _localizationBias2.Shape[0];
-        int totalParams = w1Size + b1Size + w2Size + b2Size;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Copy IN PLACE into the existing tensor storage so we preserve
-        // the engine's persistent-tensor registration. Replacing the field
-        // references with `Tensor<T>.FromVector(...)` would leave the
-        // registry pointing at the old tensors, causing stale GPU-cached
-        // weights and breaking streaming bookkeeping.
-        int index = 0;
-        parameters.AsSpan().Slice(index, w1Size).CopyTo(_localizationWeights1.Data.Span);
-        index += w1Size;
-        parameters.AsSpan().Slice(index, b1Size).CopyTo(_localizationBias1.Data.Span);
-        index += b1Size;
-        parameters.AsSpan().Slice(index, w2Size).CopyTo(_localizationWeights2.Data.Span);
-        index += w2Size;
-        parameters.AsSpan().Slice(index, b2Size).CopyTo(_localizationBias2.Data.Span);
-
-        Engine.InvalidatePersistentTensor(_localizationWeights1);
-        Engine.InvalidatePersistentTensor(_localizationBias1);
-        Engine.InvalidatePersistentTensor(_localizationWeights2);
-        Engine.InvalidatePersistentTensor(_localizationBias2);
     }
 
     /// <summary>

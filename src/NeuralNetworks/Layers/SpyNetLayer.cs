@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 128, 128", TestConstructorArgs = "2")]
+[AutoParameters]
 public partial class SpyNetLayer<T> : LayerBase<T>
 {
     #region Fields
@@ -1324,49 +1325,6 @@ public partial class SpyNetLayer<T> : LayerBase<T>
     #endregion
 
     #region Parameter Management
-
-    /// <inheritdoc/>
-    public override long ParameterCount => (int)_basicModules.Sum(m => m.ParameterCount);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var module in _basicModules)
-        {
-            var moduleParams = module.GetParameters();
-            for (int i = 0; i < moduleParams.Length; i++)
-            {
-                allParams.Add(moduleParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: per-pyramid-level conv shapes are unresolved.
-        // Buffer and replay from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-        foreach (var module in _basicModules)
-        {
-            var moduleParams = module.GetParameters();
-            var newParams = new T[moduleParams.Length];
-            for (int i = 0; i < moduleParams.Length; i++)
-            {
-                newParams[i] = parameters[offset + i];
-            }
-            module.SetParameters(new Vector<T>(newParams));
-            offset += moduleParams.Length;
-        }
-    }
 
     private Vector<T>? _pendingParameters;
 

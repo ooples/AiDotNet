@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
+[AutoParameters]
 public partial class MaskingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -314,29 +315,6 @@ public partial class MaskingLayer<T> : LayerBase<T>
     {
         // Use Engine for GPU/CPU accelerated element-wise multiplication
         return Engine.TensorMultiply(input, mask);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since this layer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector because the MaskingLayer has no trainable parameters.
-    /// However, it must be implemented to satisfy the base class contract.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally return all the values that can be learned during training.
-    /// 
-    /// Since this layer has no learnable values:
-    /// - It returns an empty list (vector with length 0)
-    /// - This is expected for layers that perform fixed operations
-    /// - Other layers, like those with weights, would return those weights
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // MaskingLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

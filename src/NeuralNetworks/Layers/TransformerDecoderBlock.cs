@@ -33,6 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 2, 16, 0.0")]
+[AutoParameters]
 public partial class TransformerDecoderBlock<T> : LayerBase<T>
 {
     private readonly int _hiddenSize;
@@ -254,38 +255,6 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>
 
     private LayerBase<T>[] Subs => new LayerBase<T>[]
         { _selfAttention, _norm1, _crossAttention, _norm2, _ffnUp, _ffnDown, _norm3 };
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get { long n = 0; foreach (var l in Subs) n += l.ParameterCount; return n; }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var result = Vector<T>.Empty();
-        foreach (var l in Subs) result = Vector<T>.Concatenate(result, l.GetParameters());
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            MaterializeLazySublayers();
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-        int offset = 0;
-        foreach (var l in Subs)
-        {
-            int count = (int)l.ParameterCount;
-            if (count == 0) continue;
-            l.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
 
     private void MaterializeLazySublayers()
     {

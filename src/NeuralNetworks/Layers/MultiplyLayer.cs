@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class MultiplyLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -422,31 +423,6 @@ public partial class MultiplyLayer<T> : LayerBase<T>
         }
 
         return inputGradients;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the multiply layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since MultiplyLayer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. Since MultiplyLayer
-    /// has no trainable parameters, it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
-    /// 
-    /// Since MultiplyLayer:
-    /// - Only performs fixed mathematical operations (multiplication)
-    /// - Has no weights, biases, or other learnable parameters
-    /// - The method returns an empty list
-    /// 
-    /// This is different from layers like Dense layers, which would return their weights and biases.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // MultiplyLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

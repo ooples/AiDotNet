@@ -43,6 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
+[AutoParameters]
 public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <inheritdoc />
@@ -267,22 +268,54 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// Idempotent: tensors already at the right length are reused so the
     /// existing RegisterTrainableParameter registrations stay valid.
     /// </summary>
+    /// <summary>
+    /// Sizes gamma, beta and the running statistics from the resolved channel count, and registers
+    /// the running statistics as buffers.
+    /// </summary>
+    /// <remarks>
+    /// The tape swap rebinds gamma and beta directly, so a trained layer could reach serialization
+    /// with correctly-sized affine parameters and running statistics that had never been allocated
+    /// or registered — it wrote 48 values where a freshly constructed clone expected 96, and the
+    /// checkpoint would not load. Materializing here means whatever reads the parameter surface
+    /// sees the layer's full persistent state, affine and statistics alike.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        // Guarded: an unresolved layer still carries the -1 sentinel and would allocate against it.
+        if (IsShapeResolved && InputShape is { Length: > 0 } && InputShape[0] > 0)
+            InitializeNormalizationParameters();
+
+        base.EnsureInitialized();
+    }
+
     private void InitializeNormalizationParameters()
     {
         int channels = InputShape[0];
-        bool reinit = _gamma is null || _gamma.Length != channels;
-        if (reinit)
+
+        // The running statistics are sized and registered INDEPENDENTLY of gamma. They used to
+        // share gamma's reinit guard, which made them a casualty of the tape-buffer swap: that
+        // swap rebinds _gamma to a correctly-sized view, so the next call here saw gamma already
+        // at `channels`, took no branch, and left the running stats unallocated and unregistered.
+        // A trained model then serialized 48 values where the freshly-constructed clone expected
+        // 96, and the checkpoint would not load. Splitting the conditions removes the coupling;
+        // RegisterBuffer is name-keyed and idempotent, so registering on every call is free.
+        if (_gamma is null || _gamma.Length != channels)
         {
             _gamma = Tensor<T>.CreateDefault([channels], NumOps.One);
             _beta = Tensor<T>.CreateDefault([channels], NumOps.Zero);
+            RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+            RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+        }
+
+        if (_runningMean is null || _runningMean.Length != channels)
+        {
             _runningMean = TensorAllocator.RentPinned<T>([channels]);
             _runningMean.Fill(NumOps.Zero);
             _runningVariance = TensorAllocator.RentPinned<T>([channels]);
             _runningVariance.Fill(NumOps.One);
-            RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
-            RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
-            RegisterRunningStatisticBuffers();
         }
+
+        RegisterRunningStatisticBuffers();
     }
 
     /// <summary>
@@ -985,115 +1018,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         int total = 1;
         for (int i = 0; i < shape.Length; i++) total *= shape[i];
         return total;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the batch normalization layer.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters (gamma and beta) concatenated together.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns a single vector containing all trainable parameters of the layer:
-    /// - First half: gamma (scale) parameters
-    /// - Second half: beta (shift) parameters
-    /// </para>
-    /// <para>
-    /// This is useful for optimization algorithms that need access to all parameters at once,
-    /// or for saving/loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the learnable parameters as a single vector.
-    ///
-    /// Batch normalization has two sets of learnable parameters:
-    /// - Gamma (scale): Controls how much to stretch or compress the normalized data
-    /// - Beta (shift): Controls how much to move the normalized data up or down
-    ///
-    /// This method combines both sets into a single vector, with gamma values first,
-    /// followed by beta values. For example, with 3 features:
-    ///
-    /// [gamma1, gamma2, gamma3, beta1, beta2, beta3]
-    ///
-    /// This format is useful for:
-    /// - Saving and loading models
-    /// - Advanced optimization algorithms that work with all parameters at once
-    /// - Regularization techniques that need to access all parameters
-    ///
-    /// The total length of the returned vector is twice the number of features,
-    /// since there's one gamma and one beta parameter per feature.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _gamma.Length + _beta.Length;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // Production-grade: Use Vector.Concatenate instead of manual loops
-        return Vector<T>.Concatenate(Vector<T>.FromMemory(_gamma.Data), Vector<T>.FromMemory(_beta.Data));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters of the batch normalization layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters (gamma and beta) concatenated together.</param>
-    /// <remarks>
-    /// <para>
-    /// This method expects a single vector containing all trainable parameters:
-    /// - First half: gamma (scale) parameters
-    /// - Second half: beta (shift) parameters
-    /// </para>
-    /// <para>
-    /// The length of the parameters vector must be exactly twice the feature size.
-    /// This method is useful for loading pre-trained weights or setting parameters
-    /// after optimization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads parameters into the layer from a single vector.
-    ///
-    /// This is the counterpart to GetParameters() - it takes a vector containing
-    /// all parameters and sets them in the layer. The vector must have the format:
-    ///
-    /// [gamma1, gamma2, ..., gammaN, beta1, beta2, ..., betaN]
-    ///
-    /// Where N is the number of features. The total length must be exactly 2*N.
-    ///
-    /// This method is commonly used for:
-    /// - Loading pre-trained models
-    /// - Setting parameters after external optimization
-    /// - Implementing transfer learning
-    /// - Testing different parameter configurations
-    ///
-    /// If the vector doesn't have the expected length, the method will throw an
-    /// exception to prevent incorrect parameter assignments.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters when in lazy placeholder state.
-        // Layout: [gamma, beta] each featureSize long, so featureSize = length/2.
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            if (parameters.Length % 2 != 0 || parameters.Length == 0)
-                throw new ArgumentException(
-                    $"Cannot infer featureSize for BatchNormalizationLayer from {parameters.Length} parameters.");
-            int inferredFeatureSize = parameters.Length / 2;
-            ResolveFromShape(new[] { inferredFeatureSize });
-        }
-
-        int featureSize = InputShape[0];
-        if (parameters.Length != featureSize * 2)
-            throw new ArgumentException($"Expected {featureSize * 2} parameters, but got {parameters.Length}", nameof(parameters));
-
-        // Production-grade: Use Tensor.FromVector instead of manual loops
-        var gammaVec = parameters.Slice(0, featureSize);
-        var betaVec = parameters.Slice(featureSize, featureSize);
-
-        _gamma = Tensor<T>.FromVector(gammaVec, [featureSize]);
-        _beta = Tensor<T>.FromVector(betaVec, [featureSize]);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
-        _inferenceScaleDirty = true;
     }
 
     // --- ILayerSerializationExtras: running mean/variance are non-trainable state ---

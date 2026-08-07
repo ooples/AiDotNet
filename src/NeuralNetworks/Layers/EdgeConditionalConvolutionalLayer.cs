@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj }); var ef = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 10, 2 }); ef.Fill(1.0); var m2 = layer.GetType().GetMethod(\"SetEdgeFeatures\"); if (m2 != null) m2.Invoke(layer, new object[] { ef });")]
+[AutoParameters]
 public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -104,8 +105,6 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     private Tensor<T>? _selfWeightsGradient;
     private Tensor<T>? _biasGradient;
 
-    /// <inheritdoc/>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -911,20 +910,6 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         Engine.InvalidatePersistentTensor(_bias);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector.Concatenate to efficiently combine all parameters
-        return Vector<T>.Concatenate(
-            new Vector<T>(_edgeNetworkWeights1.ToArray()),
-            new Vector<T>(_edgeNetworkWeights2.ToArray()),
-            new Vector<T>(_edgeNetworkBias1.ToArray()),
-            new Vector<T>(_edgeNetworkBias2.ToArray()),
-            new Vector<T>(_selfWeights.ToArray()),
-            new Vector<T>(_bias.ToArray())
-        );
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         return Vector<T>.Concatenate(
@@ -945,62 +930,6 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         _edgeNetworkBias2Gradient = null;
         _selfWeightsGradient = null;
         _biasGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int w1Size = _edgeNetworkWeights1.Length;
-        int w2Size = _edgeNetworkWeights2.Length;
-        int b1Size = _edgeNetworkBias1.Length;
-        int b2Size = _edgeNetworkBias2.Length;
-        int selfSize = _selfWeights.Length;
-        int biasSize = _bias.Length;
-        int totalParams = w1Size + w2Size + b1Size + b2Size + selfSize + biasSize;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        // Set edge network weights 1
-        var w1Params = parameters.SubVector(index, w1Size);
-        _edgeNetworkWeights1 = Tensor<T>.FromVector(w1Params).Reshape(_edgeNetworkWeights1._shape);
-        index += w1Size;
-
-        // Set edge network weights 2
-        var w2Params = parameters.SubVector(index, w2Size);
-        _edgeNetworkWeights2 = Tensor<T>.FromVector(w2Params).Reshape(_edgeNetworkWeights2._shape);
-        index += w2Size;
-
-        // Set edge network bias 1
-        var b1Params = parameters.SubVector(index, b1Size);
-        _edgeNetworkBias1 = Tensor<T>.FromVector(b1Params);
-        index += b1Size;
-
-        // Set edge network bias 2
-        var b2Params = parameters.SubVector(index, b2Size);
-        _edgeNetworkBias2 = Tensor<T>.FromVector(b2Params);
-        index += b2Size;
-
-        // Set self weights
-        var selfParams = parameters.SubVector(index, selfSize);
-        _selfWeights = Tensor<T>.FromVector(selfParams).Reshape(_selfWeights._shape);
-        index += selfSize;
-
-        // Set bias
-        var biasParams = parameters.SubVector(index, biasSize);
-        _bias = Tensor<T>.FromVector(biasParams);
-
-        // Invalidate GPU cache after parameter updates
-        Engine.InvalidatePersistentTensor(_edgeNetworkWeights1);
-        Engine.InvalidatePersistentTensor(_edgeNetworkWeights2);
-        Engine.InvalidatePersistentTensor(_edgeNetworkBias1);
-        Engine.InvalidatePersistentTensor(_edgeNetworkBias2);
-        Engine.InvalidatePersistentTensor(_selfWeights);
-        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <inheritdoc/>

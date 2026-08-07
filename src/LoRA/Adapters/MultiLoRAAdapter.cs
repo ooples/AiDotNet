@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using System.Globalization;
 using AiDotNet.Inference;
@@ -53,7 +54,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// You can switch between tasks at runtime, and each task only trains its specific LoRA weights!
 /// </para>
 /// </remarks>
-public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLayer<T>
+[AutoParameters]
+public partial class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLayer<T>
 {
     /// <summary>
     /// Dictionary mapping task names to their specific LoRA layers.
@@ -105,31 +107,6 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLay
     /// Gets the number of tasks configured in this adapter.
     /// </summary>
     public int NumberOfTasks => _taskAdapters.Count;
-
-    /// <summary>
-    /// Gets the total parameter count across all task adapters.
-    /// </summary>
-    /// <remarks>
-    /// This includes parameters from the base layer (if not frozen) plus all task-specific LoRA layers.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            int totalParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-            if (_taskAdapters != null)
-            {
-                foreach (var adapter in _taskAdapters.Values)
-                {
-                    if (adapter != null)
-                    {
-                        totalParams += (int)adapter.ParameterCount;
-                    }
-                }
-            }
-            return totalParams;
-        }
-    }
 
     /// <summary>
     /// Initializes a new Multi-LoRA adapter with an initial default task.
@@ -467,86 +444,6 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLay
 
         // Update parameter vector
         UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing base parameters (if not frozen) and all task adapters' parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Base layer parameters (if not frozen)
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // All task adapters' parameters
-        // Guard against null _taskAdapters during base constructor calls
-        if (_taskAdapters != null)
-        {
-            foreach (var adapter in _taskAdapters.Values)
-            {
-                Vector<T> taskParams = adapter.GetParameters();
-                for (int i = 0; i < taskParams.Length; i++)
-                {
-                    parameters[idx++] = taskParams[i];
-                }
-            }
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        int idx = 0;
-
-        // Base layer parameters (if not frozen)
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // All task adapters' parameters
-        // Guard against null _taskAdapters during construction or early calls
-        if (_taskAdapters != null)
-        {
-            foreach (var adapter in _taskAdapters.Values)
-            {
-                int taskParamCount = checked((int)adapter.ParameterCount);
-                Vector<T> taskParams = new Vector<T>(taskParamCount);
-                for (int i = 0; i < taskParamCount; i++)
-                {
-                    taskParams[i] = parameters[idx++];
-                }
-                adapter.SetParameters(taskParams);
-            }
-        }
-
-        Parameters = parameters.Clone();
     }
 
     /// <summary>

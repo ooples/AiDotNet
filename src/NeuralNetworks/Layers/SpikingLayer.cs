@@ -39,6 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, IsStateful = true, ChangesShape = true, UsesSurrogateGradient = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
+[AutoParameters]
 public partial class SpikingLayer<T> : LayerBase<T>
 {
 
@@ -588,28 +589,6 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _hGate;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>
-    /// The total number of weights and biases in the layer.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property returns the total number of trainable parameters in the layer, which is the sum of the
-    /// number of weights and the number of biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many adjustable numbers the layer has.
-    /// 
-    /// The parameter count is:
-    /// - Number of weights (connections between input and output)
-    /// - Plus the number of biases (one per output neuron)
-    /// 
-    /// This gives you an idea of the layer's complexity and memory requirements.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _bias.Shape[0];
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -1479,62 +1458,6 @@ public partial class SpikingLayer<T> : LayerBase<T>
 
         _weights = new Tensor<T>([inputSize, outputSize], parameters.Slice(0, weightCount));
         _bias = new Tensor<T>([_bias.Shape[0]], parameters.Slice(weightCount, _bias.Shape[0]));
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the layer (weights and biases) and combines them
-    /// into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer into a single list.
-    /// 
-    /// The returned vector contains:
-    /// 1. All weight values (rows * columns), stored row by row
-    /// 2. All bias values (one per output neuron)
-    /// 
-    /// This method is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-        int rows = _weights.Shape[0];
-        int cols = _weights.Shape[1];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                result[idx++] = _weights[i, j];
-        for (int i = 0; i < _bias.Length; i++)
-            result[idx++] = _bias[i];
-        return result;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-
-        // Use 2D indexer for reliable write (Data.Span and SetFlat don't work for all tensor types)
-        int idx = 0;
-        int rows = _weights.Shape[0];
-        int cols = _weights.Shape[1];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                _weights[i, j] = parameters[idx++];
-
-        for (int i = 0; i < _bias.Length; i++)
-            _bias[i] = parameters[idx++];
-
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_bias);
     }
 
     public override Vector<T> GetParameterGradients()

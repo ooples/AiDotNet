@@ -65,6 +65,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+[AutoParameters]
 public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -178,8 +179,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     private Tensor<T>? _gateWeightsGradient;
     private Tensor<T>? _gateBiasGradient;
 
-    /// <inheritdoc/>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -1113,33 +1112,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        // Add all weight matrices
-        paramsList.AddRange(_incomingWeights.ToArray());
-        paramsList.AddRange(_outgoingWeights.ToArray());
-        paramsList.AddRange(_selfWeights.ToArray());
-        paramsList.AddRange(_combinationWeights.ToArray());
-
-        // Add all bias vectors
-        paramsList.AddRange(_incomingBias.ToArray());
-        paramsList.AddRange(_outgoingBias.ToArray());
-        paramsList.AddRange(_selfBias.ToArray());
-        paramsList.AddRange(_combinationBias.ToArray());
-
-        // Add gating parameters if enabled
-        if (_useGating && _gateWeights != null && _gateBias != null)
-        {
-            paramsList.AddRange(_gateWeights.ToArray());
-            paramsList.AddRange(_gateBias.ToArray());
-        }
-
-        return new Vector<T>(paramsList.ToArray());
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         var gIncomingWeights = _incomingWeightsGradient != null ? new Vector<T>(_incomingWeightsGradient.ToArray()) : new Vector<T>(_incomingWeights.Length);
@@ -1175,71 +1147,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         _combinationBiasGradient = null;
         _gateWeightsGradient = null;
         _gateBiasGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedSize = _incomingWeights.Length + _outgoingWeights.Length + _selfWeights.Length +
-                          _combinationWeights.Length + _incomingBias.Length + _outgoingBias.Length +
-                          _selfBias.Length + _combinationBias.Length;
-
-        if (_useGating && _gateWeights != null && _gateBias != null)
-        {
-            expectedSize += _gateWeights.Length + _gateBias.Length;
-        }
-
-        if (parameters.Length != expectedSize)
-        {
-            throw new ArgumentException($"Expected {expectedSize} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        // Set weight matrices
-        var incomingWeightsParams = parameters.SubVector(index, _incomingWeights.Length);
-        _incomingWeights = Tensor<T>.FromVector(incomingWeightsParams).Reshape(_incomingWeights._shape);
-        index += _incomingWeights.Length;
-
-        var outgoingWeightsParams = parameters.SubVector(index, _outgoingWeights.Length);
-        _outgoingWeights = Tensor<T>.FromVector(outgoingWeightsParams).Reshape(_outgoingWeights._shape);
-        index += _outgoingWeights.Length;
-
-        var selfWeightsParams = parameters.SubVector(index, _selfWeights.Length);
-        _selfWeights = Tensor<T>.FromVector(selfWeightsParams).Reshape(_selfWeights._shape);
-        index += _selfWeights.Length;
-
-        var combinationWeightsParams = parameters.SubVector(index, _combinationWeights.Length);
-        _combinationWeights = Tensor<T>.FromVector(combinationWeightsParams).Reshape(_combinationWeights._shape);
-        index += _combinationWeights.Length;
-
-        // Set bias vectors
-        var incomingBiasParams = parameters.SubVector(index, _incomingBias.Length);
-        _incomingBias = Tensor<T>.FromVector(incomingBiasParams);
-        index += _incomingBias.Length;
-
-        var outgoingBiasParams = parameters.SubVector(index, _outgoingBias.Length);
-        _outgoingBias = Tensor<T>.FromVector(outgoingBiasParams);
-        index += _outgoingBias.Length;
-
-        var selfBiasParams = parameters.SubVector(index, _selfBias.Length);
-        _selfBias = Tensor<T>.FromVector(selfBiasParams);
-        index += _selfBias.Length;
-
-        var combinationBiasParams = parameters.SubVector(index, _combinationBias.Length);
-        _combinationBias = Tensor<T>.FromVector(combinationBiasParams);
-        index += _combinationBias.Length;
-
-        // Set gating parameters if enabled
-        if (_useGating && _gateWeights != null && _gateBias != null)
-        {
-            var gateWeightsParams = parameters.SubVector(index, _gateWeights.Length);
-            _gateWeights = Tensor<T>.FromVector(gateWeightsParams).Reshape(_gateWeights._shape);
-            index += _gateWeights.Length;
-
-            var gateBiasParams = parameters.SubVector(index, _gateBias.Length);
-            _gateBias = Tensor<T>.FromVector(gateBiasParams);
-        }
     }
 
     /// <inheritdoc/>

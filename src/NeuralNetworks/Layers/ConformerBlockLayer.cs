@@ -63,6 +63,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, Cost = ComputeCost.High,
     TestInputShape = "4, 16", TestConstructorArgs = "16, 2, 2, 3")]
+[AutoParameters]
 public partial class ConformerBlockLayer<T> : LayerBase<T>
 {
 
@@ -260,15 +261,6 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>
         return Engine.Reshape(outTd, input.Shape.ToArray());
     }
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _ffn1Norm.ParameterCount + _ffn1Expand.ParameterCount + _ffn1Project.ParameterCount
-        + _attnNorm.ParameterCount + _attention.ParameterCount
-        + _convNorm.ParameterCount + _convPointwiseExpand.ParameterCount + _convDepthwise.ParameterCount
-        + _convInnerNorm.ParameterCount + _convPointwiseProject.ParameterCount
-        + _ffn2Norm.ParameterCount + _ffn2Expand.ParameterCount + _ffn2Project.ParameterCount
-        + _outputNorm.ParameterCount;
-
     private ILayer<T>[] OrderedSubLayers => new ILayer<T>[]
     {
         _ffn1Norm, _ffn1Expand, _ffn1Project,
@@ -276,31 +268,6 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>
         _convNorm, _convPointwiseExpand, _convDepthwise, _convInnerNorm, _convPointwiseProject,
         _ffn2Norm, _ffn2Expand, _ffn2Project, _outputNorm
     };
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new List<T>((int)ParameterCount);
-        foreach (var layer in OrderedSubLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
-        }
-        return new Vector<T>(parts.ToArray());
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in OrderedSubLayers)
-        {
-            int count = (int)layer.ParameterCount;
-            if (count == 0) continue;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()

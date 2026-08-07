@@ -33,6 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class RBMLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -991,55 +992,6 @@ public partial class RBMLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method collects all trainable parameters of the RBM (weights, visible biases, and
-    /// hidden biases) into a single vector. The parameters are arranged in the order: weights
-    /// (row-major), visible biases, hidden biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method packs all the RBM's learnable values into one list.
-    /// 
-    /// The returned vector contains:
-    /// - All weight values (connections between visible and hidden units)
-    /// - All visible bias values (default preferences for visible units)
-    /// - All hidden bias values (default sensitivities for hidden units)
-    /// 
-    /// This is useful for:
-    /// - Saving the RBM's state to a file
-    /// - Loading a previously trained RBM
-    /// - Using optimization algorithms that work on all parameters at once
-    /// 
-    /// Think of it as taking a snapshot of everything the RBM has learned.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_visibleBiases.ToArray()),
-            new Vector<T>(_hiddenBiases.ToArray())
-        );
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        // _weights is a 2D Tensor [visibleUnits, hiddenUnits]
-        for (int i = 0; i < _weights.Length; i++)
-            _weights.SetFlat(i, parameters[idx++]);
-        // _visibleBiases is a 1D Tensor [visibleUnits]
-        for (int i = 0; i < _visibleBiases.Length; i++)
-            _visibleBiases.SetFlat(i, parameters[idx++]);
-        // _hiddenBiases is a 1D Tensor [hiddenUnits]
-        for (int i = 0; i < _hiddenBiases.Length; i++)
-            _hiddenBiases.SetFlat(i, parameters[idx++]);
-        // _weightsTCache invalidation removed — Forward no longer caches.
-    }
-
-    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -1090,21 +1042,6 @@ public partial class RBMLayer<T> : LayerBase<T>
         _visibleBiasesGradient = null;
         _hiddenBiasesGradient = null;
     }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    public override long ParameterCount =>
-        _visibleUnits > 0
-            ? (long)_visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits
-            // Lazy-ctor instance hasn't seen its first Forward yet — visible
-            // dim is unknown, all parameter tensors are zero-sized
-            // placeholders, and EnsureInitialized hasn't run. Reporting a
-            // count that doesn't match the actual GetParameters().Length
-            // would break the optimizer's per-parameter state allocation
-            // (it sizes its bookkeeping arrays from ParameterCount and
-            // walks GetParameters() to fill them).
-            : 0L;
 
     /// <summary>
     /// Indicates whether this layer supports training.

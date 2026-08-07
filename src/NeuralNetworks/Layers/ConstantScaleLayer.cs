@@ -13,6 +13,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "1.0")]
+[AutoParameters]
 public partial class ConstantScaleLayer<T> : LayerBase<T>
 {
     private readonly T _scale;
@@ -32,6 +33,8 @@ public partial class ConstantScaleLayer<T> : LayerBase<T>
     /// gradient flow back to <c>input</c> while still producing the same
     /// scalar-scaled output.
     /// </summary>
+    // A constant scale by definition -- saved so a reload reproduces it, never updated by the optimizer.
+    [Buffer]
     private readonly Tensor<T> _scaleTensor;
 
     public override bool SupportsTraining => false;
@@ -47,20 +50,6 @@ public partial class ConstantScaleLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input) =>
         Engine.TensorBroadcastMultiply(input, _scaleTensor);
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException(
-                $"ConstantScaleLayer has no trainable parameters; got {parameters.Length}.");
-    }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients() => new Vector<T>(0);

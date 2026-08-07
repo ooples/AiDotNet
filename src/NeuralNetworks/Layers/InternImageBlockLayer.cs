@@ -11,6 +11,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Residual)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1, 1")]
+[AutoParameters]
 public sealed partial class InternImageBlockLayer<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -105,35 +106,7 @@ public sealed partial class InternImageBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override long ParameterCount => _parameterLayers.Sum(layer => layer.ParameterCount);
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => Concatenate(_parameterLayers, gradients: false);
-
-    /// <inheritdoc />
     public override Vector<T> GetParameterGradients() => Concatenate(_parameterLayers, gradients: true);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = _parameterLayers.Sum(layer => layer.GetParameters().Length);
-        if (_parameterLayers.Any(layer => !layer.IsShapeResolved))
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} InternImage block parameters, got {parameters.Length}.", nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in _parameterLayers)
-        {
-            int count = layer.GetParameters().Length;
-            if (count == 0) continue;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
 
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)

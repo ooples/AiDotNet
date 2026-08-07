@@ -25,6 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4")]
+[AutoParameters]
 public partial class SequenceLastLayer<T> : LayerBase<T>
 {
     private readonly int _featureSize;
@@ -57,9 +58,6 @@ public partial class SequenceLastLayer<T> : LayerBase<T>
     {
         _featureSize = featureSize;
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
 
     /// <summary>
     /// Extracts the last timestep from the input sequence.
@@ -186,14 +184,6 @@ public partial class SequenceLastLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"SequenceLastLayer expects at least 1D input, got {rank}D.");
         }
-    }
-
-    /// <summary>
-    /// Returns an empty vector since this layer has no trainable parameters.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
     }
 
     /// <summary>

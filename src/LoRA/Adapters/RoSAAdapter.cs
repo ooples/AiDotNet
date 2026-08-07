@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -72,7 +73,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// January 2024
 /// </para>
 /// </remarks>
-public class RoSAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Sparse weight matrix that captures specific/rare patterns.
@@ -145,38 +147,6 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// </para>
     /// </remarks>
     public double SparsityRatio { get; set; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// RoSA parameters include:
-    /// - Base layer parameters (if not frozen)
-    /// - LoRA parameters (rank * (inputSize + outputSize))
-    /// - Non-zero sparse parameters (varies based on sparsity)
-    ///
-    /// For parameter counting, we report the full sparse matrix size, but in practice
-    /// only the non-zero elements need to be stored and updated.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // long throughout. Sparse weights at full rank == OutputShape
-            // × InputShape can overflow int32 for foundation models with
-            // large hidden dims. Closes #1271.7Bnj.
-            long baseCount = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
-            long loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0L;
-            // CRITICAL: Compute sparse count from layer dimensions when _sparseWeights is null —
-            // returning 0 causes base constructor to allocate too-small buffer.
-            long sparseCount = _sparseWeights != null
-                ? ((long)_sparseWeights.Rows * _sparseWeights.Columns)
-                : ((long)GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0] * GetInputShape()[0]);
-            return baseCount + loraCount + sparseCount;
-        }
-    }
 
     /// <summary>
     /// Initializes a new RoSA adapter wrapping an existing layer.
@@ -523,30 +493,6 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromComponents();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing all parameters (base if not frozen, LoRA, sparse).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateComponentsFromParameters();
     }
 
     /// <summary>

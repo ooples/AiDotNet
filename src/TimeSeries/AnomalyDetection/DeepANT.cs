@@ -594,7 +594,8 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 /// Supports training via analytical Backward pass with stored kernel/bias gradients.
 /// Weights are initialized using Xavier/Glorot initialization.</para>
 /// </remarks>
-internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private int _outputChannels;
     private int _kernelSize;
@@ -610,7 +611,6 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T>? _kernelGradients;
     private Tensor<T>? _biasGradients;
 
-    public override long ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     public ConvLayerTensor(int outputChannels, int kernelSize, int seed = 42)
@@ -711,14 +711,6 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _lastPreActivations = null;
         _kernelGradients = null;
         _biasGradients = null;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        for (int i = 0; i < _kernels.Length; i++) p.Add(_kernels[i]);
-        for (int i = 0; i < _biases.Length; i++) p.Add(_biases[i]);
-        return new Vector<T>(p.ToArray());
     }
 
     public override void Serialize(BinaryWriter writer)

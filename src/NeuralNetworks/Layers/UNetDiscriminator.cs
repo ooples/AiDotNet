@@ -54,6 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 2")]
+[AutoParameters]
 public partial class UNetDiscriminator<T> : LayerBase<T>
 {
     #region Fields
@@ -379,50 +380,6 @@ public partial class UNetDiscriminator<T> : LayerBase<T>
         _convLast.UpdateParameters(learningRate);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        AddParamsToList(allParams, _convFirst.GetParameters());
-        foreach (var block in _encoderBlocks)
-        {
-            AddParamsToList(allParams, block.GetParameters());
-        }
-        foreach (var block in _decoderBlocks)
-        {
-            AddParamsToList(allParams, block.GetParameters());
-        }
-        AddParamsToList(allParams, _convLast.GetParameters());
-
-        return new Vector<T>([.. allParams]);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: encoder/decoder block shapes are unresolved.
-        // Buffer and replay from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-
-        offset = SetLayerParams(_convFirst, parameters, offset);
-        foreach (var block in _encoderBlocks)
-        {
-            offset = SetLayerParams(block, parameters, offset);
-        }
-        foreach (var block in _decoderBlocks)
-        {
-            offset = SetLayerParams(block, parameters, offset);
-        }
-        SetLayerParams(_convLast, parameters, offset);
-    }
-
     private Vector<T>? _pendingParameters;
 
     private static void AddParamsToList(List<T> list, Vector<T> parameters)
@@ -468,6 +425,7 @@ public partial class UNetDiscriminator<T> : LayerBase<T>
 /// <summary>
 /// Convolutional block for U-Net encoder with optional downsampling.
 /// </summary>
+[AutoParameters]
 internal partial class UNetConvBlock<T> : LayerBase<T>
 {
     private readonly ConvolutionalLayer<T> _conv1;
@@ -593,29 +551,6 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
         _conv2.UpdateParameters(learningRate);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var params1 = _conv1.GetParameters();
-        var params2 = _conv2.GetParameters();
-        var result = new T[params1.Length + params2.Length];
-        for (int i = 0; i < params1.Length; i++) result[i] = params1[i];
-        for (int i = 0; i < params2.Length; i++) result[params1.Length + i] = params2[i];
-        return new Vector<T>(result);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int count1 = _conv1.GetParameters().Length;
-        _conv1.SetParameters(parameters.SubVector(0, count1));
-        _conv2.SetParameters(parameters.SubVector(count1, parameters.Length - count1));
-    }
-
     private Vector<T>? _pendingParameters;
 
     public override void ResetState()
@@ -634,6 +569,7 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
 /// <summary>
 /// Upsampling block for U-Net decoder with skip connection concatenation.
 /// </summary>
+[AutoParameters]
 internal partial class UNetUpBlock<T> : LayerBase<T>
 {
     private readonly UpsamplingLayer<T> _upsample;
@@ -873,29 +809,6 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
     {
         _conv1.UpdateParameters(learningRate);
         _conv2.UpdateParameters(learningRate);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var params1 = _conv1.GetParameters();
-        var params2 = _conv2.GetParameters();
-        var result = new T[params1.Length + params2.Length];
-        for (int i = 0; i < params1.Length; i++) result[i] = params1[i];
-        for (int i = 0; i < params2.Length; i++) result[params1.Length + i] = params2[i];
-        return new Vector<T>(result);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int count1 = _conv1.GetParameters().Length;
-        _conv1.SetParameters(parameters.SubVector(0, count1));
-        _conv2.SetParameters(parameters.SubVector(count1, parameters.Length - count1));
     }
 
     private Vector<T>? _pendingParameters;

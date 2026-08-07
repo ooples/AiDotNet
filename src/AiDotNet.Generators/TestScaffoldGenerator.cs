@@ -453,6 +453,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "GraphWaveNet",
     };
 
+    /// <summary>
+    /// Causal-discovery test classes that get <c>[Collection("FoundationScaleSerial")]</c> — dedicated
+    /// cores — WITHOUT the HeavyTimeout trait that would relegate them to the nightly lane. Keyed by
+    /// generated TEST CLASS name (the algorithm emit path works in those, not model class names).
+    /// Membership means "measured fast alone, starved in a wide shard"; see the emission site in
+    /// EmitAlgorithmTestClass for the per-class numbers. A genuinely slow algorithm belongs on the
+    /// options-capping ladder or in the nightly lane instead, not here.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> CausalContentionSerialClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        "CGNNAlgorithmTests",
+        "DAGMANonlinearTests",
+        "GraNDAGAlgorithmTests",
+        "OrderMCMCAlgorithmTests",
+        "PartitionMCMCAlgorithmTests",
+    };
+
     // Foundation-scale models whose CORRECT forward/backward is simply too slow for the 120s default
     // per-test gate in the multi-iteration training tests. Their generated class is tagged
     // [Trait("Category","HeavyTimeout")] so the default PR shard excludes it (Category!=HeavyTimeout) and
@@ -608,6 +626,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // so the whole DOVETests class runs in the nightly heavy lane at full scale like its VSR
         // siblings (MIAVSR / MGLDVSR), keeping it off the default per-test-timeout gate.
         "DOVE",
+        // VoiceCraft: the ladder is exhausted, every rung MEASURED rather than assumed.
+        //   rung 1 (float)  — already applied; it is in Fp32TestClassNames and emits as <float>.
+        //   rung 2 (cap)    — already applied and already TIGHTER than the standard smoke cap:
+        //                     TrainingIterations 2, MoreData 1/2, MemorizationTaskIterations 2,
+        //                     MoreDataTolerance 0.5. Only two optimizer steps are left to remove.
+        //   rung 3 (shrink) — already applied; its constructorExpr builds a bounded 64x32x1 CI fixture
+        //                     rather than the paper audio length.
+        // Measured ALONE (serialized, whole machine, Release):
+        //   OutputDimension_ShouldMatchExpectedShape   15 s      FiniteSpectralEnergy        15 s
+        //   ScaledInput_ShouldChangeOutput             24 s      Training_ShouldChangeParams 1 m 46 s
+        //   ForwardPass_ShouldBeFinite_AfterTraining / Training_ShouldReduceLoss /
+        //   LossStrictlyDecreasesOnMemorizationTask    all TIMED OUT
+        // A single FORWARD of this already-shrunken fixture costs ~15 s, and the cheapest training
+        // invariant needs 1 m 46 s of a 120 s gate — 1.13x headroom, which is a coin flip, not a pass.
+        // That is per-STEP cost: dividing the step count cannot help when two steps is already the
+        // floor, and shrinking further would stop exercising the architecture. So this one is a
+        // genuine nightly-lane deferral rather than a contention casualty — note the contrast with
+        // its neighbours in the serialization list, whose single-forward probes cost 1-2 s.
+        // (VoiceCraft is ALSO in the serialization list: dedicated cores are what took its three
+        // single-forward probes back from timeouts to 15-24 s passes. The nightly lane runs wide too,
+        // so it needs both.)
+        "VoiceCraft",
     };
 
     /// <summary>
@@ -1970,6 +2010,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         //
         // Cap repetition only; the published topology and the real training path are untouched.
         "METER",
+        // Timeout ladder, rung 2. SECBERT had rung 1 only (it is in Fp32TestClassNames). Serializing
+        // it onto dedicated cores fixed most of its shard failures, but two probes still overran
+        // their gates with the whole machine to themselves — Training_ShouldReduceLoss (120 s) and
+        // LossStrictlyDecreasesOnMemorizationTask (180 s). Those are the two highest-repetition
+        // invariants in the suite (30 and 100 optimizer steps at the defaults), and the measured
+        // per-step cost of this BERT-scale financial encoder explains both: its SINGLE-pass training
+        // probes, serialized, cost Training_ShouldChangeParameters 34 s, DifferentInputs_AfterTraining
+        // 36 s, ForwardPass_ShouldBeFinite_AfterTraining 43 s and Clone_AfterTraining 44 s. At that
+        // rate 30+ steps cannot fit, and no amount of extra serialization changes it — this is
+        // repetition count, which is exactly what this set trims.
+        // CS0102-safe: its generated scaffold (FinancialNLPTestBase) emits NO iteration or tolerance
+        // overrides of its own — verified by reading the emitted SECBERTTests.g.cs — so this branch
+        // is the only writer of those five members.
+        "SECBERT",
     };
     // Fixtures whose MoreData probe lands INSIDE the optimizer warm-up hump at the
     // 1-vs-2 window, so the invariant measures a transient rather than a training
@@ -10775,7 +10829,45 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // measure 57 s, 57 s and 58 s against 120/120/180 s gates - real work at only ~2.1x, which
         // will not survive sixteen-wide execution. It stays in the PR gate (no HeavyTimeout) because
         // it passes comfortably given dedicated cores.
-        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former")
+        //
+        // NOTE on PartitionMCMCAlgorithm: it is a CAUSAL-DISCOVERY algorithm, and those are emitted by
+        // EmitAlgorithmTestClass, not by this method — so listing it HERE never had any effect. The
+        // entry is kept for the record but the working one now lives in EmitAlgorithmTestClass, which
+        // grew the same serialize-without-relegating branch (see CausalContentionSerialClassNames).
+        //
+        // OptimizerStep_ParamL2_DoesNotExplode additions (VALLE2 / YingLong / SambaLanguageModel /
+        // MGLDVSR). That invariant performs exactly ONE Train call plus two whole-parameter L2 sweeps,
+        // so the float / iteration-cap rungs of the ladder cannot reach it — there is no iteration
+        // count to trim, and VALLE2, SambaLanguageModel and MGLDVSR had ALREADY been through rungs 1-2
+        // (all four are <float>; VALLE2 also carries TrainingIterations => 2 and MoreData 1/2, and
+        // MGLDVSR is additionally on the nightly HeavyTimeout lane). Measured ALONE on the CI-matched
+        // Release build, each against its 120 s gate:
+        //   VALLE2              11 s     SambaLanguageModel   7 s
+        //   MGLDVSR             10 s     YingLong             8 s
+        // Eleven to seventeen times of headroom, which is the innocent-bystander profile above and
+        // NOT a slow test: shrinking these fixtures would cost paper fidelity to fix a queueing
+        // problem. Serialize them instead so the one training step gets the machine.
+        //
+        // METER / RealESRGANVideo / SECBERT / VoiceCraft join for the same measured reason. All four
+        // are already deep in the ladder — every one is <float>, METER and RealESRGANVideo also carry
+        // the HeavyTrainingTimeout iteration caps, and METER is on the nightly HeavyTimeout lane — yet
+        // they still failed. A 16-class run of this whole group at full xUnit width produced 41
+        // failures and EVERY ONE reported "[1 ms]", i.e. all 41 were xUnit timeout aborts and not one
+        // was a real assertion failure. The tests that fell over include VoiceCraft's
+        // OutputDimension_ShouldMatchExpectedShape and FiniteSpectralEnergy — single-forward shape
+        // checks that cannot plausibly need 120 s of CPU and had passed seconds earlier when run
+        // alone. That is starvation, not compute.
+        //
+        // The same run also contained the control that settles which lever is the right one:
+        // CycleGANTurboModel was in the batch, is foundation-scale, and finished with ZERO failures —
+        // it is the one member already in FoundationScaleSerial. METER and MGLDVSR were also in the
+        // batch, are also tagged HeavyTimeout, and still failed 3 and 4 tests. So the HeavyTimeout
+        // trait does NOT protect a class from contention (it only chooses a lane, and the nightly lane
+        // is just as wide); DisableParallelization does. Adding more rungs of float/cap/shrink here
+        // would have degraded paper fidelity without touching the cause.
+        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former"
+            or "VALLE2" or "YingLong" or "SambaLanguageModel" or "MGLDVSR"
+            or "METER" or "RealESRGANVideo" or "SECBERT" or "VoiceCraft")
             sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
         if (IsHeavyTimeoutGeneratedModel(model.ClassName))
         {
@@ -17425,6 +17517,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
+        // Core-contention casualties among the causal-discovery algorithms — the same
+        // serialize-without-relegating treatment EmitGeneratedTestClass applies to ISTFTNet /
+        // VFIMamba, and the path PartitionMCMCAlgorithm was always MEANT to take. (Its entry in
+        // that other method is dead code: causal algorithms are emitted here, never there, so the
+        // documented PartitionMCMCAlgorithm fix has never actually been applied to a build.)
+        //
+        // DiscoverStructure_MoreDataDoesNotDegradeQuality calls DiscoverStructure twice, at 100 and
+        // 400 samples, against a 60 s gate. Measured ALONE on the CI-matched Release build:
+        //   CGNNAlgorithm   4 s     GraNDAGAlgorithm   6 s
+        //   DAGMANonlinear  1 s     OrderMCMCAlgorithm 5 s
+        // Ten to sixty times of headroom — these are not slow, they are starved while queued, the
+        // exact profile (13 s / 60 s, 14 s / 60 s) recorded for PartitionMCMCAlgorithm. Capping
+        // their epoch/sample counts further would change the structure they recover and put the
+        // recovery invariants at risk to fix a scheduling problem, so serialize instead.
+        //
+        // DAGMANonlinear is included even though it measures 1 s: it already sits at rung 3 (an
+        // FP32 boundary adapter plus MaxIterations = 250 / HiddenUnits = 4), so there is no cheaper
+        // rung left for it, and it shares the failure with its three siblings here.
+        if (category == AlgorithmCategory.CausalDiscovery && CausalContentionSerialClassNames.Contains(testClassName))
+            sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
+
         // DECI has exhausted the generated-shard mitigation ladder: its fixture is FP32,
         // capped through public options, and narrowed to 16 hidden units. It passes all
         // invariants alone, but still holds a shard worker beyond the 60-second gate and

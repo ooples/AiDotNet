@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -51,7 +52,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// LoHa uses MORE parameters than LoRA but models element-wise weight interactions via Hadamard products.
 /// </para>
 /// </remarks>
-public class LoHaAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Low-rank matrices A with dimensions (rank, inputSize, outputSize).
@@ -158,24 +160,6 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         // Initialize parameter vector
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromMatrices();
-    }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// LoHa has 2 * rank * inputSize * outputSize parameters (A and B matrices for each rank).
-    /// This is more than standard LoRA but still far less than full fine-tuning.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            int inputSize = GetInputShape()[0];
-            int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-            int lohaParams = 2 * Rank * inputSize * outputSize;
-            return _freezeBaseLayer ? lohaParams : (_baseLayer.ParameterCount + lohaParams);
-        }
     }
 
     /// <summary>
@@ -405,30 +389,6 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromMatrices();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing all LoHa parameters (A and B matrices for all ranks).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all LoHa parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateMatricesFromParameters();
     }
 
     /// <summary>

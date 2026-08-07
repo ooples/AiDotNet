@@ -21,6 +21,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
+[AutoParameters]
 public sealed partial class RowParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
@@ -33,7 +34,6 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>
     private Tensor<T> _bias;          // [outputSize] (replicated)
 
     public override bool SupportsTraining => true;
-    public override long ParameterCount => _outputSize * (long)_localInputSize + _outputSize;
     public int LocalInputSize => _localInputSize;
 
     public RowParallelLinear(
@@ -99,34 +99,6 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>
                 _weightShard[o, i] = fullWeight[o, start + i];
             _bias[o] = fullBias[o];
         }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new T[ParameterCount];
-        int idx = 0;
-        for (int o = 0; o < _outputSize; o++)
-            for (int i = 0; i < _localInputSize; i++)
-                p[idx++] = _weightShard[o, i];
-        for (int o = 0; o < _outputSize; o++)
-            p[idx++] = _bias[o];
-        return new Vector<T>(p);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new System.ArgumentNullException(nameof(parameters));
-        if (parameters.Length != ParameterCount)
-            throw new System.ArgumentException(
-                $"Expected {ParameterCount} parameters (out {_outputSize} x localIn {_localInputSize} + bias {_outputSize}), got {parameters.Length}.",
-                nameof(parameters));
-        int idx = 0;
-        for (int o = 0; o < _outputSize; o++)
-            for (int i = 0; i < _localInputSize; i++)
-                _weightShard[o, i] = parameters[idx++];
-        for (int o = 0; o < _outputSize; o++)
-            _bias[o] = parameters[idx++];
     }
 
     public override void UpdateParameters(T learningRate)

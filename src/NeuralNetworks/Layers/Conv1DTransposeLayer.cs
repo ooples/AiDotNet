@@ -45,6 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 2, 4, 2, 0, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class Conv1DTransposeLayer<T> : LayerBase<T>
 {
     private int _inputChannels;
@@ -68,26 +69,6 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
     /// or a pending flag, so MusicSourceSeparator failed it the moment the count became honest.
     /// </remarks>
     public override bool HasUninitializedParameters => !IsShapeResolved;
-
-    /// <remarks>
-    /// Mirrors <see cref="GetParameters"/>, which returns an EMPTY vector until the shape resolves.
-    /// This guessed <c>inputChannels = 1</c> in that state and reported a full parameter total for
-    /// weights that did not exist, so the two surfaces disagreed for every unresolved instance.
-    /// MusicSourceSeparator is the visible case — its Demucs decoder is built from these — but the
-    /// damage is not limited to the reported number: a parent slices the flat vector by each
-    /// child's ParameterCount, so a child claiming parameters it cannot supply misaligns every
-    /// slice after it during a restore. Same correction as <see cref="Conv1DLayer{T}"/> and
-    /// <see cref="ConvolutionalLayer{T}"/>; "not sized yet" is reported by
-    /// <c>HasUninitializedParameters</c>, never by a fabricated count.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            if (!IsShapeResolved) return 0L;
-            return ((long)_inputChannels * _outputChannels * _kernelSize) + _outputChannels;
-        }
-    }
 
     public override bool SupportsTraining => true;
 
@@ -285,72 +266,6 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         // [B, C_out, 1, T_out] -> [B, C_out, T_out]
         return Engine.Reshape(activated,
             new[] { activated.Shape[0], activated.Shape[1], activated.Shape[3] });
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        if (!IsShapeResolved)
-        {
-            return new Vector<T>(0);
-        }
-        return Vector<T>.Concatenate(
-            new Vector<T>(_kernels.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!IsShapeResolved)
-        {
-            // Nothing to restore. GetParameters() returns an empty vector while the shape is
-            // deferred, and ParameterCount now agrees with it, so an empty vector here is the
-            // faithful round-trip of "this layer had nothing to save yet" -- not a malformed
-            // payload. Inferring C_in from a length of 0 is impossible, and throwing made a clone
-            // of an un-forwarded model fail outright ("Cannot infer inputChannels ... from 0
-            // parameters"). The layer stays deferred and sizes itself on the first forward,
-            // exactly as it would have without the round-trip.
-            if (parameters.Length == 0) return;
-
-            // Layout: kernels [C_in, C_out, 1, K] + biases [C_out]. Solve for C_in.
-            int candidateInputChannels = (parameters.Length - _outputChannels) /
-                                         (_outputChannels * _kernelSize);
-            if (candidateInputChannels <= 0
-                || candidateInputChannels * _outputChannels * _kernelSize + _outputChannels != parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Cannot infer inputChannels for Conv1DTransposeLayer from {parameters.Length} parameters " +
-                    $"(outputChannels={_outputChannels}, kernelSize={_kernelSize}).");
-            }
-            _inputChannels = candidateInputChannels;
-            // The placeholder MUST be rank-3 [B, C, T]: ResolveFromShape runs the normal
-            // first-forward resolution and OnFirstForward rejects anything that is not rank-3.
-            // Passing the rank-2 [C, T] shape (the batch axis was omitted) made every Clone /
-            // Deserialize path that reaches SetParameters before the first forward throw
-            // "Conv1DTransposeLayer requires rank-3 [B, C, T] input; got rank 2" — which is what
-            // broke Serialize_Deserialize_ShouldPreserveBehavior.
-            ResolveFromShape(new[] { 1, candidateInputChannels, MinValidInputLength() });
-            _kernels = AllocateLazyWeight([candidateInputChannels, _outputChannels, 1, _kernelSize]);
-            _biases = AllocateLazyWeight([_outputChannels]);
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-        }
-
-        int expectedLength = _kernels.Length + _biases.Length;
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedLength} parameters, but got {parameters.Length}");
-        }
-
-        // In-place copy preserves the persistent-tensor identities registered above
-        // (same pattern as Conv1DLayer.SetParameters).
-        parameters.AsSpan().Slice(0, _kernels.Length).CopyTo(_kernels.Data.Span);
-        parameters.AsSpan().Slice(_kernels.Length, _biases.Length).CopyTo(_biases.Data.Span);
-
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <inheritdoc/>

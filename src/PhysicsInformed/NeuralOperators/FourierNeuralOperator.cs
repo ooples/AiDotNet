@@ -911,7 +911,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// The spectral convolution is key: it's a global operation that couples
     /// all spatial points, allowing the network to capture long-range dependencies.
     /// </remarks>
-    public class FourierLayer<T> : NeuralNetworks.Layers.LayerBase<T>
+    [AutoParameters]
+    public partial class FourierLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     {
         private readonly INumericOperations<T> _numOps;
         private readonly int _width;
@@ -1012,60 +1013,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return _activation.Activate(combined);
         }
 
-        public override Vector<T> GetParameters()
-        {
-            int spectralCount = _spectralWeightsReal.Length;
-            int pointwiseCount = _pointwiseWeights.Length;
-            int biasCount = _pointwiseBias.Length;
-
-            var parameters = new Vector<T>(spectralCount * 2 + pointwiseCount + biasCount);
-            int index = 0;
-
-            // Layout: [real spectral weights, imag spectral weights, pointwise weights, pointwise bias].
-            var realSpan = _spectralWeightsReal.Data.Span;
-            var imagSpan = _spectralWeightsImag.Data.Span;
-            for (int i = 0; i < spectralCount; i++) parameters[index++] = realSpan[i];
-            for (int i = 0; i < spectralCount; i++) parameters[index++] = imagSpan[i];
-
-            var pointwiseSpan = _pointwiseWeights.Data.Span;
-            for (int i = 0; i < pointwiseCount; i++) parameters[index++] = pointwiseSpan[i];
-
-            var biasSpan = _pointwiseBias.Data.Span;
-            for (int i = 0; i < biasCount; i++) parameters[index++] = biasSpan[i];
-
-            return parameters;
-        }
-
-        public override void SetParameters(Vector<T> parameters)
-        {
-            if (parameters.Length != ParameterCount)
-            {
-                throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.");
-            }
-
-            int spectralCount = _spectralWeightsReal.Length;
-            int pointwiseCount = _pointwiseWeights.Length;
-            int biasCount = _pointwiseBias.Length;
-            int index = 0;
-
-            // Write in place so engine persistent tensor references stay valid.
-            var realSpan = _spectralWeightsReal.Data.Span;
-            var imagSpan = _spectralWeightsImag.Data.Span;
-            for (int i = 0; i < spectralCount; i++) realSpan[i] = parameters[index++];
-            for (int i = 0; i < spectralCount; i++) imagSpan[i] = parameters[index++];
-
-            var pointwiseSpan = _pointwiseWeights.Data.Span;
-            for (int i = 0; i < pointwiseCount; i++) pointwiseSpan[i] = parameters[index++];
-
-            var biasSpan = _pointwiseBias.Data.Span;
-            for (int i = 0; i < biasCount; i++) biasSpan[i] = parameters[index++];
-
-            Engine.InvalidatePersistentTensor(_spectralWeightsReal);
-            Engine.InvalidatePersistentTensor(_spectralWeightsImag);
-            Engine.InvalidatePersistentTensor(_pointwiseWeights);
-            Engine.InvalidatePersistentTensor(_pointwiseBias);
-        }
-
         public override Vector<T> GetParameterGradients()
         {
             // Tape-based training computes gradients through GradientTape<T> on
@@ -1078,12 +1025,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             // No-op: see GetParameterGradients — no persistent gradient buffers.
         }
-
-        public override long ParameterCount =>
-            // Cast first term to long so the sum is 64-bit before any
-            // addend can wrap. Spectral weights for high-resolution
-            // physics solvers can each approach int.MaxValue / 2 alone.
-            (long)_spectralWeightsReal.Length * 2 + _pointwiseWeights.Length + _pointwiseBias.Length;
 
         public override void ResetState()
         {

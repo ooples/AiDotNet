@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+[AutoParameters]
 public partial class InstanceNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
@@ -372,52 +373,6 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_gamma);
         Engine.InvalidatePersistentTensor(_beta);
     }
-
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing gamma and beta parameters (if affine) or empty vector.</returns>
-    public override Vector<T> GetParameters()
-    {
-        if (!_affine)
-            return new Vector<T>(0);
-
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!_affine)
-        {
-            if (parameters.Length != 0)
-                throw new ArgumentException("Non-affine InstanceNorm has no parameters, but received " + parameters.Length);
-            return;
-        }
-
-        int totalParams = _gamma.Length + _beta.Length;
-
-        if (parameters.Length != totalParams)
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-
-        // Write in-place to preserve engine persistent tensor references
-        var gSpan = _gamma.Data.Span;
-        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
-        var bSpan = _beta.Data.Span;
-        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
-    }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => _affine ? _numChannels * 2 : 0;
 
     /// <summary>
     /// Resets the internal state of the layer.

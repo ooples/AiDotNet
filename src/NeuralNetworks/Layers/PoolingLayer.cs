@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 2")]
+[AutoParameters]
 public partial class PoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -393,31 +394,6 @@ public partial class PoolingLayer<T> : LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the pooling layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since PoolingLayer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. Since PoolingLayer
-    /// has no trainable parameters, it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
-    /// 
-    /// Since PoolingLayer:
-    /// - Only performs fixed mathematical operations (max or average calculation)
-    /// - Has no weights, biases, or other learnable parameters
-    /// - The method returns an empty list
-    /// 
-    /// This is different from layers like Dense layers, which would return their weights and biases.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // PoolingLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

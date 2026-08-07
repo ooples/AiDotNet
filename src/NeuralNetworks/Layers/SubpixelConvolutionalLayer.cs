@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 2, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -376,29 +377,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly T _weightDecay;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> for this layer, as it contains trainable parameters (kernels and biases).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the subpixel convolutional layer can be trained through backpropagation.
-    /// Since this layer has trainable parameters (kernels and biases), it supports training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has internal values (kernels and biases) that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// For this layer, the value is always true because it needs to learn which patterns
-    /// are most important for upscaling the input effectively.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -1006,34 +984,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _biasGradients = null;
     }
 
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (kernels and biases) of the layer and combines them into a
-    /// single vector. This is useful for optimization algorithms that operate on all parameters at once, or for
-    /// saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include all kernels and biases from the layer
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var kGrad = _kernelGradients != null ? new Vector<T>(_kernelGradients.ToArray()) : new Vector<T>(_kernels.Length);
@@ -1045,28 +995,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     {
         _kernelGradients = null;
         _biasGradients = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: _kernels/_biases are still 0-shaped (channel count
-        // unknown). Buffer the vector and replay from OnFirstForward
-        // after _inputDepth is resolved and the tensors are allocated.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int idx = 0;
-        var kSpan = _kernels.Data.Span;
-        for (int i = 0; i < _kernels.Length; i++) kSpan[i] = parameters[idx++];
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < _biases.Length; i++) bSpan[i] = parameters[idx++];
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     private Vector<T>? _pendingParameters;

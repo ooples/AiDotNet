@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -45,7 +46,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// - When LoRA is still too expensive
 /// </para>
 /// </remarks>
-public class VeRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Shared frozen random matrix A (inputSize × rank) used by all VeRA adapters.
@@ -109,33 +111,6 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// Stored intermediate value (B * A * input) from forward pass, needed for backward pass.
     /// </summary>
     private Matrix<T>? _lastIntermediate;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (only the scaling vectors d and b).
-    /// </summary>
-    /// <remarks>
-    /// VeRA only trains the scaling vectors, not the shared matrices.
-    /// For a layer with outputSize and rank r, this is: outputSize + rank.
-    /// This is typically 10x fewer parameters than standard LoRA.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Handle case where scaling vectors haven't been initialized yet
-            // (called from base constructor before derived constructor runs)
-            if (_scalingVectorD == null || _scalingVectorB == null)
-            {
-                // Return expected size based on layer dimensions and rank
-                int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-                int veraParams = outputSize + Rank;
-                return _freezeBaseLayer ? veraParams : (_baseLayer.ParameterCount + veraParams);
-            }
-
-            int actualVeraParams = _scalingVectorD.Length + _scalingVectorB.Length;
-            return _freezeBaseLayer ? actualVeraParams : (_baseLayer.ParameterCount + actualVeraParams);
-        }
-    }
 
     /// <summary>
     /// Initializes a new VeRA adapter wrapping an existing layer.
@@ -468,30 +443,6 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromVectors();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector (scaling vectors only).
-    /// </summary>
-    /// <returns>Vector containing VeRA parameters (d and b vectors).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing VeRA parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateVectorsFromParameters();
     }
 
     /// <summary>

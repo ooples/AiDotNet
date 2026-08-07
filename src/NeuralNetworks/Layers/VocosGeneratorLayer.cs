@@ -29,6 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High,
     TestInputShape = "1, 8, 4", TestConstructorArgs = "8, 16, 2, 32, 16, 4")]
+[AutoParameters]
 public partial class VocosGeneratorLayer<T> : LayerBase<T>
 {
     private readonly int _numMels;
@@ -383,27 +384,6 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>
         return Engine.TensorMultiplyScalar(real, NumOps.FromDouble(1.0 / _nFft));
     }
 
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = _inputEmbedding.ParameterCount
-                + _inputNormalization.ParameterCount
-                + _outputNormalization.ParameterCount
-                + _fourierProjection.ParameterCount;
-            for (int i = 0; i < _numBackboneBlocks; i++)
-            {
-                count += _depthwiseConvolutions[i].ParameterCount
-                    + _blockNormalizations[i].ParameterCount
-                    + _blockExpansions[i].ParameterCount
-                    + _blockProjections[i].ParameterCount
-                    + _layerScales[i].Length;
-            }
-            return count;
-        }
-    }
-
     private IEnumerable<(ILayer<T>? Layer, Tensor<T>? Scale)> OrderedParameterParts()
     {
         yield return (_inputEmbedding, null);
@@ -418,49 +398,6 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>
         }
         yield return (_outputNormalization, null);
         yield return (_fourierProjection, null);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var values = new List<T>((int)ParameterCount);
-        foreach (var (layer, scale) in OrderedParameterParts())
-        {
-            if (layer is not null)
-            {
-                var parameters = layer.GetParameters();
-                for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
-            }
-            else if (scale is not null)
-            {
-                for (int i = 0; i < scale.Length; i++) values.Add(scale[i]);
-            }
-        }
-        return new Vector<T>(values.ToArray());
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-
-        int offset = 0;
-        foreach (var (layer, scale) in OrderedParameterParts())
-        {
-            if (layer is not null)
-            {
-                int count = (int)layer.ParameterCount;
-                layer.SetParameters(parameters.Slice(offset, count));
-                offset += count;
-            }
-            else if (scale is not null)
-            {
-                parameters.AsSpan().Slice(offset, scale.Length).CopyTo(scale.Data.Span);
-                Engine.InvalidatePersistentTensor(scale);
-                offset += scale.Length;
-            }
-        }
     }
 
     /// <inheritdoc/>

@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelLoading;
@@ -36,6 +37,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// in a compressed form suitable for diffusion.
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class VAEEncoder<T> : LayerBase<T>
 {
     /// <summary>

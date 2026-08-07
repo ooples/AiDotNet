@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 
@@ -23,6 +24,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AutoParameters]
 public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
 {
     private int _inputDim;
@@ -41,9 +43,6 @@ public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _featureTransform.ParameterCount + _gateTransform.ParameterCount;
 
     /// <summary>
     /// Initializes a Gated Feature Learning Unit.
@@ -136,17 +135,4 @@ public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
         _gateTransform.ResetState();
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var featureParams = _featureTransform.GetParameters();
-        var gateParams = _gateTransform.GetParameters();
-        var result = new Vector<T>(featureParams.Length + gateParams.Length);
-        int offset = 0;
-        for (int i = 0; i < featureParams.Length; i++)
-            result[offset++] = featureParams[i];
-        for (int i = 0; i < gateParams.Length; i++)
-            result[offset++] = gateParams[i];
-        return result;
-    }
 }

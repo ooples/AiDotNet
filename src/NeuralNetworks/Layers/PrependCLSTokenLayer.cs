@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -32,6 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// during training teaches the CLS token to aggregate task-relevant
 /// information from the rest of the sequence.</para>
 /// </remarks>
+[AutoParameters]
 public partial class PrependCLSTokenLayer<T> : LayerBase<T>
 {
     private readonly int _embedDim;
@@ -60,9 +62,6 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>
         for (int i = 0; i < embedDim; i++)
             _cls[0, i] = NumOps.FromDouble(rng.NextGaussian() * initScale);
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _embedDim;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -103,22 +102,6 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>
         var clsRow = Engine.Reshape(_cls, new[] { 1, 1, _embedDim });
         var clsTiled = Engine.TensorTile(clsRow, new[] { batch, 1, 1 });
         return Engine.TensorConcatenate(new[] { clsTiled, input }, axis: 1);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var p = new Vector<T>(_embedDim);
-        for (int i = 0; i < _embedDim; i++) p[i] = _cls[0, i];
-        return p;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _embedDim)
-            throw new ArgumentException($"Expected {_embedDim} params, got {parameters.Length}.");
-        for (int i = 0; i < _embedDim; i++) _cls[0, i] = parameters[i];
     }
 
     /// <inheritdoc/>

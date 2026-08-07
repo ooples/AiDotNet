@@ -26,6 +26,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
+[AutoParameters]
 public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 {
     private readonly int _patchSize;
@@ -48,9 +49,6 @@ public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _projection.ParameterCount + _norm.ParameterCount;
 
     /// <summary>
     /// Gets the number of patches produced by this layer.
@@ -203,43 +201,6 @@ public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         metadata["PatchSize"] = _patchSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["EmbedDim"] = _embedDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var projParams = _projection.GetParameters();
-        var normParams = _norm.GetParameters();
-
-        var result = new T[projParams.Length + normParams.Length];
-        projParams.AsSpan().CopyTo(result.AsSpan(0, projParams.Length));
-        normParams.AsSpan().CopyTo(result.AsSpan(projParams.Length, normParams.Length));
-
-        return new Vector<T>(result);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: _projection's input channel count is unresolved.
-        // Buffer and replay from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int projCount = checked((int)_projection.ParameterCount);
-        int normCount = checked((int)_norm.ParameterCount);
-
-        var projParams = new T[projCount];
-        var normParams = new T[normCount];
-
-        parameters.AsSpan().Slice(0, projCount).CopyTo(projParams);
-        parameters.AsSpan().Slice(projCount, normCount).CopyTo(normParams);
-
-        _projection.SetParameters(new Vector<T>(projParams));
-        _norm.SetParameters(new Vector<T>(normParams));
     }
 
     private Vector<T>? _pendingParameters;

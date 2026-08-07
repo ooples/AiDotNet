@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
+[AutoParameters]
 internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
 {
     private int _maxSequenceLength;
@@ -46,12 +47,16 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// Pre-computed cosine values: cos_cache[pos, i] = cos(pos * freq_i).
     /// Shape: [maxSequenceLength, headDimension / 2].
     /// </summary>
+    // Memoised cos table for a deterministic function of position; recomputed on demand, never learned.
+    [Scratch]
     private Tensor<T> _cosCache;
 
     /// <summary>
     /// Pre-computed sine values: sin_cache[pos, i] = sin(pos * freq_i).
     /// Shape: [maxSequenceLength, headDimension / 2].
     /// </summary>
+    // Memoised sin table for a deterministic function of position; recomputed on demand, never learned.
+    [Scratch]
     private Tensor<T> _sinCache;
 
     private readonly object _cacheLock = new();
@@ -352,12 +357,6 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
         EnsureCacheLength(seqLen);
 
         return RotateTensor(input, 0);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
     }
 
     /// <inheritdoc />

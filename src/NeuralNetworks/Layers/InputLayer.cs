@@ -32,6 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Input)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, SupportsBackpropagation = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+[AutoParameters]
 public partial class InputLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -163,31 +164,6 @@ public partial class InputLayer<T> : LayerBase<T>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return input;
-    }
-
-    /// <summary>
-    /// Returns an empty vector since the input layer has no trainable parameters.
-    /// </summary>
-    /// <returns>An empty vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector since the InputLayer has no trainable parameters.
-    /// It is implemented as required by the LayerBase interface.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because there are no parameters.
-    /// 
-    /// Since the input layer:
-    /// - Has no weights or biases
-    /// - Doesn't have any learnable values
-    /// 
-    /// This method returns an empty vector to indicate there are no parameters.
-    /// Other layers would return their weights and biases here.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // InputLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

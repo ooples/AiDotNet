@@ -30,6 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[AutoParameters]
 public partial class PreLNTransformerBlock<T> : LayerBase<T>
 {
     private readonly RMSNormalizationLayer<T> _norm1;
@@ -287,40 +288,6 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
             yield return _ffnGate;
         yield return _ffnUp;
         yield return _ffnDown;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in OrderedSubLayers())
-                total += layer.ParameterCount;
-            return total;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var layer in OrderedSubLayers())
-            acc = Vector<T>.Concatenate(acc, layer.GetParameters());
-        return acc;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException(
-                $"Expected {expected} parameters, got {parameters.Length}.");
-
-        int offset = 0;
-        foreach (var layer in OrderedSubLayers())
-            SetSubParams(layer, parameters, ref offset);
     }
 
     private static void SetSubParams(LayerBase<T> layer, Vector<T> source, ref int offset)

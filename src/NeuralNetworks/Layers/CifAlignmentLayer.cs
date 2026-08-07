@@ -58,6 +58,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
+[AutoParameters]
 public partial class CifAlignmentLayer<T> : LayerBase<T>
 {
     private readonly int _encoderDim;
@@ -88,9 +89,6 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>
     /// predictor untrainable and Paraformer's L_MAE term (Eq 6) impossible to express.
     /// </remarks>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _alphaPredictor.ParameterCount;
 
     /// <summary>
     /// Whether the paper's training-time alpha scaling is applied. Defaults to <c>true</c>.
@@ -398,12 +396,6 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
         => _alphaPredictor.SetTrainableParameters(parameters);
-
-    public override Vector<T> GetParameters() => _alphaPredictor.GetParameters();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-        => _alphaPredictor.SetParameters(parameters);
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()

@@ -67,6 +67,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 2, Cost = ComputeCost.Medium, TestInputShape = "1, 3", TestConstructorArgs = "3, 16, 8, 2")]
+[AutoParameters]
 public partial class OccupancyNetworkDecoder<T> : LayerBase<T>
 {
     private readonly int _pointDim;
@@ -265,51 +266,6 @@ public partial class OccupancyNetworkDecoder<T> : LayerBase<T>
         yield return _gammaF;
         yield return _betaF;
         yield return _fcOut;
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in SubLayers())
-                total += layer.ParameterCount;
-            return total;
-        }
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        foreach (var layer in SubLayers())
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-                parameters.Add(p[i]);
-        }
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-
-        int idx = 0;
-        foreach (var layer in SubLayers())
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count == 0) continue;
-            var sub = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-                sub[i] = parameters[idx++];
-            layer.SetParameters(sub);
-        }
     }
 
     /// <inheritdoc />

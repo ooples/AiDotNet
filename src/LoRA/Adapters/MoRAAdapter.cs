@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -106,7 +107,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// learning to reason about medical cases using existing knowledge.
 /// </para>
 /// </remarks>
-public class MoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Square matrix M for high-rank adaptation (r×r dimensions).
@@ -433,96 +435,6 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Rebuild Parameters buffer to reflect updated _matrixM and _baseLayer
         RebuildParameterSnapshot();
-    }
-
-    /// <summary>
-    /// Gets the current parameter values (base layer + MoRA matrix M).
-    /// </summary>
-    /// <returns>A cloned vector containing all parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// Since MoRA does not use the standard LoRA layer architecture, this method overrides
-    /// the base implementation to pack parameters from the base layer (if not frozen) and
-    /// the square matrix M directly.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the parameter values (base layer + MoRA matrix M).
-    /// </summary>
-    /// <param name="parameters">Parameter vector to set.</param>
-    /// <exception cref="ArgumentException">Thrown if parameter count doesn't match ParameterCount.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method unpacks the parameter vector into the base layer (if not frozen) and
-    /// the square matrix M. The parameter layout is:
-    /// - Base layer parameters (if !_freezeBaseLayer): [0 .. baseLayerParamCount)
-    /// - Matrix M parameters (row-major): [baseLayerParamCount .. ParameterCount)
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        // Clone into Parameters buffer
-        Parameters = parameters.Clone();
-
-        int idx = 0;
-
-        // Unpack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack matrix M parameters (row-major order)
-        for (int i = 0; i < _matrixM.Rows; i++)
-        {
-            for (int j = 0; j < _matrixM.Columns; j++)
-            {
-                _matrixM[i, j] = parameters[idx++];
-            }
-        }
-    }
-
-    public override long ParameterCount
-    {
-        get
-        {
-            // During base class construction, _squareRank is not yet initialized (it's 0).
-            // In this phase, we need to return a parameter count that satisfies the base class,
-            // which includes the base layer's parameters and the placeholder LoRA layer's parameters.
-            if (_squareRank == 0)
-            {
-                int baseLayerParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-                // The _loraLayer is created in CreateLoRALayer, so it should be available.
-                // Its parameter count is needed for the base class's internal parameter management.
-                // CreateLoRALayer uses rank=1 for the placeholder LoRA layer.
-                int loraLayerParams = (int)(_loraLayer?.ParameterCount ?? (GetInputShape()[0] * 1 + GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0] * 1));
-                return baseLayerParams + loraLayerParams;
-            }
-            else
-            {
-                // After MoRAAdapter's constructor has run and _squareRank is initialized,
-                // the actual trainable parameters are from _matrixM and the base layer (if not frozen).
-                int moraParams = _squareRank * _squareRank;
-                int baseParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-                return baseParams + moraParams;
-            }
-        }
     }
 
     public override ILayer<T> MergeToOriginalLayer()

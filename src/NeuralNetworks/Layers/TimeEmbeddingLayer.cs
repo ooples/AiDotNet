@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 1", TestConstructorArgs = "8, 16")]
+[AutoParameters]
 public partial class TimeEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -115,10 +116,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     private Tensor<T>? _gpuPreActivation;
     private int[]? _gpuInputShape;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    public override long ParameterCount => _linear1Weights.Length + _linear1Bias.Length + _linear2Weights.Length + _linear2Bias.Length;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -428,47 +425,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         _linear1Bias = Engine.TensorSubtract(_linear1Bias, Engine.TensorMultiplyScalar(_linear1BiasGradient, learningRate));
         _linear2Weights = Engine.TensorSubtract(_linear2Weights, Engine.TensorMultiplyScalar(_linear2WeightsGradient, learningRate));
         _linear2Bias = Engine.TensorSubtract(_linear2Bias, Engine.TensorMultiplyScalar(_linear2BiasGradient, learningRate));
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_linear1Weights);
-        Engine.InvalidatePersistentTensor(_linear1Bias);
-        Engine.InvalidatePersistentTensor(_linear2Weights);
-        Engine.InvalidatePersistentTensor(_linear2Bias);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new Vector<T>[]
-        {
-            _linear1Weights.ToVector(),
-            _linear1Bias.ToVector(),
-            _linear2Weights.ToVector(),
-            _linear2Bias.ToVector()
-        };
-        return Vector<T>.Concatenate(parts);
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters of the layer from a vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        int size1 = _embeddingDim * _outputDim;
-        int size2 = _outputDim;
-        int size3 = _outputDim * _outputDim;
-        int size4 = _outputDim;
-
-        _linear1Weights = Tensor<T>.FromVector(parameters.Slice(offset, size1), [_embeddingDim, _outputDim]);
-        offset += size1;
-        _linear1Bias = Tensor<T>.FromVector(parameters.Slice(offset, size2), [_outputDim]);
-        offset += size2;
-        _linear2Weights = Tensor<T>.FromVector(parameters.Slice(offset, size3), [_outputDim, _outputDim]);
-        offset += size3;
-        _linear2Bias = Tensor<T>.FromVector(parameters.Slice(offset, size4), [_outputDim]);
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_linear1Weights);

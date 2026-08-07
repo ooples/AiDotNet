@@ -198,7 +198,26 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     public override int TimeEmbeddingDim => _timeEmbeddingDim;
 
     /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived from the SAME layer enumeration <see cref="GetParameters"/> walks, so the two cannot
+    /// disagree. It used to call a hand-written arithmetic estimate over channel multipliers, which
+    /// described nothing that existed: it reported 32,385,924 against a real vector of 295,840,220,
+    /// a factor of nine out. SetParameters pairs the two by length, so a checkpoint restored into
+    /// the wrong tensors and the model silently kept its initial weights.
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var layer in EnumerateLayersInParameterOrder())
+            {
+                if (layer is not null) total += layer.ParameterCount;
+            }
+            return total;
+        }
+    }
 
     /// <inheritdoc />
     public override bool SupportsCFG => true;
@@ -1257,32 +1276,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
-    {
-        long count = 0;
-
-        // Input/output convolutions
-        count += _inputChannels * _baseChannels * 9 + _baseChannels;
-        count += _baseChannels * _outputChannels * 9 + _outputChannels;
-
-        // Time embedding MLP
-        count += (_timeEmbeddingDim / 4) * _timeEmbeddingDim + _timeEmbeddingDim;
-        count += _timeEmbeddingDim * _timeEmbeddingDim + _timeEmbeddingDim;
-
-        // Image conditioning
-        if (_supportsImageConditioning)
-        {
-            count += _inputChannels * _baseChannels + _baseChannels;
-        }
-
-        // Estimate blocks
-        foreach (var channels in _channelMultipliers.Select(mult => _baseChannels * mult))
-        {
-            count += _numResBlocks * (channels * channels * 4); // Spatial + temporal
-        }
-
-        return (int)Math.Min(count, int.MaxValue);
-    }
 
     /// <summary>
     /// Enumerates every layer in the EXACT order used by <see cref="GetParameters"/> /

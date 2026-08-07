@@ -45,6 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = false, IsStateful = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 16")]
+[AutoParameters]
 public partial class ReservoirLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -116,6 +117,8 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     /// It is initialized randomly based on the connection probability and then scaled to
     /// achieve the desired spectral radius. These weights remain fixed during training.
     /// </remarks>
+    // Echo State Network: the reservoir is randomly initialised and scaled to a target spectral radius, then held FIXED. Training only touches the readout, so this is persistent state, not a parameter.
+    [Buffer]
     private Tensor<T> _reservoirWeights;
 
     /// <summary>
@@ -124,6 +127,8 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     /// <remarks>
     /// Shape: [reservoirSize, inputSize]. These weights remain fixed during training.
     /// </remarks>
+    // Fixed input projection, same ESN contract as the reservoir itself.
+    [Buffer]
     private Tensor<T> _inputWeights;
 
     /// <summary>
@@ -136,6 +141,8 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     /// The reservoir state is the output of this layer and contains the features that
     /// will be used by subsequent layers for prediction or classification.
     /// </remarks>
+    // Per-sequence activation state, rebuilt on the next forward; nothing to save.
+    [Scratch]
     private Tensor<T> _reservoirState;
 
     /// <summary>
@@ -564,8 +571,6 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     /// Although these parameters are fixed during training, the reservoir still has them.
     /// </remarks>
     // Both reservoir weights and input weights are serialized for Clone fidelity
-    public override long ParameterCount => _reservoirWeights.Length + _inputWeights.Length;
-
     public override void UpdateParameters(T learningRate)
     {
         // In ESN, we don't update the reservoir weights
@@ -633,62 +638,6 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _reservoirState.Fill(NumOps.Zero);
-    }
-
-    /// <summary>
-    /// Gets all parameters of the reservoir layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all reservoir weights, which remain fixed during training.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all reservoir weights as a single vector. In Echo State Networks, these weights
-    /// are randomly initialized and remain fixed during training, so this method is primarily useful for
-    /// inspection or manual modification of the weights, rather than for training purposes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method lets you access the fixed random weights of the reservoir.
-    /// 
-    /// Even though the reservoir weights don't change during training, this method provides access to them for:
-    /// - Inspecting the weight values
-    /// - Saving the weights for later use
-    /// - Manually modifying the weights if needed
-    /// - Research or experimental purposes
-    /// 
-    /// Remember that in Echo State Networks:
-    /// - These weights are set randomly during initialization
-    /// - They are scaled to achieve the desired spectral radius
-    /// - They remain fixed throughout the network's lifetime
-    /// - Only the weights in a separate readout layer are trained
-    /// 
-    /// This method returns all the weights as a single long list (vector).
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Serialize reservoir weights followed by input weights
-        var result = new Vector<T>(_reservoirWeights.Length + _inputWeights.Length);
-        int idx = 0;
-        for (int i = 0; i < _reservoirSize; i++)
-            for (int j = 0; j < _reservoirSize; j++)
-                result[idx++] = _reservoirWeights[i, j];
-        for (int i = 0; i < _reservoirSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                result[idx++] = _inputWeights[i, j];
-        return result;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedCount = _reservoirWeights.Length + _inputWeights.Length;
-        if (parameters.Length != expectedCount)
-            throw new ArgumentException($"Expected {expectedCount} parameters, got {parameters.Length}");
-
-        int idx = 0;
-        for (int i = 0; i < _reservoirSize; i++)
-            for (int j = 0; j < _reservoirSize; j++)
-                _reservoirWeights[i, j] = parameters[idx++];
-        for (int i = 0; i < _reservoirSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                _inputWeights[i, j] = parameters[idx++];
     }
 
     internal override Dictionary<string, string> GetMetadata()

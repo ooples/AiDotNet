@@ -18,6 +18,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = true, TestInputShape = "1, 17, 8", TestConstructorArgs = "8, 2, 32, 4")]
+[AutoParameters]
 public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenSize;
@@ -141,32 +142,6 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return Forward(input, _configuredFrames);
-    }
-
-    public override long ParameterCount =>
-        _temporalNorm.ParameterCount + _temporalAttention.ParameterCount +
-        _spatialNorm.ParameterCount + _spatialAttention.ParameterCount +
-        _ffnNorm.ParameterCount + _ffnUp.ParameterCount + _ffnDown.ParameterCount;
-
-    public override Vector<T> GetParameters() => ConcatenateLayerVectors(layer => layer.GetParameters());
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            MaterializeLazySublayers();
-
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        int offset = 0;
-        SetSubParams(_temporalNorm, parameters, ref offset);
-        SetSubParams(_temporalAttention, parameters, ref offset);
-        SetSubParams(_spatialNorm, parameters, ref offset);
-        SetSubParams(_spatialAttention, parameters, ref offset);
-        SetSubParams(_ffnNorm, parameters, ref offset);
-        SetSubParams(_ffnUp, parameters, ref offset);
-        SetSubParams(_ffnDown, parameters, ref offset);
     }
 
     private void MaterializeLazySublayers()

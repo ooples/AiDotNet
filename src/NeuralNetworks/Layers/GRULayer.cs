@@ -41,6 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class GRULayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -386,51 +387,6 @@ public partial class GRULayer<T> : LayerBase<T>
     private IGpuBuffer? _gpuFusedCacheGates;
 
     #endregion
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>
-    /// The total number of weight and bias parameters in the GRU layer.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property calculates the total number of trainable parameters in the GRU layer, which includes
-    /// all the weights and biases for the gates and candidate hidden state.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many numbers the layer needs to learn.
-    /// 
-    /// The formula counts:
-    /// - Weights connecting inputs to the GRU (Wz, Wr, Wh)
-    /// - Weights connecting the previous hidden state (Uz, Ur, Uh)
-    /// - Bias values for each gate and candidate state (bz, br, bh)
-    /// 
-    /// A higher parameter count means the model can capture more complex patterns
-    /// but requires more data and time to train effectively.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Report nothing until a real forward pins the input width, matching GetParameters().
-            // Both surfaces now describe the same tensors at every point in the lifecycle.
-            //
-            // This previously mirrored GetParameters()'s square-default GUESS so the two agreed on
-            // a fabricated number. They have to agree, but on the truth: with the guess removed
-            // from GetParameters, mirroring it here would recreate the very mismatch the old
-            // comment set out to prevent. The RelationalGCN crash it cited came from
-            // NeuralNetworkBase.GetParameters sizing its destination from Sum(ParameterCount);
-            // that code is gone and the method now sizes from each layer's real
-            // GetParameters().Length, so an honest 0 is safe.
-            if (_inputSize <= 0)
-                return 0;
-
-            return _hiddenSize * _inputSize * 3 +   // Wz, Wr, Wh
-                   _hiddenSize * _hiddenSize * 3 +  // Uz, Ur, Uh
-                   _hiddenSize * 3;                 // bz, br, bh
-        }
-    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -1550,76 +1506,6 @@ public partial class GRULayer<T> : LayerBase<T>
                 ?? _recurrentActivation.GetType().FullName
                 ?? string.Empty;
         return metadata;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        // An unresolved GRU reports NO parameters, matching ParameterCount below. This used to
-        // resolve to a "standard square default" (inputSize == hiddenSize) and allocate at it, so
-        // merely ASKING a lazy layer for its parameters permanently pinned a guessed width.
-        //
-        // GRU hid that better than LSTM did, which made it the more dangerous of the two. LSTM has
-        // no input-adaptation path, so a wrong pin surfaced loudly as "wIh.Shape[1] (200) must equal
-        // input feature count (32)". GRU HAS one, so a wrong pin instead silently truncates or
-        // zero-pads real input data to the guessed width and trains on it. A quieter bug, not a
-        // smaller one.
-        //
-        // The comment this replaces justified the guess by pointing at a RelationalGCN crash in
-        // NeuralNetworkBase.GetParameters, which used to size its destination buffer from
-        // Sum(ParameterCount). That sizing no longer exists — the method now sizes and copies from
-        // each layer's real GetParameters().Length — so the justification is stale relative to the
-        // code it cites.
-        if (!IsShapeResolved || _inputSize <= 0)
-        {
-            return Vector<T>.Empty();
-        }
-
-        // ResolveFromShape only fixes the SHAPE — the weight tensors are still zero-length until
-        // EnsureInitialized allocates them, so without this the concatenation below returns an empty
-        // vector while ParameterCount (computed from the resolved shapes) reports the full count.
-        // Every consumer that pairs the two then breaks: the finance smoke test asserts
-        // ParameterCount == GetParameters().Length, and SetParameters rejects a correctly-sized saved
-        // vector as a length mismatch.
-        EnsureInitialized();
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_Wz.Data),
-            Vector<T>.FromMemory(_Wr.Data),
-            Vector<T>.FromMemory(_Wh.Data),
-            Vector<T>.FromMemory(_Uz.Data),
-            Vector<T>.FromMemory(_Ur.Data),
-            Vector<T>.FromMemory(_Uh.Data),
-            Vector<T>.FromMemory(_bz.Data),
-            Vector<T>.FromMemory(_br.Data),
-            Vector<T>.FromMemory(_bh.Data)
-        );
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Accept the empty vector an unresolved layer hands out, so a round-trip through
-        // GetParameters -> SetParameters is a no-op rather than an error, and so every caller that
-        // slices a flat vector by ParameterCount (now 0 while lazy) can pass the zero-length slice
-        // straight back. Materializing storage from a zero length would re-introduce a guessed width.
-        if (parameters.Length == 0 && (!IsShapeResolved || _inputSize <= 0))
-        {
-            return;
-        }
-
-        MaterializeParameterStorageFor(parameters.Length);
-
-        // Bulk copy from parameter vector into tensor storage — avoids per-element SetFlat calls
-        int idx = 0;
-        parameters.Slice(idx, _Wz.Length).AsSpan().CopyTo(_Wz.Data.Span); idx += _Wz.Length;
-        parameters.Slice(idx, _Wr.Length).AsSpan().CopyTo(_Wr.Data.Span); idx += _Wr.Length;
-        parameters.Slice(idx, _Wh.Length).AsSpan().CopyTo(_Wh.Data.Span); idx += _Wh.Length;
-        parameters.Slice(idx, _Uz.Length).AsSpan().CopyTo(_Uz.Data.Span); idx += _Uz.Length;
-        parameters.Slice(idx, _Ur.Length).AsSpan().CopyTo(_Ur.Data.Span); idx += _Ur.Length;
-        parameters.Slice(idx, _Uh.Length).AsSpan().CopyTo(_Uh.Data.Span); idx += _Uh.Length;
-        parameters.Slice(idx, _bz.Length).AsSpan().CopyTo(_bz.Data.Span); idx += _bz.Length;
-        parameters.Slice(idx, _br.Length).AsSpan().CopyTo(_br.Data.Span); idx += _br.Length;
-        parameters.Slice(idx, _bh.Length).AsSpan().CopyTo(_bh.Data.Span);
     }
 
     private void MaterializeParameterStorageFor(int parameterLength)

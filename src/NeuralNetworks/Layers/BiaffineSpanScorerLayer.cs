@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // Finite-difference gradchecks require a stationary forward function. Disable dropout only in the
 // generated fixture while preserving the paper-faithful 0.2 production default below.
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null, 0.0, 2")]
+[AutoParameters]
 public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
@@ -68,11 +69,6 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        SumParameterCounts(_startFfnn) + SumParameterCounts(_endFfnn) +
-        _bilinear.Length + _additive.Length + _bias.Length;
 
     /// <summary>
     /// Initializes a new biaffine span scorer.
@@ -320,48 +316,6 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
             for (int i = 0; i < count; i++) slice[i] = source[offset++];
             layer.SetParameters(slice);
         }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var start = StackParameters(_startFfnn);
-        var end = StackParameters(_endFfnn);
-        int total = start.Length + end.Length + _bilinear.Length + _additive.Length + _bias.Length;
-
-        var flat = new Vector<T>(total);
-        int k = 0;
-        for (int i = 0; i < start.Length; i++) flat[k++] = start[i];
-        for (int i = 0; i < end.Length; i++) flat[k++] = end[i];
-        for (int i = 0; i < _bilinear.Length; i++) flat[k++] = _bilinear[i];
-        for (int i = 0; i < _additive.Length; i++) flat[k++] = _additive[i];
-        for (int i = 0; i < _bias.Length; i++) flat[k++] = _bias[i];
-
-        return flat;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // The boundary FFNNs allocate lazily on first Forward. Resolve their shapes from this
-        // layer's known geometry first, or restoring a trained scorer into a fresh instance
-        // compares the payload against a count of just the bilinear/additive/bias tensors.
-        ResolveChildShapes();
-
-        var start = StackParameters(_startFfnn);
-        var end = StackParameters(_endFfnn);
-        int expected = start.Length + end.Length + _bilinear.Length + _additive.Length + _bias.Length;
-
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-
-        int k = 0;
-        SetStackParameters(_startFfnn, parameters, ref k);
-        SetStackParameters(_endFfnn, parameters, ref k);
-
-        for (int i = 0; i < _bilinear.Length; i++) _bilinear[i] = parameters[k++];
-        for (int i = 0; i < _additive.Length; i++) _additive[i] = parameters[k++];
-        for (int i = 0; i < _bias.Length; i++) _bias[i] = parameters[k++];
     }
 
     /// <inheritdoc/>

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using System;
 using AiDotNet.Interfaces;
@@ -47,7 +48,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// (Koohpayegani et al., ICLR 2024) - https://arxiv.org/abs/2310.02556
 /// </para>
 /// </remarks>
-public class NOLAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Random number generator with fixed seed for reproducible basis generation.
@@ -203,30 +205,6 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
         int nolaParams = 2 * _numBasis;
         Parameters = new Vector<T>(_freezeBaseLayer ? nolaParams : (int)(_baseLayer.ParameterCount + nolaParams));
         UpdateParametersFromCoefficients();
-    }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// For NOLA, this is just 2 * numBasis (coefficients for A and B), plus base layer parameters if not frozen.
-    /// This is dramatically smaller than standard LoRA's (inputSize * rank) + (rank * outputSize).
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Guard against being called during base class construction before _numBasis is set
-            if (_numBasis == 0 && _baseLayer != null)
-            {
-                return _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
-            }
-
-            // long throughout — avoid truncation when wrapping a large
-            // foundation-model base layer. Closes #1271.7Bni.
-            long baseCount = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
-            return baseCount + (2L * _numBasis);
-        }
     }
 
     /// <summary>
@@ -549,28 +527,6 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
         {
             ParameterGradients[idx++] = _coefficientsBGradient[i];
         }
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateCoefficientsFromParameters();
     }
 
     /// <summary>

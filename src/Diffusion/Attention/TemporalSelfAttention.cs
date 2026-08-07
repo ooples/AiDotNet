@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -29,6 +30,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Output: same shape as input with temporal information mixed
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class TemporalSelfAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -113,18 +115,6 @@ public partial class TemporalSelfAttention<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _temporalAttention.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return _temporalAttention.GetParameters();
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _temporalAttention.SetParameters(parameters);
     }
 
     /// <inheritdoc />

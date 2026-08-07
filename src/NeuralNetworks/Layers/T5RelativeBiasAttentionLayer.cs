@@ -58,6 +58,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 2")]
+[AutoParameters]
 public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenSize;
@@ -465,54 +466,6 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>
         }
 
         return ret;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            long ownedBias = _ownsBiasTable ? _relativeBiasTable.Length : 0;
-            return _qWeights.Length + _kWeights.Length + _vWeights.Length + _oWeights.Length + ownedBias;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var q = _qWeights.ToVector();
-        var k = _kWeights.ToVector();
-        var v = _vWeights.ToVector();
-        var o = _oWeights.ToVector();
-        if (!_ownsBiasTable)
-            return Vector<T>.Concatenate(Vector<T>.Concatenate(q, k), Vector<T>.Concatenate(v, o));
-        var b = _relativeBiasTable.ToVector();
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(q, k),
-            Vector<T>.Concatenate(Vector<T>.Concatenate(v, o), b));
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException(
-                $"Expected {expected} parameters, got {parameters.Length}.");
-
-        int offset = 0;
-        WriteInto(_qWeights, parameters, ref offset);
-        WriteInto(_kWeights, parameters, ref offset);
-        WriteInto(_vWeights, parameters, ref offset);
-        WriteInto(_oWeights, parameters, ref offset);
-        if (_ownsBiasTable)
-            WriteInto(_relativeBiasTable, parameters, ref offset);
-
-        Engine.InvalidatePersistentTensor(_qWeights);
-        Engine.InvalidatePersistentTensor(_kWeights);
-        Engine.InvalidatePersistentTensor(_vWeights);
-        Engine.InvalidatePersistentTensor(_oWeights);
-        if (_ownsBiasTable) Engine.InvalidatePersistentTensor(_relativeBiasTable);
     }
 
     private static void WriteInto(Tensor<T> dest, Vector<T> src, ref int offset)

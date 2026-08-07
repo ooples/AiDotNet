@@ -44,6 +44,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
+[AutoParameters]
 public partial class FeedForwardLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -294,22 +295,6 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool HasUninitializedParameters => !IsShapeResolved;
 
-    public override long ParameterCount
-    {
-        get
-        {
-            if (_isInitialized) return _weights.Length + _biases.Length;
-            // Compute in long to detect overflow for very large layers; int arithmetic
-            // on (_inputSize * _outputSize) + _outputSize can silently wrap to a
-            // negative value and break parameter-shape validation downstream.
-            long count = (long)_inputSize * _outputSize + _outputSize;
-            if (count > int.MaxValue)
-                throw new OverflowException(
-                    $"FeedForwardLayer parameter count {count} exceeds int.MaxValue " +
-                    $"(inputSize={_inputSize}, outputSize={_outputSize}).");
-            return (int)count;
-        }
-    }
     // Note: the source generator (TrainableParameterGenerator) auto-emits
     // GetTrainableParameters() with an EnsureInitialized() trampoline, so
     // tape-based training that calls CollectParameters before the first Forward()
@@ -782,111 +767,6 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
         _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
-
-        // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) of the layer as a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
-    /// and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
-    /// 
-    /// The parameters include:
-    /// - All the weight values (the majority of the parameters)
-    /// - All the bias values (one per output neuron)
-    /// 
-    /// This combined list is useful for:
-    /// - Saving a trained model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need all parameters together
-    /// 
-    /// For example, a layer with 100 inputs and 10 outputs would have:
-    /// - 1,000 weight parameters (100 × 10)
-    /// - 10 bias parameters (one per output)
-    /// - Totaling 1,010 parameters in the returned vector
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Deferred-shape lazy layer — return empty vector so Clone /
-        // SetParameters / ParameterCount roundtrip on uninitialised
-        // layers (real params materialise on first Forward and the
-        // next Collect picks them up).
-        if (!IsShapeResolved) return new Vector<T>(0);
-
-        EnsureInitialized();
-        // Bulk copy from contiguous tensor storage — replaces nested scalar loops
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
-            Vector<T>.FromMemory(_biases.Data));
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (weights and biases) of the layer from a single vector.
-    /// This is useful for loading saved model weights or for implementing optimization algorithms
-    /// that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learnable values from a provided list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the exact right length
-    /// - The values are distributed back to the weights and biases
-    /// - This allows loading previously trained weights
-    /// 
-    /// Use cases include:
-    /// - Restoring a saved model
-    /// - Using pre-trained weights
-    /// - Testing specific weight configurations
-    /// 
-    /// The method throws an error if the provided vector doesn't contain exactly the right number of values.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters: derive inputSize from vector
-        // length + known outputSize. Fixes #1221 serialize/deserialize drop.
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            int outputSize = OutputShape[0];
-            if (outputSize <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on a deferred-shape FeedForwardLayer before outputSize is known.");
-            int candidateInput = (parameters.Length - outputSize) / outputSize;
-            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputSize for FeedForwardLayer from {parameters.Length} parameters " +
-                    $"and outputSize={outputSize}.");
-            ResolveFromShape(new[] { candidateInput });
-        }
-
-        EnsureInitialized();
-        int weightLen = _weights.Length;
-        int biasLen = _biases.Length;
-        if (parameters.Length != weightLen + biasLen)
-        {
-            throw new ArgumentException($"Expected {weightLen + biasLen} parameters, but got {parameters.Length}");
-        }
-
-        // Bulk copy into contiguous tensor storage in-place — replaces nested scalar loops
-        var src = parameters.AsSpan();
-        src.Slice(0, weightLen).CopyTo(_weights.Data.Span);
-        src.Slice(weightLen, biasLen).CopyTo(_biases.Data.Span);
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);

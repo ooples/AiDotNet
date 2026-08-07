@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -37,6 +38,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// ```
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class DiffusionAttention<T> : LayerBase<T>
 {
     /// <summary>
@@ -280,28 +282,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>
         _standardAttention.UpdateParameters(learningRate);
     }
 
-    /// <inheritdoc />
-    public override long ParameterCount => _flashAttention.ParameterCount;
-
-    /// <summary>
-    /// Gets all layer parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        // Return Flash Attention parameters (they share the same weights conceptually)
-        return _flashAttention.GetParameters();
-    }
-
-    /// <summary>
-    /// Sets all layer parameters from a single vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _flashAttention.SetParameters(parameters);
-        // Sync standard attention weights
-        _standardAttention.SetParameters(parameters);
-    }
-
     /// <summary>
     /// Resets the layer's internal state.
     /// </summary>
@@ -349,6 +329,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>
 /// This enables the model to generate images that match the text description.
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class DiffusionCrossAttention<T> : LayerBase<T>
 {
     /// <summary>
@@ -521,25 +502,6 @@ public partial class DiffusionCrossAttention<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _crossAttention.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount => _crossAttention.ParameterCount;
-
-    /// <summary>
-    /// Gets all layer parameters.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return _crossAttention.GetParameters();
-    }
-
-    /// <summary>
-    /// Sets all layer parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _crossAttention.SetParameters(parameters);
     }
 
     /// <summary>

@@ -24,6 +24,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.FeedForward)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[AutoParameters]
 public partial class MoEFeedForwardLayer<T> : LayerBase<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
@@ -280,36 +281,6 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>
             yield return _sharedUp;
             yield return _sharedDown;
             yield return _sharedGateLogit;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get { long total = 0; foreach (var l in SubLayers()) total += l.ParameterCount; return total; }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var l in SubLayers()) acc = Vector<T>.Concatenate(acc, l.GetParameters());
-        return acc;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-        int offset = 0;
-        foreach (var l in SubLayers())
-        {
-            int count = (int)l.ParameterCount;
-            if (count == 0) continue;
-            l.SetParameters(parameters.Slice(offset, count));
-            offset += count;
         }
     }
 

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -39,7 +40,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// - You're working with very large models
 /// </para>
 /// </remarks>
-public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Whether matrix A is frozen (always true for LoRA-FA).
@@ -54,42 +56,6 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     /// and then frozen, never updated during training.
     /// </remarks>
     public bool IsMatrixAFrozen => _freezeMatrixA;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (only matrix B).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// For LoRA-FA, only matrix B is trainable. Matrix A is frozen, so it doesn't count
-    /// toward trainable parameters. This results in approximately 50% parameter reduction
-    /// compared to standard LoRA.
-    /// </para>
-    /// <para><b>For Beginners:</b> This returns how many parameters will actually be trained.
-    /// Since matrix A is frozen, we only count matrix B's parameters. If the base layer is
-    /// also frozen (typical case), this is just matrix B. Otherwise, it's base layer + matrix B.
-    ///
-    /// For a layer with input size 1000, output size 1000, and rank 8:
-    /// - Matrix B size: rank × outputSize = 8 × 1000 = 8,000 parameters
-    /// - Matrix A size: inputSize × rank = 1000 × 8 = 8,000 parameters (but frozen, so not counted)
-    /// - Total trainable: 8,000 (50% less than standard LoRA's 16,000)
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // CRITICAL: Return full LoRA parameter count (A + B) to match base class invariants
-            // Even though matrix A is frozen, it must be included in the parameter buffer
-            // to avoid IndexOutOfRangeException in base class private helpers
-            // The freeze logic is handled in UpdateParameters, not in buffer sizing
-            if (!_freezeBaseLayer)
-            {
-                return _baseLayer.ParameterCount + _loraLayer.ParameterCount;
-            }
-
-            return _loraLayer.ParameterCount;
-        }
-    }
 
     /// <summary>
     /// Initializes a new LoRA-FA adapter wrapping an existing layer.

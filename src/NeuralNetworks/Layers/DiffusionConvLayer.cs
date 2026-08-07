@@ -51,6 +51,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 4, 128, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var lap = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { lap[i, i] = 2.0; if (i > 0) { lap[i, i-1] = -1.0; lap[i-1, i] = -1.0; } } ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(lap);")]
+[AutoParameters]
 public partial class DiffusionConvLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -1627,39 +1628,6 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var timeParams = new Vector<T>(DiffusionTimes);
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_biases.ToArray()),
-            timeParams);
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = _weights.Length + _biases.Length + DiffusionTimes.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        int idx = 0;
-        _weights = new Tensor<T>(_weights._shape, parameters.Slice(idx, _weights.Length));
-        idx += _weights.Length;
-        _biases = new Tensor<T>(_biases._shape, parameters.Slice(idx, _biases.Length));
-        idx += _biases.Length;
-
-        for (int i = 0; i < DiffusionTimes.Length; i++)
-        {
-            DiffusionTimes[i] = parameters[idx + i];
-        }
-    }
-
-    /// <summary>
     /// Gets the weight tensor.
     /// </summary>
     public override Tensor<T> GetWeights() => _weights;
@@ -1668,11 +1636,6 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// Gets the bias tensor.
     /// </summary>
     public override Tensor<T> GetBiases() => _biases;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => _weights.Length + _biases.Length + DiffusionTimes.Length;
 
     /// <summary>
     /// Creates a deep copy of this layer.

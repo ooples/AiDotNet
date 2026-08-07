@@ -35,6 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 16", TestConstructorArgs = "16, 4, 64, 31")]
+[AutoParameters]
 public partial class BranchformerBlock<T> : LayerBase<T>
 {
     private readonly int _modelDim;
@@ -55,13 +56,6 @@ public partial class BranchformerBlock<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _attention.ParameterCount + _attentionNorm.ParameterCount +
-        _cgmlpNorm.ParameterCount + _cgmlpExpand.ParameterCount +
-        _csguNorm.ParameterCount + _csguConv.ParameterCount +
-        _cgmlpProject.ParameterCount + _merge.ParameterCount;
 
     /// <summary>Initializes a new Branchformer block.</summary>
     /// <param name="modelDim">Model width; input and output are both this wide.</param>
@@ -206,40 +200,6 @@ public partial class BranchformerBlock<T> : LayerBase<T>
         _attention, _attentionNorm, _cgmlpNorm, _cgmlpExpand,
         _csguNorm, _csguConv, _cgmlpProject, _merge
     };
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parts = Children.Select(c => c.GetParameters()).ToArray();
-        int total = parts.Sum(p => p.Length);
-
-        var flat = new Vector<T>(total);
-        int at = 0;
-        foreach (var p in parts)
-            for (int i = 0; i < p.Length; i++) flat[at++] = p[i];
-
-        return flat;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        ResolveChildShapes();
-
-        var children = Children;
-        var sizes = children.Select(c => c.GetParameters().Length).ToArray();
-
-        if (parameters.Length != sizes.Sum())
-            throw new ArgumentException($"Expected {sizes.Sum()} parameters, got {parameters.Length}.", nameof(parameters));
-
-        int at = 0;
-        for (int c = 0; c < children.Length; c++)
-        {
-            var slice = new Vector<T>(sizes[c]);
-            for (int i = 0; i < sizes[c]; i++) slice[i] = parameters[at++];
-            children[c].SetParameters(slice);
-        }
-    }
 
     /// <inheritdoc/>
     /// <remarks>

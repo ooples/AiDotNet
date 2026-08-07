@@ -319,31 +319,6 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         return new LSTMVAE<T>(new LSTMVAEOptions<T>(_options));
     }
 
-    public override long ParameterCount => _encoder.ParameterCount + _decoder.ParameterCount;
-
-    public override Vector<T> GetParameters()
-    {
-        var encoderParams = _encoder.GetParameters();
-        var decoderParams = _decoder.GetParameters();
-        var combined = new Vector<T>(encoderParams.Length + decoderParams.Length);
-        for (int i = 0; i < encoderParams.Length; i++) combined[i] = encoderParams[i];
-        for (int i = 0; i < decoderParams.Length; i++) combined[encoderParams.Length + i] = decoderParams[i];
-        return combined;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int encoderLen = checked((int)_encoder.ParameterCount);
-        var encoderParams = new Vector<T>(encoderLen);
-        for (int i = 0; i < encoderLen && i < parameters.Length; i++) encoderParams[i] = parameters[i];
-        _encoder.SetParameters(encoderParams);
-
-        int decoderLen = checked((int)_decoder.ParameterCount);
-        var decoderParams = new Vector<T>(decoderLen);
-        for (int i = 0; i < decoderLen && encoderLen + i < parameters.Length; i++) decoderParams[i] = parameters[encoderLen + i];
-        _decoder.SetParameters(decoderParams);
-    }
-
     protected override Vector<T> GetLayerParameterGradients()
     {
         var encoderGrads = _encoder.GetParameterGradients();
@@ -418,10 +393,6 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _logVarWeightsGrad;
     private Tensor<T> _logVarBiasGrad;
 
-    public override long ParameterCount => _weights.Length + _bias.Length +
-                                  _meanWeights.Length + _meanBias.Length +
-                                  _logVarWeights.Length + _logVarBias.Length;
-
     public override bool SupportsTraining => true;
 
     public override void ResetState() { ResetGradients(); }
@@ -429,14 +400,6 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         ApplyGradients(learningRate, 1);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new[] { _weights, _bias, _meanWeights, _meanBias, _logVarWeights, _logVarBias })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
     }
 
     /// <summary>
@@ -606,16 +569,6 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             writer.Write(NumOps.ToDouble(tensor[i]));
     }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var t in new[] { _weights, _bias, _meanWeights, _meanBias, _logVarWeights, _logVarBias })
-        {
-            for (int i = 0; i < t.Length && offset < parameters.Length; i++)
-                t[i] = parameters[offset++];
-        }
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var g = new List<T>();
@@ -666,9 +619,6 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _outputWeightsGrad;
     private Tensor<T> _outputBiasGrad;
 
-    public override long ParameterCount => _weights.Length + _bias.Length +
-                                  _outputWeights.Length + _outputBias.Length;
-
     private Tensor<T>? _lastLatent;
     private Tensor<T>? _lastHidden;
 
@@ -679,14 +629,6 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         ApplyGradients(learningRate, 1);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new[] { _weights, _bias, _outputWeights, _outputBias })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
     }
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
@@ -843,16 +785,6 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
                 tensor[i] = NumOps.FromDouble(v);
         }
         return tensor;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var t in new[] { _weights, _bias, _outputWeights, _outputBias })
-        {
-            for (int i = 0; i < t.Length && offset < parameters.Length; i++)
-                t[i] = parameters[offset++];
-        }
     }
 
     public override Vector<T> GetParameterGradients()

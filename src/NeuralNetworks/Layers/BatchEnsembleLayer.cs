@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AutoParameters]
 public partial class BatchEnsembleLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
@@ -89,17 +90,6 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = _weights.Length + _rVectors.Length + _sVectors.Length;
-            if (_bias != null) count += _bias.Length;
-            return count;
-        }
-    }
 
     /// <summary>
     /// Initializes a new instance of the BatchEnsembleLayer class.
@@ -322,52 +312,6 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
         // batchSize × outputDim × numMembers scalar NumOps.Add dispatches.
         var reshaped = Engine.Reshape(output, [batchSize, _numMembers, _outputDim]);
         return Engine.ReduceMean(reshaped, new[] { 1 }, keepDims: false);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        for (int i = 0; i < _weights.Length; i++)
-            paramsList.Add(_weights[i]);
-
-        if (_bias != null)
-        {
-            for (int i = 0; i < _bias.Length; i++)
-                paramsList.Add(_bias[i]);
-        }
-
-        for (int i = 0; i < _rVectors.Length; i++)
-            paramsList.Add(_rVectors[i]);
-
-        for (int i = 0; i < _sVectors.Length; i++)
-            paramsList.Add(_sVectors[i]);
-
-        return new Vector<T>([.. paramsList]);
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters from a vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-
-        for (int i = 0; i < _weights.Length; i++)
-            _weights[i] = parameters[idx++];
-
-        if (_bias != null)
-        {
-            for (int i = 0; i < _bias.Length; i++)
-                _bias[i] = parameters[idx++];
-        }
-
-        for (int i = 0; i < _rVectors.Length; i++)
-            _rVectors[i] = parameters[idx++];
-
-        for (int i = 0; i < _sVectors.Length; i++)
-            _sVectors[i] = parameters[idx++];
     }
 
     /// <summary>

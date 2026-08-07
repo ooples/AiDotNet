@@ -34,6 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = false, ChangesShape = true,
     TestInputShape = "1, 4, 8",
     TestConstructorArgs = "AiDotNet.NeuralNetworks.Layers.SequenceTokenSliceLayer<double>.Position.Last")]
+[AutoParameters]
 public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -58,9 +59,6 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
     {
         _position = position;
     }
-
-    /// <inheritdoc />
-    public override long ParameterCount => 0;
 
     /// <inheritdoc />
     public override bool SupportsTraining => false;
@@ -109,17 +107,6 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
         // the full output gradient. That's the correct backward for a
         // pure index-select.
         return Engine.TensorSliceAxis(input, axis: 1, index: index);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException(
-                $"{nameof(SequenceTokenSliceLayer<T>)} has no parameters; got vector of length {parameters.Length}.");
     }
 
     /// <inheritdoc />

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -47,7 +48,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Total: 24,000 parameters (still 97.6% reduction from 1M!)
 /// </para>
 /// </remarks>
-public class GLoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// The LoRA layer that adapts activations (layer outputs).
@@ -78,29 +80,6 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
     /// control over the complexity of weight vs. activation adaptations.
     /// </remarks>
     public int ActivationRank => _activationAdaptation.Rank;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (both weight and activation adaptations).
-    /// </summary>
-    /// <remarks>
-    /// If the base layer is frozen, this returns the sum of weight and activation LoRA parameters.
-    /// Otherwise, it includes base layer parameters as well.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Sum as long throughout — base layers can have
-            // > int.MaxValue parameters on large foundation models, and
-            // a sufficiently large weight + activation rank could push
-            // the totals past the int boundary even on smaller bases.
-            // Closes #1271.7Bna.
-            long baseCount = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
-            long loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0L;
-            long activationCount = _activationAdaptation != null ? _activationAdaptation.ParameterCount : 0L;
-            return baseCount + loraCount + activationCount;
-        }
-    }
 
     /// <summary>
     /// Initializes a new GLoRA adapter with the specified parameters.
@@ -223,30 +202,6 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters from both adaptations (and base layer if not frozen).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters for both adaptations (and base layer if not frozen).</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateLayersFromParameters();
     }
 
     /// <summary>

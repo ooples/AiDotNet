@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -29,6 +30,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// temporal parameters to be trained without disrupting the spatial generation quality.
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class MotionModule<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -153,48 +155,6 @@ public partial class MotionModule<T> : LayerBase<T>
         _ffnOut.UpdateParameters(learningRate);
         _norm1.UpdateParameters(learningRate);
         _norm2.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parts = new[]
-        {
-            _temporalAttention.GetParameters(),
-            _ffnIn.GetParameters(),
-            _ffnOut.GetParameters(),
-            _norm1.GetParameters(),
-            _norm2.GetParameters()
-        };
-
-        int total = 0;
-        foreach (var p in parts) total += p.Length;
-
-        var combined = new Vector<T>(total);
-        int offset = 0;
-        foreach (var p in parts)
-        {
-            for (int i = 0; i < p.Length; i++)
-                combined[offset + i] = p[i];
-            offset += p.Length;
-        }
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // GetParameters() concatenates sublayer params; allocates once for validation.
-        int expected = GetParameters().Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-
-        int offset = 0;
-        SetSubParams(_temporalAttention, parameters, ref offset);
-        SetSubParams(_ffnIn, parameters, ref offset);
-        SetSubParams(_ffnOut, parameters, ref offset);
-        SetSubParams(_norm1, parameters, ref offset);
-        SetSubParams(_norm2, parameters, ref offset);
     }
 
     private static void SetSubParams(LayerBase<T> layer, Vector<T> parameters, ref int offset)

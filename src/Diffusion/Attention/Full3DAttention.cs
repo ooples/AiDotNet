@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -30,6 +31,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Uses Flash Attention implementation for O(N) memory
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class Full3DAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -113,18 +115,6 @@ public partial class Full3DAttention<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _fullAttention.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return _fullAttention.GetParameters();
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _fullAttention.SetParameters(parameters);
     }
 
     /// <inheritdoc />

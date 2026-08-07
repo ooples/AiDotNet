@@ -34,6 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 10, 4, 3")]
+[AutoParameters]
 public partial class DigitCapsuleLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -233,26 +234,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly int _routingIterations;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because this layer has trainable parameters (weights).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the digit capsule layer supports training through backpropagation.
-    /// The layer has trainable weights that are updated during the training process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer can adjust its internal values during training
-    /// - It will improve its performance as it sees more data
-    /// - It has weights that are updated to make better predictions over time
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -815,35 +796,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights) of the layer as a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
-    /// and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
-    /// 
-    /// The parameters:
-    /// - Are all the weight values that the network learns
-    /// - Are flattened into a single long list (vector)
-    /// - Can be saved to disk or loaded from a previous training session
-    /// 
-    /// This allows you to:
-    /// - Save a trained model for later use
-    /// - Transfer a model's knowledge to another identical model
-    /// - Share trained models with others
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use ToArray() for production-grade parameter extraction
-        return new Vector<T>(_weights.ToArray());
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -890,19 +842,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         _weightsGradient = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _weights.Length)
-        {
-            throw new ArgumentException($"Expected {_weights.Length} parameters, but got {parameters.Length}");
-        }
-
-        // Write parameters directly into a new mutable tensor
-        _weights = new Tensor<T>(_weights._shape);
-        for (int i = 0; i < parameters.Length; i++)
-            _weights[i] = parameters[i];
     }
 
     /// <summary>

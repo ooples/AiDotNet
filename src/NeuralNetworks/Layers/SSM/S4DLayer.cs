@@ -59,6 +59,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+[AutoParameters]
 public partial class S4DLayer<T> : LayerBase<T>
 {
     // Configuration
@@ -153,18 +154,6 @@ public partial class S4DLayer<T> : LayerBase<T>
     /// Gets the inner dimension used for the SSM computation.
     /// </summary>
     public int InnerDimension => _innerDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _aReal.Length + _aImag.Length +
-        _bReal.Length + _bImag.Length +
-        _cReal.Length + _cImag.Length +
-        _dParam.Length +
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length +
-        _logDelta.Length;
 
     /// <summary>
     /// Creates a new S4D (Diagonal State Space) layer.
@@ -1187,49 +1176,6 @@ public partial class S4DLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var tensor in new[]
-        {
-            _aReal, _aImag, _bReal, _bImag, _cReal, _cImag, _dParam,
-            _inputProjectionWeights, _inputProjectionBias,
-            _outputProjectionWeights, _outputProjectionBias,
-            _logDelta
-        })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in new[]
-        {
-            _aReal, _aImag, _bReal, _bImag, _cReal, _cImag, _dParam,
-            _inputProjectionWeights, _inputProjectionBias,
-            _outputProjectionWeights, _outputProjectionBias,
-            _logDelta
-        })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     public override Vector<T> GetParameterGradients()

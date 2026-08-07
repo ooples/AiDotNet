@@ -42,6 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1")]
+[AutoParameters]
 public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
@@ -94,12 +95,6 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     private Tensor<T>? _gpuBn2Out;
     private Tensor<T>? _gpuPreActivation;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    public override long ParameterCount =>
-        _conv1.ParameterCount + _bn1.ParameterCount + _conv2.ParameterCount + _bn2.ParameterCount +
-        (_downsampleConv?.ParameterCount ?? 0) + (_downsampleBn?.ParameterCount ?? 0);
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -392,25 +387,6 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
         _downsampleBn?.UpdateParameters(learningRate);
     }
 
-    /// <summary>
-    /// Gets all trainable parameters.
-    /// </summary>
-    /// <returns>A vector containing all parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        allParams.AddRange(_conv1.GetParameters().ToArray());
-        allParams.AddRange(_bn1.GetParameters().ToArray());
-        allParams.AddRange(_conv2.GetParameters().ToArray());
-        allParams.AddRange(_bn2.GetParameters().ToArray());
-        if (_downsampleConv is not null && _downsampleBn is not null)
-        {
-            allParams.AddRange(_downsampleConv.GetParameters().ToArray());
-            allParams.AddRange(_downsampleBn.GetParameters().ToArray());
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var grads = new List<T>();
@@ -432,20 +408,6 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
         _conv1.ClearGradients(); _bn1.ClearGradients();
         _conv2.ClearGradients(); _bn2.ClearGradients();
         _downsampleConv?.ClearGradients(); _downsampleBn?.ClearGradients();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: every sub-layer's shape is unresolved so each
-        // ParameterCount returns 0 — slicing collapses. Buffer the
-        // whole vector and replay from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        ApplyParameters(parameters);
     }
 
     private Vector<T>? _pendingParameters;

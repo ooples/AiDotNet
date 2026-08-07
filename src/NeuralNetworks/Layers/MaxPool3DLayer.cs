@@ -35,6 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2, 2")]
+[AutoParameters]
 public partial class MaxPool3DLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -335,11 +336,6 @@ public partial class MaxPool3DLayer<T> : LayerBase<T>
         metadata["PoolSize"] = PoolSize.ToString();
         metadata["Stride"] = Stride.ToString();
         return metadata;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
     }
 
     #endregion

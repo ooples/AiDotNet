@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -312,29 +313,6 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _gpuBiasesV;
     #endregion
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training through backpropagation.
-    /// </summary>
-    /// <value>
-    /// Always returns <c>true</c> as separable convolutional layers have trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the separable convolutional layer can be trained using backpropagation.
-    /// The layer contains trainable parameters (kernels and biases) that are updated during the training process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer contains numbers (parameters) that can be adjusted during training
-    /// - It will improve its performance as it sees more examples
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// Think of it like a student who can improve by studying - this layer can get better at its job
-    /// through a process called backpropagation, which adjusts its internal values based on errors it makes.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -770,119 +748,6 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
         _depthwiseKernelsGradient = null;
         _pointwiseKernelsGradient = null;
         _biasesGradient = null;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the layer (depthwise kernels, pointwise kernels, and biases)
-    /// and combines them into a single vector. This is useful for optimization algorithms that operate on all parameters
-    /// at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer into a single list.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include depthwise kernels, pointwise kernels, and biases
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(_depthwiseKernels.ToVector(), _pointwiseKernels.ToVector()),
-            _biases.ToVector());
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters of the layer (depthwise kernels, pointwise kernels, and biases)
-    /// from a single vector. It expects the vector to contain the parameters in the same order as they are retrieved
-    /// by GetParameters(). This is useful for loading saved model weights or for implementing optimization algorithms
-    /// that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer from a single list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with exactly the right number of values
-    /// - The values are distributed to the appropriate places (depthwise kernels, pointwise kernels, and biases)
-    /// - The order must match how they were stored in GetParameters()
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if shape isn't resolved (placeholders with Length 0),
-        // infer inputDepth from the param vector. Param layout:
-        //   depthwise: inputDepth * kernelSize²
-        //   pointwise: inputDepth * outputDepth
-        //   biases: outputDepth
-        //   total = inputDepth * (kernelSize² + outputDepth) + outputDepth
-        if (!IsShapeResolved)
-        {
-            int kernelArea = _kernelSize * _kernelSize;
-            int divisor = kernelArea + _outputDepth;
-            int candidateInputDepth = (parameters.Length - _outputDepth) / divisor;
-            if (candidateInputDepth <= 0
-                || candidateInputDepth * divisor + _outputDepth != parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Cannot infer inputDepth for SeparableConvolutionalLayer from {parameters.Length} parameters " +
-                    $"(outputDepth={_outputDepth}, kernelSize={_kernelSize}).");
-            }
-            // OnFirstForward accepts both rank-3 [H, W, C] (per-sample) and
-            // rank-4 [B, H, W, C] (batched). Pass the rank-3 per-sample form
-            // here — rank-4 with a placeholder leading 1 makes
-            // candidateInputDepth land in the channel slot only by accident
-            // and breaks unrelated rank-checking paths. We don't have a real
-            // H or W at deserialize time, so we use _kernelSize as a non-zero
-            // sentinel that covers the receptive field without affecting
-            // weight shape.
-            ResolveFromShape(new[] { _kernelSize, _kernelSize, candidateInputDepth });
-        }
-
-        int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        int dwLen = _depthwiseKernels.Length;
-        int pwLen = _pointwiseKernels.Length;
-        int biasLen = _biases.Length;
-
-        var dwVec = parameters.Slice(0, dwLen);
-        var pwVec = parameters.Slice(dwLen, pwLen);
-        var biasVec = parameters.Slice(dwLen + pwLen, biasLen);
-
-        _depthwiseKernels = Tensor<T>.FromVector(dwVec, [_inputDepth, _kernelSize, _kernelSize, 1]);
-        _pointwiseKernels = Tensor<T>.FromVector(pwVec, [_inputDepth, 1, 1, _outputDepth]);
-        _biases = Tensor<T>.FromVector(biasVec, [_outputDepth]);
-
-        // Invalidate GPU cache after parameter update
-        Engine.InvalidatePersistentTensor(_depthwiseKernels);
-        Engine.InvalidatePersistentTensor(_pointwiseKernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

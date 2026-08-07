@@ -55,6 +55,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+[AutoParameters]
 internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -131,17 +132,6 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
     /// Gets the dimension per head.
     /// </summary>
     public int HeadDimension => _headDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        // Cast the first term to long so the running sum widens to 64-bit
-        // and never wraps before reaching ToFlatVectorSize on multi-billion-
-        // parameter linear-attention configs.
-        (long)_queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _gateWeights.Length + _gateBias.Length +
-        _outputWeights.Length + _outputBias.Length;
 
     /// <summary>
     /// Creates a new Gated Linear Attention layer.
@@ -374,28 +364,6 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

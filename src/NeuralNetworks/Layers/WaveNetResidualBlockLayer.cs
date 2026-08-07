@@ -39,6 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 16", TestConstructorArgs = "8, 3, 1")]
+[AutoParameters]
 public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -94,16 +95,6 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
 
     public override bool SupportsTraining => true;
 
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var c in InnerConvs()) total += c.ParameterCount;
-            return total;
-        }
-    }
-
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
@@ -127,33 +118,6 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         foreach (var c in InnerConvs()) c.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> all = Vector<T>.Empty();
-        foreach (var c in InnerConvs())
-            all = Vector<T>.Concatenate(all, c.GetParameters());
-        return all;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var c in InnerConvs())
-        {
-            int len = (int)c.ParameterCount;
-            var slice = new Vector<T>(parameters.AsSpan().Slice(offset, len).ToArray());
-            c.SetParameters(slice);
-            offset += len;
-        }
-        if (offset != parameters.Length)
-        {
-            throw new ArgumentException(
-                $"Expected {offset} parameters for WaveNetResidualBlockLayer, but got {parameters.Length}.");
-        }
     }
 
     /// <inheritdoc/>

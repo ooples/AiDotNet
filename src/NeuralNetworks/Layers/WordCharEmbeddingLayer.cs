@@ -57,6 +57,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
+[AutoParameters]
 public partial class WordCharEmbeddingLayer<T> : LayerBase<T>
 {
     private readonly DenseLayer<T> _wordEmbedding;
@@ -236,32 +237,6 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>
         // "unknown", not "absent". Falls back to PAD only for a degenerate size-1 vocabulary.
         if (idx >= vocabSize) return vocabSize > 1 ? 1 : 0;
         return idx;
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>Concatenates child parameters in a fixed order: word table, char table, char BiLSTM.</remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(_wordEmbedding.GetParameters(), _charEmbedding.GetParameters()),
-            _charBiLstm.GetParameters());
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int wordLen = _wordEmbedding.GetParameters().Length;
-        int charLen = _charEmbedding.GetParameters().Length;
-        int biLen = _charBiLstm.GetParameters().Length;
-
-        if (parameters.Length != wordLen + charLen + biLen)
-            throw new ArgumentException(
-                $"Expected {wordLen + charLen + biLen} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-
-        _wordEmbedding.SetParameters(parameters.Slice(0, wordLen));
-        _charEmbedding.SetParameters(parameters.Slice(wordLen, charLen));
-        _charBiLstm.SetParameters(parameters.Slice(wordLen + charLen, biLen));
     }
 
     /// <inheritdoc/>

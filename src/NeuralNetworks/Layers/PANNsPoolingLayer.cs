@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -11,7 +12,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// the training tape. This layer is internal because it is an architectural detail
 /// of the PANNs factory rather than a general channels-last global-pooling variant.
 /// </remarks>
-internal sealed class PANNsPoolingLayer<T> : LayerBase<T>
+[AutoParameters]
+internal sealed partial class PANNsPoolingLayer<T> : LayerBase<T>
 {
     public PANNsPoolingLayer()
         : base(new[] { -1, -1, -1 }, new[] { -1 })
@@ -20,9 +22,6 @@ internal sealed class PANNsPoolingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => false;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
 
     /// <inheritdoc/>
     protected override void OnFirstForward(Tensor<T> input)
@@ -49,16 +48,6 @@ internal sealed class PANNsPoolingLayer<T> : LayerBase<T>
         var temporalMean = Engine.ReduceMean(frequencyMean, new[] { 2 }, keepDims: false);
         var temporalMax = Engine.ReduceMax(frequencyMean, new[] { 2 }, keepDims: false, out _);
         return Engine.TensorAdd(temporalMax, temporalMean);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => Vector<T>.Empty();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException($"PANNsPoolingLayer has no parameters; got {parameters.Length}.", nameof(parameters));
     }
 
     /// <inheritdoc/>

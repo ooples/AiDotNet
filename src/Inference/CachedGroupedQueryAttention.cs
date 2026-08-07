@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -25,7 +26,8 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-internal class CachedGroupedQueryAttention<T> : LayerBase<T>
+[AutoParameters]
+internal partial class CachedGroupedQueryAttention<T> : LayerBase<T>
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;
@@ -405,42 +407,6 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int qSize = _queryWeights.Rows * _queryWeights.Columns;
-        int kvSize = _keyWeights.Rows * _keyWeights.Columns;
-        int oSize = _outputWeights.Rows * _outputWeights.Columns;
-        int totalParams = qSize + kvSize * 2 + oSize + _outputBias.Length;
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var matrix in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            for (int i = 0; i < matrix.Rows; i++)
-                for (int j = 0; j < matrix.Columns; j++)
-                    parameters[index++] = matrix[i, j];
-        }
-        for (int i = 0; i < _outputBias.Length; i++)
-            parameters[index++] = _outputBias[i];
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var matrix in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            for (int i = 0; i < matrix.Rows; i++)
-                for (int j = 0; j < matrix.Columns; j++)
-                    matrix[i, j] = parameters[index++];
-        }
-        for (int i = 0; i < _outputBias.Length; i++)
-            _outputBias[i] = parameters[index++];
     }
 
     /// <inheritdoc />

@@ -59,6 +59,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 2")]
+[AutoParameters]
 public partial class RWKV7Block<T> : LayerBase<T>
 {
     // Configuration
@@ -350,18 +351,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// (arXiv:2503.14456, Eq. 12 and Appendix C, Theorem 1 — quoted there as 0.5452...).
     /// </summary>
     private static readonly double DecayClampLowerBound = Math.Exp(-Math.Exp(-0.5));
-
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var tensor in GetAllParameterTensors())
-                count += tensor.Length;
-            return count;
-        }
-    }
 
     /// <summary>
     /// Creates a new RWKV-7 block.
@@ -1468,19 +1457,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllParameterTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-        return parameters;
-    }
-
-    /// <inheritdoc />
     public override Vector<T> GetParameterGradients()
     {
         var allParams = GetAllParameterTensors();
@@ -1544,20 +1520,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _normBeta1Grad = null;
         _normGamma2Grad = null;
         _normBeta2Grad = null;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in GetAllParameterTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     /// <summary>

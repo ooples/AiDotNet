@@ -42,6 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class ConcatenateLayer<T> : LayerBase<T>
 {
     private readonly int _axis;
@@ -478,29 +479,6 @@ public partial class ConcatenateLayer<T> : LayerBase<T>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         throw new NotSupportedException("ConcatenateLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector as concatenate layers have no parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector because concatenate layers don't have any trainable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because concatenate layers don't have any learnable values.
-    /// 
-    /// Unlike layers with weights and biases, the concatenate layer doesn't have any parameters
-    /// that need to be saved or loaded. It's just a fixed operation that joins inputs together.
-    /// 
-    /// This method is still required because all layers must follow the same interface, but it
-    /// simply returns an empty vector in this case.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Concatenate layers don't have parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

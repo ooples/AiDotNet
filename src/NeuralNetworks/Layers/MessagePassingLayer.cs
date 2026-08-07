@@ -74,6 +74,7 @@ public delegate Vector<T> UpdateFunction<T>(Vector<T> nodeFeatures, Vector<T> ag
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+[AutoParameters]
 public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -252,8 +253,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private IGpuBuffer? _gpuResetMsgWeightsGradient;
     private IGpuBuffer? _gpuResetBiasGradient;
 
-    /// <inheritdoc/>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -823,27 +822,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var tensors = GetParameterTensors();
-        var arrays = tensors.Select(t => t.ToArray()).ToList();
-        int totalLength = arrays.Sum(a => a.Length);
-
-        var result = new Vector<T>(totalLength);
-        int index = 0;
-
-        foreach (var array in arrays)
-        {
-            for (int i = 0; i < array.Length; i++)
-            {
-                result[index++] = array[i];
-            }
-        }
-
-        return result;
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         var gMsgWeights1 = _messageWeights1Gradient != null ? new Vector<T>(_messageWeights1Gradient.ToArray()) : new Vector<T>(_messageWeights1.Length);
@@ -881,39 +859,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         _resetMessageWeightsGradient = null;
         _resetBiasGradient = null;
         _edgeWeightsGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var tensors = GetParameterTensors();
-        int totalLength = tensors.Sum(t => t.Length);
-
-        if (parameters.Length != totalLength)
-        {
-            throw new ArgumentException($"Expected {totalLength} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-        var updatedTensors = new List<Tensor<T>>();
-
-        foreach (var tensor in tensors)
-        {
-            var array = new T[tensor.Length];
-            for (int i = 0; i < array.Length; i++)
-            {
-                array[i] = parameters[index++];
-            }
-
-            var newTensor = new Tensor<T>(tensor._shape);
-            for (int i = 0; i < array.Length; i++)
-            {
-                newTensor[i] = array[i];
-            }
-            updatedTensors.Add(newTensor);
-        }
-
-        SetParameterTensors(updatedTensors);
     }
 
     /// <inheritdoc/>

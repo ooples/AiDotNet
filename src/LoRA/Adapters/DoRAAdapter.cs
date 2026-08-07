@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -58,7 +59,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2402.09353
 /// </para>
 /// </remarks>
-public class DoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Magnitude component of the decomposed weights (scalar per output neuron).
@@ -90,26 +92,6 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
     /// Cached input matrix from forward pass (used for computing magnitude gradients in backward).
     /// </summary>
     private Matrix<T>? _lastInputMatrix;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// DoRA adds the magnitude parameters (one per output neuron) to the standard LoRA parameters.
-    /// Total = (base layer parameters if not frozen) + LoRA parameters + magnitude parameters.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            int baseCount = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-            int loraCount = _loraLayer != null ? (int)_loraLayer.ParameterCount : 0;
-            int magnitudeCount = _magnitude != null ? _magnitude.Length : 0;
-            return baseCount + loraCount + magnitudeCount;
-        }
-    }
 
     /// <summary>
     /// Initializes a new DoRA adapter wrapping an existing layer.
@@ -458,30 +440,6 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromComponents();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing all parameters (base if not frozen, LoRA, magnitude).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateComponentsFromParameters();
     }
 
     /// <summary>

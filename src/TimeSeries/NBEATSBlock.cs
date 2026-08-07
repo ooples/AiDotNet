@@ -30,7 +30,8 @@ namespace AiDotNet.TimeSeries;
 /// Multiple blocks work together, with each one focusing on different aspects of the data.
 /// </para>
 /// </remarks>
-internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly int _lookbackWindow;
     private readonly int _forecastHorizon;
@@ -70,34 +71,6 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     /// Precomputed basis matrix for forecast expansion: [forecastHorizon, thetaSizeForecast].
     /// </summary>
     private Tensor<T> _basisForecast;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the block.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var weight in _fcWeights)
-            {
-                count += weight.Length;
-            }
-            foreach (var bias in _fcBiases)
-            {
-                count += bias.Length;
-            }
-            // Generic blocks: V_b and V_f bases are learnable per Oreshkin et al.
-            // 2020 Section 3.2. Interpretable blocks use fixed polynomial bases
-            // that aren't trainable, so don't include them in the parameter count.
-            if (!_useInterpretableBasis)
-            {
-                count += _basisBackcast.Length;
-                count += _basisForecast.Length;
-            }
-            return count;
-        }
-    }
 
     /// <summary>
     /// Initializes a new instance of the NBEATSBlock class.
@@ -684,105 +657,6 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Gets all parameters (weights and biases) as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        foreach (var weight in _fcWeights)
-        {
-            var vec = weight.ToVector();
-            parameters.AddRange(vec);
-        }
-
-        foreach (var bias in _fcBiases)
-        {
-            var vec = bias.ToVector();
-            parameters.AddRange(vec);
-        }
-
-        // Generic blocks: include trainable V_b / V_f bases so export round-trips
-        // don't drop learned basis state. Ordering (fc weights, fc biases, then
-        // bases) must match SetParameters.
-        if (!_useInterpretableBasis)
-        {
-            parameters.AddRange(_basisBackcast.ToVector());
-            parameters.AddRange(_basisForecast.ToVector());
-        }
-
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all parameters (weights and biases) from a single vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int idx = 0;
-
-        for (int w = 0; w < _fcWeights.Count; w++)
-        {
-            var weight = _fcWeights[w];
-            int len = weight.Length;
-            var data = new T[len];
-            for (int i = 0; i < len; i++)
-            {
-                data[i] = parameters[idx++];
-            }
-            int rows = weight.Shape[0];
-            int cols = weight.Shape[1];
-            _fcWeights[w] = new Tensor<T>(new[] { rows, cols }, new Vector<T>(data));
-        }
-
-        for (int b = 0; b < _fcBiases.Count; b++)
-        {
-            var bias = _fcBiases[b];
-            int len = bias.Length;
-            var data = new T[len];
-            for (int i = 0; i < len; i++)
-            {
-                data[i] = parameters[idx++];
-            }
-            // Preserve the column-shaped [len, 1] layout CreateBiasTensor establishes
-            // so ForwardTape's reshape-free TensorBroadcastAdd keeps working after a
-            // SetParameters round-trip. Same data order; Length is unchanged.
-            _fcBiases[b] = new Tensor<T>(new[] { len, 1 }, new Vector<T>(data));
-        }
-
-        // Generic blocks: restore trainable V_b / V_f bases. Must match the
-        // order GetParameters produced them in.
-        if (!_useInterpretableBasis)
-        {
-            int backcastLen = _basisBackcast.Length;
-            var backcastData = new T[backcastLen];
-            for (int i = 0; i < backcastLen; i++)
-            {
-                backcastData[i] = parameters[idx++];
-            }
-            _basisBackcast = new Tensor<T>(_basisBackcast.Shape.ToArray(), new Vector<T>(backcastData));
-
-            int forecastLen = _basisForecast.Length;
-            var forecastData = new T[forecastLen];
-            for (int i = 0; i < forecastLen; i++)
-            {
-                forecastData[i] = parameters[idx++];
-            }
-            _basisForecast = new Tensor<T>(_basisForecast.Shape.ToArray(), new Vector<T>(forecastData));
-        }
-
-        // Re-register trainable parameters after replacing tensors
-        ReRegisterParameters();
     }
 
     /// <summary>

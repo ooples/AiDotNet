@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using AiDotNet.Attributes;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
@@ -35,6 +36,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// The result is a high-resolution image reconstructed from the compressed latent.
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class VAEDecoder<T> : LayerBase<T>
 {
     /// <summary>

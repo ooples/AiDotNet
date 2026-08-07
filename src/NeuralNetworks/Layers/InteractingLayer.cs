@@ -24,6 +24,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AutoParameters]
 public partial class InteractingLayer<T> : LayerBase<T>
 {
     private readonly int _embeddingDim;
@@ -69,15 +70,6 @@ public partial class InteractingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        // Cast the first term to long so the running sum widens to 64-bit
-        // and never wraps before reaching ToFlatVectorSize. With Q/K/V/O
-        // weight matrices each `embeddingDim × attentionDim` the int sum
-        // can overflow on multi-billion-parameter feature interactors.
-        (long)_queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _outputWeights.Length + (_residualWeights?.Length ?? 0);
 
     /// <summary>
     /// Initializes an interacting layer.
@@ -320,25 +312,6 @@ public partial class InteractingLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
 
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        int total = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var result = new Vector<T>(total);
-        int offset = 0;
-
-        CopyTensorToVector(_queryWeights, result, ref offset);
-        CopyTensorToVector(_keyWeights, result, ref offset);
-        CopyTensorToVector(_valueWeights, result, ref offset);
-        CopyTensorToVector(_outputWeights, result, ref offset);
-        if (_residualWeights != null)
-        {
-            CopyTensorToVector(_residualWeights, result, ref offset);
-        }
-
-        return result;
     }
 
     private static void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int offset)

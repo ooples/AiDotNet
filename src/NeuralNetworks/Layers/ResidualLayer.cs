@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Residual)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.ILayer<double>?)null, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class ResidualLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -590,23 +591,9 @@ public partial class ResidualLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override long ParameterCount => _innerLayer?.ParameterCount ?? 0;
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         return _innerLayer?.GetParameterGradients() ?? new Vector<T>(0);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        return _innerLayer?.GetParameters() ?? Vector<T>.Empty();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _innerLayer?.SetParameters(parameters);
     }
 
     /// <summary>

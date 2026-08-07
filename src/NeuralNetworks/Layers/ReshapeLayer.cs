@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 2, 2 }")]
+[AutoParameters]
 public partial class ReshapeLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -210,30 +211,6 @@ public partial class ReshapeLayer<T> : LayerBase<T>
         Array.Copy(_outputShape, 0, targetShape, 1, _outputShape.Length);
 
         return Engine.Reshape(input, targetShape);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the reshape layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since this layer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector because the ReshapeLayer has no trainable parameters. The method
-    /// is required by the LayerBase class but is essentially a no-op for this layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because the layer has no learnable values.
-    /// 
-    /// As mentioned earlier, the reshape layer doesn't have any weights or biases
-    /// that it learns during training. It just reorganizes the data structure.
-    /// 
-    /// This method returns an empty vector to indicate that there are no parameters to retrieve.
-    /// It exists only because all layers in the network must implement it.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // ReshapeLayer has no trainable parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

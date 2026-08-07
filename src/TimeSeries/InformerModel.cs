@@ -874,23 +874,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
         };
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = _inputProjection.Length + _decoderStartToken.Length +
-                       _outputProjection.Length + _outputBias.Length;
-
-            foreach (var layer in _encoderLayers)
-                count += (int)layer.ParameterCount;
-            foreach (var layer in _distillingLayers)
-                count += (int)layer.ParameterCount;
-            foreach (var layer in _decoderLayers)
-                count += (int)layer.ParameterCount;
-
-            return count;
-        }
-    }
     /// <summary>
     /// Creates a new instance of the Informer model.
     /// </summary>
@@ -1125,20 +1108,8 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private readonly Tensor<T> _layerNorm2Gamma;
     private readonly Tensor<T> _layerNorm2Beta;
 
-    public override long ParameterCount =>
-        _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
-        _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
-        _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
-
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new Tensor<T>[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
-    }
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
@@ -1276,8 +1247,6 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private readonly Tensor<T> _convWeights;  // [embeddingDim, 3] for kernel size 3
     private readonly Tensor<T> _convBias;
 
-    public override long ParameterCount => _convWeights.Length + _convBias.Length;
-
     // Tape accessors so the IEngine forward can run the distilling conv/pool as tracked ops
     // (the [embDim,3] depthwise kernel + [embDim] bias + the stride factor).
     internal Tensor<T> GetConvWeights() => _convWeights;
@@ -1286,13 +1255,6 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        for (int i = 0; i < _convWeights.Length; i++) p.Add(_convWeights[i]);
-        for (int i = 0; i < _convBias.Length; i++) p.Add(_convBias[i]);
-        return new Vector<T>(p.ToArray());
-    }
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
@@ -1415,24 +1377,8 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     internal Tensor<T> GetLayerNorm3Gamma() => _layerNorm3Gamma;
     internal Tensor<T> GetLayerNorm3Beta() => _layerNorm3Beta;
 
-    public override long ParameterCount =>
-        _selfQueryProj.Length + _selfKeyProj.Length + _selfValueProj.Length + _selfOutputProj.Length +
-        _crossQueryProj.Length + _crossKeyProj.Length + _crossValueProj.Length + _crossOutputProj.Length +
-        _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
-        _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2 + _layerNorm3Gamma.Length * 2;
-
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new Tensor<T>[] { _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj,
-            _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj,
-            _ffn1, _ffn1Bias, _ffn2, _ffn2Bias,
-            _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta, _layerNorm3Gamma, _layerNorm3Beta })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
-    }
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 

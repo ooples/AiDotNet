@@ -39,6 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 1, 0.25")]
+[AutoParameters]
 public partial class PReLULayer<T> : LayerBase<T>
 {
     private readonly int _numParameters;
@@ -54,11 +55,6 @@ public partial class PReLULayer<T> : LayerBase<T>
     /// Gets a value indicating that this layer has trainable parameters (α).
     /// </summary>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (the length of α).
-    /// </summary>
-    public override long ParameterCount => _alpha.Length;
 
     /// <summary>
     /// Gets the current α tensor. Shape is <c>[numParameters]</c>.
@@ -169,23 +165,6 @@ public partial class PReLULayer<T> : LayerBase<T>
         }
 
         return Engine.TensorSubtract(positivePart, scaledNegative);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _alpha.ToVector();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _alpha.Length)
-            throw new ArgumentException(
-                $"Expected {_alpha.Length} parameters, but got {parameters.Length}");
-
-        var span = _alpha.Data.Span;
-        for (int i = 0; i < _alpha.Length; i++)
-            span[i] = parameters[i];
-
-        Engine.InvalidatePersistentTensor(_alpha);
     }
 
     /// <inheritdoc/>

@@ -159,17 +159,6 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var l in TrainableSubLayers()) total += l.ParameterCount;
-            return total;
-        }
-    }
-
-    /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 3)
@@ -212,37 +201,6 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
     public override void UpdateParameters(T learningRate)
     {
         foreach (var l in TrainableSubLayers()) l.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> all = Vector<T>.Empty();
-        foreach (var l in TrainableSubLayers())
-            all = Vector<T>.Concatenate(all, l.GetParameters());
-        return all;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Validate the total length BEFORE slicing so a short vector throws the informative
-        // ArgumentException below instead of a generic ArgumentOutOfRangeException from Slice()
-        // mid-loop (mirrors DepthwiseConv1DLayer.SetParameters + SetExtraParameters).
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters for CitrinetBlockLayer, but got {parameters.Length}.");
-        }
-        int offset = 0;
-        foreach (var l in TrainableSubLayers())
-        {
-            int len = (int)l.ParameterCount;
-            var slice = new Vector<T>(parameters.AsSpan().Slice(offset, len).ToArray());
-            l.SetParameters(slice);
-            offset += len;
-        }
     }
 
     /// <inheritdoc/>

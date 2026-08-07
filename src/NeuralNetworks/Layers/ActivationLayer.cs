@@ -25,6 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>()")]
+[AutoParameters]
 public partial class ActivationLayer<T> : LayerBase<T>
 {
     /// <inheritdoc />
@@ -271,47 +272,6 @@ public partial class ActivationLayer<T> : LayerBase<T>
     {
         var activation = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
         return ActivationHelper.ApplyActivation(activation, input, Engine);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of this layer as a flat vector.
-    /// <para>
-    /// This method is useful for operations that need to work with all parameters at once,
-    /// such as certain optimization algorithms, regularization techniques, or when saving a model.
-    /// </para>
-    /// <para>
-    /// Returns an empty vector since activation layers have no trainable parameters.
-    /// Other layer types like Dense layers would return their weights and biases.
-    /// </para>
-    /// </summary>
-    /// <returns>An empty vector representing the layer's parameters</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns all trainable parameters of the layer as a flat vector. For layers with trainable
-    /// parameters, this would involve reshaping multi-dimensional parameters (like weight matrices) into a
-    /// one-dimensional vector. However, since activation layers have no trainable parameters, this method
-    /// returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the layer's trainable values as a single list, but activation layers have none.
-    /// 
-    /// Some operations in neural networks need to work with all parameters at once:
-    /// - Saving and loading models
-    /// - Applying regularization (techniques to prevent overfitting)
-    /// - Using advanced optimization algorithms
-    /// 
-    /// This method provides those parameters as a single vector, but since
-    /// activation layers don't have any trainable parameters, it returns an empty vector.
-    /// 
-    /// For comparison:
-    /// - A Dense layer with 100 inputs and 10 outputs would return a vector with 1,010 values
-    ///   (1,000 weights + 10 biases)
-    /// - This ActivationLayer returns an empty vector with 0 values
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Activation layers don't have parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

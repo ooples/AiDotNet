@@ -53,6 +53,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
+[AutoParameters]
 public partial class ResidualDenseBlock<T> : LayerBase<T>
 {
     #region Fields
@@ -150,8 +151,6 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>
     /// </summary>
     public int NumFeatures => _numFeatures;
 
-    /// <inheritdoc />
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -748,21 +747,6 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var conv in _convLayers)
-        {
-            var convParams = conv.GetParameters();
-            for (int i = 0; i < convParams.Length; i++)
-            {
-                allParams.Add(convParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var gradVectors = _convLayers
@@ -775,26 +759,6 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>
     {
         foreach (var conv in _convLayers)
             conv.ClearGradients();
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: each conv's input shape is unresolved, so its
-        // GetParameters().Length is wrong. Buffer; OnFirstForward replays.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-        foreach (var conv in _convLayers)
-        {
-            int count = conv.GetParameters().Length;
-            conv.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
     }
 
     private Vector<T>? _pendingParameters;

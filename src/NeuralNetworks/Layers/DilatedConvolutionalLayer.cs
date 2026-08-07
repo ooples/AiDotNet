@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3, 2, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -323,29 +324,6 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     private bool _gpuAddedBatchDimension;
     private FusedActivationType _gpuActivationType;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because this layer has trainable parameters (kernels and biases).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the dilated convolutional layer supports training through backpropagation.
-    /// The layer has trainable parameters (kernels and biases) that are updated during the training process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer adjusts its filters and biases during training
-    /// - It improves over time as it sees more examples
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// This is different from some layers (like pooling layers) that don't have
-    /// trainable parameters and therefore don't "learn" in the same way.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -908,101 +886,6 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         // Reset gradients
         _kernelGradients = null;
         _biasGradients = null;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) of the layer as a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
-    /// and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
-    /// 
-    /// The parameters include:
-    /// - All the filter weights (the majority of the parameters)
-    /// - All the bias values (one per output channel)
-    /// 
-    /// This combined list is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need all parameters together
-    /// 
-    /// Think of it like packing all the knowledge the layer has learned into a single container.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (weights and biases) of the layer from a single vector.
-    /// This is useful for loading saved model weights or for implementing optimization algorithms
-    /// that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learnable values from a provided list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the exact right length
-    /// - The values are distributed back to the filter weights and biases
-    /// - This allows loading previously trained weights
-    /// 
-    /// Use cases include:
-    /// - Restoring a saved model
-    /// - Using pre-trained weights
-    /// - Testing specific weight configurations
-    /// 
-    /// The method throws an error if the provided vector doesn't contain exactly the right number of values.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if shape isn't resolved yet (placeholder _kernels with
-        // Length 0), infer inputDepth from the parameter vector layout
-        // (kernels + biases = inputDepth*outputDepth*kernelSize² + outputDepth)
-        // and call ResolveFromShape with kernelSize as dummy spatial dims.
-        if (!IsShapeResolved)
-        {
-            int kernelArea = _kernelSize * _kernelSize;
-            int candidateInputDepth = (parameters.Length - _outputDepth) / (_outputDepth * kernelArea);
-            if (candidateInputDepth <= 0
-                || candidateInputDepth * _outputDepth * kernelArea + _outputDepth != parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Cannot infer inputDepth for DilatedConvolutionalLayer from {parameters.Length} parameters " +
-                    $"(outputDepth={_outputDepth}, kernelSize={_kernelSize}).");
-            }
-            // Dilated kernel needs spatial dims >= dilation*(kernelSize-1)+1
-            // for the OnFirstForward shape check. Use that as the dummy size.
-            int minSpatial = _dilation * (_kernelSize - 1) + 1;
-            ResolveFromShape(new[] { candidateInputDepth, minSpatial, minSpatial });
-        }
-
-        int expectedLength = _kernels.Length + _biases.Length;
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
-        }
-
-        var kernelVec = parameters.Slice(0, _kernels.Length);
-        var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
-
-        _kernels = new Tensor<T>([_outputDepth, _inputDepth, _kernelSize, _kernelSize], kernelVec);
-        _biases = new Tensor<T>([_outputDepth], biasVec);
-
-        // Invalidate GPU cache after parameter update
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

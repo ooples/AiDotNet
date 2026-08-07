@@ -41,6 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
+[AutoParameters]
 public partial class RepParameterizationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -426,31 +427,6 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>
         }
 
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the reparameterization layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since this layer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector because the RepParameterizationLayer has no trainable parameters.
-    /// The method is required by the LayerBase class but is essentially a no-op for this layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because the layer has no learnable values.
-    /// 
-    /// As mentioned earlier, the reparameterization layer doesn't have any weights or biases
-    /// that it learns during training. It just performs the sampling operation and passes
-    /// gradients through.
-    /// 
-    /// This method returns an empty vector to indicate that there are no parameters to retrieve.
-    /// It exists only because all layers in the network must implement it.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // This layer has no trainable parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

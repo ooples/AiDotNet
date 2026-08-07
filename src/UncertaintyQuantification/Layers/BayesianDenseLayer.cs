@@ -1,4 +1,5 @@
-﻿using AiDotNet.Extensions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -28,6 +29,7 @@ namespace AiDotNet.UncertaintyQuantification.Layers;
 /// to express uncertainty in its predictions.
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
 {
     private readonly Random _rng;
@@ -106,9 +108,6 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         // Initialize weight and bias parameters
         InitializeParameters();
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 2L * _outputSize * _inputSize + 2L * _outputSize;
 
     private void InitializeParameters()
     {
@@ -451,70 +450,6 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     public override void UpdateParameters(Vector<T> parameters)
     {
         SetParameters(parameters);
-        _sampledWeightEpsilon = null;
-        _sampledBiasEpsilon = null;
-        _samplePending = false;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var paramCount = _outputSize * _inputSize * 2 + _outputSize * 2;
-        var parameters = new Vector<T>(paramCount);
-        int idx = 0;
-
-        // Pack weight means
-        for (int i = 0; i < _outputSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                parameters[idx++] = _weightMean[i, j];
-
-        // Pack weight log variances
-        for (int i = 0; i < _outputSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                parameters[idx++] = _weightLogVar[i, j];
-
-        // Pack bias means
-        for (int i = 0; i < _outputSize; i++)
-            parameters[idx++] = _biasMean[i];
-
-        // Pack bias log variances
-        for (int i = 0; i < _outputSize; i++)
-            parameters[idx++] = _biasLogVar[i];
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var expectedCount = _outputSize * _inputSize * 2 + _outputSize * 2;
-        if (parameters.Length != expectedCount)
-            throw new ArgumentException($"Expected {expectedCount} parameters, got {parameters.Length}");
-
-        int idx = 0;
-
-        // Unpack weight means
-        for (int i = 0; i < _outputSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                _weightMean[i, j] = parameters[idx++];
-
-        // Unpack weight log variances
-        for (int i = 0; i < _outputSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                _weightLogVar[i, j] = parameters[idx++];
-
-        // Unpack bias means
-        for (int i = 0; i < _outputSize; i++)
-            _biasMean[i] = parameters[idx++];
-
-        // Unpack bias log variances
-        for (int i = 0; i < _outputSize; i++)
-            _biasLogVar[i] = parameters[idx++];
-
         _sampledWeightEpsilon = null;
         _sampledBiasEpsilon = null;
         _samplePending = false;

@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -47,6 +48,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// trainable — the tape treats them as input data.
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class NoisyDenseLayer<T> : LayerBase<T>
 {
     private readonly int _inputSize;
@@ -130,9 +132,6 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>
 
         InitializeParameters();
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 2L * _inputSize * _outputSize + 2L * _outputSize;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -361,31 +360,6 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>
             u2 = 1.0 - _rng.NextDouble();
         }
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var p = new Vector<T>((int)ParameterCount);
-        int idx = 0;
-        for (int i = 0; i < _muWeights.Length; i++) p[idx++] = _muWeights[i];
-        for (int i = 0; i < _sigmaWeights.Length; i++) p[idx++] = _sigmaWeights[i];
-        for (int j = 0; j < _muBiases.Length; j++) p[idx++] = _muBiases[j];
-        for (int j = 0; j < _sigmaBiases.Length; j++) p[idx++] = _sigmaBiases[j];
-        return p;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        int idx = 0;
-        for (int i = 0; i < _muWeights.Length; i++) _muWeights[i] = parameters[idx++];
-        for (int i = 0; i < _sigmaWeights.Length; i++) _sigmaWeights[i] = parameters[idx++];
-        for (int j = 0; j < _muBiases.Length; j++) _muBiases[j] = parameters[idx++];
-        for (int j = 0; j < _sigmaBiases.Length; j++) _sigmaBiases[j] = parameters[idx++];
     }
 
     /// <inheritdoc/>

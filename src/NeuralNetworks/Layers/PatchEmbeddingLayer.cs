@@ -34,6 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
+[AutoParameters]
 public partial class PatchEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -167,14 +168,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets the total number of parameters in this layer.
-    /// </summary>
-    /// <value>
-    /// The total number of trainable parameters (projection weights + projection bias).
-    /// </value>
-    public override long ParameterCount => _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Length;
 
     /// <summary>
     /// Creates a new patch embedding layer with the specified dimensions.
@@ -596,135 +589,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         // Invalidate GPU cache after parameter updates
         Engine.InvalidatePersistentTensor(_projectionWeights);
         Engine.InvalidatePersistentTensor(_projectionBias);
-    }
-
-    /// <summary>
-    /// Gets all parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weights and biases.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method collects all the layer's learnable values into one list.
-    /// This is useful for saving the model or for optimization algorithms.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Shape[0];
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        for (int i = 0; i < _projectionWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _projectionWeights.Shape[1]; j++)
-            {
-                parameters[index++] = _projectionWeights[i, j];
-            }
-        }
-
-        for (int i = 0; i < _projectionBias.Shape[0]; i++)
-        {
-            parameters[index++] = _projectionBias[i];
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets all parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all weights and biases to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameter vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method loads saved parameter values back into the layer.
-    /// This is used when loading a previously trained model.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if weights aren't allocated yet (placeholder Length 0),
-        // infer the input channel count from the parameter vector.
-        // Layout: projectionWeights [channels*patchSize², embeddingDim] +
-        // projectionBias [embeddingDim]. Total = embeddingDim *
-        // (channels*patchSize² + 1). We allocate the projection tensors
-        // directly with the inferred channels, but leave image H/W
-        // unresolved so OnFirstForward picks them up from the actual
-        // input on first Forward — this is what makes
-        // Serialize_Deserialize_ShouldPreserveBehavior work even when
-        // the test re-runs Forward with a different image size.
-        if (_projectionWeights.Shape[0] == 0)
-        {
-            int patchArea = _patchSize * _patchSize;
-            int divisor = _embeddingDim * patchArea;
-            // Special case: param vector is just bias-sized (placeholder
-            // round-trip — fresh lazy layer's GetParameters returned only
-            // the bias values since weights are 0×embeddingDim). Skip
-            // channel inference and let the bias-only update fall through
-            // to the regular write path below.
-            if (parameters.Length == _embeddingDim)
-            {
-                // weights stay at [0, embeddingDim], biases get the new vector.
-                // Falls through to the totalParams check which will see
-                // 0*embeddingDim + embeddingDim == parameters.Length and pass.
-            }
-            else
-            {
-                int candidateChannels = (parameters.Length - _embeddingDim) / divisor;
-                if (candidateChannels <= 0
-                    || _embeddingDim * (candidateChannels * patchArea + 1) != parameters.Length)
-                {
-                    throw new ArgumentException(
-                        $"Cannot infer channel count for PatchEmbeddingLayer from {parameters.Length} parameters " +
-                        $"(patchSize={_patchSize}, embeddingDim={_embeddingDim}).");
-                }
-                _channels = candidateChannels;
-                // Route allocation through AllocateLazyWeight so that when
-                // streaming is engaged on the parent network, the new weight
-                // tensor lands in the streaming pool (with LRU eviction
-                // pre-empting the GC byte[] arrival) instead of bypassing
-                // it via plain `new Tensor<T>(...)`. This keeps the PR's
-                // peak-managed-memory invariant intact for deserialize /
-                // SetParameters paths on large models.
-                _projectionWeights = AllocateLazyWeight([candidateChannels * patchArea, _embeddingDim]);
-                _projectionBias = AllocateLazyWeight([_embeddingDim]);
-                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
-                RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
-            }
-        }
-
-        int totalParams = _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Shape[0];
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        int index = 0;
-
-        for (int i = 0; i < _projectionWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _projectionWeights.Shape[1]; j++)
-            {
-                _projectionWeights[i, j] = parameters[index++];
-            }
-        }
-
-        for (int i = 0; i < _projectionBias.Shape[0]; i++)
-        {
-            _projectionBias[i] = parameters[index++];
-        }
-
-        // Invalidate GPU cache after parameter updates
-        Engine.InvalidatePersistentTensor(_projectionWeights);
-        Engine.InvalidatePersistentTensor(_projectionBias);
-
-        // Mark that caller-provided values are now in flight so OnFirstForward
-        // doesn't overwrite them with fresh Xavier init. Set unconditionally
-        // (not gated on parameters.Length) so any SetParameters call that
-        // makes it past the totalParams check is treated as a real load,
-        // not just the bias-only special case.
-        _paramsLoadedViaSetParameters = true;
     }
 
     /// <summary>

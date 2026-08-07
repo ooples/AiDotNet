@@ -31,6 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.CrossModalAttention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
+[AutoParameters]
 public partial class CrossAttentionLayer<T> : LayerBase<T>
 {
 
@@ -95,11 +96,6 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer can execute on GPU.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _outputWeights.Length + _outputBias.Length;
 
     /// <summary>
     /// Creates a new cross-attention layer for conditioning.
@@ -825,41 +821,6 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
 
         // Permute NHWC to NCHW: [B, H, W, C] -> [B, C, H, W]
         return gpuEngine.PermuteGpu(nhwc, new[] { 0, 3, 1, 2 });
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray()));
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int qLen = _queryWeights.Length;
-        int kLen = _keyWeights.Length;
-        int vLen = _valueWeights.Length;
-        int oLen = _outputWeights.Length;
-        int bLen = _outputBias.Length;
-
-        int index = 0;
-        CopyToTensor(parameters, index, _queryWeights); index += qLen;
-        CopyToTensor(parameters, index, _keyWeights); index += kLen;
-        CopyToTensor(parameters, index, _valueWeights); index += vLen;
-        CopyToTensor(parameters, index, _outputWeights); index += oLen;
-        CopyToTensor(parameters, index, _outputBias);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_queryWeights);
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     private void CopyToTensor(Vector<T> source, int offset, Tensor<T> dest)

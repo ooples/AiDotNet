@@ -27,6 +27,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AutoParameters]
 public partial class NodeEnsembleLayer<T> : LayerBase<T>
 {
     private readonly int _numTrees;
@@ -107,35 +108,6 @@ public partial class NodeEnsembleLayer<T> : LayerBase<T>
             outs[i] = _trees![i].Forward(x);
         }
         return Engine.TensorConcatenate(outs, axis: 1);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var all = new List<T>();
-        foreach (var sub in GetSubLayers())
-        {
-            var p = sub.GetParameters();
-            for (int i = 0; i < p.Length; i++) all.Add(p[i]);
-        }
-        var result = new Vector<T>(all.Count);
-        for (int i = 0; i < all.Count; i++) result[i] = all[i];
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var sub in GetSubLayers())
-        {
-            int count = AiDotNet.Helpers.ParameterCountHelper.ToFlatVectorSize(sub.ParameterCount);
-            if (count == 0) continue;
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
-            sub.SetParameters(p);
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

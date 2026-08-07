@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 128", TestConstructorArgs = "16, 8")]
+[AutoParameters]
 public partial class OctonionLinearLayer<T> : LayerBase<T>
 {
 
@@ -92,16 +93,6 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// Gets the number of output features (octonion-valued).
     /// </summary>
     public int OutputFeatures { get; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// Each octonion has 8 real components, so the parameter count is:
-    /// (InputFeatures * OutputFeatures + OutputFeatures) * 8
-    /// </remarks>
-    public override long ParameterCount =>
-        (InputFeatures * OutputFeatures + OutputFeatures) * 8;
 
     /// <summary>
     /// Gets whether this layer supports training.
@@ -268,46 +259,6 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
         // Update biases
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
         Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weights and biases.</returns>
-    public override Vector<T> GetParameters()
-    {
-        // Weights and biases are Tensor<T>, flatten directly
-        var weightsFlat = _weights.Reshape([OutputFeatures * InputFeatures * 8]);
-        var biasesFlat = _biases.Reshape([OutputFeatures * 8]);
-
-        var paramArray = new T[ParameterCount];
-        for (int i = 0; i < weightsFlat.Length; i++)
-            paramArray[i] = weightsFlat[i];
-        for (int i = 0; i < biasesFlat.Length; i++)
-            paramArray[weightsFlat.Length + i] = biasesFlat[i];
-
-        return new Vector<T>(paramArray);
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
-        }
-
-        int weightSize = OutputFeatures * InputFeatures * 8;
-        int biasSize = OutputFeatures * 8;
-
-        // Copy weights from flat vector into tensor
-        for (int i = 0; i < weightSize; i++)
-            _weights.SetFlat(i, parameters[i]);
-        for (int i = 0; i < biasSize; i++)
-            _biases.SetFlat(i, parameters[weightSize + i]);
     }
 
     /// <inheritdoc/>

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -59,7 +60,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2402.07148
 /// </para>
 /// </remarks>
-public class XLoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Array of LoRA expert layers.
@@ -109,35 +111,6 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Gets the gating network used for routing.
     /// </summary>
     public DenseLayer<T> GatingNetwork => _gatingNetwork;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// Includes parameters from:
-    /// - Base layer (if not frozen)
-    /// - All expert LoRA layers
-    /// - Gating network
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // long throughout — N experts × per-expert params can sum
-            // past int.MaxValue, especially for mixture-of-experts at
-            // foundation-model scales. Closes #1271.7Bnq.
-            long expertParams = 0L;
-            for (int i = 0; i < _experts.Length; i++)
-            {
-                expertParams += _experts[i].ParameterCount;
-            }
-
-            long gatingParams = _gatingNetwork.ParameterCount;
-            long baseParams = _freezeBaseLayer ? 0L : _baseLayer.ParameterCount;
-
-            return baseParams + expertParams + gatingParams;
-        }
-    }
 
     /// <summary>
     /// Temporary storage for expert outputs during forward pass (needed for backward pass).
@@ -332,30 +305,6 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters from all experts, gating network, and optionally base layer.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters for all components.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateLayersFromParameters();
     }
 
     /// <summary>

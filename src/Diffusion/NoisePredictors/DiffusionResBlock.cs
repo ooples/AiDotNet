@@ -1,4 +1,5 @@
 ﻿#pragma warning disable CS0649, CS0414, CS0169
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
@@ -27,6 +28,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AutoParameters]
 public partial class DiffusionResBlock<T> : LayerBase<T>
 {
     private readonly int _inChannels;
@@ -74,13 +76,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        _norm1.ParameterCount + _conv1.ParameterCount +
-        _timeMlp.ParameterCount +
-        _norm2.ParameterCount + _conv2.ParameterCount +
-        (_skipConv?.ParameterCount ?? 0);
 
     /// <summary>
     /// Creates a new diffusion residual block per the DDPM/Stable Diffusion paper.
@@ -505,33 +500,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>
                 return g;
         }
         return 1;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        AddParams(parameters, _norm1);
-        AddParams(parameters, _conv1);
-        AddParams(parameters, _timeMlp);
-        AddParams(parameters, _norm2);
-        AddParams(parameters, _conv2);
-        if (_skipConv is not null)
-            AddParams(parameters, _skipConv);
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        SetParams(_norm1, parameters, ref idx);
-        SetParams(_conv1, parameters, ref idx);
-        SetParams(_timeMlp, parameters, ref idx);
-        SetParams(_norm2, parameters, ref idx);
-        SetParams(_conv2, parameters, ref idx);
-        if (_skipConv is not null)
-            SetParams(_skipConv, parameters, ref idx);
     }
 
     private static void AddParams(List<T> list, ILayer<T> layer)

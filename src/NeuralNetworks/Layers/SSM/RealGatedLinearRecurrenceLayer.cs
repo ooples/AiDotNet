@@ -53,6 +53,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+[AutoParameters]
 public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 {
     // Configuration
@@ -138,17 +139,6 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     /// In Griffin, this is typically equal to the model dimension, but can be configured independently.</para>
     /// </remarks>
     public int RecurrenceDimension => _recurrenceDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _recurrenceGateWeights.Length + _recurrenceGateBias.Length +
-        _inputGateWeights.Length + _inputGateBias.Length +
-        _valueProjectionWeights.Length +
-        _decayParam.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new Real-Gated Linear Recurrence Unit (RG-LRU) layer.
@@ -507,36 +497,6 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     private Tensor<T>[] GetAllTensors() =>

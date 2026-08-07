@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "0")]
+[AutoParameters]
 public partial class MeanLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -345,12 +346,6 @@ public partial class MeanLayer<T> : LayerBase<T>
         var metadata = base.GetMetadata();
         metadata["Axis"] = Axis.ToString();
         return metadata;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        // MeanLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

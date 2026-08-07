@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
+[AutoParameters]
 public partial class ExpertLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -97,30 +98,6 @@ public partial class ExpertLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution =>
         _layers.All(l => l is LayerBase<T> lb && lb.CanExecuteOnGpu);
-
-    /// <summary>
-    /// Gets the total number of trainable parameters across all layers in this expert.
-    /// </summary>
-    /// <value>
-    /// The sum of parameter counts from all contained layers.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property calculates the total number of trainable parameters by summing the
-    /// parameter counts of all layers in the expert's sequence.
-    /// </para>
-    /// <para><b>For Beginners:</b> This counts all the numbers that can be adjusted during training.
-    ///
-    /// The total includes:
-    /// - Weights from all dense layers
-    /// - Biases from all layers that use them
-    /// - Any other learnable parameters in the layers
-    ///
-    /// A higher parameter count means the expert can represent more complex patterns,
-    /// but also requires more memory and computation.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => (int)_layers.Sum(l => l.ParameterCount);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ExpertLayer{T}"/> class with the specified layers.
@@ -467,43 +444,6 @@ public partial class ExpertLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters from all layers as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all parameters from all layers, concatenated in layer order.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts all trainable parameters from all layers and concatenates them into
-    /// a single vector. The parameters are ordered by layer (first layer's parameters, then second layer's, etc.).
-    /// This is useful for optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learned values from every layer into one list.
-    ///
-    /// The returned vector contains:
-    /// - All parameters from the first layer
-    /// - Then all parameters from the second layer
-    /// - And so on for all layers
-    ///
-    /// This is useful for:
-    /// - Saving the expert's knowledge to disk
-    /// - Transferring learned parameters to another expert
-    /// - Advanced optimization techniques
-    /// - Analyzing what the expert has learned
-    ///
-    /// You can think of it as packaging up everything the expert knows into one container.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for production-grade parameter collection
-        var layerParams = _layers
-            .Where(l => l.ParameterCount > 0)
-            .Select(l => l.GetParameters())
-            .ToArray();
-
-        return layerParams.Length > 0 ? Vector<T>.Concatenate(layerParams) : new Vector<T>(0);
-    }
-
-    /// <summary>
     /// Sets all trainable parameters in all layers from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for all layers, concatenated in layer order.</param>
@@ -545,26 +485,6 @@ public partial class ExpertLayer<T> : LayerBase<T>
     {
         foreach (var layer in _layers)
             layer.ClearGradients();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // === Vectorized Parameter Distribution (Phase B: US-GPU-015) ===
-        int offset = 0;
-        foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            var layerParamsVec = parameters.Slice(offset, layerParamCount);
-            layer.SetParameters(layerParamsVec);
-            offset += layerParamCount;
-        }
     }
 
     /// <summary>

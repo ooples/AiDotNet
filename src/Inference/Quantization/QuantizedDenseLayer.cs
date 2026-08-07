@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Configuration;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -10,7 +11,8 @@ namespace AiDotNet.Inference.Quantization;
 /// and NF4 (4-bit NormalFloat, per-group) via the shared <see cref="WeightOnlyProjection"/> engine, so a
 /// FFN/dense layer honors the same <see cref="InferenceQuantizationMode"/> the user selects for attention.
 /// </summary>
-internal sealed class QuantizedDenseLayer : LayerBase<float>
+[AutoParameters]
+internal sealed partial class QuantizedDenseLayer : LayerBase<float>
 {
     private readonly int _inputSize;
     private readonly int _outputSize;
@@ -59,8 +61,6 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
     }
 
     public override bool SupportsTraining => false;
-
-    public override long ParameterCount => 0;
 
     public override Tensor<float>? GetWeights() => null;
 
@@ -133,9 +133,6 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
 
     public override void UpdateParameters(Vector<float> parameters)
         => throw new NotSupportedException("QuantizedDenseLayer is inference-only.");
-
-    public override Vector<float> GetParameters()
-        => Vector<float>.Empty();
 
     public override void ResetState()
     {

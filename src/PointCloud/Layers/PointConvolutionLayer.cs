@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -27,6 +28,7 @@ namespace AiDotNet.PointCloud.Layers;
 /// - Learning shape patterns in point clouds
 /// - Building blocks for PointNet / DGCNN-style architectures
 /// </remarks>
+[AutoParameters]
 public partial class PointConvolutionLayer<T> : LayerBase<T>
 {
     private readonly int _inputChannels;
@@ -114,39 +116,7 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>
         _biases = parameters[1];
     }
 
-    public override Vector<T> GetParameters()
-    {
-        int total = (int)ParameterCount;
-        var parameters = new Vector<T>(total);
-        var w = _weights.Data.Span;
-        var b = _biases.Data.Span;
-        int idx = 0;
-        for (int i = 0; i < w.Length; i++) parameters[idx++] = w[i];
-        for (int i = 0; i < b.Length; i++) parameters[idx++] = b[i];
-        return parameters;
-    }
-
     public override void UpdateParameters(Vector<T> parameters) => SetParameters(parameters);
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException("Parameter vector length does not match layer parameter count.", nameof(parameters));
-        }
-
-        // Write in place so the registered tensor instances (which the tape trained and
-        // the Forward reads) keep their identity. This MUST override SetParameters — the
-        // Clone / DeepCopy / serialize round-trip distributes weights through SetParameters,
-        // and the LayerBase default only stashes the vector in the Parameters field without
-        // writing _weights / _biases, so a clone would keep its fresh random init and diverge
-        // from the original (issue #1221 class).
-        var w = _weights.Data.Span;
-        var b = _biases.Data.Span;
-        int idx = 0;
-        for (int i = 0; i < w.Length; i++) w[i] = parameters[idx++];
-        for (int i = 0; i < b.Length; i++) b[i] = parameters[idx++];
-    }
 
     public override void ClearGradients()
     {
@@ -156,8 +126,6 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>
     public override void ResetState()
     {
     }
-
-    public override long ParameterCount => (long)_inputChannels * _outputChannels + _outputChannels;
 
     public override bool SupportsTraining => true;
 }

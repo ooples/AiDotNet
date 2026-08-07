@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 4, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -153,30 +154,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly int _stride;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because the PrimaryCapsuleLayer has trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that PrimaryCapsuleLayer can be trained through backpropagation. The layer
-    /// has trainable parameters (convolution weights and biases) that are updated during training to optimize
-    /// the capsule transformation process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has internal values (weights and biases) that change during training
-    /// - It will improve its performance as it sees more data
-    /// - It learns to extract better capsule representations from the input
-    /// 
-    /// During training, the layer learns to transform input features into capsule vectors
-    /// that best represent the entities in the data.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _convWeights.Length + _convBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -869,41 +846,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters from the primary capsule layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. It concatenates
-    /// the convolution weights and biases into a single vector. This is useful for optimization algorithms
-    /// that operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values in the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include all the weights and biases from this layer
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// The method carefully arranges all parameters in a specific order
-    /// so they can be correctly restored later.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector.Concatenate for production-grade parameter extraction
-        return Vector<T>.Concatenate(
-            new Vector<T>(_convWeights.ToArray()),
-            new Vector<T>(_convBias.ToArray())
-        );
-    }
-
-    /// <summary>
     /// Sets the trainable parameters for the primary capsule layer.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -952,30 +894,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         base.ClearGradients();
         _convWeightsGradient = null;
         _convBiasGradient = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int weightSize = _convWeights.Length;
-        int biasSize = _convBias.Length;
-        int totalParams = weightSize + biasSize;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Write in-place to preserve registered parameter tensor references
-        parameters.Slice(0, weightSize).AsSpan().CopyTo(_convWeights.Data.Span);
-        parameters.Slice(weightSize, biasSize).AsSpan().CopyTo(_convBias.Data.Span);
-
-        // Invalidate any GPU-resident copy of these persistent parameter tensors.
-        // The CPU spans were just overwritten, but the GPU keeps a separately-uploaded
-        // mirror of registered persistent tensors and reuses it on subsequent ForwardGpu
-        // calls. Without this invalidation the GPU forward path would silently keep
-        // computing against the pre-update weights, mirroring DenseLayer/Conv layers.
-        Engine.InvalidatePersistentTensor(_convWeights);
-        Engine.InvalidatePersistentTensor(_convBias);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
-﻿using AiDotNet.Helpers;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 
@@ -33,6 +34,7 @@ namespace AiDotNet.LoRA;
 /// requires 8x1000 + 8x1000 = 16,000 parameters (98.4% reduction!).
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class LoRALayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -128,17 +130,6 @@ public partial class LoRALayer<T> : LayerBase<T>
     /// Stored pre-activation output from the forward pass, needed for activation derivative computation.
     /// </summary>
     private Tensor<T>? _lastPreActivation;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (elements in A and B matrices).
-    /// </summary>
-    public override long ParameterCount =>
-        // Promote to long BEFORE the multiplication so a sufficiently
-        // large rank × dim doesn't overflow int32 mid-computation. The
-        // outer return type is already long, but the int*int product
-        // wraps before the implicit widening converts to long. Closes
-        // #1271.7Bnv.
-        ((long)_loraA.Rows * _loraA.Columns) + ((long)_loraB.Rows * _loraB.Columns);
 
     /// <summary>
     /// Gets whether this layer supports training (always true for LoRA).
@@ -355,30 +346,6 @@ public partial class LoRALayer<T> : LayerBase<T>
 
         // Update parameter vector
         UpdateParametersFromMatrices();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing all LoRA parameters (A and B matrices flattened).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all LoRA parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        }
-
-        Parameters = parameters.Clone();
-        UpdateMatricesFromParameters();
     }
 
     /// <summary>

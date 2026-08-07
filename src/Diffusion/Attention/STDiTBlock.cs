@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -26,6 +27,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// Each sub-layer uses adaptive layer normalization (adaLN-Zero) for timestep conditioning.
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class STDiTBlock<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -201,64 +203,6 @@ public partial class STDiTBlock<T> : LayerBase<T>
         _temporalNorm.UpdateParameters(learningRate);
         _crossNorm.UpdateParameters(learningRate);
         _ffnNorm.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parts = new LayerBase<T>[]
-        {
-            _spatialAttention, _temporalAttention, _crossAttention,
-            _ffnIn, _ffnOut,
-            _spatialNorm, _temporalNorm, _crossNorm, _ffnNorm
-        };
-
-        int total = 0;
-        foreach (var p in parts) total += p.GetParameters().Length;
-
-        var combined = new Vector<T>(total);
-        int offset = 0;
-        foreach (var p in parts)
-        {
-            var parms = p.GetParameters();
-            for (int i = 0; i < parms.Length; i++)
-                combined[offset + i] = parms[i];
-            offset += parms.Length;
-        }
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var parts = new LayerBase<T>[]
-        {
-            _spatialAttention, _temporalAttention, _crossAttention,
-            _ffnIn, _ffnOut,
-            _spatialNorm, _temporalNorm, _crossNorm, _ffnNorm
-        };
-
-        int expectedLength = 0;
-        foreach (var layer in parts)
-            expectedLength += layer.GetParameters().Length;
-
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException(
-                $"Parameter vector length ({parameters.Length}) does not match expected length ({expectedLength}).",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        foreach (var layer in parts)
-        {
-            int count = layer.GetParameters().Length;
-            var sub = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-                sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += count;
-        }
     }
 
     /// <inheritdoc />

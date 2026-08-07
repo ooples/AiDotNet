@@ -22,13 +22,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, ChangesShape = false, ExpectedInputRank = -1, Cost = ComputeCost.Low, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[AutoParameters]
 public partial class StopGradientLayer<T> : LayerBase<T>
 {
     /// <inheritdoc/>
     public override bool SupportsTraining => false;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
 
     /// <summary>Initializes a new stop-gradient barrier.</summary>
     public StopGradientLayer()
@@ -42,16 +40,6 @@ public partial class StopGradientLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     /// <remarks>The barrier passes its input through untouched, so its output shape is its input shape.</remarks>
     protected override bool IsShapePreserving => true;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => new(0);
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException("StopGradientLayer has no parameters.", nameof(parameters));
-    }
 
     /// <inheritdoc/>
     public override void ResetState()

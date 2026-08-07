@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4")]
+[AutoParameters]
 public partial class HyperbolicLinearLayer<T> : LayerBase<T>
 {
 
@@ -100,12 +101,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// Gets the number of output features.
     /// </summary>
     public int OutputFeatures { get; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        (OutputFeatures * InputFeatures) + OutputFeatures;
 
     /// <summary>
     /// Gets whether this layer supports training.
@@ -563,58 +558,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
                 _weights[o, i] = NumOps.Subtract(_weights[o, i], NumOps.Multiply(learningRate, _weightsGradient[o, i]));
 
             _biases[o] = NumOps.Subtract(_biases[o], NumOps.Multiply(learningRate, _biasesGradient[o]));
-        }
-
-        _weightsTCache = null;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weights and biases.</returns>
-    public override Vector<T> GetParameters()
-    {
-        var paramArray = new T[ParameterCount];
-        int idx = 0;
-
-        // Use Data.Span for direct access — avoids any indexer overhead
-        var wSpan = _weights.Data.Span;
-        for (int j = 0; j < wSpan.Length && idx < paramArray.Length; j++)
-            paramArray[idx++] = wSpan[j];
-
-        var bSpan = _biases.Data.Span;
-        for (int j = 0; j < bSpan.Length && idx < paramArray.Length; j++)
-            paramArray[idx++] = bSpan[j];
-
-        return new Vector<T>(paramArray);
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
-        }
-
-        int idx = 0;
-
-        // Restore weights
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                _weights[o, i] = parameters[idx++];
-            }
-        }
-
-        // Restore biases (scalar per output)
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            _biases[o] = parameters[idx++];
         }
 
         _weightsTCache = null;

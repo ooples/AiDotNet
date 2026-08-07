@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AutoParameters]
 public partial class FeatureTokenizerLayer<T> : LayerBase<T>
 {
     private int _numFeatures;
@@ -77,9 +78,6 @@ public partial class FeatureTokenizerLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _initialized ? 2L * _numFeatures * _embeddingDim : 0L;
 
     private void EnsureTokenizerInitialized()
     {
@@ -148,42 +146,6 @@ public partial class FeatureTokenizerLayer<T> : LayerBase<T>
 
         var scaled = Engine.TensorBroadcastMultiply(expanded, wB);
         return Engine.TensorBroadcastAdd(scaled, bB);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        if (!_initialized) return new Vector<T>(0);
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
-            Vector<T>.FromMemory(_biases.Data));
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!_initialized)
-        {
-            // Resolve the feature count from the parameter vector: length = 2 * F * E.
-            if (parameters.Length == 0) return;
-            int inferred = parameters.Length / (2 * _embeddingDim);
-            if (inferred <= 0 || inferred * 2 * _embeddingDim != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer feature count from {parameters.Length} parameters with embeddingDim {_embeddingDim}.",
-                    nameof(parameters));
-            _numFeatures = inferred;
-            EnsureTokenizerInitialized();
-        }
-
-        int wCount = _numFeatures * _embeddingDim;
-        if (parameters.Length != 2 * wCount)
-            throw new ArgumentException(
-                $"Expected {2 * wCount} parameters, got {parameters.Length}.", nameof(parameters));
-
-        var wSpan = _weights.Data.Span;
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < wCount; i++) wSpan[i] = parameters[i];
-        for (int i = 0; i < wCount; i++) bSpan[i] = parameters[wCount + i];
     }
 
     /// <inheritdoc/>

@@ -1,4 +1,5 @@
 ﻿#pragma warning disable CS0649, CS0414, CS0169
+using AiDotNet.Attributes;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
@@ -31,6 +32,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Combined with spatial attention for full spatio-temporal modeling
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class CausalTemporalAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -122,18 +124,6 @@ public partial class CausalTemporalAttention<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _causalAttention.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return _causalAttention.GetParameters();
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _causalAttention.SetParameters(parameters);
     }
 
     /// <inheritdoc />

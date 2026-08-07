@@ -42,6 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 3, 2", TestSetupCode = "var e = new int[4, 2]; for (int i = 0; i < 4; i++) for (int j = 0; j < 2; j++) e[i, j] = (i + j + 1) % 4; ((AiDotNet.NeuralNetworks.Layers.MeshPoolLayer<double>)layer).SetEdgeAdjacency(e);")]
+[AutoParameters]
 public partial class MeshPoolLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -548,27 +549,6 @@ public partial class MeshPoolLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>Vector containing importance weights.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return new Vector<T>(_importanceWeights.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing importance weights.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != InputChannels)
-            throw new ArgumentException($"Expected {InputChannels} parameters, got {parameters.Length}");
-
-        _importanceWeights = new Tensor<T>(parameters.ToArray(), [InputChannels]);
-    }
-
-    /// <summary>
     /// Gets the importance weights tensor.
     /// </summary>
     /// <returns>The importance weights.</returns>
@@ -579,11 +559,6 @@ public partial class MeshPoolLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>Null as this layer has no biases.</returns>
     public override Tensor<T> GetBiases() => new Tensor<T>([0]);
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => InputChannels;
 
     /// <summary>
     /// Creates a deep copy of the layer.

@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -24,6 +25,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Optionally causal (only looking at past frames) for streaming generation
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class TemporalConvolution<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -113,37 +115,6 @@ public partial class TemporalConvolution<T> : LayerBase<T>
     {
         _conv.UpdateParameters(learningRate);
         _norm.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var convParams = _conv.GetParameters();
-        var normParams = _norm.GetParameters();
-        var combined = new Vector<T>(convParams.Length + normParams.Length);
-        for (int i = 0; i < convParams.Length; i++)
-            combined[i] = convParams[i];
-        for (int i = 0; i < normParams.Length; i++)
-            combined[convParams.Length + i] = normParams[i];
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var convParams = _conv.GetParameters();
-        int convCount = convParams.Length;
-        int normCount = parameters.Length - convCount;
-
-        var newConvParams = new Vector<T>(convCount);
-        var newNormParams = new Vector<T>(normCount);
-        for (int i = 0; i < convCount; i++)
-            newConvParams[i] = parameters[i];
-        for (int i = 0; i < normCount; i++)
-            newNormParams[i] = parameters[convCount + i];
-
-        _conv.SetParameters(newConvParams);
-        _norm.SetParameters(newNormParams);
     }
 
     /// <inheritdoc />

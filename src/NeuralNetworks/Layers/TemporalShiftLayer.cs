@@ -28,15 +28,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, ChangesShape = false, ExpectedInputRank = 4, Cost = ComputeCost.Low, TestInputShape = "2, 8, 4, 4", TestConstructorArgs = "8")]
+[AutoParameters]
 public partial class TemporalShiftLayer<T> : LayerBase<T>
 {
     private readonly int _shiftedChannelRatio;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => false;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
 
     /// <summary>Initializes a new temporal shift module.</summary>
     /// <param name="shiftedChannelRatio">
@@ -114,16 +112,6 @@ public partial class TemporalShiftLayer<T> : LayerBase<T>
             : new[] { kept, zeroFrame };
 
         return Engine.TensorConcatenate(ordered, axis: timeAxis);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => new(0);
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException("TemporalShiftLayer has no parameters.", nameof(parameters));
     }
 
     /// <inheritdoc/>

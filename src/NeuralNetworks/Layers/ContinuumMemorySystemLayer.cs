@@ -17,6 +17,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 4 }, 4, 2")]
+[AutoParameters]
 public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>
 {
     private readonly DenseLayer<T>[] _mlpBlocks;
@@ -31,10 +32,6 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>
     private Tensor<T>? LastOutput;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
-    /// <summary>
-    /// Indicates whether this layer supports training. CMS always supports training.
-    /// </summary>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -402,81 +399,6 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// Gets the chunk sizes for gradient accumulation.
     /// </summary>
     public int[] ChunkSizes => _chunkSizes;
-
-    /// <summary>
-    /// Gets all parameters from all MLP blocks in the chain.
-    /// Returns a concatenated vector of all parameters from all levels.
-    /// </summary>
-    /// <returns>Concatenated parameter vector</returns>
-    public override Vector<T> GetParameters()
-    {
-        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
-            throw new InvalidOperationException("MLP blocks are not initialized");
-
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        Vector<T> result = Vector<T>.Empty();
-
-        foreach (var mlp in _mlpBlocks)
-        {
-            if (mlp == null)
-                throw new InvalidOperationException("MLP block is null");
-
-            var mlpParams = mlp.GetParameters();
-            result = Vector<T>.Concatenate(result, mlpParams);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Sets all parameters for all MLP blocks in the chain.
-    /// Distributes the parameter vector across all levels.
-    /// </summary>
-    /// <param name="parameters">Concatenated parameter vector</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-            throw new ArgumentNullException(nameof(parameters));
-
-        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
-            throw new InvalidOperationException("MLP blocks are not initialized");
-
-        // Calculate total expected parameter count
-        int totalParams = 0;
-        foreach (var mlp in _mlpBlocks)
-        {
-            if (mlp == null)
-                throw new InvalidOperationException("MLP block is null");
-
-            totalParams += (int)mlp.ParameterCount;
-        }
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException(
-                $"Parameter vector length ({parameters.Length}) does not match total parameters ({totalParams})",
-                nameof(parameters));
-        }
-
-        // Distribute parameters to each MLP block
-        int offset = 0;
-        foreach (var mlp in _mlpBlocks)
-        {
-            int mlpParamCount = checked((int)mlp.ParameterCount);
-            var mlpParams = new Vector<T>(mlpParamCount);
-
-            for (int i = 0; i < mlpParamCount; i++)
-            {
-                mlpParams[i] = parameters[offset + i];
-            }
-
-            mlp.SetParameters(mlpParams);
-            offset += mlpParamCount;
-        }
-
-        // Update the base class Parameters property
-        Parameters = parameters;
-    }
 
     /// <summary>
     /// Resets the state of the layer (required by LayerBase).

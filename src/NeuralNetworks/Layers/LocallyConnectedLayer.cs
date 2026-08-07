@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class LocallyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -300,29 +301,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly int _stride;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because this layer has trainable parameters (weights and biases).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be trained through backpropagation.
-    /// The LocallyConnectedLayer always returns true because it contains trainable weights and biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has parameters that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// The Locally Connected layer always supports training because it has weights 
-    /// and biases that are learned during training.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _weights.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -835,44 +813,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) and combines them into a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving and loading
-    /// model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include all the unique filter weights (which can be very many!) and biases
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// For locally connected layers, this vector can be very large due to the
-    /// unique filters for each spatial location.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Get weight parameters as vector
-        var weightVector = new Vector<T>(_weights.ToArray());
-
-        // Get bias parameters as vector
-        var biasVector = new Vector<T>(_biases.ToArray());
-
-        // Concatenate weights and biases
-        return Vector<T>.Concatenate(weightVector, biasVector);
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the layer.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -938,28 +878,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             ResolveFromShape(new[] { inH, inW, inC });
         }
         base.Deserialize(reader);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int totalParams = _weights.Length + _biases.Length;
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Copy IN PLACE into existing tensor storage. Replacing the field
-        // refs via `Tensor<T>.FromVector` would leave the engine's persistent-
-        // tensor registry pointing at the old _weights/_biases objects
-        // (allocated via ResolveFromShape during Deserialize), so subsequent
-        // training/streaming would silently follow stale references.
-        int weightsLength = _weights.Length;
-        parameters.AsSpan().Slice(0, weightsLength).CopyTo(_weights.Data.Span);
-        parameters.AsSpan().Slice(weightsLength, _biases.Length).CopyTo(_biases.Data.Span);
-
-        // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

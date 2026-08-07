@@ -17,6 +17,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "30.0")]
+[AutoParameters]
 public partial class LogitSoftcapLayer<T> : LayerBase<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
@@ -48,19 +49,6 @@ public partial class LogitSoftcapLayer<T> : LayerBase<T>
             dst[i] = Ops.FromDouble(_cap * Math.Tanh(x / _cap));
         }
         return output;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException("LogitSoftcapLayer has no parameters.");
     }
 
     /// <inheritdoc/>

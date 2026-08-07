@@ -33,6 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "2, 3, 8, 8",
     TestConstructorArgs = "3, 8, 8, 8, 1, 1, 2, 2, 0.5")]
+[AutoParameters]
 public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>
 {
     private readonly int _inputChannels;
@@ -422,35 +423,6 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>
         foreach (var layer in _mainPixelShuffles) yield return layer;
         foreach (var layer in _shuttlePixelShuffles) yield return layer;
         yield return _outputProjection;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => OrderedLayers().Sum(layer => layer.ParameterCount);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var values = new List<T>((int)ParameterCount);
-        foreach (var layer in OrderedLayers())
-        {
-            var parameters = layer.GetParameters();
-            for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
-        }
-        return new Vector<T>(values.ToArray());
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        int offset = 0;
-        foreach (var layer in OrderedLayers())
-        {
-            int count = (int)layer.ParameterCount;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

@@ -1119,7 +1119,8 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 /// Chronos transformer layer with causal multi-head self-attention and feed-forward network.
 /// Now uses Tensor<T> and proper backpropagation.
 /// </summary>
-internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private int _embeddingDim;
     private int _numHeads;
@@ -1151,11 +1152,6 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
     private List<Tensor<T>>? _cachedNorm2;
     private List<Tensor<T>>? _cachedFfnHidden;
 
-    public override long ParameterCount =>
-        _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
-        _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
-        _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
-
     public override bool SupportsTraining => true;
 
     public override void ResetState()
@@ -1174,14 +1170,6 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         var seqInput = new List<Tensor<T>> { input };
         var seqOutput = Forward(seqInput);
         return seqOutput.Count > 0 ? seqOutput[seqOutput.Count - 1] : input;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var tensor in new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
-            for (int i = 0; i < tensor.Length; i++) allParams.Add(tensor[i]);
-        return new Vector<T>(allParams.ToArray());
     }
 
     public ChronosTransformerLayerTensor(int embeddingDim, int numHeads, int seed = 42)

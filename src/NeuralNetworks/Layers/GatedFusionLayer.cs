@@ -31,6 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// or always trusting one, this learns a per-value dial: where the dial is near 1 it takes the
 /// first component's answer, near 0 the second's, and in between it blends them.</para>
 /// </remarks>
+[AutoParameters]
 public partial class GatedFusionLayer<T> : LayerBase<T>
 {
     /// <summary>Width of each input stream (half the concatenated input width).</summary>
@@ -41,9 +42,6 @@ public partial class GatedFusionLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _gate.ParameterCount;
 
     /// <summary>
     /// Creates a gated fusion layer.
@@ -99,12 +97,6 @@ public partial class GatedFusionLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
         => _gate.SetTrainableParameters(parameters);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _gate.GetParameters();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters) => _gate.SetParameters(parameters);
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters) => _gate.UpdateParameters(parameters);

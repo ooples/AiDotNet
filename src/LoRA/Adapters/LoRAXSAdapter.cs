@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
@@ -104,7 +105,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Key Innovation: Parameter count O(r²) instead of O(dr), enabling extreme efficiency
 /// </para>
 /// </remarks>
-public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Frozen left singular vectors (U_r) from SVD of pretrained weights.
@@ -229,35 +231,6 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// Gets the trainable R matrix.
     /// </summary>
     public Matrix<T> TrainableR => _trainableR.Clone();
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (only r² for the R matrix).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// CRITICAL: Returns full base LoRA layer parameter count to match base constructor expectations.
-    /// Even though only the R matrix (rank²) is trainable in LoRA-XS, the base constructor
-    /// allocates Parameters buffer based on this count and packs the underlying LoRA layer.
-    /// </para>
-    /// <para>
-    /// LoRA-XS only trains the rank×rank R matrix, so ParameterCount returns rank².
-    /// The frozen U, Σ, and V matrices are not trainable parameters.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Handle case where R matrix hasn't been initialized yet
-            // (called from base constructor before derived constructor runs)
-            if (_trainableR == null)
-            {
-                return Rank * Rank;
-            }
-
-            return _trainableR.Rows * _trainableR.Rows;
-        }
-    }
 
     /// <summary>
     /// Initializes a new LoRA-XS adapter wrapping an existing layer.
@@ -492,32 +465,6 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         // Base layer is always frozen in LoRA-XS
         // Update parameter vector
         UpdateParametersFromR();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector (only R matrix elements).
-    /// </summary>
-    /// <returns>Vector containing R matrix flattened row-major.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector (R matrix only).
-    /// </summary>
-    /// <param name="parameters">Vector containing R matrix elements.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters (R matrix: {Rank}×{Rank}), got {parameters.Length}",
-                nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateRFromParameters();
     }
 
     /// <summary>

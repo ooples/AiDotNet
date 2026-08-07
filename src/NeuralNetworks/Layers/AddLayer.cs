@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class AddLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -369,39 +370,6 @@ public partial class AddLayer<T> : LayerBase<T>
         }
 
         return activated;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of this layer as a flat vector.
-    /// </summary>
-    /// <returns>An empty vector since addition layers have no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns all trainable parameters of the layer as a flat vector. For layers with trainable
-    /// parameters, this would involve reshaping multi-dimensional parameters (like weight matrices) into a
-    /// one-dimensional vector. However, since addition layers have no trainable parameters, this method
-    /// returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the layer's trainable values as a single list, but addition layers have none.
-    /// 
-    /// Some operations in neural networks need to work with all parameters at once:
-    /// - Saving and loading models
-    /// - Applying regularization (techniques to prevent overfitting)
-    /// - Using advanced optimization algorithms
-    /// 
-    /// This method provides those parameters as a single vector, but since
-    /// addition layers don't have any trainable parameters, it returns an empty vector.
-    /// 
-    /// For comparison:
-    /// - A Dense layer with 100 inputs and 10 outputs would return a vector with 1,010 values
-    ///   (1,000 weights + 10 biases)
-    /// - This AddLayer returns an empty vector with 0 values
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Add layers don't have parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

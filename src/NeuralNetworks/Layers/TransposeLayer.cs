@@ -32,6 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     ChangesShape = true,
     TestInputShape = "1, 2, 3",
     TestConstructorArgs = "new[] { 1, 0 }")]
+[AutoParameters]
 public partial class TransposeLayer<T> : LayerBase<T>
 {
     private int[] _logicalInputShape;
@@ -119,12 +120,6 @@ public partial class TransposeLayer<T> : LayerBase<T>
     {
         EnsureInitializedFromInput(input);
         return Engine.TensorPermute(input, _fullPermutation);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
     }
 
     /// <inheritdoc/>

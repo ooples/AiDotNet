@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -61,6 +62,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// this be dropped into any model's adversarial objective.
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class PatchGANDiscriminator<T> : LayerBase<T>
 {
     #region Constants
@@ -379,43 +381,6 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>
         }
 
         yield return _convOut;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var all = new List<T>();
-        foreach (var layer in AllSubLayers())
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) all.Add(p[i]);
-        }
-
-        return new Vector<T>([.. all]);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-
-        int expected = 0;
-        foreach (var layer in AllSubLayers()) expected += layer.GetParameters().Length;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters for this PatchGANDiscriminator, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        foreach (var layer in AllSubLayers())
-        {
-            int count = layer.GetParameters().Length;
-            if (count == 0) continue;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

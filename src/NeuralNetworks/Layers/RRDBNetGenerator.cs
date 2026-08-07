@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -55,6 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class RRDBNetGenerator<T> : LayerBase<T>
 {
     #region Fields
@@ -484,50 +486,6 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>
 
         _hrConv.UpdateParameters(learningRate);
         _convLast.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        AddParametersToList(allParams, _convFirst.GetParameters());
-
-        foreach (var rrdb in _rrdbBlocks)
-        {
-            AddParametersToList(allParams, rrdb.GetParameters());
-        }
-
-        AddParametersToList(allParams, _trunkConv.GetParameters());
-
-        foreach (var conv in _upsampleConvs)
-        {
-            AddParametersToList(allParams, conv.GetParameters());
-        }
-
-        AddParametersToList(allParams, _hrConv.GetParameters());
-        AddParametersToList(allParams, _convLast.GetParameters());
-
-        return new Vector<T>([.. allParams]);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Buffer until OnFirstForward resolves shapes when arriving pre-
-        // resolution: every sub-layer (_convFirst, _rrdbBlocks[i],
-        // _trunkConv, _upsampleConvs[i], _hrConv, _convLast) reports
-        // GetParameters().Length == 0 before OnFirstForward, so the
-        // SubVector cuts below all consume zero bytes and the parameters
-        // get silently dropped — a deserialized RRDBNet checkpoint
-        // would inference with random weights instead of the loaded
-        // values. Replay in OnFirstForward once shapes are resolved.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-        ApplyParameters(parameters);
     }
 
     /// <summary>

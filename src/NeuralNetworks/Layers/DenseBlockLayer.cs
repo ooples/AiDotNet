@@ -15,6 +15,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4")]
+[AutoParameters]
 internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
@@ -35,7 +36,6 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
     private Tensor<T>? _gpuConv1Out;
     private Tensor<T>? _gpuBn2Out;
 
-    public override long ParameterCount => _bn1.ParameterCount + _conv1x1.ParameterCount + _bn2.ParameterCount + _conv3x3.ParameterCount;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -254,30 +254,6 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
         _conv1x1.UpdateParameters(learningRate);
         _bn2.UpdateParameters(learningRate);
         _conv3x3.UpdateParameters(learningRate);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        parameters.AddRange(_bn1.GetParameters().ToArray());
-        parameters.AddRange(_conv1x1.GetParameters().ToArray());
-        parameters.AddRange(_bn2.GetParameters().ToArray());
-        parameters.AddRange(_conv3x3.GetParameters().ToArray());
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: sub-layers' shapes haven't been resolved, so
-        // their GetParameters().Length is wrong. Buffer and replay
-        // from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        ApplyParameters(parameters);
     }
 
     private Vector<T>? _pendingParameters;

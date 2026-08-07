@@ -29,6 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 2")]
+[AutoParameters]
 public partial class SoftTreeLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
@@ -73,9 +74,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     private Tensor<T>? _cachedRightProbs;
     private Tensor<T>? _cachedNodeProbs;
     private Tensor<T>? _cachedSplitLogits;
-
-    public override long ParameterCount =>
-        _splitWeights.Length + _splitBiases.Length + _leafValues.Length;
 
     /// <summary>
     /// Initializes a new soft tree layer.
@@ -269,34 +267,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int idx = 0;
-
-        // Copy split weights
-        for (int i = 0; i < _splitWeights.Length; i++)
-        {
-            parameters[idx++] = _splitWeights[i];
-        }
-
-        // Copy split biases
-        for (int i = 0; i < _splitBiases.Length; i++)
-        {
-            parameters[idx++] = _splitBiases[i];
-        }
-
-        // Copy leaf values
-        for (int i = 0; i < _leafValues.Length; i++)
-        {
-            parameters[idx++] = _leafValues[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int idx = 0;
@@ -371,19 +341,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     {
         base.ClearGradients();
         _splitWeightsGrad = null; _splitBiasesGrad = null; _leafValuesGrad = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int idx = 0;
-        var swSpan = _splitWeights.Data.Span;
-        for (int i = 0; i < _splitWeights.Length; i++) swSpan[i] = parameters[idx++];
-        var sbSpan = _splitBiases.Data.Span;
-        for (int i = 0; i < _splitBiases.Length; i++) sbSpan[i] = parameters[idx++];
-        var lvSpan = _leafValues.Data.Span;
-        for (int i = 0; i < _leafValues.Length; i++) lvSpan[i] = parameters[idx++];
     }
 
     /// <inheritdoc/>

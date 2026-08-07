@@ -54,6 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
+[AutoParameters]
 public partial class ParallelStreamsLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -158,19 +159,6 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>
     public override bool SupportsTraining => _streamA.Any(l => l.SupportsTraining) || _streamB.Any(l => l.SupportsTraining);
 
     /// <summary>
-    /// Gets the total number of trainable parameters across both streams.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is the sum of all learnable weights and biases in both Stream A
-    /// and Stream B. For example, if Stream A has 1000 parameters and Stream B has 2000, this
-    /// returns 3000.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount =>
-        (int)_streamA.Sum(l => l.ParameterCount) + (int)_streamB.Sum(l => l.ParameterCount);
-
-    /// <summary>
     /// Performs the forward pass: splits input, runs both streams, and concatenates outputs.
     /// </summary>
     /// <param name="input">The input tensor with shape <c>[batch, features]</c> or <c>[features]</c>.
@@ -234,74 +222,6 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>
 
         // Concatenate along last axis (tape-tracked)
         return Engine.TensorConcatenate([outputA, outputB], axis: rank - 1);
-    }
-
-    /// <summary>
-    /// Collects all trainable parameters from both streams into a single vector.
-    /// </summary>
-    /// <returns>A vector containing all parameters from Stream A followed by all parameters
-    /// from Stream B.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This flattens all the weights and biases from both streams into a
-    /// single list of numbers. The optimizer uses this to update all parameters at once.
-    /// Stream A's parameters come first, then Stream B's.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new List<Vector<T>>();
-        foreach (var layer in _streamA) parts.Add(layer.GetParameters());
-        foreach (var layer in _streamB) parts.Add(layer.GetParameters());
-        return Vector<T>.Concatenate(parts.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters for both streams from a single parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing parameters for Stream A followed by Stream B.
-    /// Must have exactly <see cref="ParameterCount"/> elements.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is the reverse of GetParameters — it takes a flat list of numbers
-    /// and distributes them to the correct layers in both streams. The optimizer calls this after
-    /// computing updated parameter values.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new ArgumentNullException(nameof(parameters));
-        // Enforce the documented contract that the vector has exactly ParameterCount
-        // elements. Without this check, a too-short vector would NRE deep in a sub-layer
-        // and a too-long vector would silently ignore tail values — both mask upstream
-        // optimizer bugs.
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected parameter vector length {ParameterCount}, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        foreach (var layer in _streamA)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count > 0)
-            {
-                layer.SetParameters(parameters.GetSubVector(offset, count));
-                offset += count;
-            }
-        }
-        foreach (var layer in _streamB)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count > 0)
-            {
-                layer.SetParameters(parameters.GetSubVector(offset, count));
-                offset += count;
-            }
-        }
     }
 
     /// <summary>

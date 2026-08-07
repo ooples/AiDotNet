@@ -318,6 +318,7 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 // ctor is expressible as literal TestConstructorArgs (both require an IActivationFunction).
 // TrainableParameterGenerator keys on LayerBase inheritance, not the attribute, so the
 // generated EnsureSubLayersRegistered() for this CSP stage is emitted regardless.
+[AutoParameters]
 internal partial class CSPBlock<T> : LayerBase<T>
 {
     private readonly ConvolutionalLayer<T> _downsample;
@@ -381,27 +382,6 @@ internal partial class CSPBlock<T> : LayerBase<T>
         foreach (var l in InnerLayers()) l.UpdateParameters(learningRate);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> all = Vector<T>.Empty();
-        foreach (var l in InnerLayers()) all = Vector<T>.Concatenate(all, l.GetParameters());
-        return all;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var l in InnerLayers())
-        {
-            int len = (int)l.ParameterCount;
-            var slice = new Vector<T>(parameters.AsSpan().Slice(offset, len).ToArray());
-            l.SetParameters(slice);
-            offset += len;
-        }
-        if (offset != parameters.Length)
-            throw new ArgumentException($"Expected {offset} parameters for CSPBlock, but got {parameters.Length}.");
-    }
-
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
@@ -412,8 +392,6 @@ internal partial class CSPBlock<T> : LayerBase<T>
     {
         foreach (var l in InnerLayers()) l.ResetState();
     }
-
-    public override long ParameterCount => GetParameterCount();
 
     public long GetParameterCount()
     {
@@ -456,6 +434,7 @@ internal partial class CSPBlock<T> : LayerBase<T>
 // ctor is expressible as literal TestConstructorArgs (both require an IActivationFunction).
 // TrainableParameterGenerator keys on LayerBase inheritance, not the attribute, so the
 // generated EnsureSubLayersRegistered() for this bottleneck is emitted regardless.
+[AutoParameters]
 internal partial class CSPBottleneckBlock<T> : LayerBase<T>
 {
     private readonly ConvolutionalLayer<T> _cv1;
@@ -498,19 +477,6 @@ internal partial class CSPBottleneckBlock<T> : LayerBase<T>
         _cv2.UpdateParameters(learningRate);
     }
 
-    public override Vector<T> GetParameters()
-        => Vector<T>.Concatenate(_cv1.GetParameters(), _cv2.GetParameters());
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int len1 = (int)_cv1.ParameterCount;
-        int len2 = (int)_cv2.ParameterCount;
-        if (parameters.Length != len1 + len2)
-            throw new ArgumentException($"Expected {len1 + len2} parameters for CSPBottleneckBlock, but got {parameters.Length}.");
-        _cv1.SetParameters(new Vector<T>(parameters.AsSpan().Slice(0, len1).ToArray()));
-        _cv2.SetParameters(new Vector<T>(parameters.AsSpan().Slice(len1, len2).ToArray()));
-    }
-
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
@@ -523,8 +489,6 @@ internal partial class CSPBottleneckBlock<T> : LayerBase<T>
         _cv1.ResetState();
         _cv2.ResetState();
     }
-
-    public override long ParameterCount => GetParameterCount();
 
     public long GetParameterCount() => _cv1.ParameterCount + _cv2.ParameterCount;
 

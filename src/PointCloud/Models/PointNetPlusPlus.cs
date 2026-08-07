@@ -1051,6 +1051,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 /// - Input: Many points, basic features (XYZ)
 /// - Output: Fewer points, rich features (learned patterns)
 /// </remarks>
+[AutoParameters]
 public partial class SetAbstractionLayer<T> : LayerBase<T>
 {
     private sealed class ScaleBranch
@@ -1274,30 +1275,6 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
         }
     }
 
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int offset = 0;
-
-        foreach (var branch in _branches)
-        {
-            foreach (var layer in branch.MlpLayers)
-            {
-                var layerParameters = layer.GetParameters();
-                for (int i = 0; i < layerParameters.Length; i++)
-                {
-                    parameters[offset + i] = layerParameters[i];
-                }
-
-                offset += layerParameters.Length;
-            }
-        }
-
-        Parameters = parameters;
-        return parameters;
-    }
-
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -1310,40 +1287,6 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
                 {
                     var layerParameters = parameters.SubVector(offset, layerParameterCount);
                     layer.UpdateParameters(layerParameters);
-                    offset += layerParameterCount;
-                }
-            }
-        }
-
-        Parameters = parameters;
-    }
-
-    /// <summary>
-    /// Restores the flat parameter vector into the per-branch MLP sub-layers,
-    /// which is where this layer's weights actually live. The base SetParameters
-    /// would set only the inert Parameters field, so a deserialized clone kept its
-    /// freshly-initialised sub-layer weights and predicted differently from the
-    /// trained original (#1789 clone-parity failure — "SetParameters skipped
-    /// silently on an unresolved layer"). This mirrors GetParameters: it slices
-    /// the vector back across the same sub-layers, in the same order, so a
-    /// round-trip through GetParameters/SetParameters is exact.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
-        }
-
-        int offset = 0;
-        foreach (var branch in _branches)
-        {
-            foreach (var layer in branch.MlpLayers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    layer.SetParameters(parameters.SubVector(offset, layerParameterCount));
                     offset += layerParameterCount;
                 }
             }
@@ -1367,26 +1310,6 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
             branch.NeighborCounts = null;
             branch.NeighborIndices = null;
             branch.MaxIndices = null;
-        }
-    }
-
-    public override long ParameterCount
-    {
-        get
-        {
-            // Accumulate in long; SetAbstraction branches over high-resolution
-            // point clouds can have MLP layers whose individual ParameterCount
-            // approaches int.MaxValue. (int) cast on each addend used to
-            // wrap before the sum widened to long for the property's return.
-            long total = 0;
-            foreach (var branch in _branches)
-            {
-                foreach (var layer in branch.MlpLayers)
-                {
-                    total += layer.ParameterCount;
-                }
-            }
-            return total;
         }
     }
 

@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2")]
+[AutoParameters]
 public partial class Upsample3DLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -95,12 +96,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>
     /// Upsample3D supports GPU execution via CUDA, OpenCL, and HIP backends using nearest neighbor interpolation.
     /// </remarks>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>Always 0 as this layer has no trainable parameters.</value>
-    public override long ParameterCount => 0;
 
     #endregion
 
@@ -387,24 +382,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>
     #endregion
 
     #region Parameter Management
-
-    /// <summary>
-    /// Gets all trainable parameters. This layer has none.
-    /// </summary>
-    /// <returns>An empty vector.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
-    }
-
-    /// <summary>
-    /// Sets parameters from a vector. This layer has no trainable parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (should be empty).</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // No parameters to set
-    }
 
     #endregion
 

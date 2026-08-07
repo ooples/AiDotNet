@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 0, 1, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class PaddingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -374,31 +375,6 @@ public partial class PaddingLayer<T> : LayerBase<T>
         // Assume BHWC format: padding order [batch, height, width, channels]
         var paddedOutput = Engine.Pad(input, _padding[1], _padding[1], _padding[2], _padding[2], NumOps.Zero);
         return ApplyActivation(paddedOutput);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the padding layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since PaddingLayer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. Since PaddingLayer
-    /// has no trainable parameters, it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
-    /// 
-    /// Since PaddingLayer:
-    /// - Only performs a fixed operation (adding zeros around the edges)
-    /// - Has no weights, biases, or other learnable parameters
-    /// - The method returns an empty list
-    /// 
-    /// This is different from layers like Dense layers, which would return their weights and biases.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // PaddingLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

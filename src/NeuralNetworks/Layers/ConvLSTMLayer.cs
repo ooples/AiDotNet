@@ -48,6 +48,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 1, 4, 4, 1 }, 3, 2, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class ConvLSTMLayer<T> : LayerBase<T>
 {
     private readonly int _kernelSize;
@@ -224,29 +225,6 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> indicating that the layer supports training; this value is always true for ConvLSTM layers.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the ConvLSTM layer can be trained through backpropagation.
-    /// ConvLSTM layers always return true as they contain trainable parameters (weights and biases).
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer can adjust its internal values during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// ConvLSTM layers always return true because they have parameters (like weights and biases)
-    /// that can be updated during training to learn patterns in spatio-temporal data (like videos or weather data).
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _weightsFi.Length + _weightsIi.Length + _weightsCi.Length + _weightsOi.Length + _weightsFh.Length + _weightsIh.Length + _weightsCh.Length + _weightsOh.Length + _biasF.Length + _biasI.Length + _biasC.Length + _biasO.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -1450,77 +1428,6 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Retrieves all trainable parameters of the ConvLSTM layer as a flattened vector.
-    /// </summary>
-    /// <returns>A vector containing all weights and biases of the layer</returns>
-    /// <remarks>
-    /// <para>
-    /// This method flattens all trainable parameters into a single vector in the following order:
-    /// </para>
-    /// <para>
-    /// 1. Input weights: _weightsFi, _weightsIi, _weightsCi, _weightsOi
-    /// 2. Hidden weights: _weightsFh, _weightsIh, _weightsCh, _weightsOh
-    /// 3. Biases: _biasF, _biasI, _biasC, _biasO
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values into one long list.
-    /// 
-    /// It's like taking all the knobs and dials from the control panel and listing them in a single row:
-    /// - First, it counts how many total numbers need to be stored
-    /// - Then it creates a vector (a one-dimensional array) of that size
-    /// - Finally, it copies all the weights and biases into this vector in a specific order
-    /// 
-    /// This is useful for:
-    /// - Saving all parameters to a file
-    /// - Loading parameters from a file
-    /// - Certain optimization techniques that work with all parameters at once
-    /// - Tracking how many learnable parameters the layer has in total
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Calculate total number of parameters
-        int totalParams = 0;
-
-        // Input weights (I, C, O gates first — F gate has zero gradient for seqLen=1)
-        totalParams += _weightsIi.Length;
-        totalParams += _weightsCi.Length;
-        totalParams += _weightsOi.Length;
-        totalParams += _weightsFi.Length;
-
-        // Hidden weights
-        totalParams += _weightsIh.Length;
-        totalParams += _weightsCh.Length;
-        totalParams += _weightsOh.Length;
-        totalParams += _weightsFh.Length;
-
-        // Biases
-        totalParams += _biasI.Length;
-        totalParams += _biasC.Length;
-        totalParams += _biasO.Length;
-        totalParams += _biasF.Length;
-
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        CopyTensorToVector(_weightsIi, parameters, ref index);
-        CopyTensorToVector(_weightsCi, parameters, ref index);
-        CopyTensorToVector(_weightsOi, parameters, ref index);
-        CopyTensorToVector(_weightsFi, parameters, ref index);
-
-        CopyTensorToVector(_weightsIh, parameters, ref index);
-        CopyTensorToVector(_weightsCh, parameters, ref index);
-        CopyTensorToVector(_weightsOh, parameters, ref index);
-        CopyTensorToVector(_weightsFh, parameters, ref index);
-
-        CopyTensorToVector(_biasI, parameters, ref index);
-        CopyTensorToVector(_biasC, parameters, ref index);
-        CopyTensorToVector(_biasO, parameters, ref index);
-        CopyTensorToVector(_biasF, parameters, ref index);
-
-        return parameters;
-    }
-
-    /// <summary>
     /// Helper method to copy values from a tensor to a vector.
     /// </summary>
     /// <param name="tensor">Source tensor containing values to copy</param>
@@ -1612,43 +1519,6 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         _gradients?.Clear();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-
-        // Set input weights (I, C, O, F order matching GetParameters)
-        CopyVectorToTensor(parameters, _weightsIi, ref index);
-        CopyVectorToTensor(parameters, _weightsCi, ref index);
-        CopyVectorToTensor(parameters, _weightsOi, ref index);
-        CopyVectorToTensor(parameters, _weightsFi, ref index);
-
-        // Set hidden weights
-        CopyVectorToTensor(parameters, _weightsIh, ref index);
-        CopyVectorToTensor(parameters, _weightsCh, ref index);
-        CopyVectorToTensor(parameters, _weightsOh, ref index);
-        CopyVectorToTensor(parameters, _weightsFh, ref index);
-
-        // Set biases
-        CopyVectorToTensor(parameters, _biasI, ref index);
-        CopyVectorToTensor(parameters, _biasC, ref index);
-        CopyVectorToTensor(parameters, _biasO, ref index);
-        CopyVectorToTensor(parameters, _biasF, ref index);
-
-        // Invalidate GPU cache after parameter updates
-        Engine.InvalidatePersistentTensor(_weightsFi);
-        Engine.InvalidatePersistentTensor(_weightsIi);
-        Engine.InvalidatePersistentTensor(_weightsCi);
-        Engine.InvalidatePersistentTensor(_weightsOi);
-        Engine.InvalidatePersistentTensor(_weightsFh);
-        Engine.InvalidatePersistentTensor(_weightsIh);
-        Engine.InvalidatePersistentTensor(_weightsCh);
-        Engine.InvalidatePersistentTensor(_weightsOh);
-        Engine.InvalidatePersistentTensor(_biasF);
-        Engine.InvalidatePersistentTensor(_biasI);
-        Engine.InvalidatePersistentTensor(_biasC);
-        Engine.InvalidatePersistentTensor(_biasO);
     }
 
     /// <summary>

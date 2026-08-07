@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2, 2")]
+[AutoParameters]
 public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
 {
     private readonly int _outputHeight;
@@ -364,15 +365,6 @@ public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         }
 
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters. Returns empty for pooling layers.
-    /// </summary>
-    /// <returns>An empty vector.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
     }
 
     /// <summary>

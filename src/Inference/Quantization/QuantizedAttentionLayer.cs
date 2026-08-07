@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
@@ -24,7 +25,8 @@ namespace AiDotNet.Inference.Quantization;
 /// time so you get faster prediction with less memory.
 /// </para>
 /// </remarks>
-internal sealed class QuantizedAttentionLayer : LayerBase<float>
+[AutoParameters]
+internal sealed partial class QuantizedAttentionLayer : LayerBase<float>
 {
     private readonly int _embeddingDimension;
     private readonly int _headCount;
@@ -120,8 +122,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     }
 
     public override bool SupportsTraining => false;
-
-    public override long ParameterCount => 0;
 
     public override Tensor<float>? GetWeights() => null;
 
@@ -261,9 +261,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
 
     public override void UpdateParameters(Vector<float> parameters)
         => throw new NotSupportedException("QuantizedAttentionLayer is inference-only.");
-
-    public override Vector<float> GetParameters()
-        => Vector<float>.Empty();
 
     public override void ResetState()
     {

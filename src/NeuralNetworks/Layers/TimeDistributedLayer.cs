@@ -35,6 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true)]
+[AutoParameters]
 public partial class TimeDistributedLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -106,34 +107,8 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T>? _lastOutput;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if the inner layer supports training; otherwise, <c>false</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the time distributed layer can be trained. It simply forwards the value of
-    /// the inner layer's SupportsTraining property, as the time distributed layer's trainability depends entirely
-    /// on whether its inner layer can be trained.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// Rather than having its own answer, this layer checks if the inner layer can learn:
-    /// - If the inner layer supports training, this layer also supports training
-    /// - If the inner layer doesn't support training, this layer also doesn't support training
-    /// 
-    /// This makes sense because:
-    /// - The time distributed layer doesn't have its own trainable parameters
-    /// - It just organizes how the inner layer is applied to sequences
-    /// - The actual learning happens in the inner layer
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
-    public override void SetParameters(Vector<T> parameters) => _innerLayer.SetParameters(parameters);
     public override Vector<T> GetParameterGradients() =>
         _accumulatedGradients ?? _innerLayer.GetParameterGradients();
     public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); _accumulatedGradients = null; }
@@ -462,36 +437,6 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _innerLayer.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the inner layer.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters from the inner layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the inner layer. The time distributed layer itself doesn't
-    /// have trainable parameters; it simply delegates to the inner layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the inner layer.
-    /// 
-    /// Since the time distributed layer:
-    /// - Doesn't have its own parameters to learn
-    /// - Simply applies the inner layer multiple times
-    /// 
-    /// It returns the inner layer's parameters, which are:
-    /// - The numbers that the neural network learns during training
-    /// - The same across all time steps (parameter sharing)
-    /// 
-    /// This parameter sharing is a key feature - it means the layer learns patterns
-    /// that can be applied to any time step, rather than learning different patterns
-    /// for different positions in the sequence.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Return the parameters of the inner layer
-        return _innerLayer.GetParameters();
     }
 
     /// <summary>

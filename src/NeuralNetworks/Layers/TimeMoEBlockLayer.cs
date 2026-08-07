@@ -30,6 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 16, 4, 2")]
+[AutoParameters]
 public partial class TimeMoEBlockLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenDim;
@@ -154,6 +155,41 @@ public partial class TimeMoEBlockLayer<T> : LayerBase<T>
         RegisterSubLayer(_moe);
     }
 
+    /// <summary>
+    /// Sizes the four sub-layers from <c>_hiddenDim</c>, which is the only thing that determines
+    /// their weights.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the one fact about the block that cannot be derived: its children are sized by the
+    /// block's HIDDEN width, not by the shape of the tensor arriving at its input, and nothing
+    /// outside the block knows that. It used to live inside a hand-written
+    /// <c>SetParameters</c> — so a restore materialized the children, while <c>ParameterCount</c>
+    /// asked the same unmaterialized children and answered a smaller number. The saved and loaded
+    /// blocks then disagreed by 2,424 values.
+    /// </para>
+    /// <para>
+    /// Stating it here instead makes it a SHAPE fact, declared once, and count / read / restore
+    /// all inherit it — none of them has to re-derive the parameter layout, which is what the
+    /// three hand-written surfaces were really for.
+    /// </para>
+    /// <para>
+    /// MultiHeadAttention requires rank >= 2 (sequence + features), so it gets a length-1
+    /// sequence; its weight count depends only on <c>_hiddenDim</c> either way.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        EnsureSubLayersRegistered();
+
+        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape([_hiddenDim]);
+        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape([_hiddenDim]);
+        if (!_selfAttention.IsShapeResolved) _selfAttention.ResolveFromShape([1, _hiddenDim]);
+        if (!_moe.IsShapeResolved) _moe.ResolveFromShape([_hiddenDim]);
+
+        base.EnsureInitialized();
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
@@ -178,76 +214,6 @@ public partial class TimeMoEBlockLayer<T> : LayerBase<T>
         _selfAttention.UpdateParameters(learningRate);
         _norm2.UpdateParameters(learningRate);
         _moe.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: sublayers may be in placeholder shape state. Resolve them
-        // from known constants (hiddenDim) before slicing parameters. MHA
-        // requires rank>=2 (sequence + features), so we synthesize a length-1
-        // sequence shape; weight count depends only on hiddenDim regardless.
-        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape(new[] { _hiddenDim });
-        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape(new[] { _hiddenDim });
-        if (!_selfAttention.IsShapeResolved) _selfAttention.ResolveFromShape(new[] { 1, _hiddenDim });
-        if (!_moe.IsShapeResolved) _moe.ResolveFromShape(new[] { _hiddenDim });
-
-        // Use sub.ParameterCount (cheap O(1) integer) rather than
-        // sub.GetParameters().Length (which materializes a full flattened
-        // copy of every sublayer just to discover its width — that copy
-        // is multi-billion entries on the MoE branch in PaLM-E-scale runs
-        // and silently inflates peak memory during deserialize). The
-        // sublayer types here (LayerNormalization, MultiHeadAttention,
-        // MixtureOfExperts) all maintain the invariant
-        // ParameterCount == GetParameters().Length once IsShapeResolved is
-        // true, which the ResolveFromShape calls above guarantee.
-        int idx = 0;
-        void Set(ILayer<T> sub)
-        {
-            // Use the centralized ParameterCountHelper so a sublayer count
-            // above int.MaxValue surfaces with the actionable
-            // "split the architecture or use streaming" message used
-            // everywhere else in the codebase, rather than a generic
-            // OverflowException at the (int) cast.
-            int count = ParameterCountHelper.ToFlatVectorSize(sub.ParameterCount);
-            if (count == 0) return;
-            sub.SetParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        Set(_norm1);
-        Set(_selfAttention);
-        Set(_norm2);
-        Set(_moe);
-        if (idx != parameters.Length)
-        {
-            throw new ArgumentException(
-                $"TimeMoEBlockLayer expected {idx} parameters across sublayers, got {parameters.Length}.");
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new List<Vector<T>>
-        {
-            _norm1.GetParameters(),
-            _selfAttention.GetParameters(),
-            _norm2.GetParameters(),
-            _moe.GetParameters(),
-        };
-
-        int total = 0;
-        foreach (var p in parts) total += p.Length;
-
-        var combined = new T[total];
-        int offset = 0;
-        foreach (var p in parts)
-        {
-            for (int i = 0; i < p.Length; i++)
-                combined[offset + i] = p[i];
-            offset += p.Length;
-        }
-        return new Vector<T>(combined);
     }
 
     /// <inheritdoc/>

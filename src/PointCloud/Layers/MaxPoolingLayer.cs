@@ -72,18 +72,11 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>
         // No gradients to clear
     }
 
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
-    }
-
     public override void ResetState()
     {
         _maxIndices = null;
         _numPoints = 0;
     }
-
-    public override long ParameterCount => 0;
 
     public override bool SupportsTraining => false; // No parameters to update; still participates in backprop
 }

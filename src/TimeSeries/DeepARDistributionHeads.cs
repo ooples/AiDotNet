@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -192,7 +193,8 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
 /// detached mean for σ (so the scale learns the residual spread without an "inflate σ to kill the μ gradient"
 /// escape hatch). This is the historical DeepAR head, preserved bit-for-bit as the default.
 /// </summary>
-internal sealed class DeepARGaussianHead<T> : DeepARDistributionHead<T>
+[AutoParameters]
+internal sealed partial class DeepARGaussianHead<T> : DeepARDistributionHead<T>
 {
     private readonly Tensor<T> _meanW, _meanB, _scaleW, _scaleB;
 
@@ -270,7 +272,8 @@ internal sealed class DeepARGaussianHead<T> : DeepARDistributionHead<T>
 /// fat-tailed data. ν is fixed (not learned) so the log-Γ normalisation constants are true constants and the
 /// loss stays fully differentiable in (μ, σ) with standard tape ops — no differentiable log-Γ required.
 /// </summary>
-internal sealed class DeepARStudentTHead<T> : DeepARDistributionHead<T>
+[AutoParameters]
+internal sealed partial class DeepARStudentTHead<T> : DeepARDistributionHead<T>
 {
     private readonly Tensor<T> _meanW, _meanB, _scaleW, _scaleB;
     private readonly double _nu;
@@ -364,7 +367,8 @@ internal sealed class DeepARStudentTHead<T> : DeepARDistributionHead<T>
 /// distribution can be ASYMMETRIC and multi-modal-ish — the head that actually models skew, which the
 /// downstream skew-aware sizing consumes via the closed-form quantile function.
 /// </summary>
-internal sealed class DeepARSplineHead<T> : DeepARDistributionHead<T>
+[AutoParameters]
+internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>
 {
     // Fixed probability grid (must be strictly increasing, symmetric around 0.5 for a sane median).
     private static readonly double[] Grid = { 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95 };

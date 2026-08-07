@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4")]
+[AutoParameters]
 public partial class DropoutLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -354,62 +355,6 @@ public partial class DropoutLayer<T> : LayerBase<T>
         refreshedMask.AsSpan().CopyTo(_dropoutMask.AsWritableSpan());
         _dropoutMask.IncrementVersion();
         Engine.InvalidatePersistentTensor(_dropoutMask);
-    }
-
-    /// <summary>
-    /// Gets the trainable parameters of the layer.
-    /// </summary>
-    /// <returns>
-    /// An empty vector since dropout layers have no trainable parameters.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the dropout layer has no
-    /// trainable parameters to retrieve, so it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because dropout layers have no learnable values.
-    /// 
-    /// Unlike layers with weights and biases:
-    /// - Dropout layers don't have any parameters that change during training
-    /// - The dropout rate and scale are fixed when the layer is created
-    /// - There are no values to save when storing a trained model
-    /// 
-    /// This method returns an empty vector (a vector of length zero),
-    /// indicating there are no parameters to collect.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Dropout layer has no trainable parameters
-        return new Vector<T>(0);
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is not shown in the original code, but would typically be implemented to match
-    /// the GetParameters method. For a dropout layer, it would accept an empty vector since there
-    /// are no parameters to set.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would do nothing because dropout layers have no adjustable parameters.
-    /// 
-    /// Since dropout layers don't have learnable parameters:
-    /// - There's nothing to set or update
-    /// - The method would only verify that the input is an empty vector
-    /// 
-    /// This method would exist only to fulfill the contract of the base layer class.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Dropout layer has no parameters to set
-        if (parameters.Length != 0)
-        {
-            throw new ArgumentException($"Expected 0 parameters, but got {parameters.Length}");
-        }
     }
 
     /// <summary>

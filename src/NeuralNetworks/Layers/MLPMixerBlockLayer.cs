@@ -30,6 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 8, 2")]
+[AutoParameters]
 public partial class MLPMixerBlockLayer<T> : LayerBase<T>
 {
     private readonly int _numPatches;
@@ -121,6 +122,36 @@ public partial class MLPMixerBlockLayer<T> : LayerBase<T>
         RegisterSubLayer(_channelMlpContract);
     }
 
+    /// <summary>
+    /// Sizes the two mixer MLPs and the two norms from <c>_numPatches</c> / <c>_hiddenDim</c>, which
+    /// are fixed at construction.
+    /// </summary>
+    /// <remarks>
+    /// The temporal mixer runs on the TRANSPOSED tensor, so its Dense layers see
+    /// <c>[hiddenDim, numPatches]</c> and take <c>numPatches</c> as their input width, while the
+    /// channel mixer sees <c>[numPatches, hiddenDim]</c>. Nothing outside the block can work that
+    /// out, which is why the block reported a truthful zero until its first Forward and a restore
+    /// into a fresh instance had nowhere to put 5,376 values.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        EnsureSubLayersRegistered();
+
+        int tempExpanded = _numPatches * _expansionFactor;
+        int chanExpanded = _hiddenDim * _expansionFactor;
+
+        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape([_numPatches, _hiddenDim]);
+        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape([_numPatches, _hiddenDim]);
+
+        if (!_temporalMlpExpand.IsShapeResolved) _temporalMlpExpand.ResolveFromShape([_hiddenDim, _numPatches]);
+        if (!_temporalMlpContract.IsShapeResolved) _temporalMlpContract.ResolveFromShape([_hiddenDim, tempExpanded]);
+
+        if (!_channelMlpExpand.IsShapeResolved) _channelMlpExpand.ResolveFromShape([_numPatches, _hiddenDim]);
+        if (!_channelMlpContract.IsShapeResolved) _channelMlpContract.ResolveFromShape([_numPatches, chanExpanded]);
+
+        base.EnsureInitialized();
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
@@ -149,76 +180,6 @@ public partial class MLPMixerBlockLayer<T> : LayerBase<T>
         _norm2.UpdateParameters(learningRate);
         _channelMlpExpand.UpdateParameters(learningRate);
         _channelMlpContract.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new List<Vector<T>>
-        {
-            _norm1.GetParameters(),
-            _temporalMlpExpand.GetParameters(),
-            _temporalMlpContract.GetParameters(),
-            _norm2.GetParameters(),
-            _channelMlpExpand.GetParameters(),
-            _channelMlpContract.GetParameters(),
-        };
-        int total = 0;
-        foreach (var p in parts) total += p.Length;
-        var combined = new T[total];
-        int offset = 0;
-        foreach (var p in parts)
-        {
-            for (int i = 0; i < p.Length; i++)
-                combined[offset + i] = p[i];
-            offset += p.Length;
-        }
-        return new Vector<T>(combined);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: sublayers start with placeholder shapes. Resolve them
-        // from known constants (numPatches, hiddenDim, expansion factors).
-        int tempExpanded = _numPatches * _expansionFactor;
-        int chanExpanded = _hiddenDim * _expansionFactor;
-
-        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape(new[] { _hiddenDim });
-        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape(new[] { _hiddenDim });
-        if (!_temporalMlpExpand.IsShapeResolved) _temporalMlpExpand.ResolveFromShape(new[] { _numPatches });
-        if (!_temporalMlpContract.IsShapeResolved) _temporalMlpContract.ResolveFromShape(new[] { tempExpanded });
-        if (!_channelMlpExpand.IsShapeResolved) _channelMlpExpand.ResolveFromShape(new[] { _hiddenDim });
-        if (!_channelMlpContract.IsShapeResolved) _channelMlpContract.ResolveFromShape(new[] { chanExpanded });
-
-        // Composite SetParameters: route by sublayer ParameterCount (cheap
-        // O(1) integer) rather than GetParameters().Length, which would
-        // materialize a full flattened copy of every sublayer just to read
-        // its width — doubling load-time allocations on deep mixer stacks
-        // and eagerly materializing tensors that should stay on the lazy/
-        // streamable path. The sublayer types here (LayerNormalization,
-        // DenseLayer) maintain ParameterCount == GetParameters().Length
-        // once IsShapeResolved is true (the ResolveFromShape calls above
-        // guarantee that here).
-        int idx = 0;
-        void Set(ILayer<T> sub)
-        {
-            int count = checked((int)sub.ParameterCount);
-            if (count == 0) return;
-            sub.SetParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        Set(_norm1);
-        Set(_temporalMlpExpand);
-        Set(_temporalMlpContract);
-        Set(_norm2);
-        Set(_channelMlpExpand);
-        Set(_channelMlpContract);
-        if (idx != parameters.Length)
-        {
-            throw new ArgumentException(
-                $"MLPMixerBlockLayer expected {idx} parameters across sublayers, got {parameters.Length}.");
-        }
     }
 
     /// <inheritdoc/>

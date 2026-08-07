@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 16", TestConstructorArgs = "8")]
+[AutoParameters]
 public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -97,8 +98,6 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
     private IEnumerable<Conv1DLayer<T>> InnerConvs() => _convs1.Concat(_convs2);
 
     public override bool SupportsTraining => true;
-
-    public override long ParameterCount => InnerConvs().Sum(c => c.ParameterCount);
 
     /// <summary>
     /// Channel width is fixed by the block; the time axis is carried through untouched, since every
@@ -171,33 +170,6 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         foreach (var c in InnerConvs()) c.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> all = Vector<T>.Empty();
-        foreach (var c in InnerConvs())
-            all = Vector<T>.Concatenate(all, c.GetParameters());
-        return all;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var c in InnerConvs())
-        {
-            int len = (int)c.ParameterCount;
-            var slice = new Vector<T>(parameters.AsSpan().Slice(offset, len).ToArray());
-            c.SetParameters(slice);
-            offset += len;
-        }
-        if (offset != parameters.Length)
-        {
-            throw new ArgumentException(
-                $"Expected {offset} parameters for HiFiGANResBlockLayer, but got {parameters.Length}.");
-        }
     }
 
     /// <inheritdoc/>

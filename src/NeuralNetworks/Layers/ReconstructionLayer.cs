@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class ReconstructionLayer<T> : LayerBase<T>
 {
 
@@ -88,32 +89,6 @@ public partial class ReconstructionLayer<T> : LayerBase<T>
     /// When false, the layer uses scalar activation functions that operate on individual elements.
     /// </remarks>
     private bool _useVectorActivation;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the reconstruction layer.
-    /// </summary>
-    /// <value>
-    /// The sum of parameter counts from all three fully connected layers.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property returns the total number of trainable parameters (weights and biases) across all three
-    /// fully connected layers that make up this reconstruction layer. This is useful for monitoring the
-    /// complexity of the layer or for parameter initialization strategies.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you how many numbers the layer can adjust during training.
-    /// 
-    /// Each parameter is a number that the neural network learns:
-    /// - More parameters mean the layer can learn more complex patterns
-    /// - More parameters also require more training data and time
-    /// - This layer has parameters in all three of its internal layers
-    /// 
-    /// Think of parameters like knobs that the network can turn to get better results.
-    /// This property tells you the total number of knobs available to this layer.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount =>
-        _fc1.ParameterCount + _fc2.ParameterCount + _fc3.ParameterCount;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -539,42 +514,6 @@ public partial class ReconstructionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the reconstruction layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters from all three fully connected layers.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the reconstruction layer as a single vector.
-    /// It collects the parameters from each of the three fully connected layers in sequence and concatenates
-    /// them into a single vector. This is useful for optimization algorithms that operate on all parameters
-    /// at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the reconstruction layer.
-    /// 
-    /// The parameters:
-    /// - Are the weights and biases from all three internal layers
-    /// - Control how the layer processes information
-    /// - Are returned as a single list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// The parameters from the first layer come first in the vector, followed by the second layer's parameters,
-    /// and finally the third layer's parameters.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for production-grade parameter collection
-        return Vector<T>.Concatenate(
-            _fc1.GetParameters(),
-            _fc2.GetParameters(),
-            _fc3.GetParameters());
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the reconstruction layer.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for all three fully connected layers.</param>
@@ -615,30 +554,6 @@ public partial class ReconstructionLayer<T> : LayerBase<T>
         _fc1.ClearGradients();
         _fc2.ClearGradients();
         _fc3.ClearGradients();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Get parameter counts for each sublayer
-        int fc1ParamCount = checked((int)_fc1.ParameterCount);
-        int fc2ParamCount = checked((int)_fc2.ParameterCount);
-        int fc3ParamCount = checked((int)_fc3.ParameterCount);
-        int totalParams = fc1ParamCount + fc2ParamCount + fc3ParamCount;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Use Vector.Slice for production-grade parameter distribution
-        int offset = 0;
-        _fc1.SetParameters(parameters.Slice(offset, fc1ParamCount));
-        offset += fc1ParamCount;
-
-        _fc2.SetParameters(parameters.Slice(offset, fc2ParamCount));
-        offset += fc2ParamCount;
-
-        _fc3.SetParameters(parameters.Slice(offset, fc3ParamCount));
     }
 
     /// <summary>

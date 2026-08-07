@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -45,6 +46,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class UpBlock<T> : LayerBase<T>
 {
     /// <summary>
@@ -273,49 +275,11 @@ public partial class UpBlock<T> : LayerBase<T>
         }
     }
 
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        if (_hasUpsample && _upsample != null)
-        {
-            AddParameters(paramsList, _upsample.GetParameters());
-        }
-
-        foreach (var block in _resBlocks)
-        {
-            AddParameters(paramsList, block.GetParameters());
-        }
-
-        return new Vector<T>(paramsList.ToArray());
-    }
-
     private static void AddParameters(List<T> list, Vector<T> parameters)
     {
         for (int i = 0; i < parameters.Length; i++)
         {
             list.Add(parameters[i]);
-        }
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-
-        if (_hasUpsample && _upsample != null)
-        {
-            SetLayerParams(_upsample, parameters, ref index);
-        }
-
-        foreach (var block in _resBlocks)
-        {
-            SetLayerParams(block, parameters, ref index);
         }
     }
 

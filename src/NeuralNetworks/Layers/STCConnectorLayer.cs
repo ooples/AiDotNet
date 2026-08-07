@@ -27,6 +27,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "4, 4, 8", TestConstructorArgs = "8, 2, 2")]
+[AutoParameters]
 public partial class STCConnectorLayer<T> : LayerBase<T>
 {
     private readonly int _visionDim;
@@ -265,35 +266,6 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
             layer.SetTrainingMode(isTraining);
     }
 
-    /// <inheritdoc/>
-    public override long ParameterCount => _parameterLayers.Sum(layer => layer.ParameterCount);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => Concatenate(_parameterLayers, gradients: false);
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Every convolution/dense sublayer is lazy. Reconstruct its concrete shapes before slicing
-        // a serialized trained vector into the newly-created connector.
-        if (_parameterLayers.Sum(layer => (long)layer.GetParameters().Length) != parameters.Length)
-            MaterializeSublayers();
-
-        int offset = 0;
-        foreach (var layer in _parameterLayers)
-        {
-            int count = layer.GetParameters().Length;
-            if (count == 0) continue;
-            if (offset + count > parameters.Length)
-                throw new ArgumentException("STCConnectorLayer parameter vector is shorter than its reconstructed structure.", nameof(parameters));
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-
-        if (offset != parameters.Length)
-            throw new ArgumentException($"Expected {offset} STC parameters, got {parameters.Length}.", nameof(parameters));
-    }
-
     private void MaterializeSublayers()
     {
         bool wasTraining = IsTrainingMode;
@@ -477,26 +449,6 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
             base.SetTrainingMode(isTraining);
             foreach (var layer in _allLayers)
                 layer.SetTrainingMode(isTraining);
-        }
-
-        public override long ParameterCount => _parameterLayers.Sum(layer => layer.ParameterCount);
-
-        public override Vector<T> GetParameters() => Concatenate(_parameterLayers, gradients: false);
-
-        public override void SetParameters(Vector<T> parameters)
-        {
-            int expected = _parameterLayers.Sum(layer => layer.GetParameters().Length);
-            if (parameters.Length != expected)
-                throw new ArgumentException($"Expected {expected} RegStage parameters, got {parameters.Length}.", nameof(parameters));
-
-            int offset = 0;
-            foreach (var layer in _parameterLayers)
-            {
-                int count = layer.GetParameters().Length;
-                if (count == 0) continue;
-                layer.SetParameters(parameters.Slice(offset, count));
-                offset += count;
-            }
         }
 
         public override Vector<T> GetParameterGradients() => Concatenate(_parameterLayers, gradients: true);

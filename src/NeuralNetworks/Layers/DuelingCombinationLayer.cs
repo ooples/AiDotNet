@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -42,6 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// gradients for both heads automatically.
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class DuelingCombinationLayer<T> : LayerBase<T>
 {
     private readonly int _featureDim;
@@ -105,10 +107,6 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = NumOps.FromDouble((rng.NextDouble() * 2.0 - 1.0) * range);
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        (long)_featureDim * 1 + 1 + (long)_featureDim * _actionSize + _actionSize;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -221,31 +219,6 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>
         for (int i = 0; i < input.Rank - 1; i++) outShape[i] = input.Shape[i];
         outShape[^1] = _actionSize;
         return Engine.Reshape(q, outShape);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var p = new Vector<T>((int)ParameterCount);
-        int idx = 0;
-        for (int i = 0; i < _valueWeights.Length; i++) p[idx++] = _valueWeights[i];
-        for (int i = 0; i < _valueBias.Length; i++) p[idx++] = _valueBias[i];
-        for (int i = 0; i < _advantageWeights.Length; i++) p[idx++] = _advantageWeights[i];
-        for (int i = 0; i < _advantageBias.Length; i++) p[idx++] = _advantageBias[i];
-        return p;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        int idx = 0;
-        for (int i = 0; i < _valueWeights.Length; i++) _valueWeights[i] = parameters[idx++];
-        for (int i = 0; i < _valueBias.Length; i++) _valueBias[i] = parameters[idx++];
-        for (int i = 0; i < _advantageWeights.Length; i++) _advantageWeights[i] = parameters[idx++];
-        for (int i = 0; i < _advantageBias.Length; i++) _advantageBias[i] = parameters[idx++];
     }
 
     /// <inheritdoc/>

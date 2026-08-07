@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -28,6 +29,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - LayerNorm + residual connections around each attention block
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
@@ -118,40 +120,6 @@ public partial class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
         _temporalAttention.UpdateParameters(learningRate);
         _spatialNorm.UpdateParameters(learningRate);
         _temporalNorm.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var spatialParams = _spatialAttention.GetParameters();
-        var temporalParams = _temporalAttention.GetParameters();
-        var spatialNormParams = _spatialNorm.GetParameters();
-        var temporalNormParams = _temporalNorm.GetParameters();
-
-        int total = spatialParams.Length + temporalParams.Length +
-                    spatialNormParams.Length + temporalNormParams.Length;
-        var combined = new Vector<T>(total);
-        int offset = 0;
-        CopyParams(spatialParams, combined, ref offset);
-        CopyParams(temporalParams, combined, ref offset);
-        CopyParams(spatialNormParams, combined, ref offset);
-        CopyParams(temporalNormParams, combined, ref offset);
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        var spatialParams = ExtractParams(parameters, _spatialAttention.GetParameters().Length, ref offset);
-        var temporalParams = ExtractParams(parameters, _temporalAttention.GetParameters().Length, ref offset);
-        var spatialNormParams = ExtractParams(parameters, _spatialNorm.GetParameters().Length, ref offset);
-        var temporalNormParams = ExtractParams(parameters, _temporalNorm.GetParameters().Length, ref offset);
-
-        _spatialAttention.SetParameters(spatialParams);
-        _temporalAttention.SetParameters(temporalParams);
-        _spatialNorm.SetParameters(spatialNormParams);
-        _temporalNorm.SetParameters(temporalNormParams);
     }
 
     private static void CopyParams(Vector<T> src, Vector<T> dst, ref int offset)

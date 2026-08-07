@@ -30,6 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2, 2")]
+[AutoParameters]
 public partial class AveragePoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -392,25 +393,6 @@ public partial class AveragePoolingLayer<T> : LayerBase<T>
     {
         // Average pooling doesn't have an activation function
         return Array.Empty<ActivationFunction>();
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer.
-    /// </summary>
-    /// <returns>An empty vector since average pooling layers have no trainable parameters.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method returns all the values that can be adjusted during training.
-    ///
-    /// Many neural network layers have weights and biases that get updated as the network learns.
-    /// However, average pooling layers simply compute the average of values in each window - there are
-    /// no weights or biases to adjust.
-    ///
-    /// This is why the method returns an empty vector (essentially a list with no elements).
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // AveragePoolingLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

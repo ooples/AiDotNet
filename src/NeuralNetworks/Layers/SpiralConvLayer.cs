@@ -43,6 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
+[AutoParameters]
 public partial class SpiralConvLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -957,34 +958,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>Vector containing all weights and biases.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    /// <exception cref="ArgumentException">Thrown when parameter count is incorrect.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = _weights.Length + _biases.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        int idx = 0;
-        _weights = new Tensor<T>(_weights._shape, parameters.Slice(idx, _weights.Length));
-        idx += _weights.Length;
-        _biases = new Tensor<T>(_biases._shape, parameters.Slice(idx, _biases.Length));
-    }
-
-    /// <summary>
     /// Gets the weight tensor.
     /// </summary>
     /// <returns>Weights [OutputChannels, InputChannels * SpiralLength].</returns>
@@ -995,11 +968,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>Biases [OutputChannels].</returns>
     public override Tensor<T> GetBiases() => _biases;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => _weights.Length + _biases.Length;
 
     /// <summary>
     /// Emits the construction parameters the network's flat-parameter

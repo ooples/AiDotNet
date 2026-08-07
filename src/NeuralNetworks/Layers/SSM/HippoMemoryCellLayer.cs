@@ -25,6 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 4, 2", TestConstructorArgs = "4, 2, 4")]
+[AutoParameters]
 public partial class HippoMemoryCellLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenSize;
@@ -79,12 +80,6 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>
 
     /// <summary>Gets the configured discretization method.</summary>
     public string Discretization => _discretization;
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        _memoryWeights.Length + _memoryBias.Length +
-        _hiddenWeights.Length + _hiddenBias.Length +
-        (_useGate ? _gateWeights.Length + _gateBias.Length : 0);
 
     /// <inheritdoc />
     public override IReadOnlyList<Tensor<T>> GetTrainableParameters() => _useGate
@@ -745,33 +740,6 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++) result[i, j] = augmented[i, n + j];
         return result;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int offset = 0;
-        foreach (var tensor in ParameterTensors())
-        {
-            T[] data = tensor.DataVector.GetDataArray();
-            for (int i = 0; i < tensor.Length; i++) result[offset++] = data[i];
-        }
-        return result;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} HiPPO cell parameters, got {parameters.Length}.", nameof(parameters));
-        int offset = 0;
-        foreach (var tensor in ParameterTensors())
-        {
-            T[] data = tensor.DataVector.GetDataArray();
-            for (int i = 0; i < tensor.Length; i++) data[i] = parameters[offset++];
-        }
     }
 
     private IEnumerable<Tensor<T>> ParameterTensors()

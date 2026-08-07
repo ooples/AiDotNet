@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Tabular;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -39,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AutoParameters]
 public partial class AttentiveTransformerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
@@ -269,48 +271,6 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>
         return NumOps.Divide(totalEntropy, NumOps.FromDouble(batchSize));
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var fcParams = _fcLayer.GetParameters();
-        var bnParams = _bnLayer.GetParameters();
-        var result = new Vector<T>(fcParams.Length + bnParams.Length);
-
-        for (int i = 0; i < fcParams.Length; i++)
-        {
-            result[i] = fcParams[i];
-        }
-        for (int i = 0; i < bnParams.Length; i++)
-        {
-            result[fcParams.Length + i] = bnParams[i];
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int fcCount = checked((int)_fcLayer.ParameterCount);
-        int bnCount = checked((int)_bnLayer.ParameterCount);
-
-        var fcParams = new Vector<T>(fcCount);
-        var bnParams = new Vector<T>(bnCount);
-
-        for (int i = 0; i < fcCount; i++)
-        {
-            fcParams[i] = parameters[i];
-        }
-        for (int i = 0; i < bnCount; i++)
-        {
-            bnParams[i] = parameters[fcCount + i];
-        }
-
-        _fcLayer.SetParameters(fcParams);
-        _bnLayer.SetParameters(bnParams);
-    }
-
     /// <summary>
     /// Gets the parameter gradients.
     /// </summary>
@@ -330,9 +290,6 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>
         }
         return result;
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _fcLayer.ParameterCount + _bnLayer.ParameterCount;
 
     /// <summary>
     /// Gets the input shape.

@@ -98,9 +98,6 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override long ParameterCount => (long)_channels * _multiplier * _kernelSize + (long)_channels * _multiplier;
-
-    /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 3)
@@ -137,32 +134,6 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
         var biasReshaped = Engine.Reshape(_bias, new[] { 1, _channels * _multiplier, 1 });
         var withBias = Engine.TensorBroadcastAdd(conv, biasReshaped);
         return ApplyActivation(withBias);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-        => Vector<T>.Concatenate(new Vector<T>(_kernel.ToArray()), new Vector<T>(_bias.ToArray()));
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int kernelLen = _channels * _multiplier * _kernelSize;
-        int biasLen = _channels * _multiplier;
-        if (parameters.Length != kernelLen + biasLen)
-        {
-            throw new ArgumentException(
-                $"Expected {kernelLen + biasLen} parameters for DepthwiseConv1DLayer, but got {parameters.Length}.");
-        }
-
-        // Copy in place (NOT `_kernel = new Tensor<T>(...)`) so the persistent-tensor identities
-        // registered in the ctor stay valid — replacing the fields would leave the registry/optimizer
-        // pointing at the old tensors and a Clone restored via SetParameters would silently lose the
-        // loaded values on the next step. Same pattern as Conv1DLayer/DenseLayer.SetParameters.
-        parameters.AsSpan().Slice(0, kernelLen).CopyTo(_kernel.Data.Span);
-        parameters.AsSpan().Slice(kernelLen, biasLen).CopyTo(_bias.Data.Span);
-
-        Engine.InvalidatePersistentTensor(_kernel);
-        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <inheritdoc/>

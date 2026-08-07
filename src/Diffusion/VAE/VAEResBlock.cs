@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -46,6 +47,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class VAEResBlock<T> : LayerBase<T>
 {
     /// <summary>
@@ -274,55 +276,11 @@ public partial class VAEResBlock<T> : LayerBase<T>
         _skipConv?.UpdateParameters(learningRate);
     }
 
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        _norm1.ParameterCount + _conv1.ParameterCount +
-        _norm2.ParameterCount + _conv2.ParameterCount +
-        (_skipConv?.ParameterCount ?? 0);
-
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        AddParameters(paramsList, _norm1.GetParameters());
-        AddParameters(paramsList, _conv1.GetParameters());
-        AddParameters(paramsList, _norm2.GetParameters());
-        AddParameters(paramsList, _conv2.GetParameters());
-
-        if (_skipConv != null)
-        {
-            AddParameters(paramsList, _skipConv.GetParameters());
-        }
-
-        return new Vector<T>(paramsList.ToArray());
-    }
-
     private static void AddParameters(List<T> list, Vector<T> parameters)
     {
         for (int i = 0; i < parameters.Length; i++)
         {
             list.Add(parameters[i]);
-        }
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-
-        SetLayerParams(_norm1, parameters, ref index);
-        SetLayerParams(_conv1, parameters, ref index);
-        SetLayerParams(_norm2, parameters, ref index);
-        SetLayerParams(_conv2, parameters, ref index);
-
-        if (_skipConv != null)
-        {
-            SetLayerParams(_skipConv, parameters, ref index);
         }
     }
 

@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
+[AutoParameters]
 public partial class PositionalEncodingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -380,33 +381,6 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the positional encoding layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since PositionalEncodingLayer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. Since PositionalEncodingLayer
-    /// has no trainable parameters, it returns an empty vector. The positional encodings are fixed values
-    /// determined by a mathematical formula, not learnable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
-    /// 
-    /// Since PositionalEncodingLayer:
-    /// - Uses fixed encodings based on a mathematical formula
-    /// - Has no weights, biases, or other learnable parameters
-    /// - The method returns an empty list
-    /// 
-    /// This is different from layers like Dense layers, which would return their weights and biases.
-    /// The positional encodings are fixed by design and don't need to be learned from data.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // PositionalEncodingLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

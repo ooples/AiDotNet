@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.RecurrentLayer<double>(8, (AiDotNet.Interfaces.IActivationFunction<double>?)null), true, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class BidirectionalLayer<T> : LayerBase<T>
 {
     private readonly LayerBase<T> _forwardLayer;
@@ -52,30 +53,6 @@ public partial class BidirectionalLayer<T> : LayerBase<T>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if either the forward or backward layer supports training; otherwise, <c>false</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the bidirectional layer can be trained through backpropagation. 
-    /// The layer supports training if either of its internal layers (forward or backward) supports training.
-    /// This is typically the case for layers that have trainable parameters, such as weights or biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer can adjust its internal values during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// The bidirectional layer supports training if either of its two internal layers
-    /// (forward or backward) supports training.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _forwardLayer.ParameterCount + _backwardLayer.ParameterCount;
     public override bool SupportsTraining => _forwardLayer.SupportsTraining || _backwardLayer.SupportsTraining;
 
     public override Vector<T> GetParameterGradients()
@@ -602,52 +579,6 @@ public partial class BidirectionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters from both the forward and backward layers as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from both the forward and backward inner layers and combines them
-    /// into a single vector. This is useful for optimization algorithms that operate on all parameters at once, or for
-    /// saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from both forward and backward layers.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include weights and biases from both forward and backward layers
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Combine parameters from both forward and backward layers
-        var forwardParams = _forwardLayer.GetParameters();
-        var backwardParams = _backwardLayer.GetParameters();
-
-        var combinedParams = new Vector<T>(forwardParams.Length + backwardParams.Length);
-
-        // Copy forward parameters
-        for (int i = 0; i < forwardParams.Length; i++)
-        {
-            combinedParams[i] = forwardParams[i];
-        }
-
-        // Copy backward parameters
-        for (int i = 0; i < backwardParams.Length; i++)
-        {
-            combinedParams[i + forwardParams.Length] = backwardParams[i];
-        }
-
-        return combinedParams;
-    }
-
-    /// <summary>
     /// Sets the trainable parameters for both the forward and backward layers.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -709,45 +640,6 @@ public partial class BidirectionalLayer<T> : LayerBase<T>
             if (!_backwardLayer.IsShapeResolved) _backwardLayer.ResolveFromShape(savedInput);
         }
         base.Deserialize(reader);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if inner layers aren't shape-resolved, derive their
-        // input shape from this wrapper's resolved input shape.
-        if (parameters.Length > 0 && IsShapeResolved && !_forwardLayer.IsShapeResolved)
-        {
-            var wrapperInput = GetInputShape();
-            if (wrapperInput != null && wrapperInput.Length > 0
-                && System.Array.TrueForAll(wrapperInput, d => d > 0))
-            {
-                _forwardLayer.ResolveFromShape(wrapperInput);
-                _backwardLayer.ResolveFromShape(wrapperInput);
-            }
-        }
-
-        var forwardParams = _forwardLayer.GetParameters();
-        var backwardParams = _backwardLayer.GetParameters();
-
-        if (parameters.Length != forwardParams.Length + backwardParams.Length)
-            throw new ArgumentException($"Expected {forwardParams.Length + backwardParams.Length} parameters, but got {parameters.Length}");
-
-        // Extract and set forward parameters
-        var newForwardParams = new Vector<T>(forwardParams.Length);
-        for (int i = 0; i < forwardParams.Length; i++)
-        {
-            newForwardParams[i] = parameters[i];
-        }
-
-        // Extract and set backward parameters
-        var newBackwardParams = new Vector<T>(backwardParams.Length);
-        for (int i = 0; i < backwardParams.Length; i++)
-        {
-            newBackwardParams[i] = parameters[i + forwardParams.Length];
-        }
-
-        _forwardLayer.SetParameters(newForwardParams);
-        _backwardLayer.SetParameters(newBackwardParams);
     }
 
     /// <summary>

@@ -40,6 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
+[AutoParameters]
 public partial class GroupNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
@@ -82,7 +83,6 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     #endregion
 
-    public override long ParameterCount => _gamma.Length + _beta.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -380,29 +380,6 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
         var updBeta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
         for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
         for (int i = 0; i < _beta.Length; i++) _beta[i] = updBeta[i];
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int totalParams = _gamma.Length + _beta.Length;
-
-        if (parameters.Length != totalParams)
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-
-        // Write in-place to preserve engine persistent tensor references
-        var gSpan = _gamma.Data.Span;
-        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
-        var bSpan = _beta.Data.Span;
-        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);

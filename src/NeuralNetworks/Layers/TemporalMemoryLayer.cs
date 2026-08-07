@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4")]
+[AutoParameters]
 public partial class TemporalMemoryLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -124,29 +125,6 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public Vector<T> PreviousState { get; set; }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> for this layer, as it implements temporal learning mechanisms.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the temporal memory layer can be trained. Since this layer implements
-    /// mechanisms for learning sequential patterns, it supports training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has internal states that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// For this layer, the value is always true because it needs to learn which sequences
-    /// of patterns commonly occur in the input data.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => CellStates.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -422,58 +400,6 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>
         return new Vector<T>(predictions.ToArray());
     }
 
-
-    /// <summary>
-    /// Gets all cell states of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all cell states.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all cell states in the temporal memory layer and combines them into a single vector.
-    /// This is useful for saving the layer's state or for visualization purposes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the cell activation values into a single list.
-    /// 
-    /// The parameters:
-    /// - Are the current activation values of all cells in the layer
-    /// - Represent what the layer has learned about temporal sequences
-    /// - Are flattened into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the layer's current state to disk
-    /// - Visualizing what patterns the layer has learned
-    /// - Transferring the learned state to another network
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Tensor.ToArray() to efficiently convert to vector
-        return new Vector<T>(CellStates.ToArray());
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the cell states from a flattened vector. This is useful for loading
-    /// saved model states or for transferring learned patterns to another network.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ColumnCount * CellsPerColumn;
-
-        if (parameters.Length != expectedParams)
-        {
-            throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
-        }
-
-        // Use Tensor<T>.FromVector and reshape to restore cell states
-        CellStates = new Tensor<T>(new[] { ColumnCount, CellsPerColumn }, parameters);
-    }
 
     /// <summary>
     /// Resets the internal state of the layer.

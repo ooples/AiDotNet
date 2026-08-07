@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Extensions;
@@ -75,7 +76,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// - DVoRA: Combines both techniques for optimal efficiency and performance
 /// </para>
 /// </remarks>
-public class DVoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Shared frozen random matrix A (inputSize × rank) used by all DVoRA adapters.
@@ -159,36 +161,6 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// Stored intermediate value from forward pass, needed for backward pass.
     /// </summary>
     private Matrix<T>? _lastIntermediate;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// DVoRA parameters = base (if unfrozen) + LoRA layer + magnitude (outputSize) + d_scale (outputSize) + b_scale (rank).
-    /// This is only slightly more than VeRA (adds magnitude vector) but much fewer than DoRA (no full LoRA matrices).
-    /// Handles pre-initialization state by using fallback values when fields are null.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Guard against pre-initialization state when base class constructor calls this property.
-            int baseCount = _freezeBaseLayer ? (int)(0) : (int)_baseLayer.ParameterCount;
-            int inputSize = GetInputShape()[0];
-            int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-
-            // We must include the LoRA slice size for base class compatibility, even though DVoRA doesn't train it.
-            // The base constructor allocates parameter vectors based on this count, and packing/unpacking
-            // methods expect the LoRA slice to be present, causing an IndexOutOfRange exception if omitted.
-            int loraCount = (int)(_loraLayer?.ParameterCount ?? (inputSize * Rank + outputSize * Rank));
-
-            int magnitudeCount = _magnitude?.Length ?? outputSize;
-            int scalingDCount = _scalingVectorD?.Length ?? outputSize;
-            int scalingBCount = _scalingVectorB?.Length ?? Rank;
-
-            return baseCount + loraCount + magnitudeCount + scalingDCount + scalingBCount;
-        }
-    }
 
     /// <summary>
     /// Initializes a new DVoRA adapter wrapping an existing layer.
@@ -714,30 +686,6 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromComponents();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing all DVoRA parameters (magnitude, d, b).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateComponentsFromParameters();
     }
 
     /// <summary>

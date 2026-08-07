@@ -49,6 +49,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "0.5")]
+[AutoParameters]
 public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
@@ -89,15 +90,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// sentinel default (0).
     /// </summary>
     public int OutputChannels { get; private set; }
-
-    /// <summary>
-    /// Sum of trainable parameters across BN and the 1×1 projection.
-    /// <c>_conv</c> stays null until <see cref="OnFirstForward"/> resolves
-    /// the input channel count — return BN's count alone in that interim
-    /// state.
-    /// </summary>
-    public override long ParameterCount =>
-        _bn.ParameterCount + (_conv?.ParameterCount ?? 0L);
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -472,48 +464,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _bn.UpdateParameters(learningRate);
         _conv?.UpdateParameters(learningRate);
         // Pool has no parameters
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the layer. <c>_conv</c> contributes
-    /// nothing until <see cref="OnFirstForward"/> resolves the input channel
-    /// count and allocates the 1×1 projection.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        parameters.AddRange(_bn.GetParameters().ToArray());
-        if (_conv is not null)
-            parameters.AddRange(_conv.GetParameters().ToArray());
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from the given parameter vector.
-    /// </summary>
-    /// <param name="parameters">The parameter vector containing all layer parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: both _bn and _conv have unresolved shapes so
-        // GetParameters().Length on either returns 0 — we can't slice
-        // between them. Buffer the full vector and replay from
-        // OnFirstForward once shapes are resolved.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-        int count = _bn.GetParameters().Length;
-        _bn.SetParameters(parameters.SubVector(offset, count));
-        offset += count;
-
-        if (_conv is not null)
-        {
-            count = _conv.GetParameters().Length;
-            _conv.SetParameters(parameters.SubVector(offset, count));
-        }
     }
 
     internal override Dictionary<string, string> GetMetadata()

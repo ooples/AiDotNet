@@ -39,6 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 4, 4", TestConstructorArgs = "2")]
+[AutoParameters]
 public partial class PixelShuffleLayer<T> : LayerBase<T>
 {
     #region Fields
@@ -424,12 +425,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>
     #endregion
 
     #region Parameter Management
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
-    }
 
     /// <inheritdoc />
     public override void ResetState()

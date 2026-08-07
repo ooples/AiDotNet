@@ -31,6 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
+[AutoParameters]
 public partial class ClozeAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _modelDim;
@@ -42,10 +43,6 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _query.ParameterCount + _key.ParameterCount + _value.ParameterCount + _output.ParameterCount;
 
     /// <summary>Initializes a new bidirectional cloze attention block.</summary>
     /// <param name="modelDim">Model width; input and output are both this wide.</param>
@@ -123,52 +120,6 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>
         if (!_key.IsShapeResolved) _key.ResolveFromShape(new[] { 1, 1, _modelDim });
         if (!_value.IsShapeResolved) _value.ResolveFromShape(new[] { 1, 1, _modelDim });
         if (!_output.IsShapeResolved) _output.ResolveFromShape(new[] { 1, 1, _modelDim });
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new[]
-        {
-            _query.GetParameters(), _key.GetParameters(),
-            _value.GetParameters(), _output.GetParameters()
-        };
-
-        int total = 0;
-        foreach (var p in parts) total += p.Length;
-
-        var flat = new Vector<T>(total);
-        int at = 0;
-        foreach (var p in parts)
-            for (int i = 0; i < p.Length; i++) flat[at++] = p[i];
-
-        return flat;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var targets = new[] { _query, _key, _value, _output };
-
-        // The four projections allocate lazily on first Forward. Resolve their shapes from the
-        // known model width rather than running a probe forward: ResolveFromShape allocates the
-        // parameters and nothing else, whereas a probe would execute the full attention — mask,
-        // softmax and both matmuls — purely for a side effect, and leave state behind that a
-        // behaviour-preservation test then detects.
-        ResolveChildShapes();
-
-        var sizes = targets.Select(t => t.GetParameters().Length).ToArray();
-
-        if (parameters.Length != sizes.Sum())
-            throw new ArgumentException($"Expected {sizes.Sum()} parameters, got {parameters.Length}.", nameof(parameters));
-
-        int at = 0;
-        for (int t = 0; t < targets.Length; t++)
-        {
-            var slice = new Vector<T>(sizes[t]);
-            for (int i = 0; i < sizes[t]; i++) slice[i] = parameters[at++];
-            targets[t].SetParameters(slice);
-        }
     }
 
     /// <inheritdoc/>

@@ -139,16 +139,6 @@ internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSeri
 
     public override bool SupportsTraining => true;
 
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in TrainableSubLayers()) total += layer.ParameterCount;
-            return total;
-        }
-    }
-
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 3)
@@ -204,32 +194,6 @@ internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSeri
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in TrainableSubLayers()) layer.UpdateParameters(learningRate);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var parameters = Vector<T>.Empty();
-        foreach (var layer in TrainableSubLayers())
-            parameters = Vector<T>.Concatenate(parameters, layer.GetParameters());
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters for ContextNetBlockLayer, but got {parameters.Length}.");
-        }
-
-        int offset = 0;
-        foreach (var layer in TrainableSubLayers())
-        {
-            int count = (int)layer.ParameterCount;
-            layer.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
     }
 
     public override void SetTrainingMode(bool isTraining)

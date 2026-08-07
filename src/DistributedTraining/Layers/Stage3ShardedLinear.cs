@@ -19,6 +19,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
+[AutoParameters]
 public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
@@ -33,7 +34,6 @@ public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>
     private Tensor<T> _bias;          // [outputSize] (replicated)
 
     public override bool SupportsTraining => true;
-    public override long ParameterCount => _shardLen + _outputSize;
     public int ShardLength => _shardLen;
 
     public Stage3ShardedLinear(
@@ -96,28 +96,6 @@ public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>
             _weightShard[i] = flat < _fullLen ? fullWeight[flat / _inputSize, flat % _inputSize] : NumOps.Zero;
         }
         for (int o = 0; o < _outputSize; o++) _bias[o] = fullBias[o];
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new T[ParameterCount];
-        int idx = 0;
-        for (int i = 0; i < _shardLen; i++) p[idx++] = _weightShard[i];
-        for (int o = 0; o < _outputSize; o++) p[idx++] = _bias[o];
-        return new Vector<T>(p);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new System.ArgumentNullException(nameof(parameters));
-        if (parameters.Length != ParameterCount)
-            throw new System.ArgumentException(
-                $"Expected {ParameterCount} parameters (weight shard {_shardLen} + bias {_outputSize}), got {parameters.Length}.",
-                nameof(parameters));
-        int idx = 0;
-        for (int i = 0; i < _shardLen; i++) _weightShard[i] = parameters[idx++];
-        for (int o = 0; o < _outputSize; o++) _bias[o] = parameters[idx++];
     }
 
     public override void UpdateParameters(T learningRate)

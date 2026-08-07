@@ -33,6 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+[AutoParameters]
 public partial class MeasurementLayer<T> : LayerBase<T>
 {
 
@@ -288,33 +289,6 @@ public partial class MeasurementLayer<T> : LayerBase<T>
 
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
-    /// <summary>
-    /// Gets all trainable parameters from the measurement layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since MeasurementLayer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. Since MeasurementLayer
-    /// has no trainable parameters, it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
-    /// 
-    /// Since MeasurementLayer:
-    /// - Only performs fixed mathematical operations based on quantum mechanics
-    /// - Has no weights, biases, or other learnable parameters
-    /// - The method returns an empty list
-    /// 
-    /// This is different from layers like Dense layers, which would return their weights and biases.
-    /// The measurement process is governed by the laws of quantum mechanics rather than by
-    /// parameters that can be optimized during training.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // MeasurementLayer has no trainable parameters
-        return Vector<T>.Empty();
-    }
-
     /// <summary>
     /// Resets the internal state of the measurement layer.
     /// </summary>

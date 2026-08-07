@@ -33,6 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 3, 32, 32",
     TestConstructorArgs = "3, 32, 32, 16, new int[] { 8, 12, 16, 24 }, new int[] { 1, 1, 1, 1 }, 8, 4, 0.0")]
+[AutoParameters]
 public partial class ViTCoMerSegmentationLayer<T> : LayerBase<T>
 {
     private readonly int _inputChannels;
@@ -398,35 +399,6 @@ public partial class ViTCoMerSegmentationLayer<T> : LayerBase<T>
         foreach (var layer in _decoderProjections) yield return layer;
         yield return _decoderFusion;
         yield return _classifier;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => OrderedLayers().Sum(layer => layer.ParameterCount);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var values = new List<T>((int)ParameterCount);
-        foreach (var layer in OrderedLayers())
-        {
-            var parameters = layer.GetParameters();
-            for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
-        }
-        return new Vector<T>(values.ToArray());
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        int offset = 0;
-        foreach (var layer in OrderedLayers())
-        {
-            int count = (int)layer.ParameterCount;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

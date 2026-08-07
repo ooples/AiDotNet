@@ -75,6 +75,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+[AutoParameters]
 public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -194,19 +195,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>
     /// Gets the number of memory states.
     /// </summary>
     public int NumMemories => _numMemories;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _queryWeights.Length + _queryBias.Length +
-        _keyWeights.Length + _keyBias.Length +
-        _valueWeights.Length + _valueBias.Length +
-        _writeRouterWeights.Length + _writeRouterBias.Length +
-        _readRouterWeights.Length + _readRouterBias.Length +
-        _gateRouterWeights.Length + _gateRouterBias.Length +
-        _outputGateWeights.Length + _outputGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new Mixture of Memories (MoM) layer.
@@ -615,28 +603,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -12,7 +13,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Slicing and reshaping remain connected to the gradient tape through the
 /// tensor engine.
 /// </remarks>
-internal sealed class TemporalFrameSplicingLayer<T> : LayerBase<T>
+[AutoParameters]
+internal sealed partial class TemporalFrameSplicingLayer<T> : LayerBase<T>
 {
     private readonly int _factor;
 
@@ -31,9 +33,6 @@ internal sealed class TemporalFrameSplicingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => false;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
 
     /// <inheritdoc/>
     protected override void OnFirstForward(Tensor<T> input)
@@ -87,16 +86,6 @@ internal sealed class TemporalFrameSplicingLayer<T> : LayerBase<T>
         outputShape[^2] /= _factor;
         outputShape[^1] = checked(outputShape[^1] * _factor);
         return Engine.Reshape(groupedInput, outputShape);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => Vector<T>.Empty();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException($"TemporalFrameSplicingLayer has no parameters; got {parameters.Length}.", nameof(parameters));
     }
 
     /// <inheritdoc/>

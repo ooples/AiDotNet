@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var e = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) e[i, j] = (i * 3 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.MeshEdgeConvLayer<double>)layer).SetEdgeAdjacency(e);")]
+[AutoParameters]
 public partial class MeshEdgeConvLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -648,34 +649,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weight and bias parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters (weights followed by biases).</param>
-    /// <exception cref="ArgumentException">Thrown when parameter count does not match expected.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = _weights.Length + _biases.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
-
-        int index = 0;
-        _weights = new Tensor<T>(_weights._shape, parameters.Slice(index, _weights.Length));
-        index += _weights.Length;
-        _biases = new Tensor<T>(_biases._shape, parameters.Slice(index, _biases.Length));
-    }
-
-    /// <summary>
     /// Gets the weight tensor.
     /// </summary>
     /// <returns>The weights tensor.</returns>
@@ -686,11 +659,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>The bias tensor.</returns>
     public override Tensor<T> GetBiases() => _biases;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => _weights.Length + _biases.Length;
 
     /// <summary>
     /// Creates a deep copy of the layer.

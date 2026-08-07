@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "2, 3")]
+[AutoParameters]
 public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
 {
     #region Fields
@@ -679,15 +680,6 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
 
     #region Layer Properties
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// This layer supports full training with gradient computation for all parameters:
-    /// - Main convolution weights and bias
-    /// - Offset prediction weights and bias
-    /// - Modulation mask weights and bias (if using DCNv2)
-    /// All gradients are computed using IEngine backward operations with bilinear interpolation support.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     #endregion
@@ -732,87 +724,6 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
     #endregion
 
     #region Parameter Management
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        // Main conv weights and bias
-        for (int i = 0; i < _weights.Length; i++)
-            allParams.Add(_weights.Data.Span[i]);
-        for (int i = 0; i < _bias.Length; i++)
-            allParams.Add(_bias.Data.Span[i]);
-
-        // Offset weights and bias
-        for (int i = 0; i < _offsetWeights.Length; i++)
-            allParams.Add(_offsetWeights.Data.Span[i]);
-        for (int i = 0; i < _offsetBias.Length; i++)
-            allParams.Add(_offsetBias.Data.Span[i]);
-
-        // Mask weights and bias (if using modulation)
-        if (_useModulation && _maskWeights != null && _maskBias != null)
-        {
-            for (int i = 0; i < _maskWeights.Length; i++)
-                allParams.Add(_maskWeights.Data.Span[i]);
-            for (int i = 0; i < _maskBias.Length; i++)
-                allParams.Add(_maskBias.Data.Span[i]);
-        }
-
-        return new Vector<T>([.. allParams]);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Buffer the parameters when the lazy ctor hasn't seen its first
-        // Forward yet — _weights et al. are 0×0 placeholders and writing
-        // into them silently drops the data. OnFirstForward will replay
-        // this buffer once shapes are resolved and tensors allocated.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-
-        // Main conv weights
-        for (int i = 0; i < _weights.Length; i++)
-            _weights.Data.Span[i] = parameters[offset++];
-
-        // Main conv bias
-        for (int i = 0; i < _bias.Length; i++)
-            _bias.Data.Span[i] = parameters[offset++];
-
-        // Offset weights
-        for (int i = 0; i < _offsetWeights.Length; i++)
-            _offsetWeights.Data.Span[i] = parameters[offset++];
-
-        // Offset bias
-        for (int i = 0; i < _offsetBias.Length; i++)
-            _offsetBias.Data.Span[i] = parameters[offset++];
-
-        // Mask weights and bias
-        if (_useModulation && _maskWeights != null && _maskBias != null)
-        {
-            for (int i = 0; i < _maskWeights.Length; i++)
-                _maskWeights.Data.Span[i] = parameters[offset++];
-            for (int i = 0; i < _maskBias.Length; i++)
-                _maskBias.Data.Span[i] = parameters[offset++];
-        }
-
-        // Invalidate GPU cache after parameter update
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_bias);
-        Engine.InvalidatePersistentTensor(_offsetWeights);
-        Engine.InvalidatePersistentTensor(_offsetBias);
-        if (_useModulation && _maskWeights != null && _maskBias != null)
-        {
-            Engine.InvalidatePersistentTensor(_maskWeights);
-            Engine.InvalidatePersistentTensor(_maskBias);
-        }
-    }
 
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)

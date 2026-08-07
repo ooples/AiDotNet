@@ -20,6 +20,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
+[AutoParameters]
 public sealed partial class ColumnParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
@@ -34,7 +35,6 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>
     private Tensor<T> _biasShard;     // [localOutputSize]
 
     public override bool SupportsTraining => true;
-    public override long ParameterCount => _localOutputSize * (long)_inputSize + _localOutputSize;
     public int LocalOutputSize => _localOutputSize;
 
     public ColumnParallelLinear(
@@ -106,34 +106,6 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>
                 _weightShard[o, i] = fullWeight[start + o, i];
             _biasShard[o] = fullBias[start + o];
         }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new T[ParameterCount];
-        int idx = 0;
-        for (int o = 0; o < _localOutputSize; o++)
-            for (int i = 0; i < _inputSize; i++)
-                p[idx++] = _weightShard[o, i];
-        for (int o = 0; o < _localOutputSize; o++)
-            p[idx++] = _biasShard[o];
-        return new Vector<T>(p);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new System.ArgumentNullException(nameof(parameters));
-        if (parameters.Length != ParameterCount)
-            throw new System.ArgumentException(
-                $"Expected {ParameterCount} parameters (localOut {_localOutputSize} x in {_inputSize} + bias {_localOutputSize}), got {parameters.Length}.",
-                nameof(parameters));
-        int idx = 0;
-        for (int o = 0; o < _localOutputSize; o++)
-            for (int i = 0; i < _inputSize; i++)
-                _weightShard[o, i] = parameters[idx++];
-        for (int o = 0; o < _localOutputSize; o++)
-            _biasShard[o] = parameters[idx++];
     }
 
     // Tape-native layer: the collected trainable shards (GetTrainableParameters) are updated by the

@@ -44,6 +44,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class GatedLinearUnitLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -318,29 +319,6 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <value>
-    /// The sum of elements in all weight and bias tensors (linear weights, gate weights, linear bias, gate bias).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property returns the total count of learnable parameters across all four parameter tensors:
-    /// linear weights, gate weights, linear biases, and gate biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many numbers the layer can adjust during training.
-    /// For a GLU layer with 100 inputs and 50 outputs, you would have:
-    /// - 5,000 linear weights (100 x 50)
-    /// - 5,000 gate weights (100 x 50)
-    /// - 50 linear biases
-    /// - 50 gate biases
-    /// - Total: 10,100 parameters
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount =>
-        _linearWeights.Length + _gateWeights.Length + _linearBias.Length + _gateBias.Length;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GatedLinearUnitLayer{T}"/> class with a scalar activation function.
@@ -666,118 +644,6 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         for (int i = 0; i < _gateWeights.Length; i++) _gateWeights[i] = updGW[i];
         for (int i = 0; i < _linearBias.Length; i++) _linearBias[i] = updLB[i];
         for (int i = 0; i < _gateBias.Length; i++) _gateBias[i] = updGB[i];
-
-        // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_linearWeights);
-        Engine.InvalidatePersistentTensor(_gateWeights);
-        Engine.InvalidatePersistentTensor(_linearBias);
-        Engine.InvalidatePersistentTensor(_gateBias);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the GLU layer as a single vector. The parameters
-    /// include weights and biases for both the linear and gating paths. The order is: linear weights, gate weights,
-    /// linear biases, gate biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
-    /// 
-    /// The parameters include four sets of values:
-    /// 1. Linear weights: Main transformation parameters
-    /// 2. Gate weights: Selection mechanism parameters
-    /// 3. Linear biases: Baseline adjustments for features
-    /// 4. Gate biases: Default settings for gates
-    /// 
-    /// All these values are collected in a specific order into a single vector.
-    /// This combined list is useful for:
-    /// - Saving a trained model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques
-    /// 
-    /// For a layer with 100 inputs and 50 outputs, this would return:
-    /// - 5,000 linear weight parameters (100 × 50)
-    /// - 5,000 gate weight parameters (100 × 50)
-    /// - 50 linear bias parameters
-    /// - 50 gate bias parameters
-    /// - Totaling 10,100 parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_linearWeights.ToArray()),
-            new Vector<T>(_gateWeights.ToArray()),
-            new Vector<T>(_linearBias.ToArray()),
-            new Vector<T>(_gateBias.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters of the GLU layer from a single vector. The parameters
-    /// should be in the same order as produced by GetParameters: linear weights, gate weights,
-    /// linear biases, gate biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learnable values from a provided list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the exact right length
-    /// - The values are distributed to the correct parameters in order
-    /// - They must follow the same order used in GetParameters
-    /// 
-    /// This method is useful for:
-    /// - Restoring a saved model
-    /// - Loading pre-trained parameters
-    /// - Testing specific parameter configurations
-    /// 
-    /// The method verifies that the vector contains exactly the right number
-    /// of parameters before applying them.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if shape isn't resolved, infer inputDim from param
-        // vector. Layout: 2*[outDim, inDim] weights + 2*[outDim] biases
-        // = 2*outDim*(inDim + 1) → inDim = total/(2*outDim) - 1.
-        if (!IsShapeResolved && _outputDimension > 0)
-        {
-            int divisor = 2 * _outputDimension;
-            if (parameters.Length % divisor == 0)
-            {
-                int candidateInput = parameters.Length / divisor - 1;
-                if (candidateInput > 0)
-                {
-                    ResolveFromShape(new[] { candidateInput });
-                }
-            }
-        }
-
-        int linearWeightsSize = _linearWeights.Shape[0] * _linearWeights.Shape[1];
-        int gateWeightsSize = _gateWeights.Shape[0] * _gateWeights.Shape[1];
-        int expectedLength = linearWeightsSize + gateWeightsSize +
-                             _linearBias.Length + _gateBias.Length;
-
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-        _linearWeights = new Tensor<T>(_linearWeights._shape, parameters.Slice(index, linearWeightsSize));
-        index += linearWeightsSize;
-        _gateWeights = new Tensor<T>(_gateWeights._shape, parameters.Slice(index, gateWeightsSize));
-        index += gateWeightsSize;
-        _linearBias = new Tensor<T>(_linearBias._shape, parameters.Slice(index, _linearBias.Length));
-        index += _linearBias.Length;
-        _gateBias = new Tensor<T>(_gateBias._shape, parameters.Slice(index, _gateBias.Length));
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_linearWeights);

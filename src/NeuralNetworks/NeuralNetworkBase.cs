@@ -10418,7 +10418,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     private const int SerializationMagic = 0x4E444941; // "AIDN" (little-endian int)
-    private const int SerializationVersion = 4;
+    // v5 records each layer's parameter SHAPES alongside the flat values. Restore then allocates
+    // exactly what was saved instead of inferring arity from vector length -- inference that was
+    // impossible for a layer whose parameter set depends on the data it saw (EmbeddingLayer's
+    // input projection). Reading v1-v4 still works and restores exactly as it did before; those
+    // payloads simply carry no layout, so nothing can be mis-applied from one.
+    private const int SerializationVersion = 5;
 
     // Mirrors System.Array.MaxLength (introduced in .NET 6). Hardcoded
     // here so the check still compiles on net471, where Array.MaxLength
@@ -10525,6 +10530,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             // Write parameters (do not rely on ParameterCount: some layers keep trainable state outside LayerBase.Parameters).
             var parameters = layer.GetParameters();
+
+            // v5 layout manifest, written before the values and in the same fold order.
+            if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layoutLayer)
+            {
+                writer.Write(true);
+                layoutLayer.WriteParameterLayout(writer);
+            }
+            else
+            {
+                writer.Write(false);
+            }
+
             writer.Write(parameters.Length);
             foreach (var param in parameters)
             {
@@ -10634,7 +10651,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
-            // Read parameters
+            // Read parameters. v5 precedes them with a shape manifest; apply it first so the
+            // layer is materialized to exactly the saved layout before values are poured in.
+            AiDotNet.NeuralNetworks.Layers.ParameterLayoutNode? parameterLayout = null;
+            if (version >= 5 && reader.ReadBoolean())
+            {
+                parameterLayout = AiDotNet.NeuralNetworks.Layers.ParameterLayoutNode.Read(reader);
+            }
+
             int paramCount = reader.ReadInt32();
             Vector<T>? parametersVector = null;
             if (paramCount > 0)
@@ -10690,8 +10714,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // are still unmaterialised, and skipping it here left SetParameters below with nowhere
             // to put them -- the restored model came back at its initialisation values with no
             // error raised, which is the eager half of the same defect fixed in the COW path.
+            // Measure SCALARS, not the number of tensors. An unmaterialized layer still returns
+            // its placeholder tensors, so a lazy EmbeddingLayer reported Count == 1 against a
+            // [0]-length tensor, this branch concluded it was already resolved, and SetParameters
+            // below was then handed 3072 values for a layer that believed it had none. ParameterCount
+            // folds tensors, buffers and sub-layers, so it is zero exactly when nothing is sized yet.
             if (layer is LayerBase<T> lb
-                && (!lb.IsShapeResolved || lb.GetTrainableParameters().Count == 0))
+                && (!lb.IsShapeResolved || lb.ParameterCount == 0))
             {
                 int[]? candidate = inputShape is { Length: > 0 } && inputShape.All(d => d > 0)
                     ? inputShape
@@ -10707,6 +10736,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     try { lb.ResolveFromShape(candidate); }
                     catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
                 }
+            }
+
+            // Size the layer to exactly what was saved before pouring values in. Without this a
+            // layer whose parameter set depends on the data it saw -- EmbeddingLayer's input
+            // projection -- comes back one tensor short and the restore is rejected.
+            if (parameterLayout is not null && layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layoutTarget)
+            {
+                layoutTarget.ApplyParameterLayout(parameterLayout);
             }
 
             // Apply parameters if any

@@ -41,6 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
+[AutoParameters]
 public partial class Conv3DLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -939,57 +940,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all kernel and bias parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_kernels.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters (kernels followed by biases).</param>
-    /// <exception cref="ArgumentException">Thrown when parameter count does not match expected.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters: derive inputChannels from vector length.
-        // Layout: kernels [outputChannels, inputChannels, K, K, K] + biases [outputChannels].
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            int kernelVol = OutputChannels * KernelSize * KernelSize * KernelSize;
-            if (OutputChannels <= 0 || kernelVol <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on deferred-shape Conv3DLayer before OutputChannels/KernelSize are known.");
-            int candidateInputChannels = (parameters.Length - OutputChannels) / kernelVol;
-            if (candidateInputChannels <= 0
-                || candidateInputChannels * kernelVol + OutputChannels != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputChannels for Conv3DLayer from {parameters.Length} parameters.");
-            // Use KernelSize for D/H/W dummy spatial dims so the
-            // OnFirstForward shape check (input dims >= kernel) passes.
-            ResolveFromShape(new[] { candidateInputChannels, KernelSize, KernelSize, KernelSize });
-        }
-
-        int expected = _kernels.Length + _biases.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
-
-        int index = 0;
-        _kernels = new Tensor<T>(_kernels._shape, parameters.Slice(index, _kernels.Length));
-        index += _kernels.Length;
-        _biases = new Tensor<T>(_biases._shape, parameters.Slice(index, _biases.Length));
-
-        // Invalidate GPU cache after parameter update
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
-    }
-
-    /// <summary>
     /// Gets the kernel weights tensor.
     /// </summary>
     /// <returns>The kernel tensor with shape [OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize].</returns>
@@ -1006,19 +956,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>The kernel tensor.</returns>
     public Tensor<T> GetFilters() => _kernels;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>
-    /// The sum of the number of kernel weights and biases.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This equals: OutputChannels * InputChannels * KernelSize^3 + OutputChannels
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _kernels.Length + _biases.Length;
 
     /// <summary>
     /// Creates a deep copy of the layer with the same configuration and parameters.

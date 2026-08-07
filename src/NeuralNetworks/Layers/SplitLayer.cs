@@ -35,6 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4", TestConstructorArgs = "2")]
+[AutoParameters]
 public partial class SplitLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -354,31 +355,6 @@ public partial class SplitLayer<T> : LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since this layer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector since the split layer has no trainable parameters.
-    /// It is implemented to satisfy the interface requirements of LayerBase.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because the layer has no parameters.
-    /// 
-    /// Since the split layer doesn't modify the data in any way that requires learning:
-    /// - There are no weights or biases to adjust
-    /// - This method returns an empty vector (a list with no elements)
-    /// 
-    /// Other layers would return their weights and biases here, which would be
-    /// used for saving the model or applying optimization techniques.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // SplitLayer has no trainable parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

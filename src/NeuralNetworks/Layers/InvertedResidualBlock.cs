@@ -46,6 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "8")]
+[AutoParameters]
 public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     // Non-readonly: lazy ctor leaves these null until OnFirstForward
@@ -81,19 +82,6 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
     private Tensor<T>? _lastSeOut;
     private Tensor<T>? _lastProjectOut;
     private Tensor<T>? _lastProjectBnOut;
-
-    /// <summary>
-    /// Sum of trainable parameters across all sub-layers. The non-optional
-    /// <c>_dwConv</c>, <c>_dwBn</c>, <c>_projectConv</c>, <c>_projectBn</c>
-    /// stay null until <see cref="OnFirstForward"/> resolves the input
-    /// channel count and allocates them — null-guard each so this property
-    /// returns 0 in the pre-Forward state instead of throwing.
-    /// </summary>
-    public override long ParameterCount =>
-        (_expandConv?.ParameterCount ?? 0) + (_expandBn?.ParameterCount ?? 0) +
-        (_dwConv?.ParameterCount ?? 0) + (_dwBn?.ParameterCount ?? 0) +
-        (_se?.ParameterCount ?? 0) +
-        (_projectConv?.ParameterCount ?? 0) + (_projectBn?.ParameterCount ?? 0);
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -570,54 +558,6 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         _se?.UpdateParameters(learningRate);
         _projectConv?.UpdateParameters(learningRate);
         _projectBn?.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the block.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        if (_expandConv is not null)
-            parameters.AddRange(_expandConv.GetParameters().ToArray());
-        if (_expandBn is not null)
-            parameters.AddRange(_expandBn.GetParameters().ToArray());
-
-        if (_dwConv is not null)
-            parameters.AddRange(_dwConv.GetParameters().ToArray());
-        if (_dwBn is not null)
-            parameters.AddRange(_dwBn.GetParameters().ToArray());
-
-        if (_se is not null)
-            parameters.AddRange(_se.GetParameters().ToArray());
-
-        if (_projectConv is not null)
-            parameters.AddRange(_projectConv.GetParameters().ToArray());
-        if (_projectBn is not null)
-            parameters.AddRange(_projectBn.GetParameters().ToArray());
-
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from the given parameter vector.
-    /// </summary>
-    /// <param name="parameters">The parameter vector containing all layer parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward path: sub-layers are still null because their
-        // channel-count layout depends on the input we haven't seen
-        // yet. Buffer the vector and replay it from OnFirstForward,
-        // after sub-layers exist with their resolved shapes.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        ApplyParameters(parameters);
     }
 
     // --- ILayerSerializationExtras: serialize internal BN running stats ---

@@ -1,4 +1,5 @@
-﻿using AiDotNet.Helpers;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -39,6 +40,7 @@ namespace AiDotNet.PointCloud.Layers;
 /// - T-Net learns: "Rotate this cloud 45 degrees to align it"
 /// - Output: Aligned point cloud in standard orientation
 /// </remarks>
+[AutoParameters]
 public partial class TNetLayer<T> : LayerBase<T>
 {
     private readonly int _transformDim; // Dimension of transformation (e.g., 3 for XYZ, 64 for features)
@@ -242,38 +244,6 @@ public partial class TNetLayer<T> : LayerBase<T>
         }
     }
 
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int offset = 0;
-
-        foreach (var layer in _mlpLayers)
-        {
-            var layerParameters = layer.GetParameters();
-            for (int i = 0; i < layerParameters.Length; i++)
-            {
-                parameters[offset + i] = layerParameters[i];
-            }
-
-            offset += layerParameters.Length;
-        }
-
-        foreach (var layer in _fcLayers)
-        {
-            var layerParameters = layer.GetParameters();
-            for (int i = 0; i < layerParameters.Length; i++)
-            {
-                parameters[offset + i] = layerParameters[i];
-            }
-
-            offset += layerParameters.Length;
-        }
-
-        Parameters = parameters;
-        return parameters;
-    }
-
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -318,23 +288,6 @@ public partial class TNetLayer<T> : LayerBase<T>
         }
 
         _maxPooling.ResetState();
-    }
-
-    public override long ParameterCount
-    {
-        get
-        {
-            int total = 0;
-            foreach (var layer in _mlpLayers)
-            {
-                total += (int)layer.ParameterCount;
-            }
-            foreach (var layer in _fcLayers)
-            {
-                total += (int)layer.ParameterCount;
-            }
-            return total;
-        }
     }
 
     public override bool SupportsTraining => true;

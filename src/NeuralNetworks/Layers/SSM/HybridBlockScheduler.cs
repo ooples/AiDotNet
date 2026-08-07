@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -81,6 +82,7 @@ public enum HybridSchedulePattern
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[AutoParameters]
 public partial class HybridBlockScheduler<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -134,32 +136,6 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     /// SSM blocks vs. attention blocks. See <see cref="HybridSchedulePattern"/> for available patterns.</para>
     /// </remarks>
     public HybridSchedulePattern SchedulePattern => _schedulePattern;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters across all blocks and norms.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The total count of learnable numbers across all blocks
-    /// (both SSM and attention) plus normalization parameters. Shared attention blocks
-    /// (Zamba-style) count their parameters only once.</para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Accumulate in long so multi-block schedulers (e.g. 64+ Mamba/SSM
-            // blocks each with multi-billion-parameter state) don't wrap
-            // before reaching ToFlatVectorSize.
-            long count = 0;
-            foreach (var block in _blocks)
-                count += block.ParameterCount;
-            foreach (var gamma in _normGammas)
-                count += gamma.Length;
-            foreach (var beta in _normBetas)
-                count += beta.Length;
-            return count;
-        }
-    }
 
     /// <summary>
     /// Creates a new hybrid block scheduler.
@@ -362,53 +338,6 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
         }
 
         return dInput;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        for (int i = 0; i < _blocks.Length; i++)
-        {
-            var blockParams = _blocks[i].GetParameters();
-            for (int j = 0; j < blockParams.Length; j++)
-                parameters[index++] = blockParams[j];
-
-            for (int j = 0; j < _normGammas[i].Length; j++)
-                parameters[index++] = _normGammas[i][j];
-
-            for (int j = 0; j < _normBetas[i].Length; j++)
-                parameters[index++] = _normBetas[i][j];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        for (int i = 0; i < _blocks.Length; i++)
-        {
-            int blockParamCount = (int)_blocks[i].ParameterCount;
-            var blockParams = new Vector<T>(blockParamCount);
-            for (int j = 0; j < blockParamCount; j++)
-                blockParams[j] = parameters[index++];
-            _blocks[i].SetParameters(blockParams);
-
-            for (int j = 0; j < _normGammas[i].Length; j++)
-                _normGammas[i][j] = parameters[index++];
-
-            for (int j = 0; j < _normBetas[i].Length; j++)
-                _normBetas[i][j] = parameters[index++];
-        }
     }
 
     /// <inheritdoc />

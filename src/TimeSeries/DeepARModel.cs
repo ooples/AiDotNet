@@ -906,7 +906,8 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 /// through it (BPTT) and the Adam optimizer updates the registered weights from tape
 /// gradients. Activations are column-major <c>[hiddenSize, batch]</c>.
 /// </summary>
-internal class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly int _inputSize;
     private readonly int _hiddenSize;
@@ -920,7 +921,6 @@ internal class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
     public int InputSize => _inputSize;
     public int HiddenSize => _hiddenSize;
 
-    public override long ParameterCount => _wx.Length + _wh.Length + _bias.Length;
     public override bool SupportsTraining => true;
     public override void ResetState() { }
     /// <summary>
@@ -1005,24 +1005,6 @@ internal class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
         var hNew = Engine.TensorMultiply(oGate, Engine.Tanh(cNew));
 
         return (hNew, cNew);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new T[_wx.Length + _wh.Length + _bias.Length];
-        int idx = 0;
-        for (int i = 0; i < _wx.Length; i++) p[idx++] = _wx[i];
-        for (int i = 0; i < _wh.Length; i++) p[idx++] = _wh[i];
-        for (int i = 0; i < _bias.Length; i++) p[idx++] = _bias[i];
-        return new Vector<T>(p);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        for (int i = 0; i < _wx.Length; i++) _wx[i] = parameters[idx++];
-        for (int i = 0; i < _wh.Length; i++) _wh[i] = parameters[idx++];
-        for (int i = 0; i < _bias.Length; i++) _bias[i] = parameters[idx++];
     }
 
     public override void Serialize(BinaryWriter writer)

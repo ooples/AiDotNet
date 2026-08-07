@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 2")]
+[AutoParameters]
 public partial class QuantumLayer<T> : LayerBase<T>
 {
 
@@ -69,30 +70,6 @@ public partial class QuantumLayer<T> : LayerBase<T>
     private Tensor<T>? _lastResultImag;
     private readonly INumericOperations<Complex<T>> _complexOps;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> indicating that this layer can be trained through backpropagation.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the QuantumLayer has parameters (rotation angles) that
-    /// can be optimized during the training process using backpropagation. The gradients of
-    /// these parameters are calculated during the backward pass and used to update the parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has values (rotation angles) that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// When you train a neural network containing this layer, the rotation angles will 
-    /// automatically adjust to better process your specific data.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _rotationAngles.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -502,35 +479,6 @@ public partial class QuantumLayer<T> : LayerBase<T>
         _angleGradients.Fill(NumOps.Zero);
     }
 
-    /// <summary>
-    /// Gets all trainable parameters of the quantum layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters (rotation angles).</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (rotation angles) of the quantum layer as a
-    /// single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the quantum layer.
-    /// 
-    /// The parameters:
-    /// - Are the rotation angles that the quantum layer learns during training
-    /// - Control how the quantum circuit processes information
-    /// - Are returned as a single list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Return rotation angles as a Vector<T>
-        return new Vector<T>(_rotationAngles.ToArray());
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         return new Vector<T>(_angleGradients.ToArray());
@@ -540,62 +488,6 @@ public partial class QuantumLayer<T> : LayerBase<T>
     {
         _angleGradients = new Tensor<T>([_numQubits]);
         _angleGradients.Fill(NumOps.Zero);
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the quantum layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters (rotation angles) to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters (rotation angles) of the quantum layer from a single vector.
-    /// The quantum circuit is reset and reconstructed with the new rotation angles. This is useful for loading
-    /// saved model weights or for implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the rotation angles in the quantum layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length (equal to the number of qubits)
-    /// - The quantum circuit is reset to its starting state
-    /// - New rotation angles are applied to rebuild the circuit
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _numQubits)
-        {
-            throw new ArgumentException($"Expected {_numQubits} parameters, but got {parameters.Length}");
-        }
-
-        // Reset the quantum circuit to identity
-        ResetQuantumCircuit();
-
-        // Set new rotation angles using tensor ctor (no conversion hot path)
-        _rotationAngles = new Tensor<T>([parameters.Length], parameters);
-
-        for (int i = 0; i < _numQubits; i++)
-        {
-            ApplyRotation(i, _rotationAngles[i]);
-        }
-
-        // Rebuild circuit tensors from updated _quantumCircuit for Forward to use
-        int dim = 1 << _numQubits;
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                _circuitReal[i, j] = _quantumCircuit[i, j].Real;
-                _circuitImag[i, j] = _quantumCircuit[i, j].Imaginary;
-            }
-        }
     }
 
     /// <summary>

@@ -27,6 +27,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 16, 8", TestConstructorArgs = "8")]
+[AutoParameters]
 public partial class SwinPatchMergingLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
@@ -50,9 +51,6 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _reduction.ParameterCount + _norm.ParameterCount;
 
     /// <summary>
     /// Creates a new Swin patch merging layer.
@@ -178,42 +176,6 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>
         throw new InvalidOperationException(
             $"Cannot find valid spatial dimensions from sequence length {seqLen}. " +
             "Sequence length must be factorizable into two even integers for patch merging.");
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var normParams = _norm.GetParameters();
-        var reductionParams = _reduction.GetParameters();
-
-        var result = new T[normParams.Length + reductionParams.Length];
-        normParams.AsSpan().CopyTo(result.AsSpan(0, normParams.Length));
-        reductionParams.AsSpan().CopyTo(result.AsSpan(normParams.Length, reductionParams.Length));
-
-        return new Vector<T>(result);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: sublayers may be in placeholder shape state. Resolve from
-        // known constants — _norm sees the concatenated 4×inputDim features and
-        // _reduction projects 4×inputDim → 2×inputDim.
-        int concatDim = _inputDim * 4;
-        if (!_norm.IsShapeResolved) _norm.ResolveFromShape(new[] { concatDim });
-        if (!_reduction.IsShapeResolved) _reduction.ResolveFromShape(new[] { concatDim });
-
-        int normCount = checked((int)_norm.ParameterCount);
-        int reductionCount = checked((int)_reduction.ParameterCount);
-
-        var normParams = new T[normCount];
-        var reductionParams = new T[reductionCount];
-
-        parameters.AsSpan().Slice(0, normCount).CopyTo(normParams);
-        parameters.AsSpan().Slice(normCount, reductionCount).CopyTo(reductionParams);
-
-        _norm.SetParameters(new Vector<T>(normParams));
-        _reduction.SetParameters(new Vector<T>(reductionParams));
     }
 
     /// <inheritdoc/>

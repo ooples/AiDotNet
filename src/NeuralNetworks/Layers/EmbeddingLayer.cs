@@ -56,6 +56,7 @@ public enum EmbeddingInputMode
 [LayerCategory(LayerCategory.Embedding)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "100, 16")]
+[AutoParameters]
 public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>
 {
     /// <summary>
@@ -260,22 +261,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     protected override bool SupportsGpuExecution => true;
 
     /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <value>
-    /// The number of elements in the embedding matrix (vocabulary size × embedding dimension).
-    /// </value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This counts the total number of adjustable values in the layer.
-    /// For an embedding layer with 10,000 vocabulary size and 300 dimensions,
-    /// the parameter count would be 10,000 × 300 = 3,000,000 parameters.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-        => _vocabularySize * _embeddingDimension +
-           _projectionWeights.Length;
-
-    /// <summary>
     /// Returns layer-specific metadata for serialization.
     /// </summary>
     /// <remarks>
@@ -361,6 +346,23 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// constructor used to do eagerly, then registers the tensor with the
     /// engine for GPU persistence.
     /// </summary>
+    /// <summary>
+    /// Allocates the embedding table, whose shape is
+    /// <c>[_vocabularySize, _embeddingDimension]</c> — both fixed at construction.
+    /// </summary>
+    /// <remarks>
+    /// Only the optional input PROJECTION depends on the incoming feature width; the table itself
+    /// never did. Because allocation happened lazily on first use, a freshly constructed layer
+    /// offered one placeholder tensor of zero length, and a restore arrived with 3,072 values for a
+    /// layer reporting none. The underlying routine treats an already-materialized table as
+    /// authoritative trained state, so running it from here cannot overwrite a restore.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        EnsureEmbeddingInitialized();
+        base.EnsureInitialized();
+    }
+
     private void EnsureEmbeddingInitialized()
     {
         if (_embeddingInitialized) return;
@@ -1005,125 +1007,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             var scaledProjectionGradient = Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate);
             _projectionWeights = Engine.TensorSubtract(_projectionWeights, scaledProjectionGradient);
         }
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_embeddingTensor);
-        if (_projectionWeights.Length > 0)
-        {
-            Engine.InvalidatePersistentTensor(_projectionWeights);
-        }
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (the entire embedding matrix) as a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
-    /// and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the embedding values into a single list.
-    /// 
-    /// The parameters include:
-    /// - All values from the embedding matrix, arranged in a single long list
-    /// - Each embedding vector is placed one after another
-    /// 
-    /// This is useful for:
-    /// - Saving the embeddings to disk
-    /// - Loading pre-trained embeddings
-    /// - Applying specific optimization techniques
-    /// 
-    /// For example, a vocabulary of 1,000 tokens with 100-dimensional embeddings
-    /// would produce a vector of 100,000 values.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Materialize lazy embedding before reading its data — otherwise we'd
-        // return an empty vector for a freshly-constructed layer.
-        EnsureEmbeddingInitialized();
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        var embeddingParams = Vector<T>.FromMemory(_embeddingTensor.Data);
-        if (_projectionWeights.Length == 0)
-        {
-            return embeddingParams;
-        }
-
-        var projectionParams = Vector<T>.FromMemory(_projectionWeights.Data);
-        return Vector<T>.Concatenate(embeddingParams, projectionParams);
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (the entire embedding matrix) from a single vector.
-    /// This is useful for loading saved model weights or pre-trained embeddings.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all embedding values from a provided list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the exact right length
-    /// - The values are distributed back to the embedding matrix
-    /// - This allows loading previously trained or pre-trained embeddings
-    /// 
-    /// Use cases include:
-    /// - Loading embeddings trained on another task
-    /// - Initializing with pre-trained word vectors (like Word2Vec or GloVe)
-    /// - Restoring a saved model
-    /// 
-    /// For example, you might initialize your embeddings with GloVe vectors
-    /// that were pre-trained on a large corpus, giving your model a head start.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // SetParameters writes a fresh embedding tensor below; the lazy-init
-        // placeholder is fine to leave as-is here. We use the cached
-        // _vocabularySize / _embeddingDimension fields to size the new tensor
-        // since the placeholder has shape [0,0].
-        int vocabSize = _vocabularySize;
-        int embeddingDim = _embeddingDimension;
-        int expectedParams = vocabSize * embeddingDim;
-
-        if (parameters.Length < expectedParams)
-        {
-            throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
-        }
-
-        // Restore embeddings without hot-path conversions. Constructing the
-        // real-sized tensor here also fulfills the lazy-init contract — register
-        // it with the engine and flip _embeddingInitialized so subsequent
-        // EnsureEmbeddingInitialized() calls become no-ops.
-        _embeddingTensor = new Tensor<T>([vocabSize, embeddingDim], parameters.Slice(0, expectedParams));
-        if (!_embeddingInitialized)
-        {
-            RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
-            _embeddingInitialized = true;
-        }
-
-        int projectionCount = parameters.Length - expectedParams;
-        if (projectionCount == 0)
-        {
-            _projectionWeights = new Tensor<T>([0, 0]);
-            // Notify GPU that tensor data has changed
-            Engine.InvalidatePersistentTensor(_embeddingTensor);
-            return;
-        }
-
-        if (projectionCount % embeddingDim != 0)
-        {
-            throw new ArgumentException($"Projection parameter count {projectionCount} is not divisible by embedding dimension {embeddingDim}.");
-        }
-
-        int inputFeatures = projectionCount / embeddingDim;
-        _projectionWeights = new Tensor<T>([inputFeatures, embeddingDim], parameters.Slice(expectedParams, projectionCount));
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_embeddingTensor);

@@ -25,6 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AutoParameters]
 public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 {
     // Non-readonly: lazy ctor leaves _inputDim = -1 until OnFirstForward
@@ -67,13 +68,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _inputDim > 0
-            ? (long)_depth * _inputDim +      // feature selection weights
-              _depth +                          // thresholds
-              (long)_numLeaves * _outputDim      // leaf values
-            : 0L;                                // lazy: no params allocated yet
+                                // lazy: no params allocated yet
 
     /// <summary>
     /// Initializes an oblivious decision tree.
@@ -476,37 +471,4 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
         Engine.TensorFill(_leafValuesGrad, NumOps.Zero);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        int total = _featureSelectionWeights.Length + _thresholds.Length + _leafValues.Length;
-        var result = new Vector<T>(total);
-        int offset = 0;
-        for (int i = 0; i < _featureSelectionWeights.Length; i++)
-            result[offset++] = _featureSelectionWeights[i];
-        for (int i = 0; i < _thresholds.Length; i++)
-            result[offset++] = _thresholds[i];
-        for (int i = 0; i < _leafValues.Length; i++)
-            result[offset++] = _leafValues[i];
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Mirror GetParameters' layout: feature-selection weights, then thresholds, then leaf
-        // values. Writing the elements in place updates the same registered tensors the tape
-        // trains, so the Clone serialize -> deserialize round-trip restores learned weights.
-        int expected = _featureSelectionWeights.Length + _thresholds.Length + _leafValues.Length;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-        }
-
-        int offset = 0;
-        for (int i = 0; i < _featureSelectionWeights.Length; i++) _featureSelectionWeights[i] = parameters[offset++];
-        for (int i = 0; i < _thresholds.Length; i++) _thresholds[i] = parameters[offset++];
-        for (int i = 0; i < _leafValues.Length; i++) _leafValues[i] = parameters[offset++];
-    }
 }

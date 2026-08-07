@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+﻿using AiDotNet.Attributes;
+using System.Buffers;
 using AiDotNet.Enums;
 using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.Quantization;
@@ -20,7 +21,8 @@ namespace AiDotNet.Inference;
 /// For concurrent serving, create one sequence per request (distinct <see cref="SequenceId"/> values).
 /// </para>
 /// </remarks>
-internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInferenceLayer<T>
+[AutoParameters]
+internal partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInferenceLayer<T>
 {
     private readonly int _headCount;
     private readonly int _kvHeadCount;
@@ -944,71 +946,6 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         }
 
         return data;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        // Q/O are embDim x embDim; K/V are embDim x (kvHeadCount*headDim) — smaller under GQA. Sum actual sizes.
-        int totalParams =
-            _queryWeights.Rows * _queryWeights.Columns +
-            _keyWeights.Rows * _keyWeights.Columns +
-            _valueWeights.Rows * _valueWeights.Columns +
-            _outputWeights.Rows * _outputWeights.Columns +
-            _outputBias.Length;
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var matrix in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            for (int i = 0; i < matrix.Rows; i++)
-            {
-                for (int j = 0; j < matrix.Columns; j++)
-                {
-                    parameters[index++] = matrix[i, j];
-                }
-            }
-        }
-
-        for (int i = 0; i < _outputBias.Length; i++)
-        {
-            parameters[index++] = _outputBias[i];
-        }
-
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams =
-            _queryWeights.Rows * _queryWeights.Columns +
-            _keyWeights.Rows * _keyWeights.Columns +
-            _valueWeights.Rows * _valueWeights.Columns +
-            _outputWeights.Rows * _outputWeights.Columns +
-            _outputBias.Length;
-        if (parameters.Length != expectedParams)
-        {
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        foreach (var matrix in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            for (int i = 0; i < matrix.Rows; i++)
-            {
-                for (int j = 0; j < matrix.Columns; j++)
-                {
-                    matrix[i, j] = parameters[index++];
-                }
-            }
-        }
-
-        for (int i = 0; i < _outputBias.Length; i++)
-        {
-            _outputBias[i] = parameters[index++];
-        }
-
-        InvalidateKernelWeightCache();
     }
 
     private void EnsureKernelWeightCache()

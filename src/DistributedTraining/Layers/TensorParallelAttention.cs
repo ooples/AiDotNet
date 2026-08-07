@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.Attributes;
+using System;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -25,6 +26,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
+[AutoParameters]
 public sealed partial class TensorParallelAttention<T> : LayerBase<T>
 {
     private readonly ColumnParallelLinear<T> _q;
@@ -75,8 +77,6 @@ public sealed partial class TensorParallelAttention<T> : LayerBase<T>
     }
 
     public override bool SupportsTraining => false;
-
-    public override long ParameterCount => _q.ParameterCount + _k.ParameterCount + _v.ParameterCount + _o.ParameterCount;
 
     /// <summary>Seeds all four projections from full (un-sharded) weights, slicing each rank's shard. Used to
     /// build the block from an un-sharded reference for equivalence verification.</summary>
@@ -172,32 +172,6 @@ public sealed partial class TensorParallelAttention<T> : LayerBase<T>
         // Output projection: row-parallel all-reduces the per-rank head contributions into the full output.
         var outFlat = _o.Forward(context); // [batch*seq, embedDim]
         return outFlat.Reshape(batch, seq, _embedDim);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var parts = new[] { _q.GetParameters(), _k.GetParameters(), _v.GetParameters(), _o.GetParameters() };
-        var all = new T[ParameterCount];
-        int idx = 0;
-        foreach (var p in parts)
-            for (int i = 0; i < p.Length; i++) all[idx++] = p[i];
-        return new Vector<T>(all);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        int idx = 0;
-        void Assign(LayerBase<T> layer)
-        {
-            long n = layer.ParameterCount;
-            var slice = new T[n];
-            for (int i = 0; i < n; i++) slice[i] = parameters[idx++];
-            layer.SetParameters(new Vector<T>(slice));
-        }
-        Assign(_q); Assign(_k); Assign(_v); Assign(_o);
     }
 
     public override void UpdateParameters(T learningRate)

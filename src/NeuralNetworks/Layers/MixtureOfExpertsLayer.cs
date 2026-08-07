@@ -59,6 +59,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4")]
+[AutoParameters]
 public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -322,35 +323,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => _router.SupportsTraining || _experts.Any(e => e.SupportsTraining);
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>
-    /// The sum of the router's parameters and all experts' parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This includes all parameters from the router and all experts combined. This gives you the
-    /// total model capacity and memory requirement for this layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> The total count of all adjustable numbers in this layer.
-    ///
-    /// This includes:
-    /// - All weights and biases in the router
-    /// - All weights and biases in all experts
-    ///
-    /// For example, with:
-    /// - Router: 1000 parameters
-    /// - 8 experts with 5000 parameters each: 40,000 parameters
-    /// - Total: 41,000 parameters
-    ///
-    /// More parameters = more capacity to learn, but also more memory needed.
-    /// MoE shines because you can have huge capacity (many experts) but still only activate
-    /// a fraction of them per input with sparse routing.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _router.ParameterCount + (int)_experts.Sum(e => e.ParameterCount);
 
     /// <summary>
     /// Gets the number of experts in this MoE layer.
@@ -813,49 +785,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all parameters from the router and all experts.</returns>
-    /// <remarks>
-    /// <para>
-    /// Parameters are ordered as: [router parameters] [expert1 parameters] [expert2 parameters] ...
-    /// </para>
-    /// <para><b>For Beginners:</b> Collects all learned values into one list.
-    ///
-    /// The returned vector contains:
-    /// - First, all parameters from the router
-    /// - Then, all parameters from expert 1
-    /// - Then, all parameters from expert 2
-    /// - And so on
-    ///
-    /// This is useful for:
-    /// - Saving the entire MoE model to disk
-    /// - Implementing advanced optimization algorithms
-    /// - Analyzing the model's learned parameters
-    /// - Transferring knowledge to another model
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for production-grade parameter collection
-        var paramVectors = new List<Vector<T>>();
-
-        // Add router parameters
-        if (_router.ParameterCount > 0)
-        {
-            paramVectors.Add(_router.GetParameters());
-        }
-
-        // Add expert parameters
-        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
-        {
-            paramVectors.Add(expert.GetParameters());
-        }
-
-        return paramVectors.Count > 0 ? Vector<T>.Concatenate(paramVectors.ToArray()) : new Vector<T>(0);
-    }
-
-    /// <summary>
     /// Sets all trainable parameters from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing parameters for the router and all experts.</param>
@@ -899,33 +828,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         _router.ClearGradients();
         foreach (var expert in _experts)
             expert.ClearGradients();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // Use Vector.Slice for production-grade parameter distribution
-        int offset = 0;
-
-        // Set router parameters
-        if (_router.ParameterCount > 0)
-        {
-            _router.SetParameters(parameters.Slice(offset, (int)_router.ParameterCount));
-            offset += (int)_router.ParameterCount;
-        }
-
-        // Set expert parameters
-        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
-        {
-            expert.SetParameters(parameters.Slice(offset, (int)expert.ParameterCount));
-            offset += (int)expert.ParameterCount;
-        }
     }
 
     /// <summary>

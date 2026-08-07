@@ -1131,14 +1131,6 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ff1Weight, _ff1Bias, _ff2Weight, _ff2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
-    }
-
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 
@@ -1307,17 +1299,6 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new[] { _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj,
-            _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj,
-            _ff1Weight, _ff1Bias, _ff2Weight, _ff2Bias,
-            _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta, _layerNorm3Gamma, _layerNorm3Beta })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
-    }
-
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 

@@ -31,6 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "2, 4")]
+[AutoParameters]
 public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -309,20 +310,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     public int HeadCount => _headCount;
 
     /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <remarks>
-    /// Multi-head attention parameters are stored in multiple internal tensors (Q/K/V/O projections + output bias).
-    /// </remarks>
-    public override long ParameterCount => _isInitialized
-        // After EnsureInitialized has run the live tensor lengths are authoritative.
-        ? _queryWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length
-        // Lazy path: four dim×dim projection matrices + one bias vector of size dim.
-        // Reads the field without forcing the expensive tensor allocation, which is
-        // the whole point of staying lazy for existence checks.
-        : (4 * _embeddingDimension * _embeddingDimension) + _embeddingDimension;
-
-    /// <summary>
     /// Gets the query projection weights tensor for JIT compilation.
     /// Forces lazy weight allocation if the layer hasn't seen its first
     /// forward yet — callers (e.g. <c>QuantizedAttentionLayer</c>) need
@@ -452,6 +439,29 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Resolves shape on first forward; passthrough since output equals input shape.
     /// Validates that input.Shape[^1] == headCount * headDimension.
     /// </summary>
+    /// <summary>
+    /// Allocates Q/K/V/O, which are sized entirely by <c>_embeddingDimension</c>.
+    /// </summary>
+    /// <remarks>
+    /// The weights never depended on the input — only the sequence axis does — but the allocation
+    /// lived solely in <see cref="OnFirstForward"/>, so a layer that had not run a forward reported
+    /// five placeholder tensors totalling zero scalars. Deserialize then had 2,328 values and a
+    /// layer that believed it had none. Reading the parameter surface now materializes through the
+    /// same idempotent path a forward would use, and that path deliberately does NOT re-randomize
+    /// weights already installed by a restore or a copy-on-write clone.
+    /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Q/K/V/O are <c>embeddingDimension</c> square; only the sequence axis is input-dependent.
+    /// </remarks>
+    protected override bool ParametersAreConstructionSized => true;
+
+    protected override void EnsureInitialized()
+    {
+        EnsureWeightsAllocated();
+        base.EnsureInitialized();
+    }
+
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
@@ -1658,89 +1668,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             Engine.InvalidatePersistentTensor(_outputWeights);
             Engine.InvalidatePersistentTensor(_outputBias);
         }
-    }
-
-    /// <summary>
-    /// Extracts all parameters (weights and biases) from the layer into a single vector.
-    /// </summary>
-    /// <returns>A vector containing all parameters of the layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method collects all the layer's adjustable values (weights and biases) 
-    /// into a single list. Think of it like taking inventory of all the ingredients in a recipe.
-    /// This is useful for saving the model's state or for optimization algorithms that need to 
-    /// work with all parameters at once.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Materialize lazy-init tensors before copying their data — a fresh DiT
-        // block that's never seen a Forward() call otherwise returns an empty
-        // Vector here, which breaks any caller that concatenates per-layer
-        // parameter vectors (including NeuralNetworkBase.GetParameters itself).
-        EnsureWeightsAllocated();
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_queryWeights.Data),
-            Vector<T>.FromMemory(_keyWeights.Data),
-            Vector<T>.FromMemory(_valueWeights.Data),
-            Vector<T>.FromMemory(_outputWeights.Data),
-            Vector<T>.FromMemory(_outputBias.Data));
-    }
-
-    /// <summary>
-    /// Sets all parameters (weights and biases) of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set in the layer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method does the opposite of GetParameters - it takes a list of values 
-    /// and distributes them back into the layer's weights and biases. It's like restocking all the 
-    /// ingredients in your kitchen from a single shopping bag, putting each item in its proper place.
-    /// This is useful when loading a saved model or when optimization algorithms have computed 
-    /// improved parameter values.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // SetParameters is the logical mirror of GetParameters — if the caller is
-        // loading a snapshot into a lazily-constructed layer, we still need the real
-        // tensors allocated first or every shape read below is 0.
-        EnsureWeightsAllocated();
-        // Calculate total number of parameters using tensor shape
-        int qRows = _queryWeights.Shape[0], qCols = _queryWeights.Shape[1];
-        int kRows = _keyWeights.Shape[0], kCols = _keyWeights.Shape[1];
-        int vRows = _valueWeights.Shape[0], vCols = _valueWeights.Shape[1];
-        int oRows = _outputWeights.Shape[0], oCols = _outputWeights.Shape[1];
-        int biasLen = _outputBias.Shape[0];
-
-        int totalParams = qRows * qCols + kRows * kCols + vRows * vCols + oRows * oCols + biasLen;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        var qLen = qRows * qCols;
-        var kLen = kRows * kCols;
-        var vLen = vRows * vCols;
-        var oLen = oRows * oCols;
-
-        // Bulk copy in-place — preserves engine persistent tensor references
-        var src = parameters.AsSpan();
-        int idx = 0;
-        src.Slice(idx, qLen).CopyTo(_queryWeights.Data.Span); idx += qLen;
-        src.Slice(idx, kLen).CopyTo(_keyWeights.Data.Span); idx += kLen;
-        src.Slice(idx, vLen).CopyTo(_valueWeights.Data.Span); idx += vLen;
-        src.Slice(idx, oLen).CopyTo(_outputWeights.Data.Span); idx += oLen;
-        src.Slice(idx, biasLen).CopyTo(_outputBias.Data.Span);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_queryWeights);
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>

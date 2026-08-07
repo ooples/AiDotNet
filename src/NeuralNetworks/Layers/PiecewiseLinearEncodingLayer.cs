@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -23,6 +24,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AutoParameters]
 public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
 {
     private readonly int _numFeatures;
@@ -43,9 +45,6 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _numFeatures * (_numBins - 1);
 
     /// <summary>
     /// Initializes piecewise linear encoding.
@@ -170,12 +169,4 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
         Engine.TensorFill(_binBoundaryGradients, NumOps.Zero);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var result = new Vector<T>(_binBoundaries.Length);
-        for (int i = 0; i < _binBoundaries.Length; i++)
-            result[i] = _binBoundaries[i];
-        return result;
-    }
 }

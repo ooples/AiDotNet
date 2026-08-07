@@ -33,6 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, NormalizesInput = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 0.5")]
+[AutoParameters]
 public partial class AnomalyDetectorLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -579,30 +580,6 @@ public partial class AnomalyDetectorLayer<T> : LayerBase<T>
         var zeroGradient = new Tensor<T>(_lastInputShape);
         zeroGradient.Fill(NumOps.Zero);
         return zeroGradient;
-    }
-
-    /// <summary>
-    /// Gets all parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector as this layer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector since the anomaly detection layer doesn't have trainable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list since this layer doesn't learn parameters.
-    /// 
-    /// Since this layer:
-    /// - Doesn't have weights or biases
-    /// - Uses fixed formulas rather than learned parameters
-    /// - Doesn't require training in the traditional sense
-    /// 
-    /// The method returns an empty vector to maintain compatibility with the layer interface.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // This layer has no trainable parameters
-        return new Vector<T>(0);
     }
 
     /// <summary>

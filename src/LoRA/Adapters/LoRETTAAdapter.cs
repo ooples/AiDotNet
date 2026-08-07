@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -64,7 +65,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// SIAM J. Scientific Computing, 2011.
 /// </para>
 /// </remarks>
-public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Tensor-train cores representing the weight decomposition.
@@ -111,42 +113,6 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// Gets the number of cores in the tensor-train.
     /// </summary>
     public int NumCores => _numCores;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the tensor-train cores.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The total parameters is the sum of all core sizes:
-    /// sum_k (ttRanks[k-1] × coreShapes[k] × ttRanks[k])
-    /// </para>
-    /// <para>
-    /// This is typically much smaller than standard LoRA for the same expressiveness.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Promote to long BEFORE the per-core multiplication so a
-            // sufficiently-large rank × shape doesn't wrap. The TT-core
-            // product can be arbitrarily large for big factorizations.
-            // Closes #1271.7Bnd.
-            long ttParams = 0L;
-            for (int k = 0; k < _numCores; k++)
-            {
-                ttParams += (long)_ttRanks[k] * _coreShapes[k] * _ttRanks[k + 1];
-            }
-
-            // Add base layer parameters if not frozen
-            if (!_freezeBaseLayer)
-            {
-                return _baseLayer.ParameterCount + ttParams;
-            }
-
-            return ttParams;
-        }
-    }
 
     /// <summary>
     /// Initializes a new LoRETTA adapter wrapping an existing layer.
@@ -770,32 +736,6 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}",
-                nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateCoresFromParameters();
     }
 
     /// <summary>

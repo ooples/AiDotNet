@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = true)]
+[AutoParameters]
 public partial class SpectralNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -84,10 +85,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     private bool _normalizedWeightsApplied;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    public override long ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
     /// <summary>
@@ -459,22 +456,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _innerLayer.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets the parameters of the inner layer.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return _innerLayer.GetParameters();
-    }
-
-    /// <summary>
-    /// Sets the parameters of the inner layer.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _innerLayer.SetParameters(parameters);
     }
 
     /// <summary>

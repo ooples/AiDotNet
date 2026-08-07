@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 0, 1, 0, 0 }, new[] { 0, 1, 0, 0 }, new[] { 0, 0, 1, 0 }, new[] { 0, 0, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[AutoParameters]
 public partial class CroppingLayer<T> : LayerBase<T>
 {
 
@@ -491,32 +492,6 @@ public partial class CroppingLayer<T> : LayerBase<T>
     private int[]? _gpuCachedInputShape;
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector, as cropping layers have no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector for cropping layers, as they have no trainable parameters.
-    /// It is implemented to satisfy the abstract method requirement from the base class.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because there are no values to learn.
-    /// 
-    /// Since cropping layers:
-    /// - Have no weights or biases
-    /// - Don't learn from data
-    /// - Just perform a fixed cropping operation
-    ///
-    /// The method returns an empty vector (list) to indicate there's nothing to adjust.
-    /// This is like a recipe that has no ingredients that can be changed - it's always the same.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Cropping layer has no trainable parameters
-        return Vector<T>.Empty();
-    }
-
-    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -542,28 +517,4 @@ public partial class CroppingLayer<T> : LayerBase<T>
         _gpuCachedInputShape = null;
     }
 
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing parameters to set.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a no-operation for cropping layers, as they have no trainable parameters to set.
-    /// It is implemented to satisfy the abstract method requirement from the base class.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is empty because cropping layers don't have adjustable values.
-    /// 
-    /// Since cropping layers:
-    /// - Have no weights or biases to update
-    /// - Perform a fixed operation that doesn't change
-    /// - Don't learn from training
-    ///
-    /// There's nothing to set. It's like trying to change the color settings
-    /// on a black and white printer - the feature doesn't exist.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Cropping layer has no parameters to set
-    }
 }

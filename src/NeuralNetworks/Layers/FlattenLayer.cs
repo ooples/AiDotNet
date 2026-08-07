@@ -43,6 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 2, 2", TestConstructorArgs = "")]
+[AutoParameters]
 public partial class FlattenLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -249,33 +250,6 @@ public partial class FlattenLayer<T> : LayerBase<T>
         }
         _outputSize = actualOutputSize;
         return Engine.Reshape(input, [batchSize, actualOutputSize]);
-    }
-
-    /// <summary>
-    /// Gets the trainable parameters of the layer.
-    /// </summary>
-    /// <returns>
-    /// An empty vector since flatten layers have no trainable parameters.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the flatten layer has no
-    /// trainable parameters to retrieve, so it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because flatten layers have no learnable values.
-    /// 
-    /// Unlike layers with weights and biases:
-    /// - Flatten layers don't have any parameters that change during training
-    /// - They perform a fixed operation (reshaping) that doesn't involve learning
-    /// - There are no values to save when storing a trained model
-    /// 
-    /// This method returns an empty vector, indicating there are no parameters to collect.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // FlattenLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

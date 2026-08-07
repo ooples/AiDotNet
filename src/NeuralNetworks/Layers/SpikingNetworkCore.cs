@@ -44,6 +44,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = false, ChangesShape = true, UsesSurrogateGradient = true, ExpectedInputRank = 2, TestInputShape = "1, 8", TestConstructorArgs = "8, 4, 6")]
+[AutoParameters]
 public partial class SpikingNetworkCore<T> : LayerBase<T>
 {
     private readonly int _inputSize;
@@ -236,46 +237,6 @@ public partial class SpikingNetworkCore<T> : LayerBase<T>
     {
         foreach (var syn in _synapses)
             yield return syn;
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in SubLayers())
-                total += layer.ParameterCount;
-            return total;
-        }
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        foreach (var layer in SubLayers())
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-                parameters.Add(p[i]);
-        }
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        foreach (var layer in SubLayers())
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count == 0) continue;
-            var sub = new Vector<T>(count);
-            for (int i = 0; i < count && idx < parameters.Length; i++)
-                sub[i] = parameters[idx++];
-            layer.SetParameters(sub);
-        }
     }
 
     /// <inheritdoc />

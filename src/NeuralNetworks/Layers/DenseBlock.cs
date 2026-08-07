@@ -52,6 +52,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 3")]
+[AutoParameters]
 public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly List<DenseBlockLayer<T>> _layers;
@@ -65,10 +66,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     // GPU cached tensors for backward pass
     private List<Tensor<T>>? _gpuFeatureMaps;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    public override long ParameterCount => (int)_layers.Sum(l => l.ParameterCount);
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -282,33 +279,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
         {
             layer.UpdateParameters(learningRate);
         }
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the block.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return new Vector<T>(_layers.SelectMany(l => l.GetParameters().ToArray()).ToArray());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from the given parameter vector.
-    /// </summary>
-    /// <param name="parameters">The parameter vector containing all layer parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: inner layers' shapes haven't been resolved, so
-        // their slice lengths are wrong. Buffer the full vector and
-        // replay from OnFirstForward, after each inner DenseBlockLayer
-        // has a chance to lock in its own input channel count.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        ApplyParameters(parameters);
     }
 
     private Vector<T>? _pendingParameters;

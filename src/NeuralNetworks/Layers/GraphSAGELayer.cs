@@ -38,6 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+[AutoParameters]
 public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -141,9 +142,6 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// Sum or Mean aggregators. MaxPool aggregation uses a hybrid approach.
     /// </remarks>
     protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _selfWeights.Length + _neighborWeights.Length + _bias.Length;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -626,50 +624,6 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         metadata["AggregatorType"] = ((int)_aggregatorType).ToString();
         metadata["Normalize"] = _normalize.ToString();
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_selfWeights.ToArray()),
-            new Vector<T>(_neighborWeights.ToArray()),
-            new Vector<T>(_bias.ToArray())
-        );
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int selfCount = _selfWeights.Length;
-        int neighborCount = _neighborWeights.Length;
-        int biasCount = _bias.Length;
-        int totalParams = selfCount + neighborCount + biasCount;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException(
-                $"Expected {totalParams} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        int index = 0;
-
-        // Write in-place to preserve registered parameter tensor references
-        parameters.SubVector(index, selfCount).AsSpan().CopyTo(_selfWeights.Data.Span);
-        index += selfCount;
-
-        parameters.SubVector(index, neighborCount).AsSpan().CopyTo(_neighborWeights.Data.Span);
-        index += neighborCount;
-
-        parameters.SubVector(index, biasCount).AsSpan().CopyTo(_bias.Data.Span);
-
-        // Invalidate the GPU-resident copies of these persistent trainable tensors so
-        // ForwardGpu reuploads the freshly-written CPU values on its next call. Without
-        // this the GPU path would silently use the pre-update weights, mirroring the
-        // pattern in DenseLayer/Conv layers.
-        Engine.InvalidatePersistentTensor(_selfWeights);
-        Engine.InvalidatePersistentTensor(_neighborWeights);
-        Engine.InvalidatePersistentTensor(_bias);
     }
 
     public override void ClearGradients()

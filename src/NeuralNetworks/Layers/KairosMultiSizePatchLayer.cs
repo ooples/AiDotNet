@@ -41,6 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "16", TestConstructorArgs = "16, 4, new int[] { 4, 8 }")]
+[AutoParameters]
 public partial class KairosMultiSizePatchLayer<T> : LayerBase<T>
 {
     private readonly int _contextLength;
@@ -209,77 +210,6 @@ public partial class KairosMultiSizePatchLayer<T> : LayerBase<T>
         _router.UpdateParameters(learningRate);
         foreach (var emb in _patchEmbeddings)
             emb.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: sublayers (DenseLayer router + DenseLayer embeddings)
-        // start with placeholder shapes. Resolve them from known
-        // constants — the router takes [B, contextLength] and each
-        // embedding takes patchSize-sized input.
-        if (!_router.IsShapeResolved)
-        {
-            _router.ResolveFromShape(new[] { _contextLength });
-        }
-        for (int k = 0; k < _patchEmbeddings.Count; k++)
-        {
-            if (!_patchEmbeddings[k].IsShapeResolved)
-            {
-                _patchEmbeddings[k].ResolveFromShape(new[] { _patchSizes[k] });
-            }
-        }
-
-        // Validate full parameters length up front so a malformed vector
-        // throws BEFORE we partially mutate any sublayer.
-        long expectedTotal = _router.ParameterCount;
-        for (int k = 0; k < _patchEmbeddings.Count; k++)
-        {
-            expectedTotal += _patchEmbeddings[k].ParameterCount;
-        }
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"KairosMultiSizePatchLayer expected {expectedTotal} parameters across sublayers, " +
-                $"got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // Composite SetParameters: route by sublayer ParameterCount (cheap
-        // O(1) integer) rather than GetParameters().Length, which would
-        // materialize a full flattened copy of every sublayer just to read
-        // its width — for the router + every patch-size embedding this
-        // doubles load-time allocations on a deserialize round-trip.
-        int idx = 0;
-        void Set(ILayer<T> sub)
-        {
-            int count = checked((int)sub.ParameterCount);
-            if (count == 0) return;
-            sub.SetParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        Set(_router);
-        foreach (var emb in _patchEmbeddings) Set(emb);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new List<Vector<T>> { _router.GetParameters() };
-        foreach (var emb in _patchEmbeddings)
-            parts.Add(emb.GetParameters());
-
-        int total = 0;
-        foreach (var p in parts) total += p.Length;
-        var combined = new T[total];
-        int offset = 0;
-        foreach (var p in parts)
-        {
-            for (int i = 0; i < p.Length; i++)
-                combined[offset + i] = p[i];
-            offset += p.Length;
-        }
-        return new Vector<T>(combined);
     }
 
     /// <inheritdoc/>

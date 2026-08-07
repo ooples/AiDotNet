@@ -35,6 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "2, 16")]
+[AutoParameters]
 public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -311,46 +312,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         base.Deserialize(reader);
     }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!_isInitialized)
-        {
-            // Mirror the lazy-init contract on the read side (ParameterCount==0 and
-            // GetParameters().Length==0 until first Forward): accept an empty vector
-            // as a no-op so round-trip patterns like
-            //   newParams = parameters.Slice(offset, layer.GetParameters().Length); layer.SetParameters(newParams);
-            // in the host model don't blow up before any data has flowed.
-            if (parameters.Length == 0)
-            {
-                return;
-            }
-
-            // If the eager-ctor embedding size is known, resolve and construct
-            // sublayers now so callers that already have a non-empty parameter
-            // vector (e.g. deserialize → SetParameters) can proceed without a
-            // separate warmup forward.
-            if (_embeddingSize > 0)
-            {
-                EnsureInitialized();
-            }
-
-            if (!_isInitialized)
-            {
-                throw new InvalidOperationException(
-                    "TransformerEncoderLayer.SetParameters cannot run before sublayers are " +
-                    "constructed. Run a Forward pass first so _embeddingSize is resolved.");
-            }
-        }
-        int idx = 0;
-        void Set(ILayer<T> layer)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.SetParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        Set(_selfAttention); Set(_norm1); Set(_feedForward1); Set(_feedForward2); Set(_norm2);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         if (!_isInitialized) return new Vector<T>(0);
@@ -374,33 +335,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <remarks>
-    /// This returns the sum of all parameters from sublayers: self-attention, layer norms, and feed-forward layers.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Eager-dim ctor materializes sublayers at construction so this
-            // path always sees real counts. Lazy ctor (embeddingSize == -1)
-            // returns 0 until the first forward triggers EnsureInitialized
-            // — that's the historical contract for layers whose dimensions
-            // aren't known until input flows.
-            if (_isInitialized)
-            {
-                return _selfAttention.ParameterCount +
-                       _norm1.ParameterCount +
-                       _feedForward1.ParameterCount +
-                       _feedForward2.ParameterCount +
-                       _norm2.ParameterCount;
-            }
-            return 0;
-        }
-    }
 
     /// <summary>
     /// Returns layer-specific metadata for serialization.
@@ -932,55 +866,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _feedForward1.UpdateParametersGpu(config);
         _feedForward2.UpdateParametersGpu(config);
         _norm2.UpdateParametersGpu(config);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the transformer encoder layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters from all sublayers.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from all sublayers of the transformer encoder layer and combines
-    /// them into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from all parts of the encoder.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include weights from attention mechanisms, normalization layers, and the feed-forward network
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// A transformer encoder layer typically has millions of parameters, all of which
-    /// contribute to its ability to understand complex sequences.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Sublayers do not exist on a lazy encoder until first Forward.
-        if (!_isInitialized) return new Vector<T>(0);
-
-        // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
-        // Collect parameters from all sublayers and concatenate them
-        var selfAttentionParams = _selfAttention.GetParameters();
-        var norm1Params = _norm1.GetParameters();
-        var ff1Params = _feedForward1.GetParameters();
-        var ff2Params = _feedForward2.GetParameters();
-        var norm2Params = _norm2.GetParameters();
-
-        // Concatenate all parameter vectors at once
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(
-                    Vector<T>.Concatenate(selfAttentionParams, norm1Params),
-                    ff1Params),
-                ff2Params),
-            norm2Params);
     }
 
     /// <summary>

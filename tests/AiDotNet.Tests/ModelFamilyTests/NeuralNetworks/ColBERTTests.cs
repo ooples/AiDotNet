@@ -10,7 +10,16 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 // training and is inherently >120s under the suite's single-threaded determinism BLAS even
 // uncontended (confirmed: times out in a fully serialized run) — not a regression and not shrinkable.
 // Tag HeavyTimeout so it runs full-fidelity nightly (deferred, not skipped). SimCSE/SPLADE/SGPT precedent.
+//
+// The nightly lane is still executed at full xUnit width, and OptimizerStep_ParamL2_DoesNotExplode was
+// timing out THERE — not because it is slow, but because it was starved. Measured alone on the
+// CI-matched Release build it takes 5 s against its 120 s gate (24x headroom), which is the
+// innocent-bystander profile FoundationScaleSerialCollection exists for. Note the invariant runs a
+// SINGLE Train call plus two whole-parameter L2 sweeps, so neither the float rung (already applied —
+// this fixture is <float>) nor an iteration cap can reach it: there is no iteration count to trim.
+// Serialize so that one step gets the whole machine; the BERT-base fixture stays paper-faithful.
 [Trait("Category", "HeavyTimeout")]
+[Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class ColBERTTests : NeuralNetworkModelTestBase<float>
 {
     // ColBERT (Khattab & Zaharia 2020) projects 768-dim BERT embeddings

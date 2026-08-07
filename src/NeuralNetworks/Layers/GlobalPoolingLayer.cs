@@ -43,6 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4", TestConstructorArgs = "AiDotNet.Enums.PoolingType.Max")]
+[AutoParameters]
 public partial class GlobalPoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -541,33 +542,6 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>
             FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, output),
             _ => gradOutput // Identity or unsupported - pass through
         };
-    }
-
-    /// <summary>
-    /// Gets the trainable parameters of the layer.
-    /// </summary>
-    /// <returns>
-    /// An empty vector since global pooling layers have no trainable parameters.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the global pooling layer has no
-    /// trainable parameters to retrieve, so it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because pooling layers have no learnable values.
-    /// 
-    /// Unlike layers with weights and biases:
-    /// - Global pooling layers don't have any parameters that change during training
-    /// - They perform a fixed operation (pooling) that doesn't involve learning
-    /// - There are no values to save when storing a trained model
-    /// 
-    /// This method returns an empty vector, indicating there are no parameters to collect.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // GlobalPoolingLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

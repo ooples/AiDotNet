@@ -886,7 +886,8 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 /// <summary>
 /// Represents a single stack in the N-HiTS architecture using Tensor operations.
 /// </summary>
-internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly int _inputLength;
     private readonly int _outputLength;
@@ -907,53 +908,8 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     /// </summary>
     public int InputLength => _inputLength;
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var w in _weights)
-                count += w.Length;
-            foreach (var b in _biases)
-                count += b.Length;
-            return count;
-        }
-    }
-
     public override bool SupportsTraining => true;
     public override void ResetState() { _lastForwardInput = null; }
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var w in _weights)
-            for (int i = 0; i < w.Length; i++) allParams.Add(w[i]);
-        foreach (var b in _biases)
-            for (int i = 0; i < b.Length; i++) allParams.Add(b[i]);
-        return new Vector<T>(allParams.ToArray());
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int idx = 0;
-        foreach (var w in _weights)
-        {
-            for (int i = 0; i < w.Length; i++)
-                w[i] = parameters[idx++];
-        }
-        foreach (var b in _biases)
-        {
-            for (int i = 0; i < b.Length; i++)
-                b[i] = parameters[idx++];
-        }
-    }
-
     /// <summary>
     /// Persists the constructor's parameters so DeserializationHelper can
     /// reconstruct the layer with paper-faithful dimensions instead of the

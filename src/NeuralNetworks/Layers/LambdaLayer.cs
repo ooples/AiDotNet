@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High)]
+[AutoParameters]
 public partial class LambdaLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -286,32 +287,6 @@ public partial class LambdaLayer<T> : LayerBase<T>
         return output;
     }
 
-
-    /// <summary>
-    /// Returns an empty vector since the lambda layer typically has no trainable parameters.
-    /// </summary>
-    /// <returns>An empty vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector since the LambdaLayer typically has no trainable parameters.
-    /// It is implemented as required by the LayerBase interface.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because there are typically no parameters.
-    /// 
-    /// Since Lambda layers:
-    /// - Usually don't have their own weights or biases
-    /// - Rely on the custom functions you provide
-    /// 
-    /// This method returns an empty vector to indicate there are no parameters.
-    /// If your custom functions have parameters, you would need to handle saving
-    /// and loading them separately.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // LambdaLayer typically has no trainable parameters
-        return Vector<T>.Empty();
-    }
 
     /// <summary>
     /// Resets the internal state of the layer.

@@ -56,6 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4")]
+[AutoParameters]
 internal partial class MambaBlock<T> : LayerBase<T>
 {
     // Configuration
@@ -178,17 +179,6 @@ internal partial class MambaBlock<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public int DtRank => _dtRank;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _convWeights.Length + _convBias.Length +
-        _xProjectionWeights.Length +
-        _dtProjectionWeights.Length + _dtProjectionBias.Length +
-        _aLog.Length + _dParam.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new Mamba block.
@@ -719,53 +709,6 @@ internal partial class MambaBlock<T> : LayerBase<T>
         // Re-register against the new tensor instances created by the updates above (TensorAdd returns new
         // tensors), so the autodiff registry tracks the live weights — now including _aLog and _dParam.
         RegisterTrainableParameters();
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var tensor in new[]
-        {
-            _inputProjectionWeights, _inputProjectionBias,
-            _convWeights, _convBias,
-            _xProjectionWeights,
-            _dtProjectionWeights, _dtProjectionBias,
-            _aLog, _dParam,
-            _outputProjectionWeights, _outputProjectionBias
-        })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in new[]
-        {
-            _inputProjectionWeights, _inputProjectionBias,
-            _convWeights, _convBias,
-            _xProjectionWeights,
-            _dtProjectionWeights, _dtProjectionBias,
-            _aLog, _dParam,
-            _outputProjectionWeights, _outputProjectionBias
-        })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     public override Vector<T> GetParameterGradients()
