@@ -40,7 +40,7 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>
 
     // Trainable CLS token — shape [1, embedDim]. Held by reference so the
     // gradient tape can track parameter identity.
-    private readonly Tensor<T> _cls;
+    private  Tensor<T> _cls;
 
     /// <summary>Creates a CLS-token prepender for embedDim-wide inputs.</summary>
     /// <param name="embedDim">Embedding dimension (must match the input's last axis).</param>
