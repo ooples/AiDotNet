@@ -561,7 +561,19 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // per-timestep tape-dispatch overhead that made the memorization test exceed the 180s budget.
         //   S_t[di,vi] = sigmoid(a)[di]*S_{t-1}[di,vi] + (sigmoid(b)[di]*k[di])*v[vi]
         //   wkv_t[di]  = sigmoid(r)[di] * sum_vi S_t[di,vi]*k[vi]
-        var wkvAll = Engine.Rwkv7SequenceForward(Rall, Kall, Vall, Aall, Ball, _numHeads);
+        // Tensors 0.120.2+ replaced the old (r, k, v, a, b) surface with the paper-faithful
+        // generalised delta rule (arXiv:2503.14456, Eq. 17):
+        //   (rProj, kappa, kTilde, vProj, decayLogit, iclRate, numHeads)
+        // This block's projections map onto it directly: r -> rProj, k -> kappa (the removal key,
+        // L2-normalised per head inside the kernel), a -> decayLogit (raw pre-activation; the kernel
+        // forms w = exp(-e^(-1/2)*sigmoid(decayLogit))), and b -> iclRate (the in-context learning
+        // rate, which the kernel now expects already in (0,1), so gate it with sigmoid here). The
+        // value-injection key kTilde reproduces this block's old sigmoid(b)*(k*v) injection as
+        // iclRate (*) kappa. All of these are tape-recorded ops, so autodiff carries the gradients
+        // back into the r/k/v/a/b projection weights exactly as before.
+        var iclRate = Engine.Sigmoid(Ball);
+        var kTilde = Engine.TensorMultiply(iclRate, Kall);
+        var wkvAll = Engine.Rwkv7SequenceForward(Rall, Kall, kTilde, Vall, Aall, iclRate, _numHeads);
 
         // Group-normalize (per head, per position) and project to the output — both batched over all
         // positions as [batch*seqLen, modelDim], so NO per-timestep ops remain in time-mixing.
