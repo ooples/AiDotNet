@@ -134,7 +134,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated ||
                                      field.Type.NullableAnnotation == NullableAnnotation.Annotated;
-                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: false));
+                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: false, IsKeyed: false));
                 }
                 // ...and sub-layers held in a COLLECTION. A composite that keeps its children in a
                 // List<> got no registration at all, so GetSubLayers() returned nothing for them and
@@ -142,11 +142,11 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 // in Forward, and they silently never trained. CitrinetBlockLayer reported 0 children
                 // while holding 9. This is what PyTorch's nn.ModuleList exists to prevent -- a plain
                 // Python list of modules is likewise invisible to .parameters().
-                else if (!field.IsStatic && IsLayerCollectionType(field.Type))
+                else if (!field.IsStatic && IsLayerCollectionType(field.Type, out bool isKeyed))
                 {
                     var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated ||
                                      field.Type.NullableAnnotation == NullableAnnotation.Annotated;
-                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: true));
+                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: true, IsKeyed: isKeyed));
                 }
             }
 
@@ -578,8 +578,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     // is identity-based and idempotent, so re-walking a list is harmless.
                     sb.AppendLine($"        if ({sl.Name} is not null)");
                     sb.AppendLine("        {");
-                    sb.AppendLine($"            foreach (var __sub in {sl.Name})");
+                    // A keyed collection enumerates as KeyValuePair<TKey, TLayer>; the layer is
+                    // the Value. Reading the pair itself would not compile against
+                    // RegisterSubLayer, which is exactly why the arity gate that used to skip
+                    // these fields had to go together with this branch.
+                    sb.AppendLine(sl.IsKeyed
+                        ? $"            foreach (var __entry in {sl.Name})"
+                        : $"            foreach (var __sub in {sl.Name})");
                     sb.AppendLine("            {");
+                    if (sl.IsKeyed) sb.AppendLine("                var __sub = __entry.Value;");
                     sb.AppendLine("                if (__sub is not null) RegisterSubLayer(__sub);");
                     sb.AppendLine("            }");
                     sb.AppendLine("        }");
@@ -697,49 +704,101 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// True for a field holding MANY sub-layers: TLayer[], List&lt;TLayer&gt;, IReadOnlyList&lt;TLayer&gt;
-    /// and friends, where TLayer satisfies <see cref="IsLayerType"/>.
+    /// True for a field holding MANY sub-layers: TLayer[], List&lt;TLayer&gt;, IReadOnlyList&lt;TLayer&gt;,
+    /// IEnumerable&lt;TLayer&gt;, and keyed forms such as Dictionary&lt;TKey, TLayer&gt;, where TLayer
+    /// satisfies <see cref="IsLayerType"/>.
     /// </summary>
-    private static bool IsLayerCollectionType(ITypeSymbol type)
+    /// <param name="type">The field's declared type.</param>
+    /// <param name="isKeyed">
+    /// True when enumerating the field yields <c>KeyValuePair&lt;TKey, TLayer&gt;</c> rather than the
+    /// layer itself, so the emitted loop must read <c>.Value</c>.
+    /// </param>
+    /// <remarks>
+    /// FOUND THROUGH THE IMPLEMENTED IEnumerable&lt;X&gt;, NOT THROUGH THE FIELD'S OWN ARITY. Two
+    /// separate silent misses came from doing it the other way round:
+    /// <list type="bullet">
+    /// <item><description><c>AllInterfaces</c> does not contain the type itself, so a field declared
+    /// exactly as <c>IEnumerable&lt;ILayer&lt;T&gt;&gt;</c> -- the case the summary advertises and the
+    /// one most likely to be hand-written -- reported false and its children were never
+    /// registered.</description></item>
+    /// <item><description>A <c>TypeArguments.Length == 1</c> gate excluded
+    /// <c>Dictionary&lt;string, TLayer&gt;</c>. A composite that keys its children by name got no
+    /// registration and no warning -- no gradients, no optimizer entry, no export.</description></item>
+    /// </list>
+    /// Matching is on <see cref="SpecialType.System_Collections_Generic_IEnumerable_T"/> rather than
+    /// on the string "System.Collections.Generic.IEnumerable&lt;T&gt;", which only ever worked because
+    /// the BCL happens to name that type parameter <c>T</c>.
+    /// </remarks>
+    private static bool IsLayerCollectionType(ITypeSymbol type, out bool isKeyed)
     {
+        isKeyed = false;
+
         if (type is IArrayTypeSymbol array)
             return IsLayerType(array.ElementType);
 
-        if (type is INamedTypeSymbol named && named.IsGenericType && named.TypeArguments.Length == 1)
+        if (type is not INamedTypeSymbol named) return false;
+
+        // The type itself first, then everything it implements. A Func<TLayer> is not
+        // enumerable and so is still not mistaken for a collection of layers.
+        foreach (var candidate in Enumerable.Repeat(named, 1).Concat(named.AllInterfaces))
         {
-            // Only walk types that are actually enumerable, so a Func<TLayer> or similar
-            // single-argument generic is not mistaken for a collection of layers.
-            // SELF INCLUDED. AllInterfaces does NOT contain the type itself, so a field
-            // declared exactly as IEnumerable<ILayer<T>> -- which the XML summary advertises
-            // as supported -- reported false, was skipped, and its children were never
-            // registered. The declared-interface case is the one most likely to be written by
-            // hand, so it was the documented case that silently did nothing.
-            var enumerable = named.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>"
-                || named.AllInterfaces.Any(i =>
-                    i.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>");
-            if (enumerable && IsLayerType(named.TypeArguments[0]))
+            if (candidate.OriginalDefinition.SpecialType
+                != SpecialType.System_Collections_Generic_IEnumerable_T)
+            {
+                continue;
+            }
+
+            var element = candidate.TypeArguments[0];
+            if (IsLayerType(element)) return true;
+
+            // Dictionary<TKey, TLayer> and friends enumerate as KeyValuePair<TKey, TLayer>.
+            if (element is INamedTypeSymbol { TypeArguments.Length: 2 } pair
+                && pair.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.KeyValuePair<TKey, TValue>"
+                && IsLayerType(pair.TypeArguments[1]))
+            {
+                isKeyed = true;
                 return true;
+            }
         }
 
         return false;
     }
 
+    /// <summary>True for a field holding ONE sub-layer, by interface or by base class.</summary>
+    /// <remarks>
+    /// THE TYPE ITSELF COUNTS, NOT ONLY WHAT IT IMPLEMENTS. AllInterfaces does not include the
+    /// symbol it is asked about, so a field declared exactly as <c>ILayer&lt;T&gt;</c> -- the spelling
+    /// the class summary advertises first -- matched neither the interface walk nor the LayerBase
+    /// check, and was silently skipped. It was registered only when it happened to be declared as a
+    /// concrete layer type. The same omission in IsLayerCollectionType hid
+    /// <c>IEnumerable&lt;ILayer&lt;T&gt;&gt;</c> fields.
+    /// </remarks>
     private static bool IsLayerType(ITypeSymbol type)
     {
-        // Check if type implements ILayer<T>
-        if (type is INamedTypeSymbol named)
+        if (type is not INamedTypeSymbol named) return false;
+
+        var self = named.OriginalDefinition.ToDisplayString();
+        if (self.StartsWith(ILayerTypeName + "<") || self == ILayerTypeName)
+            return true;
+        if (self.StartsWith(LayerBaseTypeName + "<") || self == LayerBaseTypeName)
+            return true;
+
+        foreach (var iface in named.AllInterfaces)
         {
-            foreach (var iface in named.AllInterfaces)
-            {
-                var display = iface.OriginalDefinition.ToDisplayString();
-                if (display.StartsWith(ILayerTypeName + "<") || display == ILayerTypeName)
-                    return true;
-            }
-            // Also check the type itself
-            var typeDisplay = named.OriginalDefinition.ToDisplayString();
-            if (typeDisplay.StartsWith(LayerBaseTypeName + "<") || typeDisplay == LayerBaseTypeName)
+            var display = iface.OriginalDefinition.ToDisplayString();
+            if (display.StartsWith(ILayerTypeName + "<") || display == ILayerTypeName)
                 return true;
         }
+
+        // A field declared as a concrete layer type reaches LayerBase through its base chain,
+        // not through its interfaces.
+        for (var b = named.BaseType; b is not null; b = b.BaseType)
+        {
+            var display = b.OriginalDefinition.ToDisplayString();
+            if (display.StartsWith(LayerBaseTypeName + "<") || display == LayerBaseTypeName)
+                return true;
+        }
+
         return false;
     }
 
@@ -822,5 +881,5 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     /// </summary>
     private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null, bool Optional = false);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
-    private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection);
+    private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection, bool IsKeyed);
 }
