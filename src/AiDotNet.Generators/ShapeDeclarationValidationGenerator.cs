@@ -228,8 +228,26 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
         public IEnumerable<int> AcceptedRanks()
         {
             yield return Axes.Count;
-            // A batch-optional layout also accepts the form with the leading axis dropped.
-            if (BatchOptional && Axes.Count > 1) yield return Axes.Count - 1;
+
+            // THE SAME THREE CONDITIONS AS TensorLayoutAttribute.AcceptsRank, and
+            // the leading-axis test is the one that was missing here. This copy
+            // dropped `Axes[0] == Batch`, so a batch-optional layout whose first
+            // axis is NOT Batch was reported as accepting rank-1-less at build
+            // time -- a build error for a shape the runtime accepts, and the exact
+            // mirror of the attribute's own omission (it lacked `Axes.Length > 1`
+            // and so accepted rank 0). Two copies of one rule drifted apart in
+            // opposite directions, each wrong in the direction the other was not.
+            //
+            // The generator cannot call the attribute: it runs inside the compiler
+            // against symbols, not loaded types. So the rule is restated with the
+            // conditions spelled out and cross-referenced, and the two are kept in
+            // step by the shared-rank test in the attribute's own suite.
+            if (BatchOptional
+                && Axes.Count > 1
+                && string.Equals(Axes[0], "Batch", System.StringComparison.Ordinal))
+            {
+                yield return Axes.Count - 1;
+            }
         }
 
         public IEnumerable<string> AxesForRank(int rank)
