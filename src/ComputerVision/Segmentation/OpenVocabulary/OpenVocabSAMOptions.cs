@@ -23,6 +23,37 @@ public class OpenVocabSAMOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        ChannelDimensions = (int[])other.ChannelDimensions.Clone();
+        StageDepths = (int[])other.StageDepths.Clone();
+        NeckEmbeddingDimension = other.NeckEmbeddingDimension;
+        DecoderDimension = other.DecoderDimension;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>
+    /// Gets or sets the four CLIP RN50x16 feature-stage channel dimensions.
+    /// </summary>
+    public int[] ChannelDimensions { get; set; } = [384, 768, 1536, 3072];
+
+    /// <summary>
+    /// Gets or sets the four CLIP RN50x16 residual-stage depths.
+    /// </summary>
+    public int[] StageDepths { get; set; } = [6, 8, 18, 8];
+
+    /// <summary>
+    /// Gets or sets the SAM2CLIP transformer-neck embedding dimension.
+    /// </summary>
+    public int NeckEmbeddingDimension { get; set; } = 1280;
+
+    /// <summary>
+    /// Gets or sets the CLIP2SAM FPN and mask-decoder channel dimension.
+    /// </summary>
+    public int DecoderDimension { get; set; } = 256;
+
+    /// <summary>Gets or sets the AdamW learning rate.</summary>
+    public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>Gets or sets the AdamW weight decay.</summary>
+    public double WeightDecay { get; set; } = 0.05;
 }

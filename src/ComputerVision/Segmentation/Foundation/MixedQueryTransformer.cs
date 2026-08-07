@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -12,61 +12,63 @@ using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 
 /// <summary>
-/// EoMT: Encoder-only Mask Transformer for universal image segmentation.
+/// MixedQueryTransformer (MQ-Former): Dynamic Query Melding for Multi-Dataset Segmentation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> EoMT dramatically simplifies segmentation by removing the complex pixel
-/// decoder and transformer decoder used by models like Mask2Former. Instead, mask queries are
-/// inserted directly into a plain Vision Transformer (DINOv2), making EoMT 4.4x faster while
-/// maintaining competitive accuracy. Think of it as the "minimalist" approach to segmentation.
+/// <b>For Beginners:</b> MixedQueryTransformer scales mask-based segmentation across multiple diverse datasets
+/// by dynamically melding (fusing) instance queries and stuff queries through cross-attention. This
+/// allows the model to generalize well across different segmentation benchmarks without dataset-specific
+/// fine-tuning.
 ///
 /// Common use cases:
-/// - Real-time panoptic segmentation
-/// - Latency-sensitive deployment (4.4x faster than Mask2Former)
-/// - Research into simpler segmentation architectures
-/// - Any scenario where speed matters more than peak accuracy
+/// - Multi-dataset panoptic segmentation
+/// - Cross-domain segmentation transfer
+/// - Production systems trained on diverse data sources
+/// - Research in universal segmentation scaling
 /// </para>
 /// <para>
 /// <b>Technical Details:</b>
-/// - Uses DINOv2 as frozen backbone (ViT-S/B/L)
-/// - Queries inserted at intermediate ViT layers, processed alongside image tokens
-/// - No separate pixel decoder or transformer decoder needed
-/// - Query-to-mask via dot product with intermediate ViT features
-/// - 4.4x faster than Mask2Former-Swin-L with competitive results
+/// - Dynamic query melding: instance and stuff queries interact via cross-attention layers
+/// - Multi-dataset training with unified query representations
+/// - Backbone: ResNet-50 or Swin-L transformer
+/// - Built on Mask2Former architecture with query interaction extensions
 /// </para>
 /// <para>
-/// <b>Reference:</b> Saporta et al., "Encoder-only Mask Transformer", CVPR 2025 Highlight.
+/// <b>Reference:</b> "MixedQueryTransformer: Dynamic Query Melding for Multi-Dataset Segmentation", CVPR 2025.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an EoMT model for fast panoptic segmentation (4.4x faster than Mask2Former)
+/// // Create a MixedQueryTransformer model for multi-dataset panoptic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
-///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new EoMT&lt;double&gt;(architecture, numClasses: 150);
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
+/// var model = new MixedQueryTransformer&lt;double&gt;(architecture, numClasses: 133);
 ///
-/// // Or load a pre-trained ONNX model for encoder-only segmentation
-/// var onnxModel = new EoMT&lt;double&gt;(architecture, "eomt.onnx", numClasses: 150);
+/// // Or load a pre-trained ONNX model for cross-dataset segmentation
+/// var onnxModel = new MixedQueryTransformer&lt;double&gt;(architecture, "querymeldnet.onnx", numClasses: 133);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Your ViT is Secretly an Image Segmentation Model", "https://arxiv.org/abs/2503.19108", Year = 2025, Authors = "Tommie Kerssies, Niccolò Cavagnero, Alexander Hermans, Narges Norouzi, Giuseppe Averta, Bastian Leibe, Gijs Dubbelman, Daan de Geus")]
-public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
+[ModelComplexity(ModelComplexity.High)]
+[ResearchPaper("Mixed-Query Transformer: A Unified Image Segmentation Architecture",
+    "https://arxiv.org/abs/2404.04469",
+    Year = 2024,
+    Authors = "Pei Wang, Zhaowei Cai, Hao Yang, Ashwin Swaminathan, R. Manmatha, Stefano Soatto")]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+public class MixedQueryTransformer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
-    private readonly EoMTOptions _options;
+    private readonly MixedQueryTransformerOptions _options;
 
     /// <summary>
-    /// Gets the configuration options for this EoMT model.
+    /// Gets the configuration options for this MixedQueryTransformer model.
     /// </summary>
-    /// <returns>The <see cref="EoMTOptions"/> for this model instance.</returns>
+    /// <returns>The <see cref="MixedQueryTransformerOptions"/> for this model instance.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
@@ -81,8 +83,8 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     private readonly int _channels;
     private readonly int _numClasses;
     private readonly int _numQueries;
-    private readonly EoMTModelSize _modelSize;
-    private readonly int _embedDim;
+    private readonly MixedQueryTransformerModelSize _modelSize;
+    private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
@@ -98,7 +100,7 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     #region Properties
 
     /// <summary>
-    /// Gets whether this EoMT instance supports training.
+    /// Gets whether this MixedQueryTransformer instance supports training.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -107,7 +109,7 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </remarks>
     public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
-    internal EoMTModelSize ModelSize => _modelSize;
+    internal MixedQueryTransformerModelSize ModelSize => _modelSize;
     internal int NumClasses => _numClasses;
 
     #endregion
@@ -115,34 +117,35 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     #region Constructors
 
     /// <summary>
-    /// Initializes EoMT in native (trainable) mode.
+    /// Initializes MixedQueryTransformer in native (trainable) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="optimizer">Gradient-based optimizer (default: AdamW as in the paper).</param>
+    /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of output classes (default: 150 for ADE20K).</param>
-    /// <param name="numQueries">Number of mask queries inserted into ViT (default: 100).</param>
-    /// <param name="modelSize">DINOv2 backbone size (default: Base).</param>
+    /// <param name="numClasses">Number of output classes (default: 133 for COCO panoptic).</param>
+    /// <param name="numQueries">Number of melded queries (default: 200).</param>
+    /// <param name="modelSize">Backbone size (default: R50).</param>
     /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Creates a trainable EoMT. The queries are injected directly into the
-    /// ViT layers — no separate decoder architecture needed, which is why EoMT is so much faster.
+    /// <b>For Beginners:</b> Creates a trainable MixedQueryTransformer. The 200 queries are split between
+    /// instance queries (for countable objects) and stuff queries (for uncountable regions like sky),
+    /// and then melded via cross-attention for improved multi-dataset performance.
     /// </para>
     /// </remarks>
-    public EoMT(
+    public MixedQueryTransformer(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        int numQueries = 100,
-        EoMTModelSize modelSize = EoMTModelSize.Base,
+        int numClasses = 133,
+        int numQueries = 200,
+        MixedQueryTransformerModelSize modelSize = MixedQueryTransformerModelSize.R50,
         double dropRate = 0.1,
-        EoMTOptions? options = null)
+        MixedQueryTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new EoMTOptions();
+        _options = options ?? new MixedQueryTransformerOptions();
         Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
@@ -155,43 +158,43 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        (_embedDim, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
 
     /// <summary>
-    /// Initializes EoMT in ONNX (inference-only) mode.
+    /// Initializes MixedQueryTransformer in ONNX (inference-only) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of output classes (default: 150).</param>
-    /// <param name="numQueries">Number of mask queries (default: 100).</param>
-    /// <param name="modelSize">DINOv2 backbone size for metadata (default: Base).</param>
+    /// <param name="numClasses">Number of output classes (default: 133).</param>
+    /// <param name="numQueries">Number of melded queries (default: 200).</param>
+    /// <param name="modelSize">Backbone size for metadata (default: R50).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Loads a pre-trained EoMT from ONNX for fast inference.
+    /// <b>For Beginners:</b> Loads a pre-trained MixedQueryTransformer from ONNX for inference.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public EoMT(
+    public MixedQueryTransformer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
-        int numQueries = 100,
-        EoMTModelSize modelSize = EoMTModelSize.Base,
-        EoMTOptions? options = null)
+        int numClasses = 133,
+        int numQueries = 200,
+        MixedQueryTransformerModelSize modelSize = MixedQueryTransformerModelSize.R50,
+        MixedQueryTransformerOptions? options = null)
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new EoMTOptions();
+        _options = options ?? new MixedQueryTransformerOptions();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"EoMT ONNX model not found: {onnxModelPath}");
+            throw new FileNotFoundException($"MixedQueryTransformer ONNX model not found: {onnxModelPath}");
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
@@ -204,10 +207,10 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _onnxModelPath = onnxModelPath;
         _optimizer = null;
 
-        (_embedDim, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
 
         try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load EoMT ONNX model: {ex.Message}", ex); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load MixedQueryTransformer ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -217,13 +220,13 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     #region Public Methods
 
     /// <summary>
-    /// Runs a forward pass through EoMT for efficient segmentation.
+    /// Runs a forward pass through MixedQueryTransformer for multi-dataset segmentation.
     /// </summary>
     /// <param name="input">The input image tensor [C, H, W] or [B, C, H, W].</param>
     /// <returns>Per-pixel segmentation logits tensor.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Pass an image to get fast, encoder-only segmentation predictions.
+    /// <b>For Beginners:</b> Pass an image to get segmentation predictions with melded queries.
     /// </para>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -238,7 +241,7 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Trains EoMT by comparing predictions to ground truth. Only native mode.
+    /// <b>For Beginners:</b> Trains using multi-dataset joint optimization. Only native mode.
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
@@ -248,10 +251,6 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             throw new InvalidOperationException(
                 "Training is not supported in ONNX mode. Use the native mode constructor for training.");
 
-        if (input.Shape.Length == 3) input = AddBatchDimension(input);
-        if (expectedOutput.Shape.Length == 3) expectedOutput = AddBatchDimension(expectedOutput);
-        if (input.Shape.Length != 4) throw new ArgumentException($"Tape-based training requires rank 3 (CHW) or rank 4 (NCHW), got rank {input.Shape.Length}.", nameof(input));
-        if (expectedOutput.Shape.Length != 4) throw new ArgumentException($"Tape-based training target requires rank 3 (CHW) or rank 4 (NCHW), got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
         SetTrainingMode(true);
         try
         {
@@ -267,14 +266,13 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     #region Private Methods
 
-    private static (int EmbedDim, int[] Depths, int DecoderDim) GetModelConfig(EoMTModelSize modelSize)
+    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(MixedQueryTransformerModelSize modelSize)
     {
         return modelSize switch
         {
-            EoMTModelSize.Small => (384, [12, 0, 0, 0], 256),
-            EoMTModelSize.Base => (768, [12, 0, 0, 0], 256),
-            EoMTModelSize.Large => (1024, [24, 0, 0, 0], 256),
-            _ => (768, [12, 0, 0, 0], 256)
+            MixedQueryTransformerModelSize.R50 => ([256, 512, 1024, 2048], [3, 4, 6, 3], 256),
+            MixedQueryTransformerModelSize.SwinLarge => ([192, 384, 768, 1536], [2, 2, 18, 2], 256),
+            _ => ([256, 512, 1024, 2048], [3, 4, 6, 3], 256)
         };
     }
 
@@ -282,41 +280,28 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
-
         var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            features = Layers[i].Forward(features);
-
+        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
         if (!hasBatch) features = RemoveBatchDimension(features);
         return features;
     }
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
-            throw new InvalidOperationException("ONNX session is not initialized.");
-
+        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
-
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-
+        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "pixel_values";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
-
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
-        var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-
-        var result = new Tensor<T>(outputShape, new Vector<T>(outputData));
+        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result);
         return result;
     }
@@ -342,34 +327,32 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     #region Abstract Implementation
 
     /// <summary>
-    /// Initializes the encoder-only layers for EoMT.
+    /// Initializes the encoder and decoder layers for MixedQueryTransformer.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In native mode, builds the DINOv2 ViT backbone with embedded mask queries.
+    /// <b>For Beginners:</b> In native mode, builds the backbone encoder and query-meld decoder.
     /// In ONNX mode, no layers are created.
     /// </para>
     /// </remarks>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) { ClearLayers(); return; }
-
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Architecture.Layers.Count / 2;
+            _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
         }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateEoMTEncoderLayers(
-                _channels, _height, _width, _embedDim, _depths, _dropRate).ToList();
+            var encoderLayers = LayerHelper<T>.CreateMixedQueryTransformerEncoderLayers(
+                _channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count;
             Layers.AddRange(encoderLayers);
-
-            int featureH = _height / 16;
-            int featureW = _width / 16;
-            var decoderLayers = LayerHelper<T>.CreateEoMTDecoderLayers(
-                _embedDim, _decoderDim, _numClasses, featureH, featureW);
+            int featureH = _height / 32;
+            int featureW = _width / 32;
+            var decoderLayers = LayerHelper<T>.CreateMixedQueryTransformerDecoderLayers(
+                _channelDims[^1], _decoderDim, _numClasses, featureH, featureW);
             Layers.AddRange(decoderLayers);
         }
     }
@@ -385,23 +368,29 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        int totalRequired = 0;
+        foreach (var l in Layers)
+            totalRequired += l.GetParameters().Length;
+
+        if (parameters.Length < totalRequired)
+            throw new ArgumentException(
+                $"Parameter vector length {parameters.Length} is less than required {totalRequired}.",
+                nameof(parameters));
+
         int offset = 0;
         foreach (var layer in Layers)
         {
-            var layerParams = layer.GetParameters();
-            int count = layerParams.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var newParams = new Vector<T>(count);
-                for (int i = 0; i < count; i++) newParams[i] = parameters[offset + i];
-                layer.UpdateParameters(newParams);
-                offset += count;
-            }
+            int count = layer.GetParameters().Length;
+            var newParams = new Vector<T>(count);
+            for (int i = 0; i < count; i++)
+                newParams[i] = parameters[offset + i];
+            layer.UpdateParameters(newParams);
+            offset += count;
         }
     }
 
     /// <summary>
-    /// Collects metadata describing this EoMT model's configuration.
+    /// Collects metadata describing this MixedQueryTransformer model's configuration.
     /// </summary>
     /// <returns>Model metadata.</returns>
     /// <remarks>
@@ -415,18 +404,18 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "ModelName", "EoMT" }, { "InputHeight", _height }, { "InputWidth", _width },
+                { "ModelName", "MixedQueryTransformer" }, { "InputHeight", _height }, { "InputWidth", _width },
                 { "InputChannels", _channels }, { "NumClasses", _numClasses },
                 { "NumQueries", _numQueries }, { "ModelSize", _modelSize.ToString() },
-                { "EmbedDim", _embedDim }, { "DecoderDim", _decoderDim },
-                { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
+                { "DecoderDim", _decoderDim }, { "UseNativeMode", _useNativeMode },
+                { "NumLayers", Layers.Count }
             },
             ModelData = SerializeForMetadata()
         };
     }
 
     /// <summary>
-    /// Writes EoMT configuration to a binary stream.
+    /// Writes MixedQueryTransformer configuration to a binary stream.
     /// </summary>
     /// <param name="writer">The binary writer.</param>
     /// <remarks>
@@ -438,15 +427,17 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         writer.Write(_height); writer.Write(_width); writer.Write(_channels);
         writer.Write(_numClasses); writer.Write(_numQueries); writer.Write((int)_modelSize);
-        writer.Write(_embedDim); writer.Write(_decoderDim); writer.Write(_dropRate);
+        writer.Write(_decoderDim); writer.Write(_dropRate);
         writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
         writer.Write(_encoderLayerEnd);
+        writer.Write(_channelDims.Length);
+        foreach (int dim in _channelDims) writer.Write(dim);
         writer.Write(_depths.Length);
         foreach (int depth in _depths) writer.Write(depth);
     }
 
     /// <summary>
-    /// Reads EoMT configuration from a binary stream.
+    /// Reads MixedQueryTransformer configuration from a binary stream.
     /// </summary>
     /// <param name="reader">The binary reader.</param>
     /// <remarks>
@@ -458,17 +449,18 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
         _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString();
-        _ = reader.ReadInt32();
+        _ = reader.ReadInt32(); _ = reader.ReadDouble();
+        _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32();
+        int dimCount = reader.ReadInt32();
+        for (int i = 0; i < dimCount; i++) _ = reader.ReadInt32();
         int depthCount = reader.ReadInt32();
         for (int i = 0; i < depthCount; i++) _ = reader.ReadInt32();
     }
 
     /// <summary>
-    /// Creates a new EoMT instance with the same configuration but fresh weights.
+    /// Creates a new MixedQueryTransformer instance with the same configuration but fresh weights.
     /// </summary>
-    /// <returns>A new <see cref="EoMT{T}"/> model.</returns>
+    /// <returns>A new <see cref="MixedQueryTransformer{T}"/> model.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
@@ -477,8 +469,8 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return _useNativeMode
-            ? new EoMT<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new EoMT<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
+            ? new MixedQueryTransformer<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
+            : new MixedQueryTransformer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
     }
 
     /// <summary>
