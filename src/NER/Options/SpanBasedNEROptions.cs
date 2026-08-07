@@ -280,6 +280,9 @@ public class SpanBasedNEROptions
         UseNegativeSampling = other.UseNegativeSampling;
         Variant = other.Variant;
         ModelPath = other.ModelPath;
+        FfnnDepth = other.FfnnDepth;
+        DecayRate = other.DecayRate;
+        DecayFrequency = other.DecayFrequency;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LabelNames = (string[])other.LabelNames.Clone();
     }
