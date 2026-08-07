@@ -3685,6 +3685,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 for (int i = 0; i < subs.Count; i++)
                 {
                     if (subs[i] is null) continue;
+                    if (IsSubLayerParameterFrozen(subs[i])) continue;
                     total += subs[i].ParameterCount;
                 }
             }
@@ -4120,6 +4121,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             {
                 var sub = subs[i];
                 if (sub is null) continue;
+                if (IsSubLayerParameterFrozen(sub)) continue;
                 if (sub is LayerBase<T> lb)
                 {
                     offset = lb.FillParameters(dest, offset);
@@ -4682,6 +4684,84 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// each inner layer. The training system will automatically find all the weights inside
     /// those inner layers and include them in training.</para>
     /// </remarks>
+    /// <summary>
+    /// Marks a registered sub-layer's parameters as FROZEN: they stay out of this layer's
+    /// ParameterCount, GetParameters and SetParameters, while the child itself keeps taking part in
+    /// Forward, training-mode propagation and serialization layout.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the parameter-surface half of what PyTorch spells <c>requires_grad = False</c>. A
+    /// LoRA adapter is the motivating case: it wraps a pretrained layer, trains only the low-rank
+    /// update, and must NOT hand the frozen base weights to an optimizer -- but it still runs that
+    /// base layer on every forward, so it cannot simply drop the child.
+    /// </para>
+    /// <para>
+    /// Freezing is expressed HERE rather than by declining to register the child, because the
+    /// parameter generator treats the discovered sub-layer set as authoritative under
+    /// <c>[AutoParameters]</c>. Conditional registration would fight the generator; this composes
+    /// with it, so a wrapper states the fact once and its ParameterCount, vector and restore all
+    /// follow from the same fold.
+    /// </para>
+    /// <para>
+    /// Frozen children still appear in the serialized parameter LAYOUT. The layout carries shapes,
+    /// not values, and it is walked positionally against <see cref="GetSubLayers"/> -- skipping
+    /// entries on one side only would misalign a v5 checkpoint against its own children.
+    /// </para>
+    /// <para><b>For Beginners:</b> this says "keep using this part, but don't train it".</para>
+    /// </remarks>
+    /// <param name="subLayer">The child to freeze. Null and unregistered children are ignored.</param>
+    protected void FreezeSubLayerParameters(ILayer<T>? subLayer)
+    {
+        if (subLayer is null) return;
+        _frozenSubLayers ??= new List<ILayer<T>>();
+        for (int i = 0; i < _frozenSubLayers.Count; i++)
+            if (ReferenceEquals(_frozenSubLayers[i], subLayer))
+                return;
+        _frozenSubLayers.Add(subLayer);
+        _cachedParameterCount = -1;
+        BumpParameterEpoch();
+    }
+
+    /// <summary>
+    /// Reverses <see cref="FreezeSubLayerParameters"/>, returning the child's parameters to this
+    /// layer's surface.
+    /// </summary>
+    /// <param name="subLayer">The child to unfreeze. Null and non-frozen children are ignored.</param>
+    protected void UnfreezeSubLayerParameters(ILayer<T>? subLayer)
+    {
+        if (subLayer is null || _frozenSubLayers is null) return;
+        for (int i = 0; i < _frozenSubLayers.Count; i++)
+        {
+            if (ReferenceEquals(_frozenSubLayers[i], subLayer))
+            {
+                _frozenSubLayers.RemoveAt(i);
+                _cachedParameterCount = -1;
+                BumpParameterEpoch();
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="subLayer"/> has been frozen via
+    /// <see cref="FreezeSubLayerParameters"/> and so contributes nothing to this layer's parameters.
+    /// </summary>
+    protected bool IsSubLayerParameterFrozen(ILayer<T>? subLayer)
+    {
+        if (subLayer is null || _frozenSubLayers is null) return false;
+        for (int i = 0; i < _frozenSubLayers.Count; i++)
+            if (ReferenceEquals(_frozenSubLayers[i], subLayer))
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Children whose parameters are excluded from this layer's surface. Null until something is
+    /// frozen, which is the overwhelmingly common case -- the parameter walks pay one null check.
+    /// </summary>
+    private List<ILayer<T>>? _frozenSubLayers;
+
     protected void RegisterSubLayer(ILayer<T> subLayer)
     {
         if (subLayer is null)
