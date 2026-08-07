@@ -46,8 +46,8 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("StabStitch: Real-Time Video Stabilization and Stitching",
-    "https://arxiv.org/abs/2303.07198",
+[ResearchPaper("Eliminating Warping Shakes for Unsupervised Online Video Stitching",
+    "https://arxiv.org/abs/2403.06378",
     Year = 2024,
     Authors = "Lang Nie, Chunyu Lin, Kang Liao, Shuaicheng Liu, Yao Zhao")]
 public class StabStitch<T> : VideoStabilizationBase<T>
@@ -88,7 +88,11 @@ public class StabStitch<T> : VideoStabilizationBase<T>
     {
         _options = options ?? new StabStitchOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         InitializeLayers();
     }
 
@@ -134,7 +138,7 @@ public class StabStitch<T> : VideoStabilizationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

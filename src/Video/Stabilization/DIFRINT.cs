@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
@@ -52,10 +53,27 @@ namespace AiDotNet.Video.Stabilization;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("DIFRINT: A Framework for Full-Frame Video Stabilization",
-    "https://arxiv.org/abs/2005.07055",
+// Citation corrected in full — title, URL and authors were all wrong. arXiv 2005.07055 is "Pinsker
+// inequalities and related Monge-Ampere equations for log concave functions", unrelated. The recorded
+// authors (Shi, Shi, Lai, Liang, Liang) are the authors of "Deep Online Fused Video Stabilization", a
+// different paper. DIFRINT is Choi & Kweon, ACM TOG 39(1) / SIGGRAPH Asia 2019, arXiv 1909.02641.
+//
+// MECHANISM NOTE: the paper's method is DEEP ITERATIVE FRAME INTERPOLATION — repeatedly synthesizing
+// each frame from its neighbours, so jitter is removed without cropping (hence "full-frame"). Three
+// gaps against that were measured and closed:
+//   1. Stabilize() ran a SINGLE pass. _numIterations reached only the layer builder, the metadata and
+//      serialization, never the sequence pass, so the "Deep Iterative" mechanism was absent at the
+//      level where the paper applies it. It now iterates, each pass consuming the previous one's output.
+//   2. The synthesis input was [prev, CURRENT, next]. Including the current frame lets the network meet
+//      a reconstruction objective by copying it through, which passes the jitter straight to the output.
+//      It is now interpolated from the two neighbours only, aligned into the current frame's reference.
+//   3. ComputeSmoothPath's result was assigned and never read. Removed rather than wired up — an
+//      explicit smoothed camera path is the cropping-stabilizer mechanism this paper is contrasted
+//      against, so adopting it would have contradicted the full-frame claim.
+[ResearchPaper("Deep Iterative Frame Interpolation for Full-frame Video Stabilization",
+    "https://arxiv.org/abs/1909.02641",
     Year = 2020,
-    Authors = "Zhenmei Shi, Fuhao Shi, Wei-Sheng Lai, Chia-Kai Liang, Yingyu Liang")]
+    Authors = "Jinsoo Choi, In So Kweon")]
 public class DIFRINT<T> : VideoStabilizationBase<T>
 {
     private readonly DIFRINTOptions _options;
@@ -160,35 +178,124 @@ public class DIFRINT<T> : VideoStabilizationBase<T>
     /// <summary>
     /// Stabilizes a sequence of video frames.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Runs the interpolation pass over the whole sequence <see cref="NumIterations"/> times, each
+    /// pass consuming the PREVIOUS pass's output. That repetition is the paper's mechanism and the
+    /// source of the "Deep Iterative" in its name — stability accumulates across passes. A single
+    /// pass, which is what this did before, is a materially weaker method that merely shares the
+    /// architecture.
+    /// </para>
+    /// </remarks>
     public List<Tensor<T>> Stabilize(List<Tensor<T>> frames)
     {
-        var stabilized = new List<Tensor<T>>();
+        if (frames is null) throw new ArgumentNullException(nameof(frames));
 
-        // Compute smooth camera path
-        var smoothPath = ComputeSmoothPath(frames);
+        // A fresh list even at zero iterations, so the caller never receives its own list back and
+        // cannot be surprised by aliasing.
+        var current = new List<Tensor<T>>(frames);
+        if (current.Count == 0) return current;
 
-        for (int i = 0; i < frames.Count; i++)
+        for (int iteration = 0; iteration < _numIterations; iteration++)
         {
-            var prevFrame = i > 0 ? frames[i - 1] : frames[i];
-            var currFrame = frames[i];
-            var nextFrame = i < frames.Count - 1 ? frames[i + 1] : frames[i];
-
-            var stacked = StackFrames([prevFrame, currFrame, nextFrame]);
-            var stabilizedFrame = _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
-
-            stabilized.Add(stabilizedFrame);
+            var pass = new List<Tensor<T>>(current.Count);
+            for (int i = 0; i < current.Count; i++)
+            {
+                // Neighbours are read from `current` — the previous ITERATION's output — never from
+                // the partially-filled `pass`. Reading the in-progress pass would make frame i
+                // depend on an already-restabilized i-1 but a still-raw i+1, which is not the
+                // paper's update and biases the result along the scan direction.
+                var prevFrame = i > 0 ? current[i - 1] : current[i];
+                var nextFrame = i < current.Count - 1 ? current[i + 1] : current[i];
+                pass.Add(StabilizeFrame(prevFrame, current[i], nextFrame));
+            }
+            current = pass;
         }
 
-        return stabilized;
+        return current;
     }
 
     /// <summary>
-    /// Stabilizes a single frame using neighboring frames.
+    /// Synthesizes a stabilized frame by INTERPOLATING its two neighbours.
     /// </summary>
+    /// <param name="prevFrame">The preceding frame.</param>
+    /// <param name="currentFrame">
+    /// The frame being replaced. It supplies the alignment target only — see the remarks.
+    /// </param>
+    /// <param name="nextFrame">The following frame.</param>
+    /// <remarks>
+    /// <para>
+    /// <paramref name="currentFrame"/> is deliberately NOT an input to the synthesis network; it only
+    /// gives the two neighbours a common frame of reference to be warped into. Concatenating it into
+    /// the network input — which is what this did before — lets the network satisfy any reconstruction
+    /// objective by copying the current frame straight through, reproducing the very jitter the method
+    /// exists to remove. Interpolating strictly from the neighbours is what places the output on the
+    /// smooth path between them, and it is also why the result is FULL-FRAME: nothing has to be
+    /// cropped away to hide a stabilizing warp.
+    /// </para>
+    /// </remarks>
     public Tensor<T> StabilizeFrame(Tensor<T> prevFrame, Tensor<T> currentFrame, Tensor<T> nextFrame)
     {
-        var stacked = StackFrames([prevFrame, currentFrame, nextFrame]);
+        if (prevFrame is null) throw new ArgumentNullException(nameof(prevFrame));
+        if (currentFrame is null) throw new ArgumentNullException(nameof(currentFrame));
+        if (nextFrame is null) throw new ArgumentNullException(nameof(nextFrame));
+
+        var alignedPrev = WarpTowardTarget(prevFrame, currentFrame);
+        var alignedNext = WarpTowardTarget(nextFrame, currentFrame);
+
+        var stacked = StackFrames([alignedPrev, alignedNext]);
         return _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
+    }
+
+    /// <summary>
+    /// Warps <paramref name="source"/> into <paramref name="target"/>'s frame of reference using the
+    /// motion estimated between them, so the two neighbours are ALIGNED before being interpolated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Aligning first is what makes interpolating between the neighbours meaningful. Handing the
+    /// network two unaligned frames asks it to resolve the parallax itself, which is what produces the
+    /// ghosting this step exists to prevent.
+    /// </para>
+    /// <para>
+    /// SIGN CONVENTION, which is easy to get backwards and would double the misalignment rather than
+    /// remove it: <see cref="EstimateMotionBetweenFrames"/> returns how far content travels FROM
+    /// source TO target, while <see cref="FlowWarpHelper.Warp{T}"/> backward-samples
+    /// (<c>out[y][x] = src[y + fy][x + fx]</c>). So the flow handed to the warp is the NEGATED
+    /// displacement.
+    /// </para>
+    /// <para>
+    /// The estimate is the global translation this class already computes — coarser than the paper's
+    /// dense PWC-Net flow, but it aligns the dominant camera motion, which is the component that
+    /// jitters.
+    /// </para>
+    /// </remarks>
+    // Internal rather than private so the SIGN CONVENTION above can be asserted directly. It is the
+    // part of this fix most likely to be silently wrong, and observing it through the synthesis
+    // network — which scrambles it — would not catch a flipped sign.
+    internal Tensor<T> WarpTowardTarget(Tensor<T> source, Tensor<T> target)
+    {
+        // The sequence ends duplicate the frame; a frame needs no warping into itself.
+        if (ReferenceEquals(source, target)) return source;
+
+        var (dx, dy, _) = EstimateMotionBetweenFrames(source, target);
+        if (dx == 0.0 && dy == 0.0) return source;
+
+        int h = source.Rank == 4 ? source.Shape[2] : source.Shape[1];
+        int w = source.Rank == 4 ? source.Shape[3] : source.Shape[2];
+
+        var flow = new Tensor<T>([2, h, w]);
+        var negDx = NumOps.FromDouble(-dx);
+        var negDy = NumOps.FromDouble(-dy);
+        int plane = h * w;
+        for (int p = 0; p < plane; p++)
+        {
+            flow[p] = negDx;
+            flow[plane + p] = negDy;
+        }
+
+        // Engine read per use rather than captured, so the warp follows a later engine switch.
+        return FlowWarpHelper.Warp(AiDotNetEngine.Current, source, flow);
     }
 
     /// <summary>
@@ -250,37 +357,13 @@ public class DIFRINT<T> : VideoStabilizationBase<T>
         return stacked;
     }
 
-    private List<(double Dx, double Dy)> ComputeSmoothPath(List<Tensor<T>> frames)
-    {
-        var rawPath = new List<(double, double)>();
-        double x = 0, y = 0;
-
-        for (int i = 0; i < frames.Count - 1; i++)
-        {
-            var motion = EstimateMotionBetweenFrames(frames[i], frames[i + 1]);
-            x += motion.Dx;
-            y += motion.Dy;
-            rawPath.Add((x, y));
-        }
-
-        // Apply Gaussian smoothing
-        var smoothPath = new List<(double, double)>();
-        int windowSize = 15;
-        for (int i = 0; i < rawPath.Count; i++)
-        {
-            double sumX = 0, sumY = 0;
-            int count = 0;
-            for (int j = Math.Max(0, i - windowSize); j < Math.Min(rawPath.Count, i + windowSize); j++)
-            {
-                sumX += rawPath[j].Item1;
-                sumY += rawPath[j].Item2;
-                count++;
-            }
-            smoothPath.Add((sumX / count, sumY / count));
-        }
-
-        return smoothPath;
-    }
+    // ComputeSmoothPath was REMOVED rather than wired up. Stabilize() called it and discarded the
+    // result, so it never affected an output. Wiring it in would have been the wrong repair: an
+    // explicit smoothed camera path is what the CROPPING stabilizers DIFRINT is contrasted against
+    // use, and warping frames onto such a path is precisely what forces them to be cropped. DIFRINT's
+    // claim is full-frame output with no camera-path model at all — stability comes from repeatedly
+    // interpolating neighbours. Keeping a box-filtered path around would have implied a mechanism the
+    // method does not have. EstimateMotionPath stays public for callers that want the raw measurement.
 
     /// <summary>
     /// Estimates motion between two frames using block matching with subpixel refinement.
@@ -463,7 +546,7 @@ public class DIFRINT<T> : VideoStabilizationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

@@ -1,10 +1,14 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Algorithms;
@@ -38,7 +42,7 @@ namespace AiDotNet.Video.Understanding;
 /// - Contrastive learning on video-text pairs
 /// - Temporal transformer for video understanding
 /// - Text transformer for language understanding
-/// - Joint embedding space with cosine similarity
+/// - Joint embedding space with dot-product similarity
 /// - Pre-trained on large-scale video-text datasets
 /// </para>
 /// <para>
@@ -89,11 +93,22 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     private readonly int _textMaxLength;
     private readonly int _vocabSize;
     private readonly double _temperature;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    // Video encoder components
+    // Video encoder components.
+    //
+    // These are VIEWS into Layers, not a second ownership graph: the constructor builds the layers,
+    // adds them to Layers, and then binds these fields by index. Deserialization REPLACES every
+    // entry in Layers with a restored instance, so the single-layer views below cannot be readonly —
+    // BindLayerViewsFromLayers() re-points them at the restored instances. Leaving them bound to the
+    // constructor's now-orphaned layers made the explicit forward run on fresh random weights while
+    // Layers held the trained ones, so a trained clone predicted differently from its original with
+    // provably identical parameters (measured: 48173/48173 parameters and both embedding tables
+    // equal to the last bit, outputs differing by 1.7e+00, and gradients on Layers pinned at zero
+    // because the backward flowed through the orphans instead).
     private readonly List<ConvolutionalLayer<T>> _videoEncoder;
     private readonly List<ConvolutionalLayer<T>> _temporalTransformer;
-    private readonly ConvolutionalLayer<T> _videoProjection;
+    private ConvolutionalLayer<T> _videoProjection;
 
     // Text encoder components
     // Proper CLIP-style token embedding: embedding lookup table [vocab_size, hidden_dim]
@@ -103,11 +118,17 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     private readonly List<ConvolutionalLayer<T>> _textTransformerAttnProj; // Attention output
     private readonly List<ConvolutionalLayer<T>> _textTransformerFFN1;     // FFN expand
     private readonly List<ConvolutionalLayer<T>> _textTransformerFFN2;     // FFN contract
-    private readonly ConvolutionalLayer<T> _textProjection;
+    private ConvolutionalLayer<T> _textProjection;
     private readonly int _textHiddenDim;
 
+    /// <summary>
+    /// Width of the vision and text trunks. CLIP ViT-B/32's 768 stays the default; it was a hardcoded
+    /// local before, which left the model at ~171M parameters no matter how small a clip it was given.
+    /// </summary>
+    private readonly int _hiddenDim;
+
     // Shared components
-    private readonly ConvolutionalLayer<T> _logitScale;
+    private ConvolutionalLayer<T> _logitScale;
 
     // Tokenizer for text encoding
     private readonly BpeTokenizer? _tokenizer;
@@ -121,6 +142,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// Gets whether training is supported.
     /// </summary>
     public override bool SupportsTraining => true;
+
 
     /// <summary>
     /// Gets the video frame height.
@@ -174,6 +196,9 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// <param name="temperature">Temperature for softmax scaling.</param>
     /// <param name="vocabPath">Optional path to CLIP vocabulary JSON file for production tokenization.</param>
     /// <param name="mergesPath">Optional path to CLIP BPE merges file for production tokenization.</param>
+    /// <param name="options">Video and text encoder configuration.</param>
+    /// <param name="optimizer">Optional optimizer. Defaults to Adam configured by <paramref name="options"/>.</param>
+    /// <param name="lossFunction">Optional objective for generic embedding training. Defaults to mean squared error.</param>
     /// <remarks>
     /// <para>
     /// <b>For Production Use:</b> Provide vocabPath and mergesPath to use proper CLIP tokenization.
@@ -190,11 +215,14 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int embeddingDim = 512,
         int textMaxLength = 77,
         int vocabSize = 49408,
-        double temperature = 0.07,
+        double temperature = 1.0,
+        int hiddenDim = 768,
         string? vocabPath = null,
         string? mergesPath = null,
-        VideoCLIPVideoOptions? options = null)
-        : base(architecture, new ContrastiveLoss<T>())
+        VideoCLIPVideoOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new VideoCLIPVideoOptions();
         Options = _options;
@@ -229,11 +257,18 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         _textTransformerFFN1 = [];
         _textTransformerFFN2 = [];
 
-        int hiddenDim = 768;
-        _textHiddenDim = hiddenDim;
-        int numSpatialBlocks = 12;
-        int numTemporalBlocks = 4;
-        int numTextBlocks = 12;
+        Guard.Positive(_options.NumSpatialBlocks, nameof(_options.NumSpatialBlocks));
+        Guard.Positive(_options.NumTemporalBlocks, nameof(_options.NumTemporalBlocks));
+        Guard.Positive(_options.NumTextBlocks, nameof(_options.NumTextBlocks));
+        Guard.Positive(_options.LearningRate, nameof(_options.LearningRate));
+
+        int effectiveHiddenDim = options is null ? hiddenDim : _options.HiddenDimension;
+        Guard.Positive(effectiveHiddenDim, nameof(hiddenDim));
+        _hiddenDim = effectiveHiddenDim;
+        _textHiddenDim = effectiveHiddenDim;
+        int numSpatialBlocks = _options.NumSpatialBlocks;
+        int numTemporalBlocks = _options.NumTemporalBlocks;
+        int numTextBlocks = _options.NumTextBlocks;
 
         // Check for user-provided custom layers
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -244,46 +279,61 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         {
             var layers = LayerHelper<T>.CreateVideoCLIPLayers(
                 channels: _channels, height: _height, width: _width,
-                hiddenDim: hiddenDim, embeddingDim: _embeddingDim,
+                hiddenDim: effectiveHiddenDim, embeddingDim: _embeddingDim,
                 numSpatialBlocks: numSpatialBlocks, numTemporalBlocks: numTemporalBlocks,
                 numTextBlocks: numTextBlocks, numFrames: _numFrames, textMaxLength: _textMaxLength).ToList();
             Layers.AddRange(layers);
         }
 
         // Distribute layers to sub-lists for forward pass
-        int idx = 0;
-        // Video encoder: 1 patch embed + numSpatialBlocks * 2
-        int videoEncoderCount = 1 + numSpatialBlocks * 2;
-        for (int i = 0; i < videoEncoderCount; i++)
-            _videoEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
-
-        // Temporal transformer
-        for (int i = 0; i < numTemporalBlocks; i++)
-            _temporalTransformer.Add((ConvolutionalLayer<T>)Layers[idx++]);
-
-        // Video projection
-        _videoProjection = (ConvolutionalLayer<T>)Layers[idx++];
-
-        // Text transformer: 4 layers per block (QKV, AttnProj, FFN1, FFN2)
-        for (int i = 0; i < numTextBlocks; i++)
-        {
-            _textTransformerQKV.Add((ConvolutionalLayer<T>)Layers[idx++]);
-            _textTransformerAttnProj.Add((ConvolutionalLayer<T>)Layers[idx++]);
-            _textTransformerFFN1.Add((ConvolutionalLayer<T>)Layers[idx++]);
-            _textTransformerFFN2.Add((ConvolutionalLayer<T>)Layers[idx++]);
-        }
-
-        // Text projection
-        _textProjection = (ConvolutionalLayer<T>)Layers[idx++];
-
-        // Logit scale
-        _logitScale = (ConvolutionalLayer<T>)Layers[idx++];
+        BindLayerViewsFromLayers();
 
         // Initialize embedding tables (not part of layer list)
         _tokenEmbeddingTable = new Tensor<T>([_vocabSize, hiddenDim]);
         InitializeEmbeddingTable(_tokenEmbeddingTable, _vocabSize, hiddenDim);
         _positionalEmbeddingTable = new Tensor<T>([_textMaxLength, hiddenDim]);
         InitializeEmbeddingTable(_positionalEmbeddingTable, _textMaxLength, hiddenDim);
+
+        // Paper-faithful training configuration (Xu et al. 2021, arXiv:2109.14084, Training Details):
+        // "Adam ... with betas of (0.9, 0.98), an initial learning rate of 5e-5, 1000 steps of
+        // warm-up, and a polynomial decay learning rate schedule ... Gradients are clipped at 2.0."
+        //
+        // What was here instead: AdamW at 1e-4 with clipping at 1.0 and default betas (0.9, 0.999).
+        // Four departures from the paper, and the learning rate was twice what VideoCLIP specifies,
+        // which is what the more-data invariant caught -- an extra step on identical data raised the
+        // loss from 0.6702 to 0.7258.
+        //
+        // Every value stays overridable: pass `optimizer` for a different optimizer entirely, or set
+        // VideoCLIPVideoOptions.LearningRate / Beta1 / Beta2 / MaxGradientNorm / WarmupSteps /
+        // TotalTrainingSteps / DecayPower.
+        //
+        // The schedule is warm-up followed by polynomial decay, stepped per batch because the paper
+        // counts warm-up in optimizer STEPS, not epochs.
+        int warmupSteps = Math.Max(0, _options.WarmupSteps);
+        int decaySteps = Math.Max(1, _options.TotalTrainingSteps - warmupSteps);
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                EnableGradientClipping = true,
+                MaxGradientNorm = _options.MaxGradientNorm,
+                // "1000 steps of warm-up, and a polynomial decay learning rate schedule."
+                // Stepped per batch because the paper counts warm-up in optimizer STEPS, not epochs.
+                LearningRateScheduler = warmupSteps > 0
+                    ? new SequentialLRScheduler(
+                        new ILearningRateScheduler[]
+                        {
+                            new LinearWarmupScheduler(_options.LearningRate, warmupSteps),
+                            new PolynomialLRScheduler(_options.LearningRate, decaySteps, _options.DecayPower)
+                        },
+                        new[] { warmupSteps })
+                    : new PolynomialLRScheduler(_options.LearningRate, decaySteps, _options.DecayPower),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
+            });
     }
 
     #endregion
@@ -320,7 +370,10 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
 
         // Project to embedding space
         var embedding = _videoProjection.Forward(pooled);
-        embedding = L2Normalize(embedding);
+        int embeddingBatchSize = embedding.Shape[0];
+        embedding = Engine.Reshape(
+            embedding,
+            [embeddingBatchSize, embedding.Length / embeddingBatchSize]);
 
         if (!hasBatch)
         {
@@ -396,12 +449,19 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         // Final layer norm
         features = TextLayerNorm(features);
 
-        // Take [EOS] token embedding (last position before padding, following CLIP)
-        var eosFeature = ExtractEOSFeature(features);
+        // VideoCLIP average-pools the valid text-token states (Xu et al.,
+        // EMNLP 2021, Eq. 3). It does not use CLIP's EOS-token pooling.
+        var validFeatures = Engine.TensorSlice(
+            features,
+            [0, 0, 0, 0],
+            [batchSize, features.Shape[1], features.Shape[2], seqLen]);
+        var pooledText = GlobalAveragePool(validFeatures);
 
         // Project to embedding space
-        var embedding = _textProjection.Forward(eosFeature);
-        embedding = L2Normalize(embedding);
+        var embedding = _textProjection.Forward(pooledText);
+        embedding = Engine.Reshape(
+            embedding,
+            [batchSize, embedding.Length / batchSize]);
 
         if (!hasBatch)
         {
@@ -419,7 +479,8 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// <returns>Similarity score (higher = more similar).</returns>
     public double ComputeSimilarity(Tensor<T> videoEmbedding, Tensor<T> textEmbedding)
     {
-        return CosineSimilarity(videoEmbedding, textEmbedding);
+        return NumOps.ToDouble(VectorHelper.DotProduct(
+            videoEmbedding.ToVector(), textEmbedding.ToVector()));
     }
 
     /// <summary>
@@ -571,12 +632,22 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // VideoCLIP's published Layers collection contains the components of
+        // several branches, not one flat sequential graph. Training must use
+        // the same video path as inference so the loss sees the projected
+        // embedding rather than an intermediate convolutional feature map.
+        return EncodeVideo(input);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -596,9 +667,6 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int height = videoFrames.Shape[3];
         int width = videoFrames.Shape[4];
 
-        int hiddenDim = 768;
-        int featH = height / 16;
-        int featW = width / 16;
 
         // Process each frame
         var allFrameFeatures = new List<Tensor<T>>();
@@ -629,31 +697,49 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
                 features = ApplyGELU(features);
             }
 
+            // VideoCLIP consumes features from a pretrained video backbone and
+            // explicitly stops gradients at that boundary (Xu et al., 2021,
+            // Eq. 1). The temporal aggregation and projection above the frozen
+            // backbone remain trainable.
+            features = Engine.StopGradient(features);
+
             allFrameFeatures.Add(features);
         }
 
-        // Stack temporal features
-        var stacked = new Tensor<T>([batchSize, hiddenDim, numFrames, featH * featW]);
-        for (int t = 0; t < numFrames; t++)
+        if (allFrameFeatures.Count == 0)
+            throw new ArgumentException("A video must contain at least one frame.", nameof(videoFrames));
+
+        // Flatten each encoder patch grid while preserving its real channel
+        // count. In particular, smoke-sized/custom encoders need not use the
+        // paper-scale width of 768. Keeping the reshape and concatenation on
+        // the engine also preserves the training tape through this layout
+        // transformation.
+        var firstFeatures = allFrameFeatures[0];
+        if (firstFeatures.Rank != 4 || firstFeatures.Shape[0] != batchSize)
         {
-            var feat = allFrameFeatures[t];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int c = 0; c < hiddenDim; c++)
-                {
-                    int idx = 0;
-                    for (int h = 0; h < featH; h++)
-                    {
-                        for (int w = 0; w < featW; w++)
-                        {
-                            stacked[b, c, t, idx++] = feat[b, c, h, w];
-                        }
-                    }
-                }
-            }
+            throw new InvalidOperationException(
+                "The VideoCLIP spatial encoder must produce [batch, channels, height, width] features.");
         }
 
-        return stacked;
+        int hiddenDim = firstFeatures.Shape[1];
+        int spatialDim = firstFeatures.Length / (batchSize * hiddenDim);
+        var temporalSlices = new Tensor<T>[numFrames];
+
+        for (int t = 0; t < numFrames; t++)
+        {
+            var features = allFrameFeatures[t];
+            if (features.Rank != 4 || features.Shape[0] != batchSize ||
+                features.Shape[1] != hiddenDim || features.Length != firstFeatures.Length)
+            {
+                throw new InvalidOperationException(
+                    "All VideoCLIP frames must produce the same spatial feature shape.");
+            }
+
+            temporalSlices[t] = Engine.Reshape(
+                features, [batchSize, hiddenDim, 1, spatialDim]);
+        }
+
+        return Engine.TensorConcatenate(temporalSlices, axis: 2);
     }
 
     private Tensor<T> ApplyTemporalAttention(Tensor<T> features)
@@ -663,23 +749,11 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int numFrames = features.Shape[2];
         int spatialDim = features.Shape[3];
 
-        // Reshape for temporal processing
-        var reshaped = new Tensor<T>([batchSize * spatialDim, channels, 1, numFrames]);
-        int idx = 0;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < spatialDim; s++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int t = 0; t < numFrames; t++)
-                    {
-                        reshaped[idx, c, 0, t] = features[b, c, t, s];
-                    }
-                }
-                idx++;
-            }
-        }
+        // Fold batch and spatial positions together so each patch has a
+        // temporal sequence [T], while retaining the computation graph.
+        var reshaped = Engine.Reshape(
+            Engine.TensorPermute(features, [0, 3, 1, 2]),
+            [batchSize * spatialDim, channels, 1, numFrames]);
 
         // Apply temporal transformer
         var attended = reshaped;
@@ -689,80 +763,18 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
             attended = ApplyGELU(attended);
         }
 
-        return attended;
-    }
-
-    private Tensor<T> ExtractEOSFeature(Tensor<T> features)
-    {
-        int batchSize = features.Shape[0];
-        int channels = features.Shape[1];
-        int seqLen = features.Shape[3];
-
-        // Extract feature at last position
-        var eosFeature = new Tensor<T>([batchSize, channels, 1, 1]);
-        int lastPos = seqLen - 1;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                eosFeature[b, c, 0, 0] = features[b, c, 0, lastPos];
-            }
-        }
-
-        return eosFeature;
+        // The temporal encoder treats each spatial location as an independent
+        // sequence by folding B and S together. Restore the original layout
+        // before pooling; otherwise S is mistaken for the batch dimension and
+        // an unbatched clip produces S embeddings instead of one embedding.
+        return Engine.TensorPermute(
+            Engine.Reshape(attended, [batchSize, spatialDim, channels, numFrames]),
+            [0, 2, 3, 1]);
     }
 
     private Tensor<T> GlobalAveragePool(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int temporalDim = input.Shape[2];
-        int spatialDim = input.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channels, 1, 1]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                T sum = NumOps.Zero;
-                int count = 0;
-
-                for (int t = 0; t < temporalDim; t++)
-                {
-                    for (int s = 0; s < spatialDim; s++)
-                    {
-                        sum = NumOps.Add(sum, input[b, c, t, s]);
-                        count++;
-                    }
-                }
-
-                output[b, c, 0, 0] = NumOps.Divide(sum, NumOps.FromDouble(count));
-            }
-        }
-
-        return output;
-    }
-
-    private Tensor<T> L2Normalize(Tensor<T> embedding)
-    {
-        // Normalize to unit length
-        double norm = 0;
-        for (int i = 0; i < embedding.Data.Length; i++)
-        {
-            double val = Convert.ToDouble(embedding.Data.Span[i]);
-            norm += val * val;
-        }
-        norm = Math.Sqrt(norm + 1e-8);
-
-        return embedding.Transform((v, _) =>
-            NumOps.FromDouble(Convert.ToDouble(v) / norm));
-    }
-
-    private double CosineSimilarity(Tensor<T> a, Tensor<T> b)
-    {
-        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
+        return Engine.ReduceMean(input, [2, 3], keepDims: true);
     }
 
     private List<double> Softmax(List<double> values, double temperature)
@@ -818,13 +830,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ApplyGELU(Tensor<T> input)
     {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            double c = Math.Sqrt(2.0 / Math.PI);
-            double gelu = 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
-            return NumOps.FromDouble(gelu);
-        });
+        return Engine.GELU(input);
     }
 
     /// <summary>
@@ -1087,15 +1093,19 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
+        if (tensor.Shape[0] != 1)
+        {
+            throw new InvalidOperationException(
+                $"Cannot remove a non-singleton batch dimension of size {tensor.Shape[0]}.");
+        }
+
         int[] newShape = new int[tensor.Shape.Length - 1];
         for (int i = 0; i < newShape.Length; i++)
         {
             newShape[i] = tensor.Shape[i + 1];
         }
 
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, newShape);
     }
 
     #endregion
@@ -1173,6 +1183,16 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         writer.Write(_textMaxLength);
         writer.Write(_vocabSize);
         writer.Write(_temperature);
+
+        // The learned embedding tables. They are trainable (see GetExtraTrainableTensors) and live
+        // outside Layers, so the layer-by-layer weight sections of the stream do not carry them and
+        // a reload rebuilt them from InitializeEmbeddingTable's RNG instead — dropping trained text
+        // -tower weights on every save/load. Same element-by-element idiom VisionTransformer uses
+        // for its CLS and positional tokens.
+        for (int i = 0; i < _tokenEmbeddingTable.Length; i++)
+            writer.Write(Convert.ToDouble(_tokenEmbeddingTable[i]));
+        for (int i = 0; i < _positionalEmbeddingTable.Length; i++)
+            writer.Write(Convert.ToDouble(_positionalEmbeddingTable[i]));
     }
 
     /// <inheritdoc/>
@@ -1186,13 +1206,146 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadDouble();
+        // Restore the learned embedding tables written above. The geometry fields are discarded
+        // because they are readonly and the constructor has already rebuilt this instance at the
+        // right sizes; these tensors, by contrast, carry trained values that only the stream has.
+        for (int i = 0; i < _tokenEmbeddingTable.Length; i++)
+            _tokenEmbeddingTable[i] = NumOps.FromDouble(reader.ReadDouble());
+        for (int i = 0; i < _positionalEmbeddingTable.Length; i++)
+            _positionalEmbeddingTable[i] = NumOps.FromDouble(reader.ReadDouble());
+
+        // The base deserializer has just replaced Layers with the restored instances. Rebind the
+        // per-stage views so the explicit forward and the tape both consume those restored weights
+        // rather than the constructor-fresh layers they were bound to.
+        BindLayerViewsFromLayers();
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Surfaces the token and positional embedding tables, which are learned parameters the model
+    /// owns OUTSIDE <c>Layers</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In CLIP (Radford et al. 2021 §2.4) the text encoder's token embedding and positional
+    /// embedding are both learned — <c>nn.Embedding(vocab_size, width)</c> and an
+    /// <c>nn.Parameter</c> respectively — so they appear in <c>state_dict()</c>, receive gradients,
+    /// and survive a module copy. Here they are plain tensors built in the constructor, so without
+    /// this hook the <c>Layers</c>-only parameter walk never saw them and they were frozen at their
+    /// random initialization for the model's entire lifetime, never trained and never persisted.
+    /// </para>
+    /// <para>
+    /// The clone consequence was the sharper one. A copy re-runs the constructor, which
+    /// re-initializes both tables to FRESH random values, and nothing afterwards overwrote them:
+    /// the clone's text tower therefore computed a different function from the original's while
+    /// every tensor in <c>Layers</c> matched bit-for-bit (measured: 22/22 chunks and 48173/48173
+    /// parameters identical, parameter L2 equal to 17 digits, yet the outputs differed by 1.6e+00
+    /// on identical input, and MoreData_ShouldNotDegrade failed on the clone).
+    /// </para>
+    /// <para>
+    /// Yielding them here opts into the three base paths that already handle model-owned tensors:
+    /// the tape optimizer's step, the serialization round-trip, and the copy-on-write clone. Same
+    /// mechanism <see cref="AiDotNet.NeuralNetworks.VisionTransformer{T}"/> uses for its CLS and
+    /// positional tokens.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+    {
+        yield return _tokenEmbeddingTable;
+        yield return _positionalEmbeddingTable;
+    }
+
+    /// <summary>
+    /// (Re)binds the per-stage layer views to the current contents of <c>Layers</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Layers</c> is the single ownership graph; <c>_videoEncoder</c>, <c>_temporalTransformer</c>,
+    /// <c>_videoProjection</c>, the four text-transformer lists, <c>_textProjection</c> and
+    /// <c>_logitScale</c> are ordered views into it that the explicit forward walks. The constructor
+    /// calls this after populating <c>Layers</c>; <see cref="DeserializeNetworkSpecificData"/> calls
+    /// it again because the base deserializer REPLACES every entry in <c>Layers</c> with a restored
+    /// instance, which orphans any view still bound to the constructor's layers.
+    /// </para>
+    /// <para>
+    /// Idempotent, so the copy-on-write clone path — which calls
+    /// <c>DeserializeNetworkSpecificData</c> without replacing <c>Layers</c> — simply re-binds each
+    /// view to the object it already referenced.
+    /// </para>
+    /// <para>
+    /// Same contract <c>MusicSourceSeparator.TryBindDemucsTopologyFromLayers</c> maintains for its
+    /// Demucs encoder/decoder views, and the reason it exists there too.
+    /// </para>
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_videoProjection), nameof(_textProjection), nameof(_logitScale))]
+    private void BindLayerViewsFromLayers()
+    {
+        _videoEncoder.Clear();
+        _temporalTransformer.Clear();
+        _textTransformerQKV.Clear();
+        _textTransformerAttnProj.Clear();
+        _textTransformerFFN1.Clear();
+        _textTransformerFFN2.Clear();
+
+        int idx = 0;
+        // Video encoder: 1 patch embed + NumSpatialBlocks * 2
+        int videoEncoderCount = 1 + _options.NumSpatialBlocks * 2;
+        for (int i = 0; i < videoEncoderCount; i++)
+            _videoEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Temporal transformer
+        for (int i = 0; i < _options.NumTemporalBlocks; i++)
+            _temporalTransformer.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Video projection
+        _videoProjection = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Text transformer: 4 layers per block (QKV, AttnProj, FFN1, FFN2)
+        for (int i = 0; i < _options.NumTextBlocks; i++)
+        {
+            _textTransformerQKV.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textTransformerAttnProj.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textTransformerFFN1.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textTransformerFFN2.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        }
+
+        // Text projection
+        _textProjection = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Logit scale
+        _logitScale = (ConvolutionalLayer<T>)Layers[idx++];
+    }
+
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new VideoCLIP<T>(
-            Architecture, _numFrames, _embeddingDim, _textMaxLength, _vocabSize, _temperature);
+            Architecture, _numFrames, _embeddingDim, _textMaxLength, _vocabSize, _temperature,
+            // EVERY option that affects training must be carried, not just the topology ones. This
+            // copied five fields and dropped Beta1, Beta2, MaxGradientNorm, WarmupSteps,
+            // TotalTrainingSteps and DecayPower, so a clone silently rebuilt its optimizer from the
+            // DEFAULTS — including the paper's 1000-step warm-up, which the caller may deliberately have
+            // turned off. A clone that warms up when the original does not is not the same model.
+            //
+            // Measured: MoreData_ShouldNotDegrade clones the network and trains the clone, and the
+            // clone's loss came back byte-identical (0.7257835234621279) at 2, 4 and 12 iterations with
+            // its parameter L2 unchanged to 16 digits — the LR sat at ~5e-8 on the first rung of a ramp
+            // the original had disabled, so no step could move anything. The invariant was reporting a
+            // real defect, not task-to-task variance.
+            options: new VideoCLIPVideoOptions
+            {
+                HiddenDimension = _options.HiddenDimension,
+                NumSpatialBlocks = _options.NumSpatialBlocks,
+                NumTemporalBlocks = _options.NumTemporalBlocks,
+                NumTextBlocks = _options.NumTextBlocks,
+                LearningRate = _options.LearningRate,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                MaxGradientNorm = _options.MaxGradientNorm,
+                WarmupSteps = _options.WarmupSteps,
+                TotalTrainingSteps = _options.TotalTrainingSteps,
+                DecayPower = _options.DecayPower
+            });
     }
 
     #endregion
