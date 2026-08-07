@@ -879,6 +879,14 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // per-timestep tape-dispatch overhead that made the memorization test exceed the 180s budget.
         //   S_t[di,vi] = sigmoid(a)[di]*S_{t-1}[di,vi] + (sigmoid(b)[di]*k[di])*v[vi]
         //   wkv_t[di]  = sigmoid(r)[di] * sum_vi S_t[di,vi]*k[vi]
+        // MERGE NOTE (master -> this branch): master adapted this call when Tensors 0.120.2
+        // replaced the old (r, k, v, a, b) surface with the paper-faithful generalised delta rule
+        // (rProj, kappa, kTilde, vProj, decayLogit, iclRate, numHeads). That adaptation passed Kall
+        // straight through as kappa and used kTilde = iclRate (*) Kall. This branch supersedes it:
+        // it forms kappa and kTilde from the LEARNED _kk / _ka parameters per Eq. 7 and applies the
+        // Global ICLR Multiplier to the transition term. Taking master's side here would have left
+        // _kk, _ka and _globalIclrMultiplier declared and trained but with no effect on the output.
+
         // Generalised delta rule inputs (arXiv:2503.14456, Eq. 17). The kernel takes kappa
         // PRE-normalisation and forms -kappaHat and (a (*) kappaHat) itself, matching the reference
         // kernel call RWKV7_CLAMPW_CUDA(r, w, kTilde, v, -kk, kk*a); it likewise derives
