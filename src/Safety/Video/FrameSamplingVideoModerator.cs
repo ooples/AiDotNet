@@ -117,6 +117,23 @@ public class FrameSamplingVideoModerator<T> : VideoSafetyModuleBase<T>
                 segmentCount, "Segment count K must be positive.");
         }
 
+        // THE THRESHOLDS GET THE SAME TREATMENT AS THE SEGMENT COUNT. Both were accepted
+        // unvalidated, and both fail SILENTLY: above 1 no confidence can ever reach the threshold so
+        // the category is unreachable, below 0 every score clears it so the category always fires. A
+        // moderation threshold that silently disables a category is the worst shape of
+        // misconfiguration to ship, so it fails at construction instead.
+        if (nsfwThreshold < 0.0 || nsfwThreshold > 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(nsfwThreshold), nsfwThreshold,
+                "Threshold must be within [0, 1]. Above 1 the NSFW category can never fire; below 0 it always fires.");
+        }
+
+        if (violenceThreshold < 0.0 || violenceThreshold > 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(violenceThreshold), violenceThreshold,
+                "Threshold must be within [0, 1]. Above 1 the violence category can never fire; below 0 it always fires.");
+        }
+
         _segmentCount = segmentCount;
         _consensus = consensus;
         _nsfwThreshold = nsfwThreshold;
@@ -187,8 +204,13 @@ public class FrameSamplingVideoModerator<T> : VideoSafetyModuleBase<T>
             }
 
             double consensusScore = ApplyConsensus(scores, _consensus);
-            double threshold = ThresholdFor(category, exemplar);
-            if (exemplar is null || consensusScore < threshold) continue;
+            double threshold = ThresholdFor(category);
+            // Two separate conditions, deliberately. `consensusScore < threshold` keeps the owned
+        // categories' gate exactly as it was -- a score EQUAL to the configured threshold still
+        // clears it -- while `<= 0` expresses the "must be non-zero" requirement that the
+        // double.Epsilon sentinel used to smuggle into the threshold value. Folding them into one
+        // comparison would have silently tightened the nsfw/violence gates.
+        if (exemplar is null || consensusScore <= 0.0 || consensusScore < threshold) continue;
 
             var timestamps = new List<string>(firedAt.Count);
             foreach (int k in firedAt)
@@ -263,12 +285,17 @@ public class FrameSamplingVideoModerator<T> : VideoSafetyModuleBase<T>
     /// averaged score to still clear the snippet threshold is what stops one flagged segment out of
     /// K from condemning the whole video.
     /// </remarks>
-    private double ThresholdFor(SafetyCategory category, SafetyFinding? exemplar)
+    private double ThresholdFor(SafetyCategory category)
     {
         if (category == SafetyCategory.SexualExplicit) return _nsfwThreshold;
         if (category == SafetyCategory.ViolenceGraphic) return _violenceThreshold;
-        // A category this module does not own its threshold for already cleared the snippet-level
-        // gate, so require only that the consensus be non-zero rather than inventing a bound.
-        return double.Epsilon;
+
+        // A category this module does not own a threshold for already cleared the snippet-level
+        // gate, so the only requirement left is that the consensus be non-zero. Returning
+        // double.Epsilon expressed that as a magnitude bound, which it is not -- it is the smallest
+        // positive subnormal, and reading it as "just above zero" invites a float-comparison bug the
+        // moment anyone adjusts the comparison. Returning 0 states the intent directly, and the
+        // caller compares with > so a zero consensus is still rejected.
+        return 0.0;
     }
 }

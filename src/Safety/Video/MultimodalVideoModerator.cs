@@ -73,7 +73,6 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
         _imageClassifier = new CLIPImageSafetyClassifier<T>(nsfwThreshold, violenceThreshold);
     }
 
-    /// <inheritdoc />
     /// <summary>
     /// Number of image frames sampled per video, matching the paper's annotation budget: "14 image
     /// frames, 1 thumbnail, and text metadata" were fed to the model for each of 19,422 videos.
@@ -171,12 +170,23 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
         // The paper's fixed annotation budget: 14 image frames plus 1 thumbnail per video, however
         // long the video is. Index 0 stands in for the thumbnail, which on a video platform is a
         // separate asset this interface does not receive; the remaining budget is spread evenly.
-        var sampled = new List<int> { 0 };
+        // CHUNK CENTRES, SO THE BUDGET IS ACTUALLY 14 PLUS THE THUMBNAIL. The previous loop started
+        // at k = 0, which recomputes index 0 -- already in the seed list as the thumbnail stand-in --
+        // and the Contains check then discarded it. The set therefore held at most `budget` entries
+        // and the thumbnail consumed one of the 14, so the code and the documented budget disagreed.
+        //
+        // Sampling the CENTRE of each chunk fixes both halves: the centre of chunk 0 is never index 0
+        // for a video longer than one frame, so the thumbnail stays distinct and all 14 content
+        // frames are spent on content. A HashSet replaces List.Contains, which was O(budget^2) --
+        // trivial at 14, but the loop no longer needs a scan at all.
         int budget = Math.Min(TaxonomyFrameBudget, frames.Count);
+        var seen = new HashSet<int> { 0 };
+        var sampled = new List<int> { 0 };
         for (int k = 0; k < budget; k++)
         {
-            int idx = (int)((long)k * frames.Count / budget);
-            if (!sampled.Contains(idx)) sampled.Add(idx);
+            int idx = (int)(((2L * k + 1) * frames.Count) / (2L * budget));
+            if (idx >= frames.Count) idx = frames.Count - 1;
+            if (seen.Add(idx)) sampled.Add(idx);
         }
 
         foreach (int i in sampled)
