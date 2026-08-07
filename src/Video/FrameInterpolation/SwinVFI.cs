@@ -142,7 +142,7 @@ public class SwinVFI<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

@@ -91,7 +91,11 @@ public class AVID<T> : VideoInpaintingBase<T>
     {
         _options = options ?? new AVIDOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         SupportsTemporalPropagation = true;
         InitializeLayers();
     }
@@ -158,7 +162,7 @@ public class AVID<T> : VideoInpaintingBase<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
