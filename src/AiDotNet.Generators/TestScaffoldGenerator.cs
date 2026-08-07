@@ -378,6 +378,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor UngeneratableModelDescriptor = new DiagnosticDescriptor(
+        id: "ADNGEN001",
+        title: "Model cannot be auto-generated a test and therefore has NO coverage",
+        messageFormat: "Model '{0}' cannot have a test generated for it: {1}. No fixture is "
+                       + "emitted, so this model has NO automated coverage at all - it is not "
+                       + "failing, it is simply never exercised. Fix the cause rather than adding a "
+                       + "hand-written fixture: a manual scaffold tells the generator to stand down "
+                       + "permanently, so the model then inherits none of the shared caps, shapes or "
+                       + "future invariants either.",
+        category: "AiDotNet.TestScaffold",
+        // WARNING FOR NOW, ERROR ONCE THE BACKLOG IS CLEARED. Twenty-four models are in this state
+        // today; erroring immediately would redden the build until every one is fixed and block
+        // everything else. The flip to Error is the point of the rule, though - a permanent warning
+        // is precisely what let these sit uncovered, buried among hundreds of AIDN040 lines.
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     private static readonly DiagnosticDescriptor ArchitectureFixtureSizeMismatchDescriptor = new DiagnosticDescriptor(
         id: "ADNTEST002",
         title: "Generated scaffold architecture size disagrees with its InputShape",
@@ -2548,7 +2565,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
                 var family = ResolveTestBaseClass(model);
                 if (family is null)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UngeneratableModelDescriptor, Location.None, model.FullyQualifiedName,
+                        "no test family could be resolved from its base type or model attributes"));
                     continue;
+                }
 
                 var testClassName = StripBacktick(model.ClassName) + "Tests";
 
@@ -2582,7 +2604,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Skip test generation entirely for compositional/wrapper patterns
                 // that can't be auto-constructed (meta-learning, distributed, etc.)
                 if (model.InheritsFromExcludedBase)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UngeneratableModelDescriptor, Location.None, model.FullyQualifiedName,
+                        "it inherits from a base excluded from generation (compositional or wrapper "
+                        + "pattern that cannot be auto-constructed)"));
                     continue;
+                }
 
                 bool canConstruct = (model.HasParameterlessConstructor || model.HasArchitectureOnlyConstructor) &&
                                     IsCompatibleWithFamily(model, family.Value);
@@ -2604,6 +2632,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // so the coverage report stays accurate.
                 if (!canConstruct)
                 {
+                    // Report the two causes SEPARATELY - they have different fixes, and lumping them
+                    // together is what made this class of gap unreadable in the first place.
+                    bool hasCtor = model.HasParameterlessConstructor || model.HasArchitectureOnlyConstructor;
+                    string reason = !hasCtor
+                        ? "it has neither a parameterless nor an architecture-only constructor, so the "
+                          + "generated fixture has no way to build it"
+                        : $"it resolves to test family {family.Value}, whose fixture requires an "
+                          + $"interface this type does not implement (see IsCompatibleWithFamily); the "
+                          + "constructor is fine";
+
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UngeneratableModelDescriptor, Location.None, model.FullyQualifiedName, reason));
                     continue;
                 }
 
