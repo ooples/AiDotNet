@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NER.Interfaces;
 using AiDotNet.NER.Options;
@@ -106,11 +107,7 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
         ValidateOptions();
         ApplyOptionsToBase();
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         InitializeLayers();
     }
@@ -256,6 +253,8 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
         sb.AppendLine($"Use CRF: {_options.UseCRF}");
         sb.AppendLine($"Dropout Rate: {_options.DropoutRate}");
         sb.AppendLine($"Learning Rate: {_options.LearningRate}");
+        sb.AppendLine($"Warmup Steps: {_options.WarmupSteps}");
+        sb.AppendLine($"Total Training Steps: {_options.TotalTrainingSteps}");
         sb.AppendLine($"Labels: {string.Join(", ", _options.LabelNames)}");
         sb.AppendLine($"Total Layers: {Layers.Count}");
 
@@ -331,7 +330,16 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
         try
         {
             var preprocessedInput = PreprocessTokens(input);
-            TrainWithTape(preprocessedInput, expected);
+            int targetSeqLen = preprocessedInput.Rank == 3
+                ? preprocessedInput.Shape[1]
+                : preprocessedInput.Shape[0];
+            var alignedExpected = PreprocessLabels(expected, targetSeqLen);
+            // Pass the model's configured optimizer (AdamW at the transformer-appropriate 5e-5, built
+            // in the ctor) — the 2-arg TrainWithTape resolves optimizer: null and falls back to the
+            // base DEFAULT Adam (~1e-3), ~20x too high for a pre-trained-scale transformer, so a single
+            // step overshot and training diverged (loss 2.84 -> 9.40 in one iteration). The ctor already
+            // requires _optimizer non-null, so this always uses the intended AdamW/LearningRate.
+            TrainWithTape(preprocessedInput, alignedExpected, _optimizer);
         }
         finally { SetTrainingMode(false); }
     }
@@ -433,6 +441,10 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
         w.Write(_options.LabelNames.Length);
         foreach (var label in _options.LabelNames)
             w.Write(label);
+        w.Write(_options.WarmupSteps);
+        w.Write(_options.WarmupInitialLearningRate);
+        w.Write(_options.TotalTrainingSteps);
+        w.Write(_options.EndLearningRate);
     }
 
     /// <inheritdoc />
@@ -455,6 +467,16 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
         _options.LabelNames = new string[labelCount];
         for (int i = 0; i < labelCount; i++)
             _options.LabelNames[i] = r.ReadString();
+
+        // These scheduler fields were appended to preserve compatibility with models serialized
+        // before transformer-NER schedulers were configurable.
+        if (r.BaseStream.Position < r.BaseStream.Length)
+        {
+            _options.WarmupSteps = r.ReadInt32();
+            _options.WarmupInitialLearningRate = r.ReadDouble();
+            _options.TotalTrainingSteps = r.ReadInt32();
+            _options.EndLearningRate = r.ReadDouble();
+        }
 
         ApplyOptionsToBase();
 
@@ -509,6 +531,42 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
         if (_options.HiddenDimension % _options.NumAttentionHeads != 0)
             throw new ArgumentException(
                 $"HiddenDimension ({_options.HiddenDimension}) must be divisible by NumAttentionHeads ({_options.NumAttentionHeads}).");
+
+        if (_options.TotalTrainingSteps > 0 && _options.TotalTrainingSteps < _options.WarmupSteps)
+            throw new ArgumentException(
+                $"TotalTrainingSteps ({_options.TotalTrainingSteps}) must be zero or at least WarmupSteps ({_options.WarmupSteps}).");
+
+        if (_options.EndLearningRate > _options.LearningRate)
+            throw new ArgumentException(
+                $"EndLearningRate ({_options.EndLearningRate}) cannot exceed LearningRate ({_options.LearningRate}).");
+
+        if (_options.WarmupInitialLearningRate > _options.LearningRate)
+            throw new ArgumentException(
+                $"WarmupInitialLearningRate ({_options.WarmupInitialLearningRate}) cannot exceed LearningRate ({_options.LearningRate}).");
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        var optimizerOptions = new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate
+        };
+
+        if (_options.WarmupSteps > 0 || _options.TotalTrainingSteps > 0)
+        {
+            optimizerOptions.SchedulerStepMode = SchedulerStepMode.StepPerBatch;
+            optimizerOptions.LearningRateScheduler = new LinearWarmupScheduler(
+                baseLearningRate: _options.LearningRate,
+                warmupSteps: _options.WarmupSteps,
+                totalSteps: _options.TotalTrainingSteps,
+                warmupInitLr: _options.WarmupInitialLearningRate,
+                decayMode: _options.TotalTrainingSteps > _options.WarmupSteps
+                    ? LinearWarmupScheduler.DecayMode.Linear
+                    : LinearWarmupScheduler.DecayMode.Constant,
+                endLr: _options.EndLearningRate);
+        }
+
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, optimizerOptions);
     }
 
     private void ApplyOptionsToBase()

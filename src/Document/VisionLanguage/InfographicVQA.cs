@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -67,7 +67,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _visionDim;
     private readonly int _textDim;
     private readonly int _fusionDim;
@@ -138,7 +138,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int fusionLayers = 6,
         int numHeads = 12,
         int vocabSize = 30522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         InfographicVQAOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -174,12 +174,12 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Default Configuration (InfographicVQA from WACV 2022):</b>
-    /// - Vision encoder: ViT or ResNet backbone
-    /// - Text encoder: BERT-base
-    /// - Multi-modal fusion transformer
-    /// - Answer decoder for generation
-    /// - Multi-scale visual processing
+    /// The WACV paper introduces the InfographicVQA dataset and evaluates multiple
+    /// baselines; it does not prescribe one reconstructible layer configuration.
+    /// This native implementation is therefore a configurable ViT-style visual
+    /// encoder and fusion approximation. The constructor exposes its image size,
+    /// widths, depths, attention heads, context length, and vocabulary size rather
+    /// than presenting any one of those choices as an undisclosed paper default.
     /// </para>
     /// </remarks>
     public InfographicVQA(
@@ -193,7 +193,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int fusionLayers = 6,
         int numHeads = 12,
         int vocabSize = 30522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         InfographicVQAOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -539,7 +539,8 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new InfographicVQA<T>(Architecture, ImageSize, MaxSequenceLength, _visionDim, _textDim,
-            _fusionDim, _visionLayers, _fusionLayers, _numHeads, _vocabSize);
+            _fusionDim, _visionLayers, _fusionLayers, _numHeads, _vocabSize,
+            options: new InfographicVQAOptions(_options));
     }
 
     #endregion
@@ -559,32 +560,43 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
-        SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
+        if (_optimizer is not IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
+        {
+            throw new InvalidOperationException(
+                "InfographicVQA native training requires a gradient-based optimizer.");
+        }
 
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+        }
 
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
+        int offset = 0;
         foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
     }
 
     #endregion
