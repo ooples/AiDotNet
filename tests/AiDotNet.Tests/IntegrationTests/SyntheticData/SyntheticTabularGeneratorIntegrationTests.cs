@@ -608,6 +608,7 @@ public class SyntheticTabularGeneratorIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
+        await Task.Yield();
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
         var options = new MedGANOptions<double>
