@@ -599,8 +599,20 @@ public class LayerStateGenerator : IIncrementalGenerator
     private static readonly SymbolDisplayFormat FullyQualified =
         SymbolDisplayFormat.FullyQualifiedFormat;
 
+    /// <summary>Namespace-qualified, no generics, and NO <c>global::</c> prefix.</summary>
+    /// <remarks>
+    /// THE global:: PREFIX MADE EVERY COMPARISON AGAINST THIS FORMAT FALSE.
+    /// <c>SymbolDisplayFormat.FullyQualifiedFormat</c> sets
+    /// <c>SymbolDisplayGlobalNamespaceStyle.Included</c>, so a symbol rendered as
+    /// <c>global::AiDotNet.NeuralNetworks.Layers.LayerBase</c> never equalled the
+    /// <c>"AiDotNet.NeuralNetworks.Layers.LayerBase"</c> it was compared with. Two checks were
+    /// silently inert as a result: DerivesFromLayerBase always returned false, so ADN0056 fired on
+    /// EVERY [LayerState] layer (120 of them on the full branch), and IsActivation never matched, so
+    /// no activation parameter was ever classified as a component.
+    /// </remarks>
     private static readonly SymbolDisplayFormat UnqualifiedGenerics =
         SymbolDisplayFormat.FullyQualifiedFormat
+            .WithGlobalNamespaceStyle(SymbolDisplayGlobalNamespaceStyle.Omitted)
             .WithGenericsOptions(SymbolDisplayGenericsOptions.None);
 
     private enum ValueKind
