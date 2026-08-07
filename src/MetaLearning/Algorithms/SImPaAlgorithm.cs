@@ -113,19 +113,19 @@ public class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
-        _rng = options.RandomSeed.HasValue ? new Random(options.RandomSeed.Value) : new Random(4242);
+        _rng = RandomHelper.CreateSeededRandom(options.RandomSeed ?? 4242);
 
         Posterior = new ImplicitPosteriorGenerator<T>(
             outputDimension: _paramDim,
             latentDimension: options.LatentDimension,
             firstHiddenWidth: options.GeneratorFirstHiddenWidth,
             secondHiddenWidth: options.GeneratorSecondHiddenWidth,
-            rng: new Random(_rng.Next()));
+            rng: RandomHelper.CreateSeededRandom(_rng.Next()));
 
         KLEstimator = new CompressionLemmaKLEstimator<T>(
             inputDimension: _paramDim,
             hiddenWidth: options.KLEstimatorHiddenWidth,
-            rng: new Random(_rng.Next()));
+            rng: RandomHelper.CreateSeededRandom(_rng.Next()));
     }
 
     /// <summary>

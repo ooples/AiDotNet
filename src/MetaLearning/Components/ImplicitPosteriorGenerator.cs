@@ -115,7 +115,7 @@ public class ImplicitPosteriorGenerator<T>
         int total = _w1 + _b1 + _w2 + _b2 + _w3 + _b3;
         _lambda = new Vector<T>(total);
 
-        var random = rng ?? new Random(17);
+        var random = rng ?? RandomHelper.CreateSeededRandom(17);
         InitializeWeights(random);
     }
 

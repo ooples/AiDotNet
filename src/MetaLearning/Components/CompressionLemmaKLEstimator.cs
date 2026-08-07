@@ -76,7 +76,7 @@ public class CompressionLemmaKLEstimator<T>
         // ZERO initialization on purpose. It makes phi identically 0, so the initial estimate is exactly
         // 0 - ln(1) = 0: the compression lemma's trivial lower bound. Starting from the trivially valid
         // point means the estimate can only be improved by training, never start out spuriously large.
-        var random = rng ?? new Random(29);
+        var random = rng ?? RandomHelper.CreateSeededRandom(29);
         double scale = Math.Sqrt(1.0 / Math.Max(1, _inputDim));
         for (int i = 0; i < _w1; i++)
             _omega[i] = NumOps.FromDouble(((random.NextDouble() * 2.0) - 1.0) * scale * 1e-3);
@@ -194,7 +194,7 @@ public class CompressionLemmaKLEstimator<T>
         if (learningRate <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(learningRate), learningRate, "learningRate must be positive.");
 
-        var random = rng ?? new Random(31);
+        var random = rng ?? RandomHelper.CreateSeededRandom(31);
         double best = ObjectiveWith(_omega, posteriorSamples, priorSamples);
 
         for (int step = 0; step < steps; step++)
