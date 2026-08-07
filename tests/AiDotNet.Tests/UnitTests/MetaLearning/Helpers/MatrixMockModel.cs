@@ -10,7 +10,20 @@ namespace AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 /// Mock model for testing meta-learning algorithms with Matrix/Vector inputs/outputs.
 /// Implements ICloneable to support meta-learning model cloning.
 /// </summary>
-public class MatrixMockModel : IFullModel<double, Matrix<double>, Vector<double>>, ICloneable
+/// <remarks>
+/// Declares IParameterizable and IGradientComputable EXPLICITLY. IFullModel does not imply either —
+/// GetParameters / SetParameters / ParameterCount are declared on IParameterizable alone — and the
+/// meta-learning algorithms call InterfaceGuard.Parameterizable(options.MetaModel), which tests the
+/// runtime type. Having the members without advertising the interface is not enough: every
+/// iMAMLAlgorithmTests case failed at construction with "MatrixMockModel does not implement
+/// IParameterizable&lt;Double, Matrix`1, Vector`1&gt;" despite this class defining all of them.
+/// LinearVectorModel in the integration-test helpers carries the same declaration for the same
+/// reason.
+/// </remarks>
+public class MatrixMockModel : IFullModel<double, Matrix<double>, Vector<double>>,
+    IParameterizable<double, Matrix<double>, Vector<double>>,
+    IGradientComputable<double, Matrix<double>, Vector<double>>,
+    ICloneable
 {
     private Vector<double> _parameters;
     private readonly int _inputFeatureCount;

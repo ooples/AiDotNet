@@ -64,5 +64,55 @@ public class BayesianNetworkSynthOptions<T> : RiskModelOptions<T>
     /// Gets or sets the Laplace smoothing constant for CPT estimation.
     /// </summary>
     /// <value>Smoothing constant, defaulting to 1.0. Prevents zero-probability entries in CPTs.</value>
+    /// <remarks>
+    /// This is a SMOOTHING PRIOR, not a privacy mechanism — it has nothing to do with the Laplace
+    /// NOISE that provides differential privacy (see <see cref="PrivacyBudget"/>). The two are easy to
+    /// confuse because both are named after the same distribution.
+    /// </remarks>
     public double LaplaceSmoothing { get; set; } = 1.0;
+
+    #region Differential Privacy (PrivBayes)
+
+    /// <summary>
+    /// Gets or sets whether to enforce differential privacy, which is what makes this PrivBayes
+    /// rather than a plain Bayesian-network synthesizer.
+    /// </summary>
+    /// <value>
+    /// Defaults to <c>true</c>. PrivBayes exists to release data privately; running without the
+    /// privacy mechanisms gives a generator that offers NO privacy guarantee whatsoever, so that has
+    /// to be an explicit opt-out rather than the default.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> differential privacy is a mathematical guarantee that the released data
+    /// cannot reveal whether any single individual was in the original dataset. It is achieved by
+    /// injecting a carefully calibrated amount of random noise. Turning this off makes generation
+    /// more faithful to the input data but removes the guarantee entirely.
+    /// </para>
+    /// </remarks>
+    public bool EnableDifferentialPrivacy { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the total privacy budget, epsilon.
+    /// </summary>
+    /// <value>
+    /// Defaults to 1.0 — the least-private setting in the range the paper evaluates
+    /// (epsilon in {0.05, 0.1, 0.2, 0.5, 0.8, 1.0}), chosen so out-of-the-box utility is reasonable
+    /// while still providing a real guarantee.
+    /// </value>
+    /// <remarks>
+    /// Smaller epsilon means MORE privacy and more noise. The budget is split between learning the
+    /// network structure and adding noise to the marginals — see
+    /// <see cref="StructureBudgetFraction"/>.
+    /// </remarks>
+    public double PrivacyBudget { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the fraction of the total privacy budget spent on learning the network structure,
+    /// with the remainder spent on noising the conditional distributions.
+    /// </summary>
+    /// <value>Defaults to 0.5, the paper's even epsilon/2 split between its two phases.</value>
+    public double StructureBudgetFraction { get; set; } = 0.5;
+
+    #endregion
 }
