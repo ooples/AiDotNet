@@ -58,14 +58,19 @@ public class TemporalSegmentNetworkModeratorTests
 
         var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 3);
 
-        var shortFindings = moderator.EvaluateVideo(shortVideo, 30.0);
-        var longFindings = moderator.EvaluateVideo(longVideo, 30.0);
+        moderator.EvaluateVideo(shortVideo, 30.0);
+        int sampledForShort = moderator.LastSampledFrameCount;
 
-        Assert.NotNull(shortFindings);
-        Assert.NotNull(longFindings);
+        moderator.EvaluateVideo(longVideo, 30.0);
+        int sampledForLong = moderator.LastSampledFrameCount;
 
-        // Segment count is fixed by configuration, not by frame count.
-        Assert.Equal(3, moderator.SegmentCount);
+        // THE COST PROPERTY, NOT A PROPERTY ROUND-TRIP. Asserting moderator.SegmentCount == 3
+        // checked only that the constructor stored the argument it was handed; it held even if
+        // EvaluateVideo walked all 300 frames, which is the one regression this method's name
+        // claims to catch. What a K-segment sampler guarantees is that a 10x longer video yields
+        // the SAME number of segment-level inputs.
+        Assert.Equal(3, sampledForShort);
+        Assert.Equal(sampledForShort, sampledForLong);
     }
 
     [Fact]
@@ -79,6 +84,11 @@ public class TemporalSegmentNetworkModeratorTests
         var findings = moderator.EvaluateVideo(frames, 30.0);
 
         Assert.NotNull(findings);
+
+        // A duplicate-group query over an empty list finds no groups and passes. Without this,
+        // a moderator that detected nothing at all satisfied the whole assertion below.
+        Assert.NotEmpty(findings);
+
         var duplicated = findings.GroupBy(f => f.Category).Where(g => g.Count() > 1).ToList();
         Assert.True(duplicated.Count == 0,
             "Consensus is applied before the decision, so each category must produce at most one " +
