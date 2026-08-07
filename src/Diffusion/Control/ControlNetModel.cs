@@ -91,6 +91,14 @@ namespace AiDotNet.Diffusion.Control;
 [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543", Year = 2023, Authors = "Zhang et al.")]
 public class ControlNetModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+    }
+
     #region Constants
 
     /// <summary>
@@ -169,19 +177,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => CN_LATENT_CHANNELS;
 
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = _baseUNet.ParameterCount;
-            foreach (var encoder in _encoderCache.Values)
-            {
-                count += encoder.ParameterCount;
-            }
-            return count;
-        }
-    }
+
 
     /// <summary>
     /// Gets the type of control signal this model uses.
@@ -623,59 +619,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         return Engine.TensorBroadcastAdd(a, b);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
 
-        // Add base UNet parameters
-        var baseParams = _baseUNet.GetParameters();
-        for (int i = 0; i < baseParams.Length; i++)
-        {
-            allParams.Add(baseParams[i]);
-        }
-
-        // Add all cached encoder parameters (in deterministic order)
-        foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
-        {
-            var encoderParams = kvp.Value.GetParameters();
-            for (int i = 0; i < encoderParams.Length; i++)
-            {
-                allParams.Add(encoderParams[i]);
-            }
-        }
-
-        return new Vector<T>(allParams.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        // Set base UNet parameters
-        int baseCount = checked((int)_baseUNet.ParameterCount);
-        var baseParams = new T[baseCount];
-        for (int i = 0; i < baseCount; i++)
-        {
-            baseParams[i] = parameters[offset + i];
-        }
-        _baseUNet.SetParameters(new Vector<T>(baseParams));
-        offset += baseCount;
-
-        // Set all cached encoder parameters (in same order as GetParameters)
-        foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
-        {
-            int encoderCount = (int)kvp.Value.ParameterCount;
-            var encoderParams = new T[encoderCount];
-            for (int i = 0; i < encoderCount; i++)
-            {
-                encoderParams[i] = parameters[offset + i];
-            }
-            kvp.Value.SetParameters(new Vector<T>(encoderParams));
-            offset += encoderCount;
-        }
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()

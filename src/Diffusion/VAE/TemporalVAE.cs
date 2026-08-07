@@ -66,6 +66,13 @@ namespace AiDotNet.Diffusion.VAE;
     [ResearchPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
 public class TemporalVAE<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Same layers, same order, as the previous GetParameters walked.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var layer in EnumerateAllLayers()) RegisterParameterComponent(layer);
+    }
+
     /// <summary>
     /// Standard Stable Video Diffusion latent scale factor.
     /// </summary>
@@ -190,28 +197,6 @@ public class TemporalVAE<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override double LatentScaleFactor => _latentScaleFactor;
-
-    /// <inheritdoc />
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from EnumerateAllLayers, which yields exactly the layers GetParameters walks, in
-    /// the same order -- so the two cannot disagree. It previously called a hand-written
-    /// arithmetic estimate over channel multipliers, which described nothing that existed; a flat
-    /// parameter vector is paired by LENGTH on restore, so a count that does not match the vector
-    /// silently restores a checkpoint into the wrong tensors.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in EnumerateAllLayers())
-            {
-                if (layer is not null) total += layer.ParameterCount;
-            }
-            return total;
-        }
-    }
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -766,42 +751,6 @@ public class TemporalVAE<T> : VAEModelBase<T>
     #region Parameter Management
 
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        AddLayerParameters(parameters, _inputConv);
-
-        foreach (var layer in _encoderSpatialLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        foreach (var layer in _encoderTemporalLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        AddLayerParameters(parameters, _meanConv);
-        AddLayerParameters(parameters, _logVarConv);
-        AddLayerParameters(parameters, _postQuantConv);
-
-        foreach (var layer in _decoderSpatialLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        foreach (var layer in _decoderTemporalLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        AddLayerParameters(parameters, _outputConv);
-
-        return new Vector<T>(parameters.ToArray());
-    }
-
     private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
     {
         if (layer == null) return;
@@ -863,41 +812,6 @@ public class TemporalVAE<T> : VAEModelBase<T>
             foreach (var parameter in EnumerateMaterializedParameters(subLayer))
                 yield return parameter;
         }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _preserveMaterializedParameters = true;
-        var index = 0;
-
-        SetLayerParameters(_inputConv, parameters, ref index);
-
-        foreach (var layer in _encoderSpatialLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        foreach (var layer in _encoderTemporalLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_meanConv, parameters, ref index);
-        SetLayerParameters(_logVarConv, parameters, ref index);
-        SetLayerParameters(_postQuantConv, parameters, ref index);
-
-        foreach (var layer in _decoderSpatialLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        foreach (var layer in _decoderTemporalLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_outputConv, parameters, ref index);
     }
 
     private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)
