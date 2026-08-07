@@ -46,6 +46,7 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
         NumHeads = other.NumHeads; CodebookSize = other.CodebookSize;
         CodebookDimension = other.CodebookDimension; NumCodebooks = other.NumCodebooks;
         DropoutRate = other.DropoutRate; CommitmentWeight = other.CommitmentWeight;
+        LearningRate = other.LearningRate;
     }
 
     /// <summary>
