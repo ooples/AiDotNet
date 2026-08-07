@@ -391,5 +391,54 @@ public class TLearner<T> : CausalModelBase<T>
         return new TLearner<T>(MaxIterations, LearningRate, Lambda);
     }
 
+    /// <summary>
+    /// Persists the two fitted linear sub-models (treated + control weights and biases) so
+    /// <see cref="CausalModelBase{T}.DeepCopy"/> / <c>Clone</c> and Serialize/Deserialize reconstruct
+    /// them. Without this the clone copied only NumFeatures + IsFitted (base model-data) while the
+    /// weight vectors stayed at their empty <c>Vector&lt;T&gt;(0)</c> default, so EstimateTreatmentEffect
+    /// on the clone indexed <c>_weightsTreated[j]</c> out of range. Mirrors SLearner/XLearner.
+    /// </summary>
+    protected override System.Collections.Generic.Dictionary<string, object> GetAdditionalModelData()
+    {
+        var data = base.GetAdditionalModelData();
+        data["BiasTreated"] = NumOps.ToDouble(_biasTreated);
+        data["BiasControl"] = NumOps.ToDouble(_biasControl);
+        var weightsTreated = new double[_weightsTreated.Length];
+        for (int i = 0; i < _weightsTreated.Length; i++)
+            weightsTreated[i] = NumOps.ToDouble(_weightsTreated[i]);
+        data["WeightsTreated"] = weightsTreated;
+        var weightsControl = new double[_weightsControl.Length];
+        for (int i = 0; i < _weightsControl.Length; i++)
+            weightsControl[i] = NumOps.ToDouble(_weightsControl[i]);
+        data["WeightsControl"] = weightsControl;
+        return data;
+    }
+
     /// <inheritdoc />
+    protected override void LoadAdditionalModelData(Newtonsoft.Json.Linq.JObject modelDataObj)
+    {
+        base.LoadAdditionalModelData(modelDataObj);
+
+        var biasTreated = modelDataObj["BiasTreated"];
+        if (biasTreated is not null)
+            _biasTreated = NumOps.FromDouble(biasTreated.ToObject<double>());
+
+        var biasControl = modelDataObj["BiasControl"];
+        if (biasControl is not null)
+            _biasControl = NumOps.FromDouble(biasControl.ToObject<double>());
+
+        if (modelDataObj["WeightsTreated"] is Newtonsoft.Json.Linq.JArray weightsTreatedArr)
+        {
+            _weightsTreated = new Vector<T>(weightsTreatedArr.Count);
+            for (int i = 0; i < weightsTreatedArr.Count; i++)
+                _weightsTreated[i] = NumOps.FromDouble(weightsTreatedArr[i].ToObject<double>());
+        }
+
+        if (modelDataObj["WeightsControl"] is Newtonsoft.Json.Linq.JArray weightsControlArr)
+        {
+            _weightsControl = new Vector<T>(weightsControlArr.Count);
+            for (int i = 0; i < weightsControlArr.Count; i++)
+                _weightsControl[i] = NumOps.FromDouble(weightsControlArr[i].ToObject<double>());
+        }
+    }
 }
