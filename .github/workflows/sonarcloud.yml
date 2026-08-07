@@ -1419,17 +1419,38 @@ jobs:
               param($tracePath)
               $traceLineCount = 0
               while ($true) {
-                if (Test-Path $tracePath) {
-                  $traceLines = @(Get-Content -Path $tracePath)
-                  while ($traceLineCount -lt $traceLines.Count) {
-                    [Console]::Out.WriteLine($traceLines[$traceLineCount])
-                    $traceLineCount++
+                # A THROW HERE ENDS THE SAMPLER SILENTLY. The runspace's IAsyncResult is discarded
+                # at BeginInvoke and nobody calls EndInvoke, so any exception is swallowed whole:
+                # sampling stops for the rest of the shard and the log reads like a clean run right
+                # up to the OOM kill -- defeating the entire purpose of a sampler that exists to
+                # show what memory did BEFORE the kill.
+                #
+                # Both known throwers are in this loop. The test host APPENDS to $tracePath while
+                # this reads it, so a read can hit a sharing violation; and Select-String returns
+                # $null when there is no match, making .Line a property access on $null.
+                try {
+                  if (Test-Path $tracePath) {
+                    # INCREMENTAL, NOT A FULL RE-READ. Get-Content read the WHOLE trace every two
+                    # seconds, so on a long shard the sampler's own cost grows with the run it is
+                    # supposed to be observing.
+                    $traceLines = @(Get-Content -Path $tracePath -ErrorAction Stop | Select-Object -Skip $traceLineCount)
+                    foreach ($line in $traceLines) {
+                      [Console]::Out.WriteLine($line)
+                      $traceLineCount++
+                    }
                   }
+                  $memLine = Select-String -Path /proc/meminfo -Pattern '^MemAvailable:' -ErrorAction Stop | Select-Object -First 1
+                  $avail = if ($memLine) { ($memLine.Line -replace '\s+', ' ').Trim() } else { 'MemAvailable: (unreadable)' }
+                  [Console]::Out.WriteLine("[memdiag $([DateTime]::UtcNow.ToString('HH:mm:ss'))] $avail")
+                  [Console]::Out.Flush()
+                } catch {
+                  # Reported, never fatal: a sampler that dies quietly is worse than one that says
+                  # it stumbled and carries on.
+                  [Console]::Out.WriteLine("[memdiag] sampler iteration failed: $($_.Exception.Message)")
+                  [Console]::Out.Flush()
                 }
-                $avail = ((Select-String -Path /proc/meminfo -Pattern '^MemAvailable:').Line -replace '\s+', ' ').Trim()
-                [Console]::Out.WriteLine("[memdiag $([DateTime]::UtcNow.ToString('HH:mm:ss'))] $avail")
-                [Console]::Out.Flush()
                 Start-Sleep -Seconds 2
+              }
               }
             })
             [void]$memSampler.AddArgument($testTrace)
