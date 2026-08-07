@@ -311,22 +311,25 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         bool useSample = IsTrainingMode || _samplePending;
         if (IsTrainingMode && !_samplePending)
             FillSampleEpsilon();
-        if (useSample && (_sampledWeightEpsilon is null || _sampledBiasEpsilon is null))
-            throw new InvalidOperationException("Bayesian posterior sample was not initialized.");
-
         Tensor<T> effectiveWeights = _weightMean;
         Tensor<T> effectiveBias = _biasMean;
         if (useSample)
         {
+            // The null check lives inside this branch rather than above it so the compiler can
+            // narrow both fields for the rest of the block. Guarding outside and then suppressing
+            // at each use gave the same runtime behaviour while hiding the nullability.
+            if (_sampledWeightEpsilon is null || _sampledBiasEpsilon is null)
+                throw new InvalidOperationException("Bayesian posterior sample was not initialized.");
+
             var weightStd = Engine.TensorSqrt(Engine.TensorExp(_weightLogVar));
             effectiveWeights = Engine.TensorAdd(
                 _weightMean,
-                Engine.TensorMultiply(weightStd, _sampledWeightEpsilon!));
+                Engine.TensorMultiply(weightStd, _sampledWeightEpsilon));
 
             var biasStd = Engine.TensorSqrt(Engine.TensorExp(_biasLogVar));
             effectiveBias = Engine.TensorAdd(
                 _biasMean,
-                Engine.TensorMultiply(biasStd, _sampledBiasEpsilon!));
+                Engine.TensorMultiply(biasStd, _sampledBiasEpsilon));
         }
 
         _samplePending = false;
