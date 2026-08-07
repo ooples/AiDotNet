@@ -1,4 +1,4 @@
-﻿name: Build & SonarCloud
+name: Build & SonarCloud
 
 # Primary build workflow - other workflows depend on this.
 # Runs on ubuntu-latest; net471 targets cross-compile via the modern .NET SDK's
@@ -299,6 +299,16 @@ jobs:
         with:
           name: nuget-packages
           path: ./artifacts/*.nupkg
+      # SHARD COVERAGE IS VERIFIED, NOT MAINTAINED BY HAND. The generated-layer
+      # shards select classes by first-letter prefix, so a class emitted later
+      # under an unlisted letter matches no shard, never runs, and nothing reports
+      # it -- a silent loss of coverage on a green pipeline, which is worse than a
+      # failing test. Runs here because this job has already built the assembly the
+      # generator emits those classes into.
+      - name: Verify every generated test class is covered by a shard
+        shell: pwsh
+        run: ./.github/scripts/check-shard-coverage.ps1
+
 
   # Sharded test execution for fast, parallel feedback and coverage generation (net10.0).
   # Coverage artifacts are consumed by the SonarCloud analysis job below.
@@ -1483,8 +1493,21 @@ jobs:
     # "Integration P-Q" (which its class name matches) it would consume that shard's whole budget.
     # The Sweep category keeps it out of every shard filter; this job is the only thing that runs it.
     timeout-minutes: 60
-    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please') }}"
-    continue-on-error: true   # a reporter, never a gate - see below
+    # THE SAME CONDITION AS EVERY OTHER JOB IN THIS FILE, and it was not.
+    # 'release-please' without the trailing double dash also matches an unrelated
+    # branch such as release-please-notes, and the release-push guard was missing
+    # entirely -- on a push github.head_ref is empty, so this job ran on release
+    # commits while every other job skipped, building the whole solution and
+    # holding a runner for up to 60 minutes to do it.
+    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    # NO continue-on-error. It made the guards below decorative: the step printed
+    # `::error::Sweep harness failed to START` and exited 1, and the job was marked
+    # green anyway -- the loud failure those guards promise could never be heard.
+    # The step already separates the two cases and only one exits non-zero: a
+    # FINDING is written to the report and passes, while an infrastructure fault
+    # (did not start / no summary / killed mid-run) fails. So the job stays a
+    # reporter for findings and a gate for its own brokenness, which is what the
+    # surrounding comments claimed all along.
     # One runner PER sweep. Each of these constructs every model in the library, so running them
     # together in a single job is what killed the first attempt: the step was cancelled after 6m48s
     # against a 60-minute limit, which is a runner OOM, not a timeout. Splitting gives each sweep a
@@ -1541,7 +1564,19 @@ jobs:
             --filter "FullyQualifiedName~${{ matrix.sweep }}" \
             --logger 'console;verbosity=detailed' \
             --logger 'trx;LogFileName=sweep.trx' \
-            --results-directory TestResults 2>&1 | tee sweep-output.txt || true
+          # PIPESTATUS, NOT THE PIPE. `dotnet test ... | tee` reports TEE's status, so the
+          # pipeline succeeded whenever tee did and `|| true` was measuring nothing. The real
+          # exit code is captured before anything else can overwrite it.
+          set -o pipefail
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
+            --filter "FullyQualifiedName~${{ matrix.sweep }}" \
+            --logger 'console;verbosity=detailed' \
+            --logger 'trx;LogFileName=sweep.trx' \
+            --results-directory TestResults 2>&1 | tee sweep-output.txt
+          dotnet_status=${PIPESTATUS[0]}
+          set +o pipefail
+          echo "dotnet test exited ${dotnet_status}"
+
           if grep -qE 'MSBUILD : error|MSB1008|error MSB[0-9]|No test source files' sweep-output.txt; then
             echo '::error::Sweep harness failed to START -- infrastructure fault, not a finding.'
             exit 1
@@ -1551,18 +1586,47 @@ jobs:
             exit 1
           fi
 
+          # THE THIRD STATE THE TWO GREPS CANNOT SEE: a harness that starts, prints a partial
+          # summary, and is then OOM-killed. That run still emits `Total tests`, so guard 2
+          # passes and the job reports success on a truncated sweep -- which is exactly what
+          # happened once already (cancelled at 6m48s against a 60-minute limit, i.e. a runner
+          # OOM). A kill shows up as a non-zero dotnet status with a summary present, so the
+          # two facts together are what distinguish it.
+          if [ "${dotnet_status}" -gt 1 ]; then
+            echo "::error::Sweep harness was killed (exit ${dotnet_status}) after printing a partial summary -- the findings are INCOMPLETE."
+            exit 1
+          fi
+
+      # STAGED INTO THE WORKSPACE FIRST. The upload listed absolute /tmp paths, which
+      # ties the artifact to runner-temp layout and makes `if-no-files-found: error`
+      # unusable -- a findings file that is legitimately absent is indistinguishable
+      # from one the uploader simply could not reach. Copying what exists into a
+      # workspace directory means the upload has one root, and an empty root then
+      # genuinely means the sweep produced nothing.
+      - name: Stage sweep findings
+        if: always()
+        run: |
+          mkdir -p sweep-artifacts
+          for f in /tmp/parameter-enumeration-parity.tsv \
+                   /tmp/parameter-count-violations.txt \
+                   /tmp/chunk-parity.txt; do
+            [ -f "$f" ] && cp "$f" sweep-artifacts/ || echo "absent: $f"
+          done
+          cp sweep-output.txt sweep-artifacts/ 2>/dev/null || true
+          ls -la sweep-artifacts/
+
       - name: Upload sweep report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: parameter-sweep-${{ matrix.sweep }}-${{ github.sha }}
           path: |
-            sweep-output.txt
-            /tmp/parameter-enumeration-parity.tsv
-            /tmp/parameter-count-violations.txt
-            /tmp/chunk-parity.txt
+            sweep-artifacts/
             TestResults/
-          if-no-files-found: warn
+          # ERROR, NOT WARN. These files ARE the job's output; an upload that finds
+          # none of them means the sweep produced nothing, and `warn` let that pass
+          # silently as a green job with an empty artifact.
+          if-no-files-found: error
           retention-days: 14
 
   sonarcloud:
