@@ -104,6 +104,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ResearchPaper("PixArt-alpha: Fast Training of Diffusion Transformer for Photorealistic Text-to-Image Synthesis", "https://arxiv.org/abs/2310.00426", Year = 2024, Authors = "Chen et al.")]
 public class PixArtModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_dit);
+    }
+
     #region Constants
 
     /// <summary>
@@ -194,7 +202,6 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => PIXART_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant.
@@ -576,24 +583,7 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return _dit.GetParameters();
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _dit.ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Parameter count mismatch. Expected {_dit.ParameterCount} but received {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        _dit.SetParameters(parameters);
-    }
 
     #endregion
 

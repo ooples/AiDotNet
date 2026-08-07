@@ -797,7 +797,7 @@ public enum ControlType
 /// Zero convolutions are 1×1 convolutions initialized to zero for safe integration with pretrained models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ControlNetEncoder<T>
+public class ControlNetEncoder<T> : IParameterSource<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

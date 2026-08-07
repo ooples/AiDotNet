@@ -342,7 +342,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// Registration order IS serialization order, because <see cref="GetParameters"/> concatenates
     /// in this order and <see cref="SetParameters"/> slices back in it.
     /// </remarks>
-    private readonly List<IParameterizable<T, Tensor<T>, Tensor<T>>> _parameterComponents = new();
+    private readonly List<IParameterSource<T>> _parameterComponents = new();
 
     /// <summary>
     /// Declares a child component as part of this model's parameter surface. Call once per
@@ -368,7 +368,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <para><b>For Beginners:</b> tell the base what your model is made of and you never write
     /// parameter counting, saving or loading code — it is derived from that one declaration.</para>
     /// </remarks>
-    protected void RegisterParameterComponent(IParameterizable<T, Tensor<T>, Tensor<T>>? component)
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
     {
         if (component is null) return;
         for (int i = 0; i < _parameterComponents.Count; i++)
@@ -380,7 +380,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     }
 
     /// <summary>The registered components, in registration order.</summary>
-    protected IReadOnlyList<IParameterizable<T, Tensor<T>, Tensor<T>>> ParameterComponents
+    protected IReadOnlyList<IParameterSource<T>> ParameterComponents
     {
         get { EnsureComponentsRegistered(); return _parameterComponents; }
     }

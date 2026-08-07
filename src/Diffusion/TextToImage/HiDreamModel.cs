@@ -102,6 +102,15 @@ namespace AiDotNet.Diffusion.TextToImage;
     [ResearchPaper("HiDream-I1: A High-Efficient Image Generative Foundation Model with Sparse Diffusion Transformer", "https://arxiv.org/abs/2505.22705")]
 public class HiDreamModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -149,7 +158,6 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => HIDREAM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant.
@@ -280,48 +288,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var predictorParams = _predictor.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = predictorParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        for (int i = 0; i < predictorParams.Length; i++)
-            combined[i] = predictorParams[i];
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[predictorParams.Length + i] = vaeParams[i];
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int predictorCount = checked((int)_predictor.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        long expectedTotal = (long)predictorCount + vaeCount;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var predictorParams = new Vector<T>(predictorCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < predictorCount; i++)
-            predictorParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[predictorCount + i];
-
-        _predictor.SetParameters(predictorParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

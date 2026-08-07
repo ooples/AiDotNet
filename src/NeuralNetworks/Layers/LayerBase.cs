@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
+public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSource<T>, IDisposable
 {
     /// <summary>
     /// Counter for generating unique instance IDs across all layer instances.

@@ -66,6 +66,15 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ResearchPaper("AuraFlow v0.3", "https://blog.fal.ai/auraflow/", Year = 2024, Authors = "Fal.ai")]
 public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_dit);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     public const int DefaultWidth = 1024;
@@ -95,7 +104,6 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -160,30 +168,7 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var dp = _dit.GetParameters();
-        var vp = _vae.GetParameters();
-        var c = new Vector<T>(dp.Length + vp.Length);
-        for (int i = 0; i < dp.Length; i++) c[i] = dp[i];
-        for (int i = 0; i < vp.Length; i++) c[dp.Length + i] = vp[i];
-        return c;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int dc = (int)_dit.ParameterCount, vc = (int)_vae.ParameterCount;
-        if (parameters.Length != dc + vc)
-            throw new ArgumentException($"Expected {dc + vc} parameters, got {parameters.Length}.", nameof(parameters));
-        var dp = new Vector<T>(dc);
-        var vp = new Vector<T>(vc);
-        for (int i = 0; i < dc; i++) dp[i] = parameters[i];
-        for (int i = 0; i < vc; i++) vp[i] = parameters[dc + i];
-        _dit.SetParameters(dp);
-        _vae.SetParameters(vp);
-    }
 
     #endregion
 

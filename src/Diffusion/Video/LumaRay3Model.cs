@@ -53,6 +53,15 @@ namespace AiDotNet.Diffusion.Video;
     [ResearchPaper("Luma Ray 3", "https://lumalabs.ai/ray")]
 public class LumaRay3Model<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_temporalVAE);
+    }
+
     private const int LATENT_CHANNELS = 16;
     private const int CONTEXT_DIM = 4096;
     private const int DEFAULT_NUM_FRAMES = 120;
@@ -70,7 +79,6 @@ public class LumaRay3Model<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Initializes a new instance of LumaRay3Model with full customization support.
@@ -135,24 +143,7 @@ public class LumaRay3Model<T> : VideoDiffusionModelBase<T>
         return _predictor.PredictNoise(latents, timestep, imageEmbedding);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var predParams = _predictor.GetParameters();
-        var vaeParams = _temporalVAE.GetParameters();
-        return Vector<T>.Concatenate(new[] { predParams, vaeParams });
-    }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int predCount = checked((int)_predictor.ParameterCount);
-        var vaeCount = _temporalVAE.GetParameters().Length;
-        if (parameters.Length != predCount + vaeCount)
-            throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var predParams = new Vector<T>(parameters.AsSpan().Slice(0, predCount).ToArray());
-        var vaeParams = new Vector<T>(parameters.AsSpan().Slice(predCount, vaeCount).ToArray());
-        _predictor.SetParameters(predParams);
-        _temporalVAE.SetParameters(vaeParams);
-    }
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
