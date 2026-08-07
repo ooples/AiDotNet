@@ -246,7 +246,7 @@ public class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

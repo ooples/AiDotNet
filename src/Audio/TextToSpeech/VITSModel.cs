@@ -151,7 +151,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private IOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -440,7 +440,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int[]? upsampleRates = null,
         int fftSize = 1024,
         int hopLength = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VITSModelOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
@@ -524,23 +524,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                 upsampleRates: _upsampleRates).ToList();
 
         Layers.Clear();
-        _textEncoderLayers.Clear();
-        _durationPredictorLayers.Clear();
-        _flowLayers.Clear();
-        _decoderLayers.Clear();
         Layers.AddRange(layers);
-
-        // Distribute to internal sub-lists for forward pass
-        int idx = 0;
-        int textEncoderCount = 1 + _numEncoderLayers * 3;
-        for (int i = 0; i < textEncoderCount && idx < layers.Count; i++)
-            _textEncoderLayers.Add(layers[idx++]);
-        for (int i = 0; i < 3 && idx < layers.Count; i++)
-            _durationPredictorLayers.Add(layers[idx++]);
-        for (int i = 0; i < _numFlowLayers && idx < layers.Count; i++)
-            _flowLayers.Add(layers[idx++]);
-        while (idx < layers.Count)
-            _decoderLayers.Add(layers[idx++]);
 
         // Speaker embedding (if multi-speaker) - separate from LayerHelper
         if (_numSpeakers > 1)
@@ -548,6 +532,38 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             _speakerEmbedding = new EmbeddingLayer<T>(_numSpeakers, _speakerEmbeddingDim);
             Layers.Add(_speakerEmbedding);
         }
+
+        RelinkNativeLayerViews();
+    }
+
+    private void RelinkNativeLayerViews()
+    {
+        _textEncoderLayers.Clear();
+        _durationPredictorLayers.Clear();
+        _flowLayers.Clear();
+        _decoderLayers.Clear();
+        _speakerEmbedding = null;
+
+        // The base deserializer replaces Layers with newly reconstructed instances. ForwardNative
+        // must point at those exact instances; retaining the constructor-created lists makes the
+        // public parameter APIs report restored weights while inference still uses fresh weights.
+        int layerCount = Layers.Count;
+        if (_numSpeakers > 1 && layerCount > 0 && Layers[layerCount - 1] is EmbeddingLayer<T>)
+        {
+            _speakerEmbedding = Layers[layerCount - 1];
+            layerCount--;
+        }
+
+        int idx = 0;
+        int textEncoderCount = 1 + _numEncoderLayers * 3;
+        for (int i = 0; i < textEncoderCount && idx < layerCount; i++)
+            _textEncoderLayers.Add(Layers[idx++]);
+        for (int i = 0; i < 3 && idx < layerCount; i++)
+            _durationPredictorLayers.Add(Layers[idx++]);
+        for (int i = 0; i < _numFlowLayers && idx < layerCount; i++)
+            _flowLayers.Add(Layers[idx++]);
+        while (idx < layerCount)
+            _decoderLayers.Add(Layers[idx++]);
     }
 
     private IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
@@ -803,7 +819,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -902,6 +918,9 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             _phonemeVocabSize = 128;
             _upsampleRates = [8, 8, 2, 2];
         }
+
+        if (_useNativeMode)
+            RelinkNativeLayerViews();
     }
 
     /// <summary>

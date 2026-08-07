@@ -1012,7 +1012,7 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         try
         {
             SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

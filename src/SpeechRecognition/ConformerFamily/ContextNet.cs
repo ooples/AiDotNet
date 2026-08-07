@@ -77,7 +77,16 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         _options = options ?? new ContextNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Global-norm gradient clipping. The default-constructed optimizer applied no
+        // clipping at all, so a single update could move a deep CTC stack far enough to
+        // swing the output by orders of magnitude. Same remedy, and the same 1.0 bound,
+        // that the video models here already use (MoG, VideoCLIP) and that fixed the
+        // N-BEATS blow-up. Paired with the residual connections restored in
+        // CreateDefaultDeepCNNCTCLayers -- the architecture bounds the gain, this bounds
+        // the step.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
         SupportedLanguages = new[] { _options.Language };
@@ -118,9 +127,45 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new ContextNetStreamingSession(this, language ?? _options.Language);
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultDeepCNNCTCLayers(encoderDim: _options.EncoderDim, numBlocks: _options.NumBlocks, numSubBlocks: 5, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultContextNetLayers(
+                numBlocks: _options.NumBlocks,
+                numSubBlocks: _options.NumSubBlocks,
+                numMels: _options.NumMels,
+                vocabSize: _options.VocabSize,
+                kernelSize: _options.KernelSize,
+                squeezeExcitationRatio: _options.SqueezeExcitationRatio,
+                widthScaling: _options.WidthScaling,
+                dropoutRate: _options.DropoutRate));
+        }
+    }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            // Honor the optimizer supplied to the native constructor. The prior
+            // null call silently selected NeuralNetworkBase's fallback optimizer,
+            // so ContextNet's declared AdamW configuration was never used and its
+            // first update could move uphill on the deterministic fitting probe.
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
@@ -144,8 +189,52 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             ["Language"] = _options.Language
         }
     };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumBlocks); w.Write(_options.SqueezeExcitationRatio); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumBlocks = r.ReadInt32(); _options.SqueezeExcitationRatio = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
+    protected override void SerializeNetworkSpecificData(BinaryWriter w)
+    {
+        w.Write(_useNativeMode);
+        w.Write(_options.ModelPath ?? string.Empty);
+        w.Write(_options.SampleRate);
+        w.Write(_options.MaxAudioLengthSeconds);
+        w.Write(_options.EncoderDim);
+        w.Write(_options.NumBlocks);
+        w.Write(_options.NumSubBlocks);
+        w.Write(_options.KernelSize);
+        w.Write(_options.WidthScaling);
+        w.Write(_options.SqueezeExcitationRatio);
+        w.Write(_options.NumMels);
+        w.Write(_options.VocabSize);
+        w.Write(_options.DropoutRate);
+        w.Write(_options.Language);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader r)
+    {
+        _useNativeMode = r.ReadBoolean();
+
+        string mp = r.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+
+        _options.SampleRate = r.ReadInt32();
+        _options.MaxAudioLengthSeconds = r.ReadInt32();
+        _options.EncoderDim = r.ReadInt32();
+        _options.NumBlocks = r.ReadInt32();
+        _options.NumSubBlocks = r.ReadInt32();
+        _options.KernelSize = r.ReadInt32();
+        _options.WidthScaling = r.ReadDouble();
+        _options.SqueezeExcitationRatio = r.ReadInt32();
+        _options.NumMels = r.ReadInt32();
+        _options.VocabSize = r.ReadInt32();
+        _options.DropoutRate = r.ReadDouble();
+        _options.Language = r.ReadString();
+
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = _options.NumMels;
+
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
+    }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new ContextNet<T>(Architecture, mp, _options); return new ContextNet<T>(Architecture, _options); }
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
     /// <summary>
