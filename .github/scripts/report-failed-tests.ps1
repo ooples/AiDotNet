@@ -19,9 +19,29 @@ function Add-Summary {
   param([string]$Line)
   Write-Host $Line
   if ($env:GITHUB_STEP_SUMMARY) {
-    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $Line
+    # THE CONSOLE WRITE HAPPENS FIRST AND THE FILE WRITE CANNOT KILL THE SCRIPT.
+    # $ErrorActionPreference is Stop, and GitHub caps the step-summary file, so a
+    # large grouped failure list that exceeds the cap made Add-Content terminating.
+    # That aborted the reporter before its `exit 0`, which changed the job outcome
+    # the header promises this script never touches. A summary that cannot be
+    # written is a degraded report, not a failed job.
+    try {
+      Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $Line -ErrorAction Stop
+    } catch {
+      $script:SummaryWriteFailed = $true
+    }
   }
 }
+
+# Set by Add-Summary when the step-summary file rejects a write. Reported once at
+# the end rather than per line, so a capped file does not produce one warning per
+# failure in the digest.
+$script:SummaryWriteFailed = $false
+
+# EVERY EXIT PATH IS 0. The body runs inside a script block so an unhandled
+# terminating error anywhere in it is caught here instead of propagating a
+# nonzero exit code out of an `if: failure()` reporting step.
+$reportBody = {
 
 # --blame-hang kills the whole test host when any single test exceeds the hang timeout, and
 # --blame writes a Sequence_*.xml naming the test that was executing when it died. Everything
@@ -94,7 +114,7 @@ if (-not $trxFiles -or $trxFiles.Count -eq 0) {
   Add-Summary 'before results were written, so the failing test cannot be named from'
   Add-Summary 'results alone. Check the tail of the run log and any `Sequence_*.xml`'
   Add-Summary 'blame file for the last test that started.'
-  exit 0
+  return
 }
 
 $ns = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
@@ -130,21 +150,13 @@ foreach ($trx in $trxFiles) {
   }
 }
 
-Add-Summary '## Failed test digest'
-Add-Summary ''
-
-if ($failed.Count -eq 0) {
-  # The step is only reached on job failure, so an empty failure set here means
-  # the job failed for a NON-test reason (coverage upload, a post-step, the
-  # runner). Flag that so it is not mistaken for a flake.
-  Add-Summary 'The TRX recorded no failed tests, yet the job failed. The cause is'
-  Add-Summary 'outside the test results themselves (a post-test step, coverage, or'
-  Add-Summary 'the runner). Check the step log directly.'
-  exit 0
-}
-
-Add-Summary ("**$($failed.Count) failed test(s).** Grouped by error, most-common first.")
-
+# COUNTERS ARE READ BEFORE THE EMPTY-FAILURE BRANCH, NOT AFTER IT.
+# This check used to live below the `$failed.Count -eq 0` early return, so the one
+# case it exists to catch could never reach it: a host OOM-killed after 40 passing
+# tests and before any failure was recorded leaves a TRX whose Counters read
+# executed=40 total=852 and whose failure list is EMPTY. The script then printed
+# "the cause is outside the test results themselves", which is the exact opposite
+# of the truth -- 812 tests never ran.
 # Executed-vs-discovered. xUnit's TRX ResultSummary carries both, and when they disagree the
 # shard did not finish -- the same truncation blame-hang causes, but also what a plain host crash
 # or an OOM part-way through leaves behind. Reporting the gap turns "this shard has 3 failures"
@@ -174,6 +186,32 @@ foreach ($trx in $trxFiles) {
     $counterParseErrors.Add("$($trx.Name): $($_.Exception.Message)")
   }
 }
+
+Add-Summary '## Failed test digest'
+Add-Summary ''
+
+if ($failed.Count -eq 0) {
+  # The step is only reached on job failure, so an empty failure set here means
+  # the job failed for a NON-test reason (coverage upload, a post-step, the
+  # runner). Flag that so it is not mistaken for a flake.
+  if ($total -gt 0 -and $executed -lt $total) {
+    Add-Summary (":warning: **Only $executed of $total discovered tests executed -- $($total - $executed) never ran.** " +
+                 'This shard is TRUNCATED. No failure was recorded because the host died before' +
+                 ' one could be written, not because the suite passed.')
+  } else {
+    Add-Summary 'The TRX recorded no failed tests, yet the job failed. The cause is'
+    Add-Summary 'outside the test results themselves (a post-test step, coverage, or'
+    Add-Summary 'the runner). Check the step log directly.'
+  }
+  if ($counterParseErrors.Count -gt 0) {
+    Add-Summary (":warning: **The executed-vs-discovered check was skipped for $($counterParseErrors.Count) result file(s).** " +
+                 'Whether this shard was truncated is UNKNOWN.')
+    foreach ($e in $counterParseErrors) { Add-Summary ('    ' + $e) }
+  }
+  return
+}
+
+Add-Summary ("**$($failed.Count) failed test(s).** Grouped by error, most-common first.")
 
 if ($total -gt 0 -and $executed -lt $total) {
   Add-Summary ''
@@ -234,4 +272,20 @@ foreach ($group in $byMessage) {
 }
 
 # Always succeed: this is a reporter, not a gate.
+}
+
+try {
+  & $reportBody
+} catch {
+  # A reporter that throws must still not decide the job. Say what broke, in the
+  # log, and leave the real test result standing.
+  Write-Host "::warning::report-failed-tests.ps1 could not complete: $($_.Exception.Message)"
+} finally {
+  if ($script:SummaryWriteFailed) {
+    Write-Host '::warning::One or more lines could not be written to GITHUB_STEP_SUMMARY' +
+               ' (the file is capped). The console output above is complete.'
+  }
+}
+
+# Unconditional, and the last statement in the file.
 exit 0
