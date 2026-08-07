@@ -300,11 +300,19 @@
          Bumped 0.120.6 -> 0.121.0: brings AiDotNet.Tensors #925, which prevents full-span
          autodiff views from being returned to the tensor pool while the graph still owns them. -->
 
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.121.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.120.6" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.121.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.120.6" />
+    <!-- Bumped 0.121.0 -> 0.122.0: restores the ALLOCATING Engine.TensorBroadcastMultiply /
+         TensorBroadcastAdd / TensorBroadcastDivide overloads that 0.121.0 shipped only in
+         *Into / *InPlace form. Their removal is what master #1987 worked around by hand; with
+         0.122.0 the call surface is back, so that workaround is no longer load-bearing.
 
+         All four move together. This branch had drifted to OneDNN/CLBlast 0.120.6 against
+         Tensors/OpenBLAS 0.121.0, and master had already restored lockstep at 0.121.0 -- taking
+         master's shape and bumping the whole set keeps the corelease invariant the comment above
+         describes. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.122.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.122.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.122.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.122.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />

@@ -238,7 +238,7 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         try
         {
             SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

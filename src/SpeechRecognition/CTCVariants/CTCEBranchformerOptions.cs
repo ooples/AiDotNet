@@ -32,6 +32,9 @@ public class CTCEBranchformerOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
+        // Copy the array itself, not the reference: a clone that shared the original's vocabulary
+        // would see later edits to it, which is not what copying an options object should mean.
+        Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
     public int SampleRate { get; set; } = 16000;
