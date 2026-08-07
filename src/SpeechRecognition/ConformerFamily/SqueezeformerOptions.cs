@@ -40,6 +40,7 @@ public class SqueezeformerOptions : ModelOptions
         WeightDecay = other.WeightDecay;
         Language = other.Language;
         Vocabulary = other.Vocabulary;
+        UseLayerNormalization = other.UseLayerNormalization;
     }
 
     public int SampleRate { get; set; } = 16000;

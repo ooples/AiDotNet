@@ -33,6 +33,25 @@ public class SeACoOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
+
+        // SeACo's own properties, as opposed to the shared ASR ones above. Omitting any of them
+        // is silent data loss: the clone keeps the default while the original keeps the
+        // configured value. LearningRate is the one that bites hardest - a clone would train at
+        // a different rate than the model it was copied from.
+        NumDecoderLayers = other.NumDecoderLayers;
+        NumBiasEncoderLayers = other.NumBiasEncoderLayers;
+        FeedForwardDim = other.FeedForwardDim;
+        LearningRate = other.LearningRate;
+        TrainingStage = other.TrainingStage;
+        CeWeight = other.CeWeight;
+        MaeWeight = other.MaeWeight;
+        BiasMergeLambda = other.BiasMergeLambda;
+        SamplerLambda = other.SamplerLambda;
+        HotwordMinLength = other.HotwordMinLength;
+        HotwordMaxLength = other.HotwordMaxLength;
+        HotwordMaskTokenId = other.HotwordMaskTokenId;
+        HotwordBatchRatio = other.HotwordBatchRatio;
+        HotwordUtteranceRatio = other.HotwordUtteranceRatio;
     }
 
     public int SampleRate { get; set; } = 16000;
