@@ -306,7 +306,7 @@
          0.122.0 the call surface is back, so that workaround is no longer load-bearing.
 
          All four move together. This branch had drifted to OneDNN/CLBlast 0.120.6 against
-         Tensors/OpenBLAS 0.121.0, and master had already restored lockstep at 0.121.0 -- taking
+         Tensors/OpenBLAS 0.121.0, while master had already restored lockstep at 0.121.0. Taking
          master's shape and bumping the whole set keeps the corelease invariant the comment above
          describes. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.122.0" />
