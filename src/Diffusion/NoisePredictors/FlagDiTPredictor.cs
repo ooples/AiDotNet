@@ -93,7 +93,32 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
     /// <inheritdoc />
-    public override long ParameterCount { get; }
+    /// <inheritdoc />
+    /// <remarks>
+    /// Summed from FlagDiTLayerSequence -- the same canonical order GetParameters,
+    /// SetParameters and GetParameterChunks all walk -- so the count cannot describe anything
+    /// other than the vector.
+    /// <para>
+    /// This was an auto-property assigned once in the constructor from a hand-written estimate,
+    /// which is strictly worse than a formula evaluated on demand: a snapshot taken before any
+    /// lazy layer materializes can never correct itself. No second cache is layered on top,
+    /// because each layer already caches its own count and nothing notifies a predictor when a
+    /// layer materializes late -- that missing signal is what made the previous layer-level
+    /// cache report 16,900 parameters against 17,972 real values.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var layer in FlagDiTLayerSequence())
+            {
+                if (layer is not null) total += layer.ParameterCount;
+            }
+            return total;
+        }
+    }
 
     /// <summary>
     /// Initializes a new Flag-DiT predictor.
@@ -128,7 +153,6 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         _seqLen = (latentSize / PatchSize) * (latentSize / PatchSize);
 
         InitializeLayers(seed);
-        ParameterCount = CalculateParameterCount();
     }
 
     [MemberNotNull(nameof(_patchEmbed), nameof(_timeEmbed1), nameof(_timeEmbed2), nameof(_contextProj),
@@ -182,19 +206,6 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         _outputProj = LazyDense(_hiddenSize, _patchDim);
     }
 
-    private long CalculateParameterCount()
-    {
-        long count = _patchEmbed.ParameterCount + _timeEmbed1.ParameterCount
-            + _timeEmbed2.ParameterCount + _contextProj.ParameterCount;
-        for (int i = 0; i < _numLayers; i++)
-        {
-            count += _attnNormPre[i].ParameterCount + _attnNormPost[i].ParameterCount
-                + _attn[i].ParameterCount + _ffnNormPre[i].ParameterCount + _ffnNormPost[i].ParameterCount
-                + _ffn1[i].ParameterCount + _ffn2[i].ParameterCount + _adaLN[i].ParameterCount;
-        }
-        count += _finalNorm.ParameterCount + _finalAdaLN.ParameterCount + _outputProj.ParameterCount;
-        return count;
-    }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
