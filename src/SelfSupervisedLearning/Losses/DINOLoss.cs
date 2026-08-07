@@ -359,18 +359,37 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
     }
 
     /// <summary>
-    /// IContrastiveLoss implementation — delegates to ComputeLoss with default center update.
-    /// </summary>
-    /// <summary>
     /// Differentiable DINO cross-entropy: -sum(P_teacher * log P_student).
     /// </summary>
+    /// <param name="view1">Student output [batch, dim].</param>
+    /// <param name="view2">Teacher output [batch, dim].</param>
+    /// <param name="updateCenter">
+    /// Whether to advance the teacher EMA center. Pass <c>false</c> to MEASURE the loss without
+    /// changing state.
+    /// </param>
     /// <remarks>
+    /// <para>
     /// The teacher is centered and sharpened at its own temperature and is treated as a CONSTANT
     /// target (DINO stops the gradient through the teacher branch, Caron et al. 2021), so only the
     /// student path carries tape history. log P_student uses the stable log-softmax rather than
     /// log(softmax(x) + eps), which both loses precision and biases the loss.
+    /// </para>
+    /// <para>
+    /// COMPUTING THE LOSS IS NOT SUPPOSED TO TRAIN THE TEACHER. <see cref="UpdateCenter"/> advances
+    /// an EMA, so every call shifts the targets subsequent calls are scored against. Evaluating for
+    /// validation or logging through a path that always updates makes a run depend on how many times
+    /// the loss happened to be measured, which is not reproducible. The scalar three-argument
+    /// <see cref="ComputeLoss(Tensor{T}, Tensor{T}, bool)"/> already exposed this control; the
+    /// differentiable path now does too.
+    /// </para>
+    /// <para>
+    /// It is a separate name rather than a <c>bool</c> overload because a
+    /// <c>ComputeLoss(Tensor, Tensor, bool)</c> returning <c>Tensor&lt;T&gt;</c> would collide with
+    /// the existing scalar overload of that exact signature -- same parameters, different return
+    /// type, which C# rejects.
+    /// </para>
     /// </remarks>
-    public override Tensor<T> ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    public Tensor<T> ComputeDifferentiableLoss(Tensor<T> view1, Tensor<T> view2, bool updateCenter = true)
     {
         if (view1 is null) throw new ArgumentNullException(nameof(view1));
         if (view2 is null) throw new ArgumentNullException(nameof(view2));
@@ -389,9 +408,21 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         var crossEntropy = Engine.ReduceSum(
             Engine.TensorMultiply(teacherProbs, studentLogProbs), null, keepDims: false);
 
-        UpdateCenter(view2);
+        if (updateCenter)
+        {
+            UpdateCenter(view2);
+        }
 
         return Engine.TensorNegate(
             Engine.TensorDivideScalar(crossEntropy, NumOps.FromDouble(batchSize)));
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Updates the teacher EMA center, matching the training-path default. Call
+    /// <see cref="ComputeDifferentiableLoss"/> with <c>updateCenter: false</c> to measure the loss
+    /// without advancing it.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+        => ComputeDifferentiableLoss(view1, view2, updateCenter: true);
 }
