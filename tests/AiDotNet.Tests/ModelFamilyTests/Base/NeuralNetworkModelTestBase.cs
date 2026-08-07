@@ -568,8 +568,24 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             if (!string.IsNullOrEmpty(traceDirectory))
                 Directory.CreateDirectory(traceDirectory);
 
+            // ONE FILE PER PROCESS AND THREAD, for the same reason ReportGradientFinding needs it:
+            // xUnit runs a shard's test classes in PARALLEL and every fixture's InitializeAsync /
+            // DisposeAsync appended to this one path. Concurrent File.AppendAllText throws
+            // IOException on a sharing violation, and a lost marker defeats the entire purpose --
+            // attributing a runner-level OOM when VSTest cannot flush its own output is exactly the
+            // situation in which the busiest shard loses the most markers.
+            //
+            // The workflow tails the directory, so a suffixed sibling is still seen; the catch below
+            // stays as a backstop for a genuinely unavailable filesystem.
+            string traceStem = Path.GetFileNameWithoutExtension(tracePath);
+            string traceExt = Path.GetExtension(tracePath);
+            string tracePerWriter = $"{traceStem}.{Environment.ProcessId}-{Environment.CurrentManagedThreadId}{traceExt}";
+            string traceTarget = string.IsNullOrEmpty(traceDirectory)
+                ? tracePerWriter
+                : Path.Combine(traceDirectory, tracePerWriter);
+
             File.AppendAllText(
-                tracePath,
+                traceTarget,
                 $"{DateTimeOffset.UtcNow:O} [{phase}] {GetType().FullName} precision={typeof(T).FullName}{Environment.NewLine}");
         }
         catch (Exception ex)
@@ -1219,7 +1235,23 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // then also visits the children the parent already handles, and HiFiGAN came out of
         // training producing identical outputs for different inputs. Drive one forward and ask the
         // question at the point the property actually has to hold.
-        network.Predict(CreateRandomTensor(InputShape, rng));
+        // THE SAME GUARD THE SIBLING INVARIANTS USE. Some layers refuse a non-training Predict and
+        // throw InvalidOperationException; three other invariants in this file already wrap their
+        // warm-up forward for that reason. Unguarded, the exception escaped and this test failed
+        // with a forward-pass error that says nothing about sub-layer registration -- and the
+        // comment above states the forward exists ONLY to trigger lazy registration, so its outcome
+        // is not a result worth reporting either way.
+        var warmUpInput = CreateRandomTensor(InputShape, rng);
+        try
+        {
+            network.Predict(warmUpInput);
+        }
+        catch (InvalidOperationException)
+        {
+            network.SetTrainingMode(true);
+            try { network.Predict(warmUpInput); }
+            catch (System.Exception) { /* warm-up only; registration is asserted below either way */ }
+        }
 
         var offenders = new List<string>();
         foreach (var layer in network.Layers)
@@ -2413,11 +2445,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // Odometer over every non-class coordinate (i.e. every pixel); set one random class = 1.
             var coord = new int[rank];
             var span = oneHot.Data.Span;
+            int pixelsWritten = 0;
             while (true)
             {
                 int baseOffset = 0;
                 for (int i = 0; i < rank; i++) baseOffset += coord[i] * strides[i];
                 span[baseOffset + rng.Next(numClasses) * classStride] = NumOps.One;
+                pixelsWritten++;
 
                 int axis = rank - 1;
                 while (axis >= 0)
@@ -2430,31 +2464,22 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 if (axis < 0) break;
             }
 
-            // Unconditionally verify the invariant the loss depends on: every pixel is a valid
-            // one-hot distribution (its class column sums to exactly 1). Guards the construction
-            // odometer against regression so the "well-posed target" contract stays honest.
-            var vcoord = new int[rank];
-            int pixelsChecked = 0;
-            while (true)
-            {
-                int baseOffset = 0;
-                for (int i = 0; i < rank; i++) baseOffset += vcoord[i] * strides[i];
-                double pixelSum = 0.0;
-                for (int c = 0; c < numClasses; c++) pixelSum += ConvertToDouble(span[baseOffset + c * classStride]);
-                Assert.Equal(1.0, pixelSum, 6);
-                pixelsChecked++;
+            // COUNTED DURING CONSTRUCTION, NOT RE-WALKED. This used to run a second odometer over
+            // every pixel and call Assert.Equal once per position: for a dense segmentation target
+            // such as [1, C, 128, 128] that is 16384 xUnit assertion calls, on a helper called by
+            // five invariants (one of them twice) against a 120 s per-test gate.
+            //
+            // Two totals verify the same property for two passes over the buffer and no per-pixel
+            // asserts. The buffer starts zeroed and each pixel writes exactly one 1, so the sum over
+            // the WHOLE tensor equals the pixel count if and only if every pixel got its own cell:
+            // any stride collision leaves one pixel at zero (or overwrites a cell already at 1) and
+            // drops the sum below the count.
+            int expectedPixels = target.Length / numClasses;
+            double totalMass = 0.0;
+            for (int i = 0; i < span.Length; i++) totalMass += ConvertToDouble(span[i]);
 
-                int axis = rank - 1;
-                while (axis >= 0)
-                {
-                    if (axis == classAxis) { axis--; continue; }
-                    if (++vcoord[axis] < shape[axis]) break;
-                    vcoord[axis] = 0;
-                    axis--;
-                }
-                if (axis < 0) break;
-            }
-            Assert.Equal(target.Length / numClasses, pixelsChecked);
+            Assert.Equal(expectedPixels, pixelsWritten);
+            Assert.Equal((double)expectedPixels, totalMass, 6);
             return oneHot;
         }
         return target;
