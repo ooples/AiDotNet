@@ -334,8 +334,101 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc />
     public INoiseScheduler<T> Scheduler => _scheduler;
 
+    /// <summary>
+    /// Child components whose parameters belong to this model — the noise predictor, the VAE, a
+    /// conditioner — in the order they were registered.
+    /// </summary>
+    /// <remarks>
+    /// Registration order IS serialization order, because <see cref="GetParameters"/> concatenates
+    /// in this order and <see cref="SetParameters"/> slices back in it.
+    /// </remarks>
+    private readonly List<IParameterizable<T, Tensor<T>, Tensor<T>>> _parameterComponents = new();
+
+    /// <summary>
+    /// Declares a child component as part of this model's parameter surface. Call once per
+    /// component, in the constructor.
+    /// </summary>
+    /// <param name="component">The child. Null is ignored, so a component built only on a branch the constructor did not take is simply absent.</param>
+    /// <remarks>
+    /// <para>
+    /// This is the model-level counterpart of <c>LayerBase.RegisterSubLayer</c>, and it exists for
+    /// the same reason. These three surfaces used to be <c>abstract</c>, so all 221 diffusion models
+    /// hand-wrote them, and 44 of those wrote expressions like
+    /// <c>_predictor.ParameterCount + _vae.GetParameters().Length</c> — mixing a COUNT from one
+    /// child with a VECTOR LENGTH from another. Those agree only while both children agree with
+    /// themselves. <c>VideoUNetPredictor</c>'s count was a hand-written estimate that was nine times
+    /// out (32,385,924 against a real 295,840,220), and every model delegating to it inherited the
+    /// error; <c>SetParameters</c> pairs by length, so a checkpoint restored into the wrong tensors
+    /// with nothing reported.
+    /// </para>
+    /// <para>
+    /// Registration is identity-based and idempotent, matching <c>RegisterSubLayer</c>: registering
+    /// the same instance twice is a no-op rather than double-counting it.
+    /// </para>
+    /// <para><b>For Beginners:</b> tell the base what your model is made of and you never write
+    /// parameter counting, saving or loading code — it is derived from that one declaration.</para>
+    /// </remarks>
+    protected void RegisterParameterComponent(IParameterizable<T, Tensor<T>, Tensor<T>>? component)
+    {
+        if (component is null) return;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            if (ReferenceEquals(_parameterComponents[i], component)) return;
+        }
+        _parameterComponents.Add(component);
+        InvalidateTrainableParametersCache();
+    }
+
+    /// <summary>The registered components, in registration order.</summary>
+    protected IReadOnlyList<IParameterizable<T, Tensor<T>, Tensor<T>>> ParameterComponents
+    {
+        get { EnsureComponentsRegistered(); return _parameterComponents; }
+    }
+
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declare this model's components here with <see cref="RegisterParameterComponent"/>.
+    /// </summary>
+    /// <remarks>
+    /// A hook rather than constructor code, for the same reason layers use a generated
+    /// <c>EnsureSubLayersRegistered</c>: it runs after every field is assigned, so a component
+    /// created late — or replaced by a subclass — is still seen, and field-initialisation order
+    /// stops being something the author has to reason about.
+    /// </remarks>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>Runs <see cref="RegisterComponents"/> once, before the parameter surface is read.</summary>
+    private void EnsureComponentsRegistered()
+    {
+        if (_componentsRegistered) return;
+        // Set BEFORE invoking: RegisterParameterComponent invalidates caches, which can re-enter
+        // through a parameter query, and this must not recurse.
+        _componentsRegistered = true;
+        RegisterComponents();
+    }
+
     /// <inheritdoc />
-    public abstract long ParameterCount { get; }
+    /// <remarks>
+    /// Derived from the registered components, in the same order <see cref="GetParameters"/> emits
+    /// them, so the two cannot disagree. A model that has registered nothing and overrides nothing
+    /// reports zero, which is the honest answer for a model that has declared no components.
+    /// </remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            EnsureComponentsRegistered();
+            long total = 0;
+            for (int i = 0; i < _parameterComponents.Count; i++)
+            {
+                total += _parameterComponents[i].ParameterCount;
+            }
+            return total;
+        }
+    }
 
     /// <summary>
     /// Streams the diffusion stack's trainable weight tensors per-tensor.
@@ -1414,10 +1507,81 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     #region IParameterizable<T, Tensor<T>, Tensor<T>> Implementation
 
     /// <inheritdoc />
-    public abstract Vector<T> GetParameters();
+    /// <remarks>
+    /// Concatenates the registered components in registration order — the same order
+    /// <see cref="ParameterCount"/> sums and <see cref="SetParameters"/> slices back, so all three
+    /// describe one enumeration and cannot drift apart.
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        EnsureComponentsRegistered();
+        if (_parameterComponents.Count == 0) return new Vector<T>(0);
+
+        // Sized from the components' own vectors rather than ParameterCount: the count is virtual,
+        // and a subclass that overrides it inconsistently would otherwise overflow the buffer here
+        // instead of failing the contract test. Same reasoning as LayerBase.GetParameters.
+        var parts = new Vector<T>[_parameterComponents.Count];
+        int total = 0;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            parts[i] = _parameterComponents[i].GetParameters();
+            total += parts[i].Length;
+        }
+
+        var result = new Vector<T>(total);
+        int offset = 0;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            for (int j = 0; j < parts[i].Length; j++) result[offset++] = parts[i][j];
+        }
+        return result;
+    }
 
     /// <inheritdoc />
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <remarks>
+    /// The exact inverse of <see cref="GetParameters"/>: each component is handed the slice it
+    /// produced, in the same order. Slice widths come from each component's OWN vector length, not
+    /// from its <c>ParameterCount</c> — those are the two numbers this whole design exists to stop
+    /// treating as interchangeable.
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        EnsureComponentsRegistered();
+        if (_parameterComponents.Count == 0)
+        {
+            if (parameters.Length == 0) return;
+            throw new ArgumentException(
+                $"{GetType().Name} has no registered parameter components, but was given " +
+                $"{parameters.Length} parameters. Register its components with " +
+                "RegisterParameterComponent, or override SetParameters.", nameof(parameters));
+        }
+
+        var widths = new int[_parameterComponents.Count];
+        int expected = 0;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            widths[i] = _parameterComponents[i].GetParameters().Length;
+            expected += widths[i];
+        }
+
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, but got {parameters.Length} " +
+                $"(model {GetType().Name}, {_parameterComponents.Count} components).",
+                nameof(parameters));
+        }
+
+        int offset = 0;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            if (widths[i] == 0) continue;
+            var slice = new Vector<T>(widths[i]);
+            for (int j = 0; j < widths[i]; j++) slice[j] = parameters[offset++];
+            _parameterComponents[i].SetParameters(slice);
+        }
+    }
 
     /// <inheritdoc />
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
