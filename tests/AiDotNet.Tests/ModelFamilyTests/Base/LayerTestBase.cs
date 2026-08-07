@@ -968,15 +968,33 @@ public abstract class LayerTestBase
         // matrix entry in a dense flat buffer, so comparing them positionally checks unrelated
         // numbers. Map through the COO coordinates instead. A sparse gradient shares the parameter's
         // payload layout, so it is read directly.
+        // THE PUBLIC SPARSE API, NOT THE INTERNAL PAYLOAD. This read the backing DataVector of
+        // the very type under test, so a change to that payload's layout would silently change
+        // what the gradient check compares -- the helper would keep returning a number and the
+        // number would mean something else. SparseTensor<double> exposes Values / RowIndices /
+        // ColumnIndices, which is what the SparseTensor suites themselves assert against.
+        //
+        // COO construction is rank-2, so the column stride is Shape[1]; a non-rank-2 sparse
+        // tensor has no COO reading and is refused rather than indexed on a guess.
         static double ReadAnalyticalScalar(Tensor<double> grad, Tensor<double> param, int i)
         {
-            if (grad is SparseTensor<double> gsp) return gsp.DataVector[i];
+            if (grad is SparseTensor<double> gsp)
+            {
+                return i >= 0 && i < gsp.Values.Length ? gsp.Values[i] : 0.0;
+            }
+
             if (param is SparseTensor<double> psp)
             {
-                int cols = psp.Shape[psp.Shape.Length - 1];
-                int flat = psp.RowIndices[i] * cols + psp.ColumnIndices[i];
-                return flat >= 0 && flat < grad.Length ? grad.DataVector[flat] : 0.0;
+                Assert.True(psp.Shape.Length == 2,
+                    $"SparseTensor COO indices are rank-2; got rank {psp.Shape.Length}, so " +
+                    "RowIndices/ColumnIndices cannot be mapped to a flat gradient index.");
+                if (i < 0 || i >= psp.RowIndices.Length) return 0.0;
+
+                int cols = psp.Shape[1];
+                int flat = (psp.RowIndices[i] * cols) + psp.ColumnIndices[i];
+                return flat >= 0 && flat < grad.Length ? grad[flat] : 0.0;
             }
+
             return grad[i];
         }
 

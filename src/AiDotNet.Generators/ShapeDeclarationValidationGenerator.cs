@@ -101,22 +101,43 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                 predicate: static (node, _) =>
                     node is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax { AttributeLists.Count: > 0 }
                     || node is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax { BaseList: not null },
-                transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
-            .Where(static s => s is not null)
+                transform: static (ctx, _) => AnalyzeType(ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol))
+            .Where(static f => f is not null)
             .Collect();
 
-        context.RegisterSourceOutput(candidates, static (spc, symbols) => Validate(spc, symbols));
+        // VALIDATE IN THE TRANSFORM, NOT AFTER Collect(). The pipeline previously carried
+        // INamedTypeSymbol all the way through Collect() and into the output step. A symbol
+        // roots its Compilation and has no value equality, so Roslyn could neither release the
+        // previous compilation nor cache this step -- the generator re-ran in full on every
+        // keystroke while pinning the old compilation in memory, which is the cost this
+        // incremental API exists to avoid.
+        //
+        // Symbols are still touched, but only INSIDE the transform, where doing so is
+        // expected. What crosses the pipeline boundary afterwards is a list of serializable
+        // diagnostics: descriptor, primitives-only span, and message arguments.
+        context.RegisterSourceOutput(candidates, static (spc, findings) =>
+        {
+            var seen = new HashSet<string>();
+            foreach (var group in findings)
+            {
+                if (group is null) continue;
+                // Partial types surface once per declaration; report each type only once.
+                if (!seen.Add(group.Value.TypeKey)) continue;
+                foreach (var f in group.Value.Findings) spc.ReportDiagnostic(f.ToDiagnostic());
+            }
+        });
     }
 
-    private static void Validate(SourceProductionContext spc, ImmutableArray<INamedTypeSymbol?> symbols)
+    /// <summary>Runs every rule against one type and returns the findings as DATA.</summary>
+    /// <remarks>
+    /// Called from the transform, which is where touching symbols is expected and where they
+    /// do not become pipeline state. Nothing that roots a Compilation leaves this method.
+    /// </remarks>
+    private static TypeFindings? AnalyzeType(INamedTypeSymbol? type)
     {
-        // Partial types surface once per declaration; report each type only once.
-        var seen = new HashSet<string>();
-
-        foreach (var type in symbols)
+        if (type is null) return null;
+        var spc = new FindingCollector();
         {
-            if (type is null) continue;
-            if (!seen.Add(type.ToDisplayString())) continue;
 
             var layouts = type.GetAttributes()
                 .Where(a => a.AttributeClass?.ToDisplayString() == LayoutAttributeName)
@@ -128,7 +149,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
 
             if (hasContract && !layouts.Any(l => l.IsInput))
             {
-                spc.ReportDiagnostic(Diagnostic.Create(
+                spc.ReportDiagnostic(new ShapeFinding(
                     ContractWithoutInputLayoutDescriptor, type.Locations.FirstOrDefault(), type.Name));
             }
 
@@ -162,14 +183,14 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                spc.ReportDiagnostic(Diagnostic.Create(
+                spc.ReportDiagnostic(new ShapeFinding(
                     OverridesForwardDescriptor,
                     member.Locations.FirstOrDefault() ?? type.Locations.FirstOrDefault(),
                     type.Name));
             }
             }
 
-            if (layouts.Count == 0) continue;
+            if (layouts.Count == 0) return Finish(type, spc);
 
             foreach (var layout in layouts)
             {
@@ -178,7 +199,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                     .FirstOrDefault(g => g.Count() > 1);
                 if (dupe is not null)
                 {
-                    spc.ReportDiagnostic(Diagnostic.Create(
+                    spc.ReportDiagnostic(new ShapeFinding(
                         DuplicateAxisDescriptor, layout.Location ?? type.Locations.FirstOrDefault(),
                         type.Name, layout.DirectionName, string.Join(", ", layout.Axes), dupe.Key));
                 }
@@ -201,7 +222,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                         }
                         else if (!list.Contains(rendered))
                         {
-                            spc.ReportDiagnostic(Diagnostic.Create(
+                            spc.ReportDiagnostic(new ShapeFinding(
                                 AmbiguousRankDescriptor, layout.Location ?? type.Locations.FirstOrDefault(),
                                 type.Name, group.Key ? "input" : "output", rank, list[0], rendered));
                             list.Add(rendered);
@@ -210,6 +231,74 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                 }
             }
         }
+
+        return Finish(type, spc);
+    }
+
+    /// <summary>Projects whatever was collected into the equatable result, or null when clean.</summary>
+    private static TypeFindings? Finish(INamedTypeSymbol type, FindingCollector spc)
+        => spc.Count == 0 ? null : new TypeFindings(type.ToDisplayString(), spc.ToImmutable());
+
+    /// <summary>Collects findings as data during analysis.</summary>
+    private sealed class FindingCollector
+    {
+        private readonly List<ShapeFinding> _items = new();
+        public int Count => _items.Count;
+        public void ReportDiagnostic(ShapeFinding f) => _items.Add(f);
+        public System.Collections.Immutable.ImmutableArray<ShapeFinding> ToImmutable() => _items.ToImmutableArray();
+    }
+
+    /// <summary>One type's findings, keyed so partial declarations report once.</summary>
+    private readonly struct TypeFindings : System.IEquatable<TypeFindings>
+    {
+        public TypeFindings(string typeKey, System.Collections.Immutable.ImmutableArray<ShapeFinding> findings)
+        { TypeKey = typeKey; Findings = findings; }
+        public string TypeKey { get; }
+        public System.Collections.Immutable.ImmutableArray<ShapeFinding> Findings { get; }
+        public bool Equals(TypeFindings other) => TypeKey == other.TypeKey && Findings.SequenceEqual(other.Findings);
+        public override bool Equals(object? o) => o is TypeFindings t && Equals(t);
+        public override int GetHashCode() => (TypeKey?.GetHashCode() ?? 0) * 397 ^ Findings.Length;
+    }
+
+    /// <summary>A diagnostic reduced to primitives so it neither roots a Compilation nor breaks equality.</summary>
+    private readonly struct ShapeFinding : System.IEquatable<ShapeFinding>
+    {
+        public ShapeFinding(DiagnosticDescriptor d, Location? loc, params object?[] args)
+        {
+            Descriptor = d;
+            var ls = loc?.GetLineSpan();
+            FilePath = ls?.Path ?? string.Empty;
+            Start = loc?.SourceSpan.Start ?? 0;
+            Length = loc?.SourceSpan.Length ?? 0;
+            StartLine = ls?.StartLinePosition.Line ?? 0;
+            StartChar = ls?.StartLinePosition.Character ?? 0;
+            EndLine = ls?.EndLinePosition.Line ?? 0;
+            EndChar = ls?.EndLinePosition.Character ?? 0;
+            Args = string.Join("", args.Select(a => a?.ToString() ?? string.Empty));
+        }
+        public DiagnosticDescriptor Descriptor { get; }
+        public string FilePath { get; }
+        public int Start { get; }
+        public int Length { get; }
+        public int StartLine { get; }
+        public int StartChar { get; }
+        public int EndLine { get; }
+        public int EndChar { get; }
+        public string Args { get; }
+        public Diagnostic ToDiagnostic()
+        {
+            var loc = string.IsNullOrEmpty(FilePath)
+                ? Location.None
+                : Location.Create(FilePath,
+                    new Microsoft.CodeAnalysis.Text.TextSpan(Start, Length),
+                    new Microsoft.CodeAnalysis.Text.LinePositionSpan(
+                        new Microsoft.CodeAnalysis.Text.LinePosition(StartLine, StartChar),
+                        new Microsoft.CodeAnalysis.Text.LinePosition(EndLine, EndChar)));
+            return Diagnostic.Create(Descriptor, loc, Args.Length == 0 ? new object[0] : Args.Split(''));
+        }
+        public bool Equals(ShapeFinding o) => ReferenceEquals(Descriptor, o.Descriptor) && FilePath == o.FilePath && Start == o.Start && Args == o.Args;
+        public override bool Equals(object? o) => o is ShapeFinding f && Equals(f);
+        public override int GetHashCode() => ((Descriptor?.Id?.GetHashCode() ?? 0) * 397 ^ Start) * 397 ^ (Args?.GetHashCode() ?? 0);
     }
 
     /// <summary>True when the type is a layer - the only thing graph tracing observes.</summary>

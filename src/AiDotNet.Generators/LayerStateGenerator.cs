@@ -115,11 +115,11 @@ public class LayerStateGenerator : IIncrementalGenerator
             return new LayerModel
             {
                 TypeName = type.Name,
-                Location = syntax.Identifier.GetLocation(),
+                Location = new SourceSpan(syntax.Identifier.GetLocation()),
                 Diagnostics =
                 {
-                    Diagnostic.Create(
-                        NotALayer, syntax.Identifier.GetLocation(), type.Name, type.TypeKind.ToString().ToLowerInvariant()),
+                    new PendingDiagnostic(
+                        NotALayer, new SourceSpan(syntax.Identifier.GetLocation()), type.Name, type.TypeKind.ToString().ToLowerInvariant()),
                 },
             };
         }
@@ -132,7 +132,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             ContainingTypes = ContainingChain(type),
             TypeParameters = type.TypeParameters.Select(tp => tp.Name).ToList(),
             BaseFqn = type.ConstructedFrom.ToDisplayString(UnqualifiedGenerics),
-            Location = syntax.Identifier.GetLocation(),
+            Location = new SourceSpan(syntax.Identifier.GetLocation()),
             IsPartial = type.DeclaringSyntaxReferences
                 .Select(r => r.GetSyntax())
                 .OfType<TypeDeclarationSyntax>()
@@ -169,8 +169,8 @@ public class LayerStateGenerator : IIncrementalGenerator
                 info.Kind = Classify(p.Type);
                 if (info.Kind == ValueKind.Unsupported)
                 {
-                    model.Diagnostics.Add(Diagnostic.Create(
-                        UnsupportedType, p.Locations.FirstOrDefault() ?? model.Location,
+                    model.Diagnostics.Add(new PendingDiagnostic(
+                        UnsupportedType, SpanFor(p, model),
                         type.Name, p.Name, p.Type.ToDisplayString()));
                     return model;
                 }
@@ -179,8 +179,8 @@ public class LayerStateGenerator : IIncrementalGenerator
                 info.NeedsConvert = needsConvert;
                 if (info.BackingMember is null)
                 {
-                    model.Diagnostics.Add(Diagnostic.Create(
-                        NoBackingMember, p.Locations.FirstOrDefault() ?? model.Location,
+                    model.Diagnostics.Add(new PendingDiagnostic(
+                        NoBackingMember, SpanFor(p, model),
                         type.Name, p.Name, Pascal(p.Name), p.Type.ToDisplayString()));
                     return model;
                 }
@@ -199,8 +199,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             }
             else
             {
-                model.Diagnostics.Add(Diagnostic.Create(
-                    Unsuppliable, p.Locations.FirstOrDefault() ?? model.Location,
+                model.Diagnostics.Add(new PendingDiagnostic(
+                    Unsuppliable, SpanFor(p, model),
                     type.Name, p.Name, p.Type.ToDisplayString()));
                 return model;
             }
@@ -210,12 +210,12 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         if (!model.IsPartial)
         {
-            model.Diagnostics.Add(Diagnostic.Create(NotPartial, model.Location, type.Name));
+            model.Diagnostics.Add(new PendingDiagnostic(NotPartial, model.Location, type.Name));
         }
 
         if (model.HasHandWrittenMetadata)
         {
-            model.Diagnostics.Add(Diagnostic.Create(
+            model.Diagnostics.Add(new PendingDiagnostic(
                 HandWrittenMetadata, model.Location, type.Name,
                 string.Join(", ", marked.Select(p => p.Name))));
         }
@@ -351,7 +351,7 @@ public class LayerStateGenerator : IIncrementalGenerator
 
     private static void Emit(SourceProductionContext spc, ImmutableArray<LayerModel> models)
     {
-        foreach (var d in models.SelectMany(m => m.Diagnostics))
+        foreach (var d in models.SelectMany(m => m.Diagnostics).Select(d => d.ToDiagnostic()))
         {
             spc.ReportDiagnostic(d);
         }
@@ -367,8 +367,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             // constructors could generate a different factory between builds. Ordering on the
             // constructor's own location also makes "first by source order" true.
             .Select(g => g
-                .OrderBy(m => m.Location.SourceTree?.FilePath ?? string.Empty, System.StringComparer.Ordinal)
-                .ThenBy(m => m.Location.SourceSpan.Start)
+                .OrderBy(m => m.Location.FilePath, System.StringComparer.Ordinal)
+                .ThenBy(m => m.Location.Start)
                 .First())
             .OrderBy(m => m.BaseFqn, System.StringComparer.Ordinal)
             .ToList();
@@ -387,7 +387,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             if (model.TypeParameters.Count != 1)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(
-                    UnsupportedArity, model.Location, model.TypeName, model.TypeParameters.Count));
+                    UnsupportedArity, model.Location.ToLocation(), model.TypeName, model.TypeParameters.Count));
             }
 
             spc.AddSource($"{HintName(model)}.LayerState.g.cs", SourceText(EmitWriter(model)));
@@ -591,6 +591,13 @@ public class LayerStateGenerator : IIncrementalGenerator
         Component,
     }
 
+    /// <summary>The symbol's own span when it has one, else the model's.</summary>
+    private static SourceSpan SpanFor(ISymbol symbol, LayerModel model)
+    {
+        var loc = symbol.Locations.FirstOrDefault();
+        return loc is null || loc == Location.None ? model.Location : new SourceSpan(loc);
+    }
+
     /// <summary>True when the type derives from AiDotNet's LayerBase.</summary>
     private static bool DerivesFromLayerBase(INamedTypeSymbol type)
     {
@@ -687,7 +694,102 @@ public class LayerStateGenerator : IIncrementalGenerator
         public ValueKind Kind;
     }
 
-    private sealed class LayerModel
+    /// <summary>A location reduced to primitives, so it neither roots a Compilation nor breaks equality.</summary>
+    private readonly struct SourceSpan : System.IEquatable<SourceSpan>
+    {
+        public static readonly SourceSpan None = default;
+
+        public SourceSpan(Location location)
+        {
+            var lineSpan = location.GetLineSpan();
+            FilePath = lineSpan.Path ?? string.Empty;
+            Start = location.SourceSpan.Start;
+            Length = location.SourceSpan.Length;
+            StartLine = lineSpan.StartLinePosition.Line;
+            StartChar = lineSpan.StartLinePosition.Character;
+            EndLine = lineSpan.EndLinePosition.Line;
+            EndChar = lineSpan.EndLinePosition.Character;
+        }
+
+        public string FilePath { get; }
+        public int Start { get; }
+        public int Length { get; }
+        public int StartLine { get; }
+        public int StartChar { get; }
+        public int EndLine { get; }
+        public int EndChar { get; }
+
+        /// <summary>Rebuilds a reportable Location at emit time, where rooting no longer matters.</summary>
+        public Location ToLocation()
+            => string.IsNullOrEmpty(FilePath)
+                ? Location.None
+                : Location.Create(
+                    FilePath,
+                    new Microsoft.CodeAnalysis.Text.TextSpan(Start, Length),
+                    new Microsoft.CodeAnalysis.Text.LinePositionSpan(
+                        new Microsoft.CodeAnalysis.Text.LinePosition(StartLine, StartChar),
+                        new Microsoft.CodeAnalysis.Text.LinePosition(EndLine, EndChar)));
+
+        public bool Equals(SourceSpan other)
+            => FilePath == other.FilePath && Start == other.Start && Length == other.Length
+               && StartLine == other.StartLine && StartChar == other.StartChar
+               && EndLine == other.EndLine && EndChar == other.EndChar;
+
+        public override bool Equals(object? obj) => obj is SourceSpan o && Equals(o);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int h = FilePath?.GetHashCode() ?? 0;
+                h = (h * 397) ^ Start;
+                h = (h * 397) ^ Length;
+                return h;
+            }
+        }
+    }
+
+    /// <summary>A diagnostic as descriptor id + span + arguments, rebuilt only at emit time.</summary>
+    private readonly struct PendingDiagnostic : System.IEquatable<PendingDiagnostic>
+    {
+        public PendingDiagnostic(DiagnosticDescriptor descriptor, SourceSpan span, params object?[] args)
+        {
+            Descriptor = descriptor;
+            Span = span;
+            // Joined into one string so equality is a string comparison rather than a
+            // reference comparison over an array, which would never compare equal and would
+            // defeat the caching this exists to restore.
+            Args = string.Join("\u001f", args.Select(a => a?.ToString() ?? string.Empty));
+        }
+
+        public DiagnosticDescriptor Descriptor { get; }
+        public SourceSpan Span { get; }
+        public string Args { get; }
+
+        public Diagnostic ToDiagnostic()
+            => Diagnostic.Create(
+                Descriptor,
+                Span.ToLocation(),
+                Args.Length == 0 ? new object[0] : Args.Split('\u001f'));
+
+        public bool Equals(PendingDiagnostic other)
+            => ReferenceEquals(Descriptor, other.Descriptor) && Span.Equals(other.Span) && Args == other.Args;
+
+        public override bool Equals(object? obj) => obj is PendingDiagnostic o && Equals(o);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int h = Descriptor?.Id?.GetHashCode() ?? 0;
+                h = (h * 397) ^ Span.GetHashCode();
+                h = (h * 397) ^ (Args?.GetHashCode() ?? 0);
+                return h;
+            }
+        }
+    }
+
+    private sealed class LayerModel : System.IEquatable<LayerModel>
     {
         public string? Namespace;
         public string TypeName = string.Empty;
@@ -711,10 +813,57 @@ public class LayerStateGenerator : IIncrementalGenerator
         /// <summary>The type closed over the factory's single numeric parameter.</summary>
         public string ClosedFqn => TypeParameters.Count == 0 ? BaseFqn : BaseFqn + "<T>";
         public List<ParamModel> Parameters = new();
-        public List<Diagnostic> Diagnostics = new();
-        public Location Location = Location.None;
+        /// <summary>Diagnostics as DATA, not as live Diagnostic instances.</summary>
+        /// <remarks>
+        /// A Diagnostic holds a Location, a Location holds a SyntaxTree, and a SyntaxTree roots
+        /// the whole Compilation. Holding them as incremental pipeline state meant Roslyn could
+        /// not release the previous compilation between builds, and -- because neither type has
+        /// value equality -- could not cache the step either, so the generator re-ran in full on
+        /// every keystroke while pinning the old compilation in memory. Both halves of that are
+        /// fixed by carrying only what is needed to REBUILD the diagnostic at emit time.
+        /// </remarks>
+        public List<PendingDiagnostic> Diagnostics = new();
+        public SourceSpan Location = SourceSpan.None;
         public bool IsPartial;
         public bool HasHandWrittenMetadata;
         public bool IsValid;
+
+        /// <summary>Value equality, which is what lets Roslyn cache this pipeline step.</summary>
+        /// <remarks>
+        /// Reference equality on a mutable class means two structurally identical models from
+        /// consecutive builds never compare equal, so the incremental pipeline treats every
+        /// build as a change and re-runs the whole generator. Every member compared here is a
+        /// string, bool, or a sequence of them -- nothing that roots a Compilation.
+        /// </remarks>
+        public bool Equals(LayerModel? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return Namespace == other.Namespace
+                && TypeName == other.TypeName
+                && BaseFqn == other.BaseFqn
+                && IsPartial == other.IsPartial
+                && HasHandWrittenMetadata == other.HasHandWrittenMetadata
+                && IsValid == other.IsValid
+                && Location.Equals(other.Location)
+                && TypeParameters.SequenceEqual(other.TypeParameters)
+                && ContainingTypes.SequenceEqual(other.ContainingTypes)
+                && Diagnostics.SequenceEqual(other.Diagnostics)
+                && Parameters.SequenceEqual(other.Parameters);
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as LayerModel);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int h = TypeName?.GetHashCode() ?? 0;
+                h = (h * 397) ^ (BaseFqn?.GetHashCode() ?? 0);
+                h = (h * 397) ^ Parameters.Count;
+                h = (h * 397) ^ Diagnostics.Count;
+                return h;
+            }
+        }
     }
 }
