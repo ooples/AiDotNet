@@ -1,4 +1,4 @@
-### New Rules
+﻿### New Rules
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|------
@@ -42,3 +42,4 @@ ADNSHAPE004 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Lay
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
 AIDN070 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Layer does not use automatic parameter discovery
 AIDN071 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Parameter surface is derived and should not be overridden
+AIDN072 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model parameter surface is derived and should not be overridden

@@ -62,6 +62,18 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         description: "Delete the override and let LayerBase derive the value. ParameterCount, GetParameters and " +
                      "SetParameters fold one enumeration in one order, so they cannot disagree.");
 
+    private static readonly DiagnosticDescriptor RedundantModelSurface = new(
+        id: "AIDN072",
+        title: "Model parameter surface is derived and should not be overridden",
+        messageFormat: "'{0}' overrides {1}; the model base derives it from the registered components, so this can only restate the fold or drift from it",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Declare the model's components in RegisterComponents and delete the override. " +
+                     "A hand-written model surface is how a count and a vector come to disagree: 44 " +
+                     "diffusion models mixed a COUNT from one child with a VECTOR LENGTH from another " +
+                     "in one expression, and VideoUNetPredictor's estimate was nine times out.");
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -76,6 +88,33 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             foreach (var type in symbols)
             {
                 if (type is null || type.IsAbstract || type.TypeKind != TypeKind.Class) continue;
+
+                // Models whose base already derives the surface from a component registry.
+                if (ExtendsAny(type, "AiDotNet.Diffusion.DiffusionModelBase<",
+                                     "AiDotNet.Diffusion.VAE.VAEModelBase<"))
+                {
+                    var modelLoc = type.Locations.FirstOrDefault(l => l.IsInSource);
+                    if (modelLoc is not null && seen.Add(type.ToDisplayString()))
+                    {
+                        foreach (var member in type.GetMembers())
+                        {
+                            if (!member.IsOverride) continue;
+                            string? ms = member switch
+                            {
+                                IPropertySymbol p2 when p2.Name == "ParameterCount" => "ParameterCount",
+                                IMethodSymbol m2 when m2.Name == "GetParameters" && m2.Parameters.Length == 0 => "GetParameters",
+                                IMethodSymbol m2 when m2.Name == "SetParameters" && m2.Parameters.Length == 1 => "SetParameters",
+                                _ => null,
+                            };
+                            if (ms is null) continue;
+                            var mloc = member.Locations.FirstOrDefault(l => l.IsInSource);
+                            if (mloc is not null)
+                                spc.ReportDiagnostic(Diagnostic.Create(RedundantModelSurface, mloc, type.Name, ms));
+                        }
+                    }
+                    continue;
+                }
+
                 if (!ExtendsLayerBase(type)) continue;
                 if (!seen.Add(type.ToDisplayString())) continue;   // partial declarations
 
@@ -110,6 +149,20 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                 }
             }
         });
+    }
+
+    /// <summary>True when <paramref name="type"/> derives from any of the given base metadata prefixes.</summary>
+    private static bool ExtendsAny(INamedTypeSymbol type, params string[] prefixes)
+    {
+        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        {
+            var name = b.OriginalDefinition.ToDisplayString();
+            foreach (var prefix in prefixes)
+            {
+                if (name.StartsWith(prefix, System.StringComparison.Ordinal)) return true;
+            }
+        }
+        return false;
     }
 
     private static bool ExtendsLayerBase(INamedTypeSymbol type)
