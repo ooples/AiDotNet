@@ -2584,13 +2584,34 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     // Phased rollout tracked in issue #1872.
 
     /// <summary>
-    /// When true, <see cref="Gradients_MatchFiniteDifference"/> runs for this model. Default FALSE:
-    /// the gradcheck infra + robustness (#1872) is validated and enabled on specific canaries
-    /// (FeedForwardNeuralNetwork, BasicVSR++), but broad enablement is a SEPARATE follow-up
-    /// (issue #1872) so it doesn't red this PR's shards while surfacing the backward-bug backlog.
-    /// Models opt in by overriding this to true.
+    /// When true, <see cref="Gradients_MatchFiniteDifference"/> runs for this model. Default TRUE.
     /// </summary>
-    protected virtual bool GradientCheckApplicable => false;
+    /// <remarks>
+    /// <para>
+    /// THE OPT-OUT LIST IS THE WORKLIST, NOT THE WHOLE TREE. This defaulted to <c>false</c>, so the
+    /// gradient-checking machinery reported a pass for every fixture in the repository — a test that
+    /// passes regardless of the implementation, which is the one thing this suite's own guidelines
+    /// treat as a blocking defect. Worse, a green result was indistinguishable from an unrun one, so
+    /// nothing said which families the infra had actually exercised.
+    /// </para>
+    /// <para>
+    /// Inverting it means a family with a real backward bug fails, which is the point: the failures
+    /// were always there, they were just unreported. A family that cannot pass yet overrides this to
+    /// <c>false</c> WITH the tracking issue in its remarks, so the set of overrides is a readable,
+    /// shrinking list of known-broken families rather than a silent blanket:
+    /// </para>
+    /// <code>
+    /// /// &lt;inheritdoc /&gt;
+    /// /// &lt;remarks&gt;Opted out pending #1872 — backward returns zeros for the fused
+    /// /// attention path. Remove this override when that lands.&lt;/remarks&gt;
+    /// protected override bool GradientCheckApplicable =&gt; false;
+    /// </code>
+    /// <para>
+    /// An override without a stated reason and issue is not an opt-out, it is the old default wearing
+    /// a disguise — the review that flagged this asked for the issue number specifically.
+    /// </para>
+    /// </remarks>
+    protected virtual bool GradientCheckApplicable => true;
 
     /// <summary>Maximum number of parameters finite-differenced; each costs two forward passes.</summary>
     protected virtual int GradientCheckSampleCount => 12;
@@ -2622,7 +2643,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!GradientCheckApplicable)
         {
             ReportGradientFinding(GradientReportFile, GetType().FullName ?? GetType().Name,
-                "NOT RUN: GradientCheckApplicable is false for this fixture (see #1872 rollout). "
+                "NOT RUN: this fixture overrides GradientCheckApplicable to false. The override "
+                + "must state its tracking issue; if it does not, it is an unexplained opt-out. "
                 + "This invariant did not execute; its green result carries no information.");
             return;
         }
@@ -2841,7 +2863,18 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// model and finding, so the worklist can be worked down family by family and each one flipped to
     /// blocking as it is fixed. Override to <c>true</c> per family once it is clean.
     /// </remarks>
-    protected virtual bool GradientCorrectnessInvariantBlocking => false;
+    /// <remarks>
+    /// DEFAULT TRUE, for the same reason <see cref="GradientCheckApplicable"/> is. Reporting-first
+    /// was chosen so that turning it on everywhere would not fail an unknown number of families at
+    /// once — but the cost was that a finding was REPORTED AS A PASS, and the same green result came
+    /// back whether the invariant found nothing or never ran. Both invariants this gates now fail on
+    /// a produced finding, and a family that cannot pass yet overrides this to <c>false</c> with its
+    /// tracking issue stated, exactly as described on <see cref="GradientCheckApplicable"/>.
+    ///
+    /// The report file is unchanged and still written on every finding, so the family-by-family
+    /// worklist the original rollout wanted is still produced — it is just no longer the only signal.
+    /// </remarks>
+    protected virtual bool GradientCorrectnessInvariantBlocking => true;
 
     /// <summary>
     /// Parameter-count ceiling above which these invariants report a skip instead of running.
