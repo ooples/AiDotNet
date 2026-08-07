@@ -369,12 +369,24 @@ public class SImPaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         int count = sampleCount ?? _algoOptions.AdaptationPosteriorSamples;
         var lambda = Posterior.GetParameters();
 
-        var taskLambda = AdaptGeneratorToTask(lambda, task, _algoOptions.AdaptationSteps);
-        Posterior.SetParameters(taskLambda);
-        var samples = Posterior.SampleMany(count, _rng);
-
-        Posterior.SetParameters(lambda);
-        return samples;
+        // ParamModel IS RESTORED TOO, not just Posterior. AdaptGeneratorToTask reaches
+        // SupportLossFor, which calls ParamModel.SetParameters(w) once per posterior sample -- so on
+        // return the SHARED MetaModel was left holding a random generator sample instead of the
+        // meta-parameters. Adapt() at the top of this file already captures and restores both;
+        // this path captured only Posterior, so merely SAMPLING the posterior silently corrupted the
+        // meta-model for every later caller.
+        var metaParams = ParamModel.GetParameters();
+        try
+        {
+            var taskLambda = AdaptGeneratorToTask(lambda, task, _algoOptions.AdaptationSteps);
+            Posterior.SetParameters(taskLambda);
+            return Posterior.SampleMany(count, _rng);
+        }
+        finally
+        {
+            Posterior.SetParameters(lambda);
+            ParamModel.SetParameters(metaParams);
+        }
     }
 
     /// <summary>

@@ -196,6 +196,14 @@ public class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             embeddingGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
+        // AN EMPTY TASK BATCH PRODUCES NO GRADIENTS AND NO LOSSES. ComputeMean over an empty
+        // list has no defined value, and ApplyOuterUpdate would step on nothing.
+        // LFTAlgorithm.MetaTrain already guards this exact case; this override was the odd one out.
+        if (losses.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
         ApplyOuterUpdate(initParams, embeddingGradients, _algoOptions.OuterLearningRate);
 
         return ComputeMean(losses);
@@ -221,6 +229,11 @@ public class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        // Adapt is public API, and both sibling algorithms (LFT, SparseMAML) guard this. Without
+        // it the very next line dereferences task and reports a NullReferenceException, which
+        // names neither the parameter nor the caller's mistake.
+        if (task is null) throw new ArgumentNullException(nameof(task));
+
         // The new task's support set becomes memory. This is how MbPA absorbs a distribution shift:
         // by remembering it, not by retraining on it.
         WriteToMemory(task.SupportInput, task.SupportOutput);

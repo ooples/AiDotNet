@@ -151,6 +151,13 @@ public class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        // ACLAlgorithm.MetaTrain sets the contract for this base class: throw on null, and return
+        // zero for an empty batch. Without the first, the foreach below reports a
+        // NullReferenceException that names neither the parameter nor the caller's mistake; without
+        // the second, ApplyOuterUpdate steps on no gradients and ComputeMean has no defined value.
+        if (taskBatch is null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks is null || taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
@@ -252,11 +259,23 @@ public class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             return total / taskBatch.Tasks.Length;
         }
 
-        double lossPlus = Probe(+1.0);
-        double lossMinus = Probe(-1.0);
-
-        _gateLogits = baseLogits;
-        ParamModel.SetParameters(metaParams);
+        // RESTORED ON EVERY EXIT, NOT JUST THE HAPPY ONE. Probe assigns _gateLogits and runs a full
+        // gated inner loop plus a forward pass per task; anything in there that throws used to leave
+        // this instance holding PERTURBED gates and an adapted ParamModel, and the corruption is
+        // silent -- it simply persists into the next meta-step and biases it. The restore belongs in
+        // a finally so it survives that path.
+        double lossPlus;
+        double lossMinus;
+        try
+        {
+            lossPlus = Probe(+1.0);
+            lossMinus = Probe(-1.0);
+        }
+        finally
+        {
+            _gateLogits = baseLogits;
+            ParamModel.SetParameters(metaParams);
+        }
 
         double scaled = (lossPlus - lossMinus) / (2.0 * perturbation);
         if (double.IsNaN(scaled) || double.IsInfinity(scaled)) return;

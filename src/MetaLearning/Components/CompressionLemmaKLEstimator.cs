@@ -73,9 +73,17 @@ public class CompressionLemmaKLEstimator<T>
 
         _omega = new Vector<T>(_w1 + _b1 + _w2 + _b2);
 
-        // ZERO initialization on purpose. It makes phi identically 0, so the initial estimate is exactly
-        // 0 - ln(1) = 0: the compression lemma's trivial lower bound. Starting from the trivially valid
-        // point means the estimate can only be improved by training, never start out spuriously large.
+        // PHI STARTS AT IDENTICALLY 0, so the initial estimate is exactly 0 - ln(1) = 0: the
+        // compression lemma's trivial lower bound. Starting from the trivially valid point means the
+        // estimate can only be improved by training, never start out spuriously large.
+        //
+        // THE MECHANISM IS THE SECOND LAYER, NOT ZERO INITIALIZATION EVERYWHERE. The first _w1
+        // entries below are small RANDOM values -- only the entries from _w1 onward are zeroed. phi is
+        // 0 because the second-layer weights and the output bias are zero, which annihilates whatever
+        // the first layer produces. Breaking that symmetry in the first layer is deliberate: identical
+        // hidden units would receive identical gradients and never differentiate. Stating the real
+        // mechanism matters because a future change to the SECOND loop would silently break the
+        // invariant while the first loop still looks like the reason it holds.
         var random = rng ?? RandomHelper.CreateSeededRandom(29);
         double scale = Math.Sqrt(1.0 / Math.Max(1, _inputDim));
         for (int i = 0; i < _w1; i++)
