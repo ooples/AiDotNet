@@ -80,7 +80,18 @@ public class RWKV7LanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         RWKV7Options? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // RWKV-7's LM head emits RAW LOGITS (DenseLayer with no activation, see
+            // LayerHelper.CreateRWKV7Layers), so the loss must be cross-entropy-with-logits (fused
+            // log-softmax + NLL, == PyTorch nn.CrossEntropyLoss / RWKV-LM's F.cross_entropy) — the same
+            // pairing RWKV4LanguageModel already uses. The TextGeneration DEFAULT is
+            // CategoricalCrossEntropy, which expects softmax PROBABILITIES and takes log(predicted):
+            // fed un-normalized logits it clamps every non-positive logit to its 1e-7 floor, and
+            // TensorClamp has ZERO gradient outside [1e-7, 1], so training receives no signal at all.
+            // Measured on the Generated Q-S shard before this fix: loss frozen at exactly
+            // 2048*-ln(1e-7) = 33005.70 from step 1 to step 100 with ALL 5,787,136 parameters NaN,
+            // under both a dense and a one-hot target. With this pairing the same probe trains
+            // normally, matching healthy sibling RWKV4.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         if (vocabSize <= 0) throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
         if (modelDimension <= 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));

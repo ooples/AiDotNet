@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, ApiShape = LayerApiShape.DualTensor, TestInputShape = "4, 8", TestConstructorArgs = "2, 16, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -565,8 +565,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="feedForwardDim">Hidden dimension of the FFN (default 2048).</param>
     /// <param name="sequenceLength">Maximum sequence length (default 512).</param>
     /// <param name="ffnActivation">FFN activation (default GELU).</param>
-    public TransformerDecoderLayer(int numHeads, int feedForwardDim,
-        int sequenceLength = 512,
+    public TransformerDecoderLayer(
+        [LayerState] int numHeads,
+        [LayerState] int feedForwardDim,
+        [LayerState] int sequenceLength = 512,
         IActivationFunction<T>? ffnActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
@@ -623,7 +625,20 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var resolved = new int[input.Shape.Length];
         for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
-        ResolveShapes(resolved, resolved);
+
+        // The output keeps the embedding width but NOT the sequence length. A decoder emits one
+        // position per TARGET token, which is not this layer's input length and is not the same
+        // from call to call -- UDOP drives it with 4 positions and then 2.
+        //
+        // Declaring output == input made the declaration not merely wrong but stale: it froze
+        // whatever the first input happened to be, and every later forward contradicted it
+        // ([4, 32] declared, [2, 32] produced). There is no single correct constant, so the
+        // sequence axis stays dynamic and only the width is committed to.
+        var declaredOutput = new int[resolved.Length];
+        for (int i = 0; i < resolved.Length; i++) declaredOutput[i] = LayerShape.Dynamic;
+        declaredOutput[resolved.Length - 1] = _embeddingSize;
+
+        ResolveShapes(resolved, declaredOutput);
     }
 
     /// <summary>
@@ -671,13 +686,26 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // sub-layer ResolveFromShape pattern (which already gets this
             // right).
             int[] subInputShape = new[] { _embeddingSize };
-            _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-            _norm1.ResolveFromShape(subInputShape);
-            _crossAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-            _norm2.ResolveFromShape(subInputShape);
-            _feedForward.ResolveFromShape(subInputShape);
-            _feedForwardProjection.ResolveFromShape(new[] { _feedForwardDim });
-            _norm3.ResolveFromShape(subInputShape);
+            if (IsResolvingShapesOnly)
+            {
+                _selfAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
+                _norm1.ResolveShapesOnly(subInputShape);
+                _crossAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
+                _norm2.ResolveShapesOnly(subInputShape);
+                _feedForward.ResolveShapesOnly(subInputShape);
+                _feedForwardProjection.ResolveShapesOnly(new[] { _feedForwardDim });
+                _norm3.ResolveShapesOnly(subInputShape);
+            }
+            else
+            {
+                _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+                _norm1.ResolveFromShape(subInputShape);
+                _crossAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+                _norm2.ResolveFromShape(subInputShape);
+                _feedForward.ResolveFromShape(subInputShape);
+                _feedForwardProjection.ResolveFromShape(new[] { _feedForwardDim });
+                _norm3.ResolveFromShape(subInputShape);
+            }
 
             _isInitialized = true;
         }
@@ -728,7 +756,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// if someone tries to use it. The correct method to use is the one that accepts both inputs.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Decoder-only mode (GPT-style): use self-attention only, skip cross-attention
         // Per Vaswani et al. 2017, the decoder can operate without encoder output

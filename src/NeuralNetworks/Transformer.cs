@@ -394,6 +394,31 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>, AiDo
     }
 
     /// <summary>
+    /// Returns the runtime input shape seen by the default token-embedding stack.
+    /// </summary>
+    /// <remarks>
+    /// A token Transformer consumes <c>[batch, sequence]</c>. The generic two-dimensional
+    /// architecture reports the per-sample shape as <c>[1, sequence]</c>; letting the base
+    /// hook prepend its batch axis turns that into <c>[1, 1, sequence]</c>. If a later lazy
+    /// layer rejects the shape walk, that rank-3 value becomes the resolver's fallback and
+    /// <see cref="SequenceTokenSliceLayer{T}"/> incorrectly binds its hidden width to the
+    /// sequence length. Publish the actual rank-2 token tensor here so the slice remains lazy
+    /// until it sees <c>[batch, sequence, d_model]</c> and resolves to <c>[d_model]</c>, as the
+    /// Transformer representation contract requires. Custom layer stacks retain the base hook
+    /// because they may intentionally preprocess a different architecture shape.
+    /// </remarks>
+    protected override int[]? TryGetArchitectureInputShape()
+    {
+        bool usesDefaultTokenStack = _transformerArchitecture.VocabularySize > 0
+            && (Architecture.Layers is null || Architecture.Layers.Count == 0);
+        if (!usesDefaultTokenStack)
+            return base.TryGetArchitectureInputShape();
+
+        int sequenceLength = _transformerArchitecture.InputSize;
+        return sequenceLength > 0 ? [1, sequenceLength] : null;
+    }
+
+    /// <summary>
     /// True when the output head emits raw LOGITS (the final Softmax activation layer was dropped
     /// for the opt-in <see cref="LossFunctions.CrossEntropyWithLogitsLoss{T}"/> training path).
     /// Inference (<see cref="PredictCore"/>) re-applies softmax so Predict() output is unchanged.

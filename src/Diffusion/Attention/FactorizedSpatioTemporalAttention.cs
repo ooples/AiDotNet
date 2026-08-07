@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -28,7 +28,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - LayerNorm + residual connections around each attention block
 /// </para>
 /// </remarks>
-public class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
+public partial class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _numHeads;
@@ -92,7 +92,7 @@ public class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
     /// <summary>
     /// Applies spatial attention then temporal attention with residual connections.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // #1668: skip the backward-activation cache in inference so the denoise-loop
         // arena can recycle scratch without aliasing a stale reference.

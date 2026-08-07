@@ -643,7 +643,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// - Then become 64×64×64 after pixel shuffling (4 times more pixels, 1/4 the channels)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor leaves _inputDepth = -1; resolve from input.Shape on
         // first call, allocate kernel + bias against the resolved channel

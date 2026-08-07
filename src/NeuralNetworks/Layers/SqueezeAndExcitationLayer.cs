@@ -685,7 +685,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// This helps the network focus attention on the most useful features for the current input.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
