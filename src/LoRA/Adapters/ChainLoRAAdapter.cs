@@ -396,8 +396,6 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             _adapterChain[_activeAdapterIndex].UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromChain();
     }
 
     /// <summary>
@@ -508,101 +506,4 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         ParameterGradients = new Vector<T>(flatSize);
     }
 
-    /// <summary>
-    /// Updates the parameter vector from the current state of the chain.
-    /// </summary>
-    private void UpdateParametersFromChain()
-    {
-        int idx = 0;
-
-        // Pack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack unfrozen adapter parameters
-        for (int i = 0; i < _chainLength; i++)
-        {
-            if (!_mergedStatus[i])
-            {
-                Vector<T> adapterParams = _adapterChain[i].GetParameters();
-                for (int j = 0; j < adapterParams.Length; j++)
-                {
-                    Parameters[idx++] = adapterParams[j];
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the chain from the parameter vector.
-    /// </summary>
-    private void UpdateChainFromParameters()
-    {
-        int idx = 0;
-
-        // Unpack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack unfrozen adapter parameters
-        for (int i = 0; i < _chainLength; i++)
-        {
-            if (!_mergedStatus[i])
-            {
-                int adapterParamCount = (int)_adapterChain[i].ParameterCount;
-                Vector<T> adapterParams = new Vector<T>(adapterParamCount);
-                for (int j = 0; j < adapterParamCount; j++)
-                {
-                    adapterParams[j] = Parameters[idx++];
-                }
-                _adapterChain[i].SetParameters(adapterParams);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the chain gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromChain()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Pack base layer gradients if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack unfrozen adapter gradients
-        for (int i = 0; i < _chainLength; i++)
-        {
-            if (!_mergedStatus[i])
-            {
-                Vector<T> adapterGrads = _adapterChain[i].GetParameterGradients();
-                for (int j = 0; j < adapterGrads.Length; j++)
-                {
-                    ParameterGradients[idx++] = adapterGrads[j];
-                }
-            }
-        }
-    }
 }

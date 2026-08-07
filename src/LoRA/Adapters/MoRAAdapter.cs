@@ -117,7 +117,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is the core trainable component of MoRA. Unlike LoRA's rectangular matrices,
     /// M is square with dimensions (r×r), enabling higher-rank updates.
     /// </remarks>
-    private Matrix<T> _matrixM;
+    private Tensor<T> _matrixM;
 
     /// <summary>
     /// Compression matrix that reduces input dimension from d to r (non-trainable).
@@ -199,7 +199,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
             _squareRank = dimension;
         }
 
-        _matrixM = new Matrix<T>(_squareRank, _squareRank);
+        _matrixM = new Tensor<T>([_squareRank, _squareRank]);
         InitializeMatrixM();
 
         _compressionMatrix = GenerateOrthogonalMatrix(dimension, _squareRank);
@@ -214,9 +214,9 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     {
         T stddev = NumOps.Sqrt(NumOps.Divide(NumOps.One, NumOps.FromDouble(_squareRank)));
 
-        for (int i = 0; i < _matrixM.Rows; i++)
+        for (int i = 0; i < _matrixM.Shape[0]; i++)
         {
-            for (int j = 0; j < _matrixM.Columns; j++)
+            for (int j = 0; j < _matrixM.Shape[1]; j++)
             {
                 _matrixM[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
             }
@@ -237,45 +237,6 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
         Parameters = new Vector<T>(paramCount);
         ParameterGradients = new Vector<T>(paramCount);
 
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Overrides the base parameter packing to use the MoRA matrix M instead of the placeholder LoRA layer.
-    /// This ensures that the public parameter surface is consistent with ParameterCount.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // Pack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // If _matrixM is not initialized, do nothing.
-        // RebuildParameterSnapshot will be called later to correctly pack the parameters.
-        if (_matrixM == null)
-        {
-            return;
-        }
-
-        // Pack _matrixM parameters
-        for (int row = 0; row < _matrixM.Rows; row++)
-        {
-            for (int col = 0; col < _matrixM.Columns; col++)
-            {
-                if (idx < Parameters.Length)
-                {
-                    Parameters[idx++] = _matrixM[row, col];
-                }
-            }
-        }
     }
 
     private Matrix<T> GenerateOrthogonalMatrix(int rows, int cols)
@@ -386,7 +347,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> compressed = inputMatrix.Multiply(_compressionMatrix);
         _lastCompressed = compressed;
 
-        Matrix<T> transformed = compressed.Multiply(_matrixM);
+        Matrix<T> transformed = compressed.Multiply(_matrixM.ToMatrix());
         Matrix<T> decompressed = transformed.Multiply(_decompressionMatrix);
 
         T scalingFactor = NumOps.FromDouble(Alpha);
@@ -419,9 +380,9 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        for (int i = 0; i < _matrixM.Rows; i++)
+        for (int i = 0; i < _matrixM.Shape[0]; i++)
         {
-            for (int j = 0; j < _matrixM.Columns; j++)
+            for (int j = 0; j < _matrixM.Shape[1]; j++)
             {
                 T update = NumOps.Multiply(_matrixMGradient[i, j], learningRate);
                 _matrixM[i, j] = NumOps.Subtract(_matrixM[i, j], update);
@@ -440,7 +401,7 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     public override ILayer<T> MergeToOriginalLayer()
     {
         // Compute full MoRA adaptation: R_d * M * R_c^T
-        Matrix<T> temp = _matrixM.Multiply(_compressionMatrix.Transpose());
+        Matrix<T> temp = _matrixM.ToMatrix().Multiply(_compressionMatrix.Transpose());
         Matrix<T> fullAdaptation = _decompressionMatrix.Multiply(temp);
 
         T scalingFactor = NumOps.FromDouble(Alpha);

@@ -189,7 +189,6 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector to include all experts and gating network
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromLayers();
     }
 
     /// <summary>
@@ -304,119 +303,6 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack expert parameters
-        for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
-        {
-            Vector<T> expertParams = _experts[expertIdx].GetParameters();
-            for (int i = 0; i < expertParams.Length; i++)
-            {
-                Parameters[idx++] = expertParams[i];
-            }
-        }
-
-        // Pack gating network parameters
-        Vector<T> gatingParams = _gatingNetwork.GetParameters();
-        for (int i = 0; i < gatingParams.Length; i++)
-        {
-            Parameters[idx++] = gatingParams[i];
-        }
-    }
-
-    /// <summary>
-    /// Updates the layers from the parameter vector.
-    /// </summary>
-    private void UpdateLayersFromParameters()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, unpack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack expert parameters
-        for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
-        {
-            int expertParamCount = (int)_experts[expertIdx].ParameterCount;
-            Vector<T> expertParams = new Vector<T>(expertParamCount);
-            for (int i = 0; i < expertParamCount; i++)
-            {
-                expertParams[i] = Parameters[idx++];
-            }
-            _experts[expertIdx].SetParameters(expertParams);
-        }
-
-        // Unpack gating network parameters
-        int gatingParamCount = checked((int)_gatingNetwork.ParameterCount);
-        Vector<T> gatingParams = new Vector<T>(gatingParamCount);
-        for (int i = 0; i < gatingParamCount; i++)
-        {
-            gatingParams[i] = Parameters[idx++];
-        }
-        _gatingNetwork.SetParameters(gatingParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack expert gradients
-        for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
-        {
-            Vector<T> expertGrads = _experts[expertIdx].GetParameterGradients();
-            for (int i = 0; i < expertGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = expertGrads[i];
-            }
-        }
-
-        // Pack gating network gradients
-        Vector<T> gatingGrads = _gatingNetwork.GetParameterGradients();
-        for (int i = 0; i < gatingGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = gatingGrads[i];
-        }
     }
 
     /// <summary>

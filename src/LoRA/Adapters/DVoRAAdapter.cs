@@ -112,7 +112,7 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// The magnitude vector stores the L2 norm of each weight vector (one per output neuron).
     /// This is the DoRA component of DVoRA.
     /// </remarks>
-    private Vector<T> _magnitude;
+    private Tensor<T> _magnitude;
 
     /// <summary>
     /// Scaling vector d (outputSize) - trainable per-layer parameter.
@@ -121,7 +121,7 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// This vector scales the VeRA output on a per-dimension basis.
     /// This is the VeRA component of DVoRA.
     /// </remarks>
-    private Vector<T> _scalingVectorD;
+    private Tensor<T> _scalingVectorD;
 
     /// <summary>
     /// Scaling vector b (rank) - trainable per-layer parameter.
@@ -130,7 +130,7 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// This vector scales the intermediate rank-dimensional representation.
     /// This is the VeRA component of DVoRA.
     /// </remarks>
-    private Vector<T> _scalingVectorB;
+    private Tensor<T> _scalingVectorB;
 
     /// <summary>
     /// Gradient for magnitude vector computed during backpropagation.
@@ -225,12 +225,12 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Initialize magnitude from base layer weights (DoRA component)
-        _magnitude = new Vector<T>(outputSize);
+        _magnitude = new Tensor<T>([outputSize]);
         DecomposeWeights();
 
         // Initialize scaling vectors to ones (VeRA component - no initial effect)
-        _scalingVectorD = new Vector<T>(outputSize);
-        _scalingVectorB = new Vector<T>(rank);
+        _scalingVectorD = new Tensor<T>([outputSize]);
+        _scalingVectorB = new Tensor<T>([rank]);
 
         for (int i = 0; i < outputSize; i++)
         {
@@ -244,7 +244,6 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromComponents();
     }
 
     /// <summary>
@@ -684,140 +683,6 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromComponents();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current component states.
-    /// </summary>
-    private void UpdateParametersFromComponents()
-    {
-        int idx = 0;
-
-        // Pack base layer parameters (if not frozen)
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack LoRA parameters (required for base class compatibility)
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
-
-        // Pack magnitude parameters
-        for (int i = 0; i < _magnitude.Length; i++)
-        {
-            Parameters[idx++] = _magnitude[i];
-        }
-
-        // Pack scaling vector d
-        for (int i = 0; i < _scalingVectorD.Length; i++)
-        {
-            Parameters[idx++] = _scalingVectorD[i];
-        }
-
-        // Pack scaling vector b
-        for (int i = 0; i < _scalingVectorB.Length; i++)
-        {
-            Parameters[idx++] = _scalingVectorB[i];
-        }
-    }
-
-    /// <summary>
-    /// Updates the components from the parameter vector.
-    /// </summary>
-    private void UpdateComponentsFromParameters()
-    {
-        int idx = 0;
-
-        // Unpack base layer parameters (if not frozen)
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack LoRA parameters (required for base class compatibility)
-        int loraParamCount = checked((int)_loraLayer.ParameterCount);
-        Vector<T> loraParams = new Vector<T>(loraParamCount);
-        for (int i = 0; i < loraParamCount; i++)
-        {
-            loraParams[i] = Parameters[idx++];
-        }
-        _loraLayer.SetParameters(loraParams);
-
-        // Unpack magnitude parameters
-        for (int i = 0; i < _magnitude.Length; i++)
-        {
-            _magnitude[i] = Parameters[idx++];
-        }
-
-        // Unpack scaling vector d
-        for (int i = 0; i < _scalingVectorD.Length; i++)
-        {
-            _scalingVectorD[i] = Parameters[idx++];
-        }
-
-        // Unpack scaling vector b
-        for (int i = 0; i < _scalingVectorB.Length; i++)
-        {
-            _scalingVectorB[i] = Parameters[idx++];
-        }
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the component gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromComponents()
-    {
-        if (_magnitudeGradient == null || _scalingVectorDGradient == null || _scalingVectorBGradient == null)
-        {
-            return;
-        }
-
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Pack base layer gradients (if not frozen)
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack magnitude gradients
-        for (int i = 0; i < _magnitudeGradient.Length; i++)
-        {
-            ParameterGradients[idx++] = _magnitudeGradient[i];
-        }
-
-        // Pack scaling vector d gradients
-        for (int i = 0; i < _scalingVectorDGradient.Length; i++)
-        {
-            ParameterGradients[idx++] = _scalingVectorDGradient[i];
-        }
-
-        // Pack scaling vector b gradients
-        for (int i = 0; i < _scalingVectorBGradient.Length; i++)
-        {
-            ParameterGradients[idx++] = _scalingVectorBGradient[i];
-        }
     }
 
     /// <summary>

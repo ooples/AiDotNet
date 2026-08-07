@@ -187,7 +187,6 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromCores();
     }
 
     /// <summary>
@@ -647,95 +646,6 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromCores();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current TT core values.
-    /// </summary>
-    private void UpdateParametersFromCores()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack all TT cores
-        foreach (Tensor<T> core in _ttCores)
-        {
-            for (int i = 0; i < core.Length; i++)
-            {
-                Parameters[idx++] = core[i];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the TT cores from the parameter vector.
-    /// </summary>
-    private void UpdateCoresFromParameters()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, unpack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack all TT cores
-        for (int k = 0; k < _numCores; k++)
-        {
-            for (int i = 0; i < _ttCores[k].Length; i++)
-            {
-                _ttCores[k][i] = Parameters[idx++];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the TT core gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromCores()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack TT core gradients
-        if (_ttCoreGradients != null)
-        {
-            foreach (Tensor<T> coreGrad in _ttCoreGradients)
-            {
-                for (int i = 0; i < coreGrad.Length; i++)
-                {
-                    ParameterGradients[idx++] = coreGrad[i];
-                }
-            }
-        }
     }
 
     /// <summary>

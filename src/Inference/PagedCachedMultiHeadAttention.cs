@@ -34,11 +34,11 @@ internal partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContext
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
-    private Matrix<T> _queryWeights;
-    private Matrix<T> _keyWeights;
-    private Matrix<T> _valueWeights;
-    private Matrix<T> _outputWeights;
-    private Vector<T> _outputBias;
+    private Tensor<T> _queryWeights;
+    private Tensor<T> _keyWeights;
+    private Tensor<T> _valueWeights;
+    private Tensor<T> _outputWeights;
+    private Tensor<T> _outputBias;
 
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
@@ -158,11 +158,11 @@ internal partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContext
 
         // K/V project to the (possibly fewer) KV heads; Q/O span the full query heads. Weights are [inDim, outDim].
         int kvProjDim = _kvHeadCount * _headDimension;
-        _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _keyWeights = new Matrix<T>(embeddingDimension, kvProjDim);
-        _valueWeights = new Matrix<T>(embeddingDimension, kvProjDim);
-        _outputWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _outputBias = new Vector<T>(embeddingDimension);
+        _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+        _keyWeights = new Tensor<T>([embeddingDimension, kvProjDim]);
+        _valueWeights = new Tensor<T>([embeddingDimension, kvProjDim]);
+        _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+        _outputBias = new Tensor<T>([embeddingDimension]);
 
         _flashConfig = FlashAttentionConfig.Default;
         _flashConfig.UseCausalMask = useCausalMask;
@@ -713,10 +713,10 @@ internal partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContext
         }
         lock (_kernelWeightsLock)
         {
-            _wqTensor ??= MatrixToTensor(_queryWeights);
-            _wkTensor ??= MatrixToTensor(_keyWeights);
-            _wvTensor ??= MatrixToTensor(_valueWeights);
-            _woTensor ??= MatrixToTensor(_outputWeights);
+            _wqTensor ??= _queryWeights;
+            _wkTensor ??= _keyWeights;
+            _wvTensor ??= _valueWeights;
+            _woTensor ??= _outputWeights;
         }
     }
 
@@ -981,10 +981,10 @@ internal partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContext
                 return;
             }
 
-            if (_cachedWQ == null) localWQ = MatrixToFloatForKernel(_queryWeights);
-            if (_cachedWK == null) localWK = MatrixToFloatForKernel(_keyWeights);
-            if (_cachedWV == null) localWV = MatrixToFloatForKernel(_valueWeights);
-            if (_cachedWO == null) localWO = MatrixToFloatForKernel(_outputWeights);
+            if (_cachedWQ == null) localWQ = MatrixToFloatForKernel(_queryWeights.ToMatrix());
+            if (_cachedWK == null) localWK = MatrixToFloatForKernel(_keyWeights.ToMatrix());
+            if (_cachedWV == null) localWV = MatrixToFloatForKernel(_valueWeights.ToMatrix());
+            if (_cachedWO == null) localWO = MatrixToFloatForKernel(_outputWeights.ToMatrix());
 
             if (!enableQuantization)
             {

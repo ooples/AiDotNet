@@ -131,7 +131,6 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector to include activation adaptation
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromLayers();
     }
 
     /// <summary>
@@ -201,110 +200,6 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack weight adaptation LoRA parameters
-        Vector<T> weightLoraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < weightLoraParams.Length; i++)
-        {
-            Parameters[idx++] = weightLoraParams[i];
-        }
-
-        // Pack activation adaptation LoRA parameters
-        Vector<T> activationLoraParams = _activationAdaptation.GetParameters();
-        for (int i = 0; i < activationLoraParams.Length; i++)
-        {
-            Parameters[idx++] = activationLoraParams[i];
-        }
-    }
-
-    /// <summary>
-    /// Updates the layers from the parameter vector.
-    /// </summary>
-    private void UpdateLayersFromParameters()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, unpack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack weight adaptation LoRA parameters
-        int weightLoraParamCount = checked((int)_loraLayer.ParameterCount);
-        Vector<T> weightLoraParams = new Vector<T>(weightLoraParamCount);
-        for (int i = 0; i < weightLoraParamCount; i++)
-        {
-            weightLoraParams[i] = Parameters[idx++];
-        }
-        _loraLayer.SetParameters(weightLoraParams);
-
-        // Unpack activation adaptation LoRA parameters
-        int activationLoraParamCount = checked((int)_activationAdaptation.ParameterCount);
-        Vector<T> activationLoraParams = new Vector<T>(activationLoraParamCount);
-        for (int i = 0; i < activationLoraParamCount; i++)
-        {
-            activationLoraParams[i] = Parameters[idx++];
-        }
-        _activationAdaptation.SetParameters(activationLoraParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack weight adaptation LoRA gradients
-        Vector<T> weightLoraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < weightLoraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = weightLoraGrads[i];
-        }
-
-        // Pack activation adaptation LoRA gradients
-        Vector<T> activationLoraGrads = _activationAdaptation.GetParameterGradients();
-        for (int i = 0; i < activationLoraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = activationLoraGrads[i];
-        }
     }
 
     /// <summary>

@@ -630,35 +630,6 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    /// <remarks>
-    /// This helper method synchronizes the parameter gradients after backward pass.
-    /// </remarks>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack LoRA gradients
-        Vector<T> loraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < loraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = loraGrads[i];
-        }
-    }
-
-    /// <summary>
     /// Resets the internal state of the adapter.
     /// </summary>
     /// <remarks>
