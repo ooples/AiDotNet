@@ -122,7 +122,8 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// learned during pretraining. We keep these fixed and only learn how to combine them.
     /// </para>
     /// </remarks>
-    private Matrix<T>? _frozenU;
+    [Buffer]
+    private Tensor<T>? _frozenU;
 
     /// <summary>
     /// Frozen singular values (diagonal of Σ_r) from SVD of pretrained weights.
@@ -139,7 +140,8 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// and use them to scale the contributions during forward pass.
     /// </para>
     /// </remarks>
-    private Vector<T>? _frozenSigma;
+    [Buffer]
+    private Tensor<T>? _frozenSigma;
 
     /// <summary>
     /// Frozen right singular vectors transposed (V_r^T) from SVD of pretrained weights.
@@ -155,7 +157,8 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// the coordinate system in which we'll make small adjustments via the R matrix.
     /// </para>
     /// </remarks>
-    private Matrix<T>? _frozenVt;
+    [Buffer]
+    private Tensor<T>? _frozenVt;
 
     /// <summary>
     /// Trainable r×r mixing matrix R - the ONLY trainable parameters in LoRA-XS.
@@ -173,7 +176,7 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// minimal parameters.
     /// </para>
     /// </remarks>
-    private Matrix<T> _trainableR;
+    private Tensor<T> _trainableR;
 
     /// <summary>
     /// Gradient of the trainable R matrix computed during backpropagation.
@@ -215,22 +218,22 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gets the frozen U matrix (left singular vectors).
     /// </summary>
-    public Matrix<T>? FrozenU => _frozenU?.Clone();
+    public Matrix<T>? FrozenU => _frozenU?.ToMatrix();
 
     /// <summary>
     /// Gets the frozen singular values.
     /// </summary>
-    public Vector<T>? FrozenSigma => _frozenSigma?.Clone();
+    public Vector<T>? FrozenSigma => _frozenSigma?.ToVector();
 
     /// <summary>
     /// Gets the frozen V^T matrix (right singular vectors transposed).
     /// </summary>
-    public Matrix<T>? FrozenVt => _frozenVt?.Clone();
+    public Matrix<T>? FrozenVt => _frozenVt?.ToMatrix();
 
     /// <summary>
     /// Gets the trainable R matrix.
     /// </summary>
-    public Matrix<T> TrainableR => _trainableR.Clone();
+    public Matrix<T> TrainableR => _trainableR.ToMatrix();
 
     /// <summary>
     /// Initializes a new LoRA-XS adapter wrapping an existing layer.
@@ -265,7 +268,7 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         : base(baseLayer, rank, alpha, freezeBaseLayer: true) // Always freeze base layer for LoRA-XS
     {
         // Initialize trainable R matrix to identity (neutral starting point)
-        _trainableR = new Matrix<T>(rank, rank);
+        _trainableR = new Tensor<T>([rank, rank]);
         for (int i = 0; i < rank; i++)
         {
             for (int j = 0; j < rank; j++)
@@ -278,7 +281,6 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameters to reflect only R matrix
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromR();
     }
 
     /// <summary>
@@ -343,7 +345,7 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         int rank = Rank;
 
         // Extract U_r: top-r left singular vectors (columns of U)
-        _frozenU = new Matrix<T>(outputSize, rank);
+        _frozenU = new Tensor<T>([outputSize, rank]);
         for (int i = 0; i < outputSize; i++)
         {
             for (int j = 0; j < rank; j++)
@@ -353,14 +355,14 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Extract Σ_r: top-r singular values (diagonal elements)
-        _frozenSigma = new Vector<T>(rank);
+        _frozenSigma = new Tensor<T>([rank]);
         for (int i = 0; i < rank; i++)
         {
             _frozenSigma[i] = svd.S[i];
         }
 
         // Extract V_r^T: top-r right singular vectors (rows of V^T)
-        _frozenVt = new Matrix<T>(rank, inputSize);
+        _frozenVt = new Tensor<T>([rank, inputSize]);
         for (int i = 0; i < rank; i++)
         {
             for (int j = 0; j < inputSize; j++)
@@ -417,16 +419,16 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
 
         // LoRA-XS forward pass: U_r * Σ_r * R * V_r^T * input
         // Step 1: x1 = V_r^T * input [rank × batchSize]
-        _cachedVtInput = MatrixVectorMultiply(_frozenVt!, input);
+        _cachedVtInput = MatrixVectorMultiply(_frozenVt!.ToMatrix(), input);
 
         // Step 2: x2 = R * x1 [rank × batchSize]
-        _cachedRVtInput = MatrixVectorMultiply(_trainableR, _cachedVtInput);
+        _cachedRVtInput = MatrixVectorMultiply(_trainableR.ToMatrix(), _cachedVtInput);
 
         // Step 3: x3 = Σ_r * x2 (diagonal multiplication) [rank × batchSize]
-        _cachedSigmaRVtInput = ApplySigmaScaling(_frozenSigma!, _cachedRVtInput);
+        _cachedSigmaRVtInput = ApplySigmaScaling(_frozenSigma!.ToVector(), _cachedRVtInput);
 
         // Step 4: x4 = U_r * x3 [outputSize × batchSize]
-        Tensor<T> loraOutput = MatrixVectorMultiply(_frozenU!, _cachedSigmaRVtInput);
+        Tensor<T> loraOutput = MatrixVectorMultiply(_frozenU!.ToMatrix(), _cachedSigmaRVtInput);
 
         // Apply LoRA scaling factor
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
@@ -453,9 +455,9 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update R matrix: R = R - learningRate * dR
-        for (int i = 0; i < _trainableR.Rows; i++)
+        for (int i = 0; i < _trainableR.Shape[0]; i++)
         {
-            for (int j = 0; j < _trainableR.Columns; j++)
+            for (int j = 0; j < _trainableR.Shape[1]; j++)
             {
                 T update = NumOps.Multiply(_trainableRGradient[i, j], learningRate);
                 _trainableR[i, j] = NumOps.Subtract(_trainableR[i, j], update);
@@ -463,8 +465,6 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Base layer is always frozen in LoRA-XS
-        // Update parameter vector
-        UpdateParametersFromR();
     }
 
     /// <summary>
@@ -513,14 +513,14 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute LoRA-XS weight delta: delta = U_r * Σ_r * R * V_r^T * scaling
-        int outputSize = _frozenU.Rows;
-        int inputSize = _frozenVt.Columns;
+        int outputSize = _frozenU.Shape[0];
+        int inputSize = _frozenVt.Shape[1];
         int rank = Rank;
         double scaling = Alpha / rank;
 
         // Step 1: R * V_r^T — vectorized Engine.TensorMatMul
-        var rTensor = Tensor<T>.FromMatrix(_trainableR);
-        var vtTensor = Tensor<T>.FromMatrix(_frozenVt);
+        var rTensor = _trainableR;
+        var vtTensor = _frozenVt!;
         var RVtTensor = Engine.TensorMatMul(rTensor, vtTensor);
 
         // Step 2: Σ_r * (R * V_r^T) — diagonal scaling per row
@@ -534,7 +534,7 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Step 3: U_r * (Σ_r * R * V_r^T) — vectorized Engine.TensorMatMul
-        var uTensor = Tensor<T>.FromMatrix(_frozenU);
+        var uTensor = _frozenU!;
         var loraWeightsTensor = Engine.TensorMatMul(uTensor, RVtTensor);
 
         // Apply scaling factor
@@ -671,78 +671,4 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         return gradient;
     }
 
-    /// <summary>
-    /// Updates the parameter vector from the R matrix.
-    /// </summary>
-    private void UpdateParametersFromR()
-    {
-        int idx = 0;
-        for (int i = 0; i < _trainableR.Rows; i++)
-        {
-            for (int j = 0; j < _trainableR.Columns; j++)
-            {
-                Parameters[idx++] = _trainableR[i, j];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Overrides base class parameter packing to prevent buffer overrun during base constructor.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The base class constructor calls UpdateParametersFromLayers() which tries to pack
-    /// _loraLayer.GetParameters() (size 2*d*r). However, LoRAXSAdapter's ParameterCount
-    /// returns Rank*Rank (much smaller) before _trainableR is initialized.
-    /// This override guards against that early call and delegates to UpdateParametersFromR
-    /// once the R matrix is ready.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateParametersFromLayers()
-    {
-        // Guard against being called from base constructor before _trainableR is initialized
-        if (_trainableR == null)
-        {
-            return;
-        }
-
-        // LoRA-XS only stores R matrix parameters, not the underlying _loraLayer
-        UpdateParametersFromR();
-    }
-
-    /// <summary>
-    /// Updates the R matrix from the parameter vector.
-    /// </summary>
-    private void UpdateRFromParameters()
-    {
-        int idx = 0;
-        for (int i = 0; i < _trainableR.Rows; i++)
-        {
-            for (int j = 0; j < _trainableR.Columns; j++)
-            {
-                _trainableR[i, j] = Parameters[idx++];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from R matrix gradient.
-    /// </summary>
-    private void UpdateParameterGradientsFromR()
-    {
-        if (_trainableRGradient == null)
-        {
-            return;
-        }
-
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-        for (int i = 0; i < _trainableRGradient.Rows; i++)
-        {
-            for (int j = 0; j < _trainableRGradient.Columns; j++)
-            {
-                ParameterGradients[idx++] = _trainableRGradient[i, j];
-            }
-        }
-    }
 }

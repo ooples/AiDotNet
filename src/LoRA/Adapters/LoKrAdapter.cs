@@ -56,7 +56,7 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// This is one of the two matrices used in the Kronecker product decomposition.
     /// </remarks>
-    private Matrix<T> _matrixA;
+    private Tensor<T> _matrixA;
 
     /// <summary>
     /// Second Kronecker factor matrix B with dimensions (p × q).
@@ -65,7 +65,7 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// This is the second matrix used in the Kronecker product decomposition.
     /// The Kronecker product A ⊗ B produces a (m×p) × (n×q) matrix.
     /// </remarks>
-    private Matrix<T> _matrixB;
+    private Tensor<T> _matrixB;
 
     /// <summary>
     /// Scaling factor for the LoKr contribution.
@@ -155,8 +155,8 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Initialize matrices
-        _matrixA = new Matrix<T>(_dimsA.m, _dimsA.n);
-        _matrixB = new Matrix<T>(_dimsB.p, _dimsB.q);
+        _matrixA = new Tensor<T>([_dimsA.m, _dimsA.n]);
+        _matrixB = new Tensor<T>([_dimsB.p, _dimsB.q]);
 
         // Default alpha to rank if not specified
         _alpha = alpha > 0 ? NumOps.FromDouble(alpha) : NumOps.FromDouble(rank);
@@ -165,18 +165,18 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize matrix A with random values (Gaussian with std = 1/sqrt(effectiveRank))
         T stddev = NumOps.Sqrt(NumOps.Divide(NumOps.One, NumOps.FromDouble(effectiveRank)));
-        for (int i = 0; i < _matrixA.Rows; i++)
+        for (int i = 0; i < _matrixA.Shape[0]; i++)
         {
-            for (int j = 0; j < _matrixA.Columns; j++)
+            for (int j = 0; j < _matrixA.Shape[1]; j++)
             {
                 _matrixA[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
             }
         }
 
         // Initialize matrix B with zeros (so LoKr has no effect initially)
-        for (int i = 0; i < _matrixB.Rows; i++)
+        for (int i = 0; i < _matrixB.Shape[0]; i++)
         {
-            for (int j = 0; j < _matrixB.Columns; j++)
+            for (int j = 0; j < _matrixB.Shape[1]; j++)
             {
                 _matrixB[i, j] = NumOps.Zero;
             }
@@ -184,7 +184,6 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize parameter vector
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromMatrices();
     }
 
     /// <summary>
@@ -284,10 +283,10 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
 
         // Dimensions: A is [p, q], B is [m, n]
         // Kronecker product (B ⊗ A) would be [(m*p), (n*q)]
-        int p = _matrixA.Rows;
-        int q = _matrixA.Columns;
-        int m = _matrixB.Rows;
-        int n = _matrixB.Columns;
+        int p = _matrixA.Shape[0];
+        int q = _matrixA.Shape[1];
+        int m = _matrixB.Shape[0];
+        int n = _matrixB.Shape[1];
 
         // inputSize should equal n*q, outputSize should equal m*p
         if (inputSize != n * q)
@@ -312,7 +311,7 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
             }
 
             // Compute Y = A * X * B^T using vec-trick: (B ⊗ A) vec(X) = vec(Y)
-            Matrix<T> temp = _matrixA.Multiply(X);  // [p, q] * [q, n] -> [p, n] (wait, dimensions wrong)
+            Matrix<T> temp = _matrixA.ToMatrix().Multiply(X);  // [p, q] * [q, n] -> [p, n] (wait, dimensions wrong)
             // Actually: A is [p, q], X is [n, q] - need to think about this more carefully
             // For vec-trick: Y = A^T * X * B where Y is [m, p]
             // Let me use the correct formulation
@@ -327,7 +326,7 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
                 }
             }
 
-            Matrix<T> Y = _matrixA.Multiply(X_reshaped).Multiply(_matrixB.Transpose());
+            Matrix<T> Y = _matrixA.ToMatrix().Multiply(X_reshaped).Multiply(_matrixB.ToMatrix().Transpose());
 
             // Vectorize Y [p, m] to output
             for (int i = 0; i < p; i++)
@@ -455,8 +454,6 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromMatrices();
     }
 
     /// <summary>
@@ -470,9 +467,9 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update matrix A
-        for (int i = 0; i < _matrixA.Rows; i++)
+        for (int i = 0; i < _matrixA.Shape[0]; i++)
         {
-            for (int j = 0; j < _matrixA.Columns; j++)
+            for (int j = 0; j < _matrixA.Shape[1]; j++)
             {
                 T update = NumOps.Multiply(_gradientA[i, j], learningRate);
                 _matrixA[i, j] = NumOps.Subtract(_matrixA[i, j], update);
@@ -480,9 +477,9 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update matrix B
-        for (int i = 0; i < _matrixB.Rows; i++)
+        for (int i = 0; i < _matrixB.Shape[0]; i++)
         {
-            for (int j = 0; j < _matrixB.Columns; j++)
+            for (int j = 0; j < _matrixB.Shape[1]; j++)
             {
                 T update = NumOps.Multiply(_gradientB[i, j], learningRate);
                 _matrixB[i, j] = NumOps.Subtract(_matrixB[i, j], update);
@@ -516,7 +513,7 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute full Kronecker product
-        Matrix<T> kronWeights = KroneckerProduct(_matrixA, _matrixB);
+        Matrix<T> kronWeights = KroneckerProduct(_matrixA.ToMatrix(), _matrixB.ToMatrix());
 
         // Apply scaling
         kronWeights = kronWeights.Multiply(_scaling);
@@ -550,90 +547,6 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Updates the parameter vector from the current matrix states.
-    /// </summary>
-    private void UpdateParametersFromMatrices()
-    {
-        int idx = 0;
-
-        // Pack matrix A
-        for (int i = 0; i < _matrixA.Rows; i++)
-        {
-            for (int j = 0; j < _matrixA.Columns; j++)
-            {
-                Parameters[idx++] = _matrixA[i, j];
-            }
-        }
-
-        // Pack matrix B
-        for (int i = 0; i < _matrixB.Rows; i++)
-        {
-            for (int j = 0; j < _matrixB.Columns; j++)
-            {
-                Parameters[idx++] = _matrixB[i, j];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the matrices from the parameter vector.
-    /// </summary>
-    private void UpdateMatricesFromParameters()
-    {
-        int idx = 0;
-
-        // Unpack matrix A
-        for (int i = 0; i < _matrixA.Rows; i++)
-        {
-            for (int j = 0; j < _matrixA.Columns; j++)
-            {
-                _matrixA[i, j] = Parameters[idx++];
-            }
-        }
-
-        // Unpack matrix B
-        for (int i = 0; i < _matrixB.Rows; i++)
-        {
-            for (int j = 0; j < _matrixB.Columns; j++)
-            {
-                _matrixB[i, j] = Parameters[idx++];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the matrix gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromMatrices()
-    {
-        if (_gradientA == null || _gradientB == null)
-        {
-            return;
-        }
-
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Pack matrix A gradients
-        for (int i = 0; i < _gradientA.Rows; i++)
-        {
-            for (int j = 0; j < _gradientA.Columns; j++)
-            {
-                ParameterGradients[idx++] = _gradientA[i, j];
-            }
-        }
-
-        // Pack matrix B gradients
-        for (int i = 0; i < _gradientB.Rows; i++)
-        {
-            for (int j = 0; j < _gradientB.Columns; j++)
-            {
-                ParameterGradients[idx++] = _gradientB[i, j];
-            }
-        }
-    }
-
-    /// <summary>
     /// Resets the internal state of the adapter.
     /// </summary>
     /// <remarks>
@@ -662,10 +575,10 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gets matrix A (for inspection or advanced use cases).
     /// </summary>
-    public Matrix<T> GetMatrixA() => _matrixA.Clone();
+    public Matrix<T> GetMatrixA() => _matrixA.ToMatrix();
 
     /// <summary>
     /// Gets matrix B (for inspection or advanced use cases).
     /// </summary>
-    public Matrix<T> GetMatrixB() => _matrixB.Clone();
+    public Matrix<T> GetMatrixB() => _matrixB.ToMatrix();
 }

@@ -262,7 +262,6 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize parameters
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromComponents();
     }
 
     /// <summary>
@@ -636,40 +635,6 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromComponents();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current component states.
-    /// </summary>
-    private void UpdateParametersFromComponents()
-    {
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Pack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack LoRA parameters
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
-
-        // Pack sparse parameters (just the values, positions are implicit)
-        foreach (var kvp in _sparseFullRankUpdates)
-        {
-            Parameters[idx++] = kvp.Value;
-        }
     }
 
     /// <summary>

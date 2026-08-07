@@ -181,41 +181,6 @@ public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update the adapter's parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// CRITICAL: For LoRA-FA, this packs BOTH matrix A and B to match ParameterCount.
-    /// Even though matrix A is frozen, it must be included in the parameter buffer
-    /// to maintain base-class invariants and prevent buffer overruns.
-    /// The freeze logic is in UpdateParameters, not in buffer packing.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack ALL LoRA parameters (both matrix A and B)
-        // Matrix A is frozen but must be in the buffer for base class compatibility
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
     }
 
     /// <summary>

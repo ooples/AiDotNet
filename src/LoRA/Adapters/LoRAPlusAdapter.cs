@@ -271,7 +271,6 @@ public class LoRAPlusAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update the adapter's parameter vector
-        UpdateParametersFromLayers();
     }
 
     /// <summary>

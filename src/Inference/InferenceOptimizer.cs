@@ -685,7 +685,7 @@ internal class InferenceOptimizer<T>
                         useCausalMask: useCausalMask,
                         activationFunction: activation);
                     paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
-                    paged.SetParameters(flash.GetParameters());
+                    CopyLayerParameters(flash, paged);
 
                     // Preserve positional encoding configuration from source FlashAttention layer
                     if (flash.PositionalEncoding != PositionalEncodingType.None)
@@ -716,7 +716,7 @@ internal class InferenceOptimizer<T>
                         layerIndex: 0,
                         useCausalMask: useCausalMask,
                         activationFunction: activation);
-                    cached.SetParameters(flash.GetParameters());
+                    CopyLayerParameters(flash, cached);
                     model.Layers[i] = cached;
                 }
                 anyRewritten = true;
@@ -785,7 +785,7 @@ internal class InferenceOptimizer<T>
             layerIndex: 0,
             useCausalMask: useCausalMask,
             activationFunction: gqa.ScalarActivation);
-        cachedGqa.SetParameters(gqa.GetParameters());
+        CopyLayerParameters(gqa, cachedGqa);
 
         if (gqa.PositionalEncoding != PositionalEncodingType.None)
         {
@@ -838,7 +838,7 @@ internal class InferenceOptimizer<T>
             kvHeadCount: gqa.NumKVHeads);
         paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
         // Same [Q][K][V][O][outBias] layout (no projection bias => the source's q/k/v bias blocks are empty).
-        paged.SetParameters(gqa.GetParameters());
+        CopyLayerParameters(gqa, paged);
 
         if (gqa.PositionalEncoding != PositionalEncodingType.None)
         {
@@ -1149,7 +1149,7 @@ internal class InferenceOptimizer<T>
                     useCausalMask: useCausalMask,
                     activationFunction: activation);
                 paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
-                paged.SetParameters(mha.GetParameters());
+                CopyLayerParameters(mha, paged);
 
                 // Preserve positional encoding configuration from source MHA layer
                 if (mha.PositionalEncoding != PositionalEncodingType.None)
@@ -1179,7 +1179,7 @@ internal class InferenceOptimizer<T>
                 layerIndex: 0,
                 useCausalMask: useCausalMask,
                 activationFunction: activation);
-            cached.SetParameters(mha.GetParameters());
+            CopyLayerParameters(mha, cached);
 
             // Preserve positional encoding configuration from source MHA layer
             if (mha.PositionalEncoding != PositionalEncodingType.None)
@@ -1212,7 +1212,7 @@ internal class InferenceOptimizer<T>
                 headCount: headCount,
                 config: flashConfig,
                 activationFunction: activation);
-            flashLayer.SetParameters(mha.GetParameters());
+            CopyLayerParameters(mha, flashLayer);
             return flashLayer;
         }
 
@@ -1640,5 +1640,50 @@ internal class InferenceOptimizer<T>
 
         _speculativeDecoder = new SpeculativeDecoder<T>(_draftModel, targetForward, speculativeConfig);
         return _speculativeDecoder;
+    }
+    /// <summary>
+    /// Copies a source layer's weights into the optimized layer replacing it, materializing the
+    /// source first so the copy cannot silently be empty.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A lazily-initialized attention layer reports no parameters until its weights are allocated,
+    /// and GetParameters() on one returns an EMPTY vector. Copying that into a freshly constructed
+    /// replacement used to succeed quietly -- both sides were zero-length -- leaving the optimized
+    /// model on the replacement's own random initialization rather than the weights it was meant to
+    /// inherit. An inference optimization that silently discards the trained weights is worse than
+    /// one that fails.
+    /// </para>
+    /// <para>
+    /// TryDeclareShape is the oracle for this: layers whose weight shapes follow from their
+    /// constructor arguments -- MultiHeadAttentionLayer's Q/K/V/O among them -- allocate on demand
+    /// and then have real parameters to hand over.
+    /// </para>
+    /// </remarks>
+    private static void CopyLayerParameters(ILayer<T> source, ILayer<T> target)
+    {
+        if (source is NeuralNetworks.Layers.LayerBase<T> sourceLayer)
+        {
+            try { sourceLayer.TryDeclareShape(); }
+            catch { /* best-effort; the emptiness check below is the real guard */ }
+        }
+
+        Vector<T> parameters = source.GetParameters();
+        if (parameters.Length == 0 && target.ParameterCount > 0)
+        {
+            // The source still has nothing to give: its weight shapes are not derivable without a
+            // forward pass, which is the lazy-shape gap the auto-shapes work closes. Do not call
+            // SetParameters with an empty vector -- the replacement's count no longer agrees with
+            // it, so that now throws where it used to pass silently. Leaving the replacement on its
+            // own initialization is what this code has always done in this case; it is recorded
+            // here rather than hidden so the day shapes ARE known, this branch simply stops running.
+            System.Diagnostics.Trace.TraceWarning(
+                $"InferenceOptimizer: {source.GetType().Name} had no materialized parameters to " +
+                $"transfer to {target.GetType().Name} (which expects {target.ParameterCount}). " +
+                "The optimized layer keeps its own initialization.");
+            return;
+        }
+
+        target.SetParameters(parameters);
     }
 }

@@ -55,11 +55,11 @@ internal partial class CachedMultiHeadAttention<T> : LayerBase<T>
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
 
     // Projection weights
-    private Matrix<T> _queryWeights;
-    private Matrix<T> _keyWeights;
-    private Matrix<T> _valueWeights;
-    private Matrix<T> _outputWeights;
-    private Vector<T> _outputBias;
+    private Tensor<T> _queryWeights;
+    private Tensor<T> _keyWeights;
+    private Tensor<T> _valueWeights;
+    private Tensor<T> _outputWeights;
+    private Tensor<T> _outputBias;
 
     // KV-Cache reference (shared across layers)
     private KVCache<T>? _cache;
@@ -169,11 +169,11 @@ internal partial class CachedMultiHeadAttention<T> : LayerBase<T>
         _useCausalMask = useCausalMask;
 
         // Initialize projection weights
-        _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _keyWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _valueWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _outputWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _outputBias = new Vector<T>(embeddingDimension);
+        _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+        _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+        _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+        _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+        _outputBias = new Tensor<T>([embeddingDimension]);
 
         InitializeParameters();
     }
@@ -213,14 +213,25 @@ internal partial class CachedMultiHeadAttention<T> : LayerBase<T>
 
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_queryWeights.Rows + _queryWeights.Columns)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_queryWeights.Shape[0] + _queryWeights.Shape[1])));
 
         InitializeMatrix(_queryWeights, scale);
         InitializeMatrix(_keyWeights, scale);
         InitializeMatrix(_valueWeights, scale);
         InitializeMatrix(_outputWeights, scale);
 
-        _outputBias = Vector<T>.CreateDefault(_outputBias.Length, NumOps.Zero);
+        _outputBias = new Tensor<T>([_outputBias.Length]);   // a fresh tensor is already zero-filled
+    }
+
+    private void InitializeMatrix(Tensor<T> matrix, T scale)
+    {
+        for (int i = 0; i < matrix.Shape[0]; i++)
+        {
+            for (int j = 0; j < matrix.Shape[1]; j++)
+            {
+                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            }
+        }
     }
 
     private void InitializeMatrix(Matrix<T> matrix, T scale)
@@ -483,11 +494,11 @@ internal partial class CachedMultiHeadAttention<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        _queryWeights = _queryWeights.Subtract(_queryWeightsGradient.Multiply(learningRate));
-        _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
-        _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
-        _outputWeights = _outputWeights.Subtract(_outputWeightsGradient.Multiply(learningRate));
-        _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+        _queryWeights = Engine.TensorSubtract(_queryWeights, Tensor<T>.FromMatrix(_queryWeightsGradient.Multiply(learningRate)));
+        _keyWeights = Engine.TensorSubtract(_keyWeights, Tensor<T>.FromMatrix(_keyWeightsGradient.Multiply(learningRate)));
+        _valueWeights = Engine.TensorSubtract(_valueWeights, Tensor<T>.FromMatrix(_valueWeightsGradient.Multiply(learningRate)));
+        _outputWeights = Engine.TensorSubtract(_outputWeights, Tensor<T>.FromMatrix(_outputWeightsGradient.Multiply(learningRate)));
+        _outputBias = Engine.TensorSubtract(_outputBias, new Tensor<T>([_outputBias.Length], _outputBiasGradient.Multiply(learningRate)));
     }
 
     /// <summary>
@@ -540,7 +551,7 @@ internal partial class CachedMultiHeadAttention<T> : LayerBase<T>
         return diagnostics;
     }
 
-    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    private Tensor<T> MatrixToTensorUnused(Matrix<T> matrix)
     {
         var tensor = new Tensor<T>(new[] { matrix.Rows, matrix.Columns });
         for (int i = 0; i < matrix.Rows; i++)

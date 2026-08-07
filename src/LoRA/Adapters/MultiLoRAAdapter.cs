@@ -443,7 +443,6 @@ public partial class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInfe
         }
 
         // Update parameter vector
-        UpdateParametersFromLayers();
     }
 
     /// <summary>
@@ -529,60 +528,6 @@ public partial class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInfe
     public override ILayer<T> MergeToOriginalLayer()
     {
         return MergeTaskToLayer(_currentTask);
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        Parameters = GetParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        // Guard against incomplete initialization
-        if (_taskAdapters == null)
-        {
-            ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-            return;
-        }
-
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Base layer gradients (if not frozen)
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // All task adapters' gradients (in same order as GetParameters/SetParameters)
-        // Guard against invalid current task
-        LoRALayer<T>? currentAdapter = null;
-        if (_currentTask != null && _taskAdapters.ContainsKey(_currentTask))
-        {
-            currentAdapter = _taskAdapters[_currentTask];
-        }
-
-        foreach (var adapter in _taskAdapters.Values)
-        {
-            Vector<T>? grads = (adapter == currentAdapter && currentAdapter != null)
-                ? adapter.GetParameterGradients()
-                : null;
-
-            for (int i = 0; i < adapter.ParameterCount; i++)
-            {
-                ParameterGradients[idx++] = grads != null ? grads[i] : NumOps.Zero;
-            }
-        }
     }
 
     /// <summary>
