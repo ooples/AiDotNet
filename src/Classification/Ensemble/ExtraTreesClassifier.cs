@@ -208,7 +208,10 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
         return Options.MaxFeatures switch
         {
             MaxFeatureSelection.Sqrt => (int)Math.Ceiling(Math.Sqrt(NumFeatures)),
-            MaxFeatureSelection.Log2 => (int)Math.Ceiling(Math.Log(NumFeatures, 2)),
+            // Math.Max(1, ...): Log2(1) is 0, and a tree cannot split on zero features. The
+            // explicit-count path above already rejects a non-positive value; the rule path
+            // needs the same floor rather than passing 0 down to every tree.
+            MaxFeatureSelection.Log2 => Math.Max(1, (int)Math.Ceiling(Math.Log(NumFeatures, 2))),
             MaxFeatureSelection.All => NumFeatures,
             _ => throw new InvalidOperationException(
                 $"Unhandled {nameof(MaxFeatureSelection)} value '{Options.MaxFeatures}'.")
@@ -273,6 +276,9 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             MinSamplesSplit = Options.MinSamplesSplit,
             MinSamplesLeaf = Options.MinSamplesLeaf,
             MaxFeatures = Options.MaxFeatures,
+            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
+            // silently retrained the clone by the rule instead of the caller's explicit count.
+            MaxFeatureCount = Options.MaxFeatureCount,
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             Seed = Options.Seed,
@@ -290,6 +296,9 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             MinSamplesSplit = Options.MinSamplesSplit,
             MinSamplesLeaf = Options.MinSamplesLeaf,
             MaxFeatures = Options.MaxFeatures,
+            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
+            // silently retrained the clone by the rule instead of the caller's explicit count.
+            MaxFeatureCount = Options.MaxFeatureCount,
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             Seed = Options.Seed,

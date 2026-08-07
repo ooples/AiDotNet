@@ -105,34 +105,6 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
             Engine.TensorDivideScalar(picked, NumOps.FromDouble(2 * n)));
     }
 
-    private T ComputeLossScalarLegacy(Tensor<T> z1, Tensor<T> z2)
-    {
-        if (z1 is null) throw new ArgumentNullException(nameof(z1));
-        if (z2 is null) throw new ArgumentNullException(nameof(z2));
-
-        var batchSize = z1.Shape[0];
-        var dim = z1.Shape[1];
-
-        // Normalize embeddings if required
-        var z1Norm = _normalize ? L2Normalize(z1) : z1;
-        var z2Norm = _normalize ? L2Normalize(z2) : z2;
-
-        // Concatenate z1 and z2: [2*batch_size, dim]
-        var combined = Concatenate(z1Norm, z2Norm);
-
-        // Compute similarity matrix: [2*batch_size, 2*batch_size]
-        var similarity = ComputeSimilarityMatrix(combined);
-
-        // Apply temperature scaling
-        var tempScaled = ScaleByTemperature(similarity);
-
-        // Create mask for positive pairs
-        // Positives: (i, i+batch_size) and (i+batch_size, i)
-        var loss = ComputeContrastiveLoss(tempScaled, batchSize);
-
-        return loss;
-    }
-
     /// <summary>
     /// Computes the NT-Xent loss and returns gradients.
     /// </summary>
@@ -232,49 +204,6 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
         }
 
         return new Tensor<T>(result, similarity._shape);
-    }
-
-    private T ComputeContrastiveLoss(Tensor<T> similarity, int batchSize)
-    {
-        var n = similarity.Shape[0]; // 2 * batchSize
-        T totalLoss = NumOps.Zero;
-        int validPairs = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            // Find positive index
-            int positiveIdx = i < batchSize ? i + batchSize : i - batchSize;
-
-            // Compute log-softmax for row i
-            T maxVal = NumOps.MinValue;
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    var val = similarity[i, j];
-                    if (NumOps.GreaterThan(val, maxVal)) maxVal = val;
-                }
-            }
-
-            T sumExp = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(similarity[i, j], maxVal)));
-                }
-            }
-
-            var logSumExp = NumOps.Add(maxVal, NumOps.Log(sumExp));
-            var positiveScore = similarity[i, positiveIdx];
-
-            // Loss for this sample: -positive_score + log_sum_exp
-            var sampleLoss = NumOps.Subtract(logSumExp, positiveScore);
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-            validPairs++;
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(validPairs));
     }
 
     private (T loss, Tensor<T> grad) ComputeContrastiveLossWithGrad(

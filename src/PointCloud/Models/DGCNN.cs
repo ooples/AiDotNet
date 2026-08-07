@@ -857,14 +857,18 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
         _bn is ILayerSerializationExtras<T> ex ? ex.ExtraParameterCount : 0;
 
     Vector<T> ILayerSerializationExtras<T>.GetExtraParameters() =>
-        _bn is ILayerSerializationExtras<T> ex ? ex.GetExtraParameters() : new Vector<T>(0);
+        // DIRECT CAST, NOT A TYPE TEST. _bn is declared BatchNormalizationLayer<T>, which implements
+        // ILayerSerializationExtras<T> EXPLICITLY, so the interface is always present. The `is` test
+        // could only ever go false if that implementation were removed -- and then it silently
+        // returned an empty vector, so a layer would round-trip through serialization having lost its
+        // running mean/variance with nothing reporting it. A cast fails at compile time instead.
+        ((ILayerSerializationExtras<T>)_bn).GetExtraParameters();
 
     void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
     {
-        if (_bn is ILayerSerializationExtras<T> ex)
-        {
-            ex.SetExtraParameters(extraParameters);
-        }
+        // See GetExtraParameters: the guard could only mask the interface being dropped, which would
+        // turn a restore into a silent no-op.
+        ((ILayerSerializationExtras<T>)_bn).SetExtraParameters(extraParameters);
     }
 
     public override void ResetState()
