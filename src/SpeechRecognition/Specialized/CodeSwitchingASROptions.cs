@@ -53,6 +53,7 @@ public class CodeSwitchingASROptions : ModelOptions
         EnglishBpeVocabSize = other.EnglishBpeVocabSize;
         MandarinCharVocabSize = other.MandarinCharVocabSize;
         SharedLidAttention = other.SharedLidAttention;
+        VocabSize = other.VocabSize;
     }
 
     /// <summary>
