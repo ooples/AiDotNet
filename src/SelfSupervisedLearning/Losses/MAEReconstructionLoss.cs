@@ -35,9 +35,9 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked Autoencoders Are Scalable Vision Learners", "https://arxiv.org/abs/2111.06377", Year = 2022, Authors = "Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, Ross Girshick")]
-public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
+public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
 
     private readonly bool _normalize;
     private readonly bool _perPatchNormalization;
@@ -314,9 +314,23 @@ public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
     /// IContrastiveLoss implementation — computes reconstruction loss with all-ones mask
     /// (all patches contribute equally).
     /// </summary>
-    T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    /// <summary>
+    /// Differentiable masked reconstruction error over every element.
+    /// </summary>
+    /// <remarks>
+    /// The two-view interface carries no mask, so this reduces to mean squared error over all
+    /// elements — the all-ones-mask case of <see cref="ComputeLoss(Tensor{T}, Tensor{T},
+    /// Tensor{T})"/>. Built from IEngine ops so it can be trained on; the masked overload above
+    /// branches on mask values in host code and returns a scalar, which cannot be.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        var mask = Tensor<T>.CreateDefault(view1._shape, NumOps.One);
-        return ComputeLoss(view1, view2, mask);
+        if (view1 is null) throw new ArgumentNullException(nameof(view1));
+        if (view2 is null) throw new ArgumentNullException(nameof(view2));
+
+        var diff = Engine.TensorSubtract(view1, view2);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var total = Engine.ReduceSum(squared, null, keepDims: false);
+        return Engine.TensorDivideScalar(total, NumOps.FromDouble(view1.Length));
     }
 }

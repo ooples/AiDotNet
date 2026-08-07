@@ -250,7 +250,7 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
     /// - For generation: Processes single new token, uses cached K, V
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
 
