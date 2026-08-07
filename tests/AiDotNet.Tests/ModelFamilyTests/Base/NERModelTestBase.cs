@@ -70,6 +70,7 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
         for (int i = 0; i < input.Length; i++)
             scaledInput[i] = NumOps.FromDouble(ConvertToDouble(input[i]) * 10.0);
 
+        var baseline = network.Predict(input);
         var output = network.Predict(scaledInput);
 
         Assert.NotNull(output);
@@ -79,6 +80,28 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
             double v = ConvertToDouble(output[i]);
             Assert.False(double.IsNaN(v) || double.IsInfinity(v),
                 "NER model produced a non-finite label for scaled input.");
+        }
+
+        // ASSERT THE PROPERTY THE DOC CLAIMS, not merely that nothing exploded. The override
+        // previously checked non-null, non-empty and finite -- all three already covered by
+        // EmptyInput_ShouldNotCrash and LabelValues_ShouldBeNonNegative in this same file -- so
+        // it carried a name promising the output CHANGES while asserting nothing about change
+        // at all, in either direction.
+        //
+        // The remark above states the real invariant for an argmax/Viterbi decoder: scaling by
+        // a positive constant is decode-invariant. That is a genuine, falsifiable property of
+        // this family, and it FAILS if the decode ever becomes scale-sensitive -- which is the
+        // defect worth catching here. A model whose labels shift under pure rescaling is not
+        // the scale-robust labeler this override assumes.
+        Assert.Equal(baseline.Length, output.Length);
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.True(
+                ConvertToDouble(baseline[i]) == ConvertToDouble(output[i]),
+                $"Decoded label[{i}] changed under a positive rescale " +
+                $"({ConvertToDouble(baseline[i])} -> {ConvertToDouble(output[i])}). " +
+                "An argmax/Viterbi decode is expected to be scale-invariant; if this model is " +
+                "genuinely scale-sensitive, it should not override ScaledInput_ShouldChangeOutput.");
         }
     }
 

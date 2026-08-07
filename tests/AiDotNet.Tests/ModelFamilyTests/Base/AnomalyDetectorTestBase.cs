@@ -74,7 +74,15 @@ public abstract class AnomalyDetectorTestBase<T>
         var normalScores = model.Predict(normalX);
         var outlierScores = model.Predict(outlierX);
 
-        if (ModelTestHelpers.AllFinite(normalScores) && ModelTestHelpers.AllFinite(outlierScores))
+        // NON-FINITE IS A FAILURE, NOT A REASON TO SKIP. Wrapping the invariant in a
+        // finiteness check meant a detector returning NaN or Infinity satisfied this test
+        // by producing nothing checkable -- the worse the model behaved, the more certainly
+        // it passed. Finiteness is asserted first, then the invariant runs unconditionally.
+        Assert.True(ModelTestHelpers.AllFinite(normalScores),
+            "Anomaly scores for normal points contain NaN or Infinity.");
+        Assert.True(ModelTestHelpers.AllFinite(outlierScores),
+            "Anomaly scores for outlier points contain NaN or Infinity.");
+
         {
             double normalMean = 0, outlierMean = 0;
             for (int i = 0; i < normalScores.Length; i++) normalMean += ToD(normalScores[i]);

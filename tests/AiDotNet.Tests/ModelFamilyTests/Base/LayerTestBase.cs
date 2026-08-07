@@ -431,18 +431,33 @@ public abstract class LayerTestBase
         }
     }
 
-    /// <summary>An exception that states a shape constraint, as opposed to one that leaks an assumption.</summary>
-    /// <remarks>
-    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
-    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
-    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
-    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
-    /// </remarks>
     /// <summary>Environmental failure - the machine, not the layer.</summary>
     private static bool IsResourceExhaustion(System.Exception ex)
         => ex is System.OutOfMemoryException or System.InsufficientExecutionStackException
             or System.OperationCanceledException;
 
+    /// <summary>An exception that STATES a shape constraint, as opposed to one that leaks an assumption.</summary>
+    /// <remarks>
+    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
+    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
+    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
+    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
+    /// <para>
+    /// THREE TYPES WERE REMOVED BECAUSE THEY SWALLOW THE DEFECT THIS INVARIANT HUNTS. The target is a
+    /// layer that ASSUMES a shape silently and then fails from inside a kernel; accepting the generic
+    /// failure modes as "deliberate rejection" meant exactly that failure counted as a pass:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>InvalidOperationException is what a kernel throws when its own state is wrong -- the
+    /// canonical shape of the bug, not of a rejection.</item>
+    /// <item>NotSupportedException and NotImplementedException say the layer does not do this at all.
+    /// That is a gap in the layer, and marking it as a well-stated shape constraint hides it.</item>
+    /// </list>
+    /// <para>
+    /// A layer that genuinely means to reject a shape has five precise types and ArgumentException
+    /// available, all of which state the constraint.
+    /// </para>
+    /// </remarks>
     private static bool IsDeliberateShapeRejection(System.Exception ex)
         => ex is AiDotNet.Exceptions.TensorShapeMismatchException
             or AiDotNet.Exceptions.TensorDimensionException
@@ -450,9 +465,6 @@ public abstract class LayerTestBase
             or AiDotNet.Exceptions.InvalidInputDimensionException
             or AiDotNet.Exceptions.VectorLengthMismatchException
             or System.ArgumentException
-            or System.InvalidOperationException
-            or System.NotSupportedException
-            or System.NotImplementedException
             or System.RankException;
 
     /// <summary>Best-effort symbolic summary of what the layer did to the shapes it accepted.</summary>
