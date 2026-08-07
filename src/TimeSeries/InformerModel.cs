@@ -1079,7 +1079,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private readonly int _sparsityFactor;
 
     // Multi-head attention weights (Tensor-based)
-    private readonly Tensor<T> _queryProj;
+    private  Tensor<T> _queryProj;
     internal Tensor<T> GetQueryProjection() => _queryProj;
     internal Tensor<T> GetKeyProjection() => _keyProj;
     internal Tensor<T> GetValueProjection() => _valueProj;
@@ -1092,21 +1092,21 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     internal Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
     internal Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
     internal Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
-    private readonly Tensor<T> _keyProj;
-    private readonly Tensor<T> _valueProj;
-    private readonly Tensor<T> _outputProj;
+    private  Tensor<T> _keyProj;
+    private  Tensor<T> _valueProj;
+    private  Tensor<T> _outputProj;
 
     // Feed-forward network (Tensor-based)
-    private readonly Tensor<T> _ffn1;
-    private readonly Tensor<T> _ffn1Bias;
-    private readonly Tensor<T> _ffn2;
-    private readonly Tensor<T> _ffn2Bias;
+    private  Tensor<T> _ffn1;
+    private  Tensor<T> _ffn1Bias;
+    private  Tensor<T> _ffn2;
+    private  Tensor<T> _ffn2Bias;
 
     // Layer normalization parameters (Tensor-based)
-    private readonly Tensor<T> _layerNorm1Gamma;
-    private readonly Tensor<T> _layerNorm1Beta;
-    private readonly Tensor<T> _layerNorm2Gamma;
-    private readonly Tensor<T> _layerNorm2Beta;
+    private  Tensor<T> _layerNorm1Gamma;
+    private  Tensor<T> _layerNorm1Beta;
+    private  Tensor<T> _layerNorm2Gamma;
+    private  Tensor<T> _layerNorm2Beta;
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
@@ -1244,8 +1244,8 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private readonly int _embeddingDim;
     private readonly int _distillingFactor;
 
-    private readonly Tensor<T> _convWeights;  // [embeddingDim, 3] for kernel size 3
-    private readonly Tensor<T> _convBias;
+    private  Tensor<T> _convWeights;  // [embeddingDim, 3] for kernel size 3
+    private  Tensor<T> _convBias;
 
     // Tape accessors so the IEngine forward can run the distilling conv/pool as tracked ops
     // (the [embDim,3] depthwise kernel + [embDim] bias + the stride factor).
@@ -1334,30 +1334,30 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private readonly int _headDim;
 
     // Self-attention weights
-    private readonly Tensor<T> _selfQueryProj;
-    private readonly Tensor<T> _selfKeyProj;
-    private readonly Tensor<T> _selfValueProj;
-    private readonly Tensor<T> _selfOutputProj;
+    private  Tensor<T> _selfQueryProj;
+    private  Tensor<T> _selfKeyProj;
+    private  Tensor<T> _selfValueProj;
+    private  Tensor<T> _selfOutputProj;
 
     // Cross-attention weights
-    private readonly Tensor<T> _crossQueryProj;
-    private readonly Tensor<T> _crossKeyProj;
-    private readonly Tensor<T> _crossValueProj;
-    private readonly Tensor<T> _crossOutputProj;
+    private  Tensor<T> _crossQueryProj;
+    private  Tensor<T> _crossKeyProj;
+    private  Tensor<T> _crossValueProj;
+    private  Tensor<T> _crossOutputProj;
 
     // FFN
-    private readonly Tensor<T> _ffn1;
-    private readonly Tensor<T> _ffn1Bias;
-    private readonly Tensor<T> _ffn2;
-    private readonly Tensor<T> _ffn2Bias;
+    private  Tensor<T> _ffn1;
+    private  Tensor<T> _ffn1Bias;
+    private  Tensor<T> _ffn2;
+    private  Tensor<T> _ffn2Bias;
 
     // Layer norms
-    private readonly Tensor<T> _layerNorm1Gamma;
-    private readonly Tensor<T> _layerNorm1Beta;
-    private readonly Tensor<T> _layerNorm2Gamma;
-    private readonly Tensor<T> _layerNorm2Beta;
-    private readonly Tensor<T> _layerNorm3Gamma;
-    private readonly Tensor<T> _layerNorm3Beta;
+    private  Tensor<T> _layerNorm1Gamma;
+    private  Tensor<T> _layerNorm1Beta;
+    private  Tensor<T> _layerNorm2Gamma;
+    private  Tensor<T> _layerNorm2Beta;
+    private  Tensor<T> _layerNorm3Gamma;
+    private  Tensor<T> _layerNorm3Beta;
     internal Tensor<T> GetSelfQueryProjection() => _selfQueryProj;
     internal Tensor<T> GetSelfKeyProjection() => _selfKeyProj;
     internal Tensor<T> GetSelfValueProjection() => _selfValueProj;

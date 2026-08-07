@@ -914,9 +914,9 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
 
     // Input-to-gate and hidden-to-gate weights, stacked over the 4 gates in the order
     // (input, forget, cell, output): _wx is [4H, inputSize], _wh is [4H, H], _bias is [4H].
-    private readonly Tensor<T> _wx;
-    private readonly Tensor<T> _wh;
-    private readonly Tensor<T> _bias;
+    private  Tensor<T> _wx;
+    private  Tensor<T> _wh;
+    private  Tensor<T> _bias;
 
     public int InputSize => _inputSize;
     public int HiddenSize => _hiddenSize;
