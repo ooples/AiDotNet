@@ -195,7 +195,14 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
                 return new Finding(RawRandomConstruction, creation.GetLocation());
 
             case "System.NotImplementedException":
-                return new Finding(NotImplemented, creation.GetLocation(), EnclosingMemberName(creation));
+                // A virtual member whose whole body is this throw is abstract-by-convention: it
+                // exists to be overridden and throws precisely so a type that overrides NEITHER it
+                // nor its predecessor fails loudly. Inventing a default there would be worse than
+                // throwing. LayerBase.ForwardTraced is the case in point - virtual only so a
+                // migration can proceed one layer at a time without a broken build in between.
+                return IsAbstractByConvention(creation)
+                    ? null
+                    : new Finding(NotImplemented, creation.GetLocation(), EnclosingMemberName(creation));
 
             case "System.Text.RegularExpressions.Regex" when !HasTimeSpanArgument(ctx, creation.ArgumentList):
                 return new Finding(RegexWithoutTimeout, creation.GetLocation(), "new Regex(...)");
@@ -246,6 +253,41 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
             var type = ctx.SemanticModel.GetTypeInfo(argument.Expression).Type;
             if (type?.ToDisplayString() == "System.TimeSpan")
                 return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when this throw is the ENTIRE body of a virtual member - an abstract-by-convention
+    /// member rather than an unfinished one.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately narrow. It requires BOTH that the member is virtual (an override or a plain
+    /// method with a stub body is still a real finding) AND that the throw is the whole body (a
+    /// virtual method that does work and throws on one branch is still a real finding).
+    /// </remarks>
+    private static bool IsAbstractByConvention(SyntaxNode node)
+    {
+        for (var current = node.Parent; current is not null; current = current.Parent)
+        {
+            if (current is not MethodDeclarationSyntax method)
+            {
+                // Stop at the first member boundary that is not a method: a property or
+                // constructor throwing NotImplementedException is a genuine stub.
+                if (current is MemberDeclarationSyntax) return false;
+                continue;
+            }
+
+            if (!method.Modifiers.Any(SyntaxKind.VirtualKeyword)) return false;
+
+            // Expression body: `=> throw new NotImplementedException(...)`.
+            if (method.ExpressionBody is not null)
+                return method.ExpressionBody.Expression is ThrowExpressionSyntax;
+
+            // Block body: a single throw statement and nothing else.
+            var statements = method.Body?.Statements;
+            return statements is { Count: 1 } && statements.Value[0] is ThrowStatementSyntax;
         }
 
         return false;
