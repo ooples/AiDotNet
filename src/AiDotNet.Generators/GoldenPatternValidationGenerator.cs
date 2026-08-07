@@ -111,9 +111,11 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var optionsFindings = context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) => node is ClassDeclarationSyntax { Identifier.ValueText.Length: > 0 },
+                predicate: static (node, _) => node is ClassDeclarationSyntax cds
+                    && (cds.Identifier.ValueText.EndsWith("Options", System.StringComparison.Ordinal)
+                        || cds.Identifier.ValueText.EndsWith("Config", System.StringComparison.Ordinal)),
                 transform: static (ctx, _) => AnalyzeOptionsCopyConstructor(ctx))
-            .Where(static f => f is not null && f!.Count > 0);
+            .Where(static f => f.Count > 0);
 
         var nodeFindings = context.SyntaxProvider.CreateSyntaxProvider(
                 predicate: static (node, _) => IsInterestingNode(node),
@@ -123,10 +125,8 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(optionsFindings.Collect(), static (spc, batches) =>
         {
             foreach (var batch in batches)
-            {
-                if (batch is null) continue;
-                foreach (var f in batch) Report(spc, f);
-            }
+                foreach (var f in batch)
+                    Report(spc, f);
         });
 
         context.RegisterSourceOutput(nodeFindings.Collect(), static (spc, findings) =>
@@ -142,7 +142,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         spc.ReportDiagnostic(Diagnostic.Create(f.Descriptor, f.Location, f.Args));
 
     /// <summary>A single rule violation, carried from the transform phase to the output phase.</summary>
-    internal sealed class Finding
+    internal sealed class Finding : System.IEquatable<Finding>
     {
         internal Finding(DiagnosticDescriptor descriptor, Location location, params string[] args)
         {
@@ -154,11 +154,85 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         internal DiagnosticDescriptor Descriptor { get; }
         internal Location Location { get; }
         internal string[] Args { get; }
+
+        // Value equality so incremental-pipeline values compare by content, not identity — otherwise
+        // every transform run yields reference-distinct Findings and Collect() treats any edit as
+        // changed input, re-reporting diagnostics that did not actually change.
+        public bool Equals(Finding? other)
+        {
+            if (other is null) return false;
+            if (Descriptor.Id != other.Descriptor.Id) return false;
+            if (!Location.Equals(other.Location)) return false;
+            if (Args.Length != other.Args.Length) return false;
+            for (int i = 0; i < Args.Length; i++)
+                if (!string.Equals(Args[i], other.Args[i], System.StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as Finding);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = Descriptor.Id.GetHashCode();
+                hash = (hash * 397) ^ Location.GetHashCode();
+                foreach (var arg in Args) hash = (hash * 397) ^ (arg?.GetHashCode() ?? 0);
+                return hash;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A readonly <see cref="ImmutableArray{T}"/> wrapper with structural equality. Incremental
+    /// pipeline values are compared with <see cref="EqualityComparer{T}.Default"/>, and
+    /// <c>ImmutableArray&lt;T&gt;.Equals</c> compares the underlying array by reference, so a bare
+    /// list/array cached value never compares equal across runs; this wrapper compares by content.
+    /// </summary>
+    internal readonly struct EquatableArray<T> : System.IEquatable<EquatableArray<T>>, IEnumerable<T>
+        where T : System.IEquatable<T>
+    {
+        private readonly ImmutableArray<T> _items;
+
+        internal EquatableArray(ImmutableArray<T> items) => _items = items;
+
+        internal int Count => _items.IsDefault ? 0 : _items.Length;
+
+        public bool Equals(EquatableArray<T> other)
+        {
+            var a = _items.IsDefault ? ImmutableArray<T>.Empty : _items;
+            var b = other._items.IsDefault ? ImmutableArray<T>.Empty : other._items;
+            if (a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++)
+                if (!a[i].Equals(b[i])) return false;
+            return true;
+        }
+
+        public override bool Equals(object? obj) => obj is EquatableArray<T> other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            if (_items.IsDefault) return 0;
+            unchecked
+            {
+                int hash = 17;
+                foreach (var item in _items) hash = (hash * 397) ^ (item?.GetHashCode() ?? 0);
+                return hash;
+            }
+        }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            var items = _items.IsDefault ? ImmutableArray<T>.Empty : _items;
+            foreach (var item in items) yield return item;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private static bool IsInterestingNode(SyntaxNode node) =>
         node is PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression }
-             or ObjectCreationExpressionSyntax
+             or BaseObjectCreationExpressionSyntax
              or InvocationExpressionSyntax
              or CatchClauseSyntax;
 
@@ -170,7 +244,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
                 when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
                 return new Finding(NullForgivingOperator, postfix.GetLocation());
 
-            case ObjectCreationExpressionSyntax creation:
+            case BaseObjectCreationExpressionSyntax creation:
                 return AnalyzeObjectCreation(ctx, creation);
 
             case InvocationExpressionSyntax invocation:
@@ -183,7 +257,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static Finding? AnalyzeObjectCreation(GeneratorSyntaxContext ctx, ObjectCreationExpressionSyntax creation)
+    private static Finding? AnalyzeObjectCreation(GeneratorSyntaxContext ctx, BaseObjectCreationExpressionSyntax creation)
     {
         var type = ctx.SemanticModel.GetSymbolInfo(creation).Symbol?.ContainingType
                    ?? ctx.SemanticModel.GetTypeInfo(creation).Type as INamedTypeSymbol;
@@ -218,10 +292,24 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
 
         var owner = method.ContainingType?.ToDisplayString();
 
-        if (owner == "System.Console" &&
-            (method.Name == "WriteLine" || method.Name == "Write" || method.Name == "Error"))
+        if (owner == "System.Console" && (method.Name == "WriteLine" || method.Name == "Write"))
         {
             return new Finding(ConsoleUsedForLogging, invocation.GetLocation(), $"Console.{method.Name}");
+        }
+
+        // Console.Error.WriteLine / Console.Out.WriteLine bind to System.IO.TextWriter (the type of
+        // the Console.Error/Out properties), so the invocation's owner is TextWriter, not Console.
+        // Catch them by inspecting the receiver: a Write/WriteLine whose target expression is the
+        // System.Console.Error or .Out property. (A bare `method.Name == "Error"` never matched —
+        // Error is a property, not a method, so GetSymbolInfo never yields a method named Error.)
+        if (owner == "System.IO.TextWriter" &&
+            (method.Name == "WriteLine" || method.Name == "Write") &&
+            invocation.Expression is MemberAccessExpressionSyntax consoleWrite &&
+            ctx.SemanticModel.GetSymbolInfo(consoleWrite.Expression).Symbol is IPropertySymbol writer &&
+            writer.ContainingType?.ToDisplayString() == "System.Console" &&
+            (writer.Name == "Error" || writer.Name == "Out"))
+        {
+            return new Finding(ConsoleUsedForLogging, invocation.GetLocation(), $"Console.{writer.Name}.{method.Name}");
         }
 
         // Static Regex helpers take the timeout as their last parameter; without it the default is infinite.
@@ -359,27 +447,27 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
     /// own copy constructor's responsibility, and flagging them here would report the same omission
     /// once per derived type.
     /// </remarks>
-    private static List<Finding>? AnalyzeOptionsCopyConstructor(GeneratorSyntaxContext ctx)
+    private static EquatableArray<Finding> AnalyzeOptionsCopyConstructor(GeneratorSyntaxContext ctx)
     {
         var declaration = (ClassDeclarationSyntax)ctx.Node;
 
         var name = declaration.Identifier.ValueText;
         if (!name.EndsWith("Options", System.StringComparison.Ordinal) &&
             !name.EndsWith("Config", System.StringComparison.Ordinal))
-            return null;
+            return default;
 
         if (ctx.SemanticModel.GetDeclaredSymbol(declaration) is not INamedTypeSymbol symbol)
-            return null;
+            return default;
 
         var copyConstructor = FindCopyConstructor(declaration, ctx, symbol);
         if (copyConstructor is null)
-            return null;
+            return default;
 
         // ': this(other)' hands the whole copy to another constructor on this same type, which is
         // then the one that gets checked. ': base(other)' only covers the BASE type's properties,
         // so it does not excuse this type from copying the properties it declares itself.
         if (copyConstructor.Initializer.IsKind(SyntaxKind.ThisConstructorInitializer))
-            return null;
+            return default;
 
         var assigned = CollectAssignedMemberNames(copyConstructor);
 
@@ -395,7 +483,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
             findings.Add(new Finding(CopyConstructorMissesProperty, location, name, member.Name));
         }
 
-        return findings;
+        return new EquatableArray<Finding>(findings.ToImmutableArray());
     }
 
     private static ConstructorDeclarationSyntax? FindCopyConstructor(
