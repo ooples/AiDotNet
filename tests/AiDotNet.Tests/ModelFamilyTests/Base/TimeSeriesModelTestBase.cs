@@ -128,7 +128,15 @@ public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
 
         var forecast = ToD(model.Predict(ToT(forecastX)));
 
-        if (ModelTestHelpers.AllFinite(forecast) && forecast.Length >= 2)
+        // NON-FINITE IS A FAILURE, NOT A REASON TO SKIP. Folding AllFinite into the guard meant a
+        // model returning NaN or Infinity satisfied the invariant by producing nothing checkable --
+        // the worse the model behaved, the more certainly it passed. Finiteness is asserted first;
+        // the structural conditions that remain in the guard are real branches (a shorter forecast,
+        // an autoregressive model whose Predict returns out-of-sample values), not excuses.
+        Assert.True(ModelTestHelpers.AllFinite(forecast),
+            "Forecast contains NaN or Infinity.");
+
+        if (forecast.Length >= 2)
         {
             // The training data has y = 0.5t + seasonal + noise, so the trend is upward.
             // Compare early vs late forecasts — later ones should be higher on average.
@@ -177,7 +185,11 @@ public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
         var pred1 = ToD(model1.Predict(ToT(testX)));
         var pred2 = ToD(model2.Predict(ToT(testX)));
 
-        if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
+        Assert.True(ModelTestHelpers.AllFinite(pred1),
+            "Prediction from the unshifted model contains NaN or Infinity.");
+        Assert.True(ModelTestHelpers.AllFinite(pred2),
+            "Prediction from the shifted model contains NaN or Infinity.");
+
         {
             double actualShift = pred2[0] - pred1[0];
             Assert.True(Math.Abs(actualShift - shift) < shift * 0.3,
@@ -214,13 +226,16 @@ public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
         // For autoregressive models, these are N-step-ahead forecasts.
         var predictions = ToD(model.Predict(ToT(trainX)));
 
-        if (ModelTestHelpers.AllFinite(predictions) && predictions.Length == trainY.Length)
+        Assert.True(ModelTestHelpers.AllFinite(predictions),
+            "Predictions contain NaN or Infinity.");
+
+        if (predictions.Length == trainY.Length)
         {
             double r2 = ModelTestHelpers.CalculateR2(trainY, predictions);
             Assert.True(r2 > 0.0,
                 $"R² = {r2:F4} on time series with clear trend — model is worse than mean baseline.");
         }
-        else if (ModelTestHelpers.AllFinite(predictions))
+        else
         {
             // For autoregressive models where Predict returns forecasts (not in-sample),
             // just verify predictions are in a reasonable range
@@ -263,7 +278,11 @@ public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
         var (testX, testY) = ModelTestHelpers.GenerateTimeSeriesData(TestLength, ModelTestHelpers.CreateSeededRandom(99), noise: 0.5);
         var testPred = ToD(model.Predict(ToT(testX)));
 
-        if (ModelTestHelpers.AllFinite(trainPred) && ModelTestHelpers.AllFinite(testPred))
+        Assert.True(ModelTestHelpers.AllFinite(trainPred),
+            "In-sample predictions contain NaN or Infinity.");
+        Assert.True(ModelTestHelpers.AllFinite(testPred),
+            "Out-of-sample predictions contain NaN or Infinity.");
+
         {
             double trainMSE = ModelTestHelpers.CalculateMSE(trainY, trainPred);
             double testMSE = ModelTestHelpers.CalculateMSE(testY, testPred);
@@ -291,7 +310,9 @@ public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
         model.Train(ToT(trainX), ToT(trainY));
         var predictions = ToD(model.Predict(ToT(trainX)));
 
-        if (ModelTestHelpers.AllFinite(predictions))
+        Assert.True(ModelTestHelpers.AllFinite(predictions),
+            "Predictions contain NaN or Infinity.");
+
         {
             double residualSum = 0;
             for (int i = 0; i < trainY.Length; i++)
@@ -335,7 +356,14 @@ public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
         var pred1 = ToD(model1.Predict(ToT(testX)));
         var pred2 = ToD(model2.Predict(ToT(testX)));
 
-        if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2) && Math.Abs(pred1[0]) > 0.01)
+        Assert.True(ModelTestHelpers.AllFinite(pred1),
+            "Prediction from the unscaled model contains NaN or Infinity.");
+        Assert.True(ModelTestHelpers.AllFinite(pred2),
+            "Prediction from the scaled model contains NaN or Infinity.");
+
+        // The magnitude guard stays: a ratio against a near-zero denominator is not a
+        // measurement, which is a property of the fixture rather than of the model.
+        if (Math.Abs(pred1[0]) > 0.01)
         {
             double ratio = pred2[0] / pred1[0];
             Assert.True(ratio > scale * 0.3 && ratio < scale * 3.0,
@@ -372,8 +400,12 @@ public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
         modelLarge.Train(ToT(trainXLarge), ToT(trainYLarge));
         var predLarge = ToD(modelLarge.Predict(ToT(trainXLarge)));
 
-        if (ModelTestHelpers.AllFinite(predSmall) && predSmall.Length == trainYSmall.Length &&
-            ModelTestHelpers.AllFinite(predLarge) && predLarge.Length == trainYLarge.Length)
+        Assert.True(ModelTestHelpers.AllFinite(predSmall),
+            "Predictions from the small-data model contain NaN or Infinity.");
+        Assert.True(ModelTestHelpers.AllFinite(predLarge),
+            "Predictions from the large-data model contain NaN or Infinity.");
+
+        if (predSmall.Length == trainYSmall.Length && predLarge.Length == trainYLarge.Length)
         {
             double r2Small = ModelTestHelpers.CalculateR2(trainYSmall, predSmall);
             double r2Large = ModelTestHelpers.CalculateR2(trainYLarge, predLarge);
@@ -589,7 +621,10 @@ public abstract class TimeSeriesModelTestBase<T> : System.IDisposable
             actual = SliceForecastTarget(trainY, trainLen, horizon);
         }
 
-        if (ModelTestHelpers.AllFinite(predictions) && predictions.Length == actual.Length)
+        Assert.True(ModelTestHelpers.AllFinite(predictions),
+            "Out-of-sample forecast contains NaN or Infinity.");
+
+        if (predictions.Length == actual.Length)
         {
             // Out-of-sample forecast evaluation with Theil's U2 statistic (Theil, 1966): the model's
             // forecast RMSE relative to the same-horizon naive/persistence forecast. U2 < 1 beats

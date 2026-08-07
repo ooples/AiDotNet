@@ -339,12 +339,6 @@ public abstract class LayerTestBase
     // =========================================================================
 
     /// <summary>
-    /// Whether the shape-robustness sweep applies. Override to <c>false</c> ONLY for a layer whose input
-    /// shape is genuinely not perturbable, never to silence a crash.
-    /// </summary>
-    protected virtual bool ShapeRobustnessApplicable => true;
-
-    /// <summary>
     /// Feeds the layer input shapes one step away from its declared one, and requires every outcome to be
     /// either a real output or a deliberate rejection.
     /// </summary>
@@ -371,7 +365,13 @@ public abstract class LayerTestBase
     public async Task Forward_NearbyShapes_AreHandledOrDeliberatelyRejected()
     {
         await Task.Yield();
-        if (!ShapeRobustnessApplicable) return;
+
+        // NO OPT-OUT. There used to be a ShapeRobustnessApplicable hook, and an override to false
+        // returned from this test having asserted NOTHING -- so the layers most likely to need this
+        // invariant were the ones most likely to be excused from it, silently and permanently.
+        // Every layer can participate, because the invariant already accepts an explicit rejection:
+        // a layer whose input shape is genuinely fixed satisfies it by REFUSING nearby shapes with a
+        // validation exception that names the constraint, which is the correct behaviour anyway.
         using var _arena = TensorArena.Create();
 
         var probes = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.ProbeShapes(InputShape);
@@ -458,14 +458,57 @@ public abstract class LayerTestBase
     /// available, all of which state the constraint.
     /// </para>
     /// </remarks>
+    /// <summary>Whether an exception is the layer deliberately refusing a shape.</summary>
+    /// <remarks>
+    /// <para>
+    /// The dedicated exception types are self-evidently shape rejections and are accepted outright.
+    /// A bare <see cref="System.ArgumentException"/> is not: it is also what an internal argument
+    /// failure throws, so accepting every one of them let a defect that names no shape constraint
+    /// pass as correct behaviour -- which is the exact distinction this invariant exists to draw.
+    /// </para>
+    /// <para>
+    /// So a generic ArgumentException has to SAY something about shape. The vocabulary below is the
+    /// language layer validation actually uses; a message drawn from none of it is treated as a
+    /// crash and reported, which is the safe direction: a real rejection worded outside this
+    /// vocabulary shows up as a failure asking for a clearer message, whereas the old behaviour hid
+    /// real defects.
+    /// </para>
+    /// </remarks>
     private static bool IsDeliberateShapeRejection(System.Exception ex)
-        => ex is AiDotNet.Exceptions.TensorShapeMismatchException
+    {
+        if (ex is AiDotNet.Exceptions.TensorShapeMismatchException
             or AiDotNet.Exceptions.TensorDimensionException
             or AiDotNet.Exceptions.TensorRankException
             or AiDotNet.Exceptions.InvalidInputDimensionException
             or AiDotNet.Exceptions.VectorLengthMismatchException
-            or System.ArgumentException
-            or System.RankException;
+            or System.RankException)
+        {
+            return true;
+        }
+
+        if (ex is not System.ArgumentException) return false;
+
+        return NamesAShapeConstraint(ex.Message);
+    }
+
+    /// <summary>The words a shape validation message uses when it states a constraint.</summary>
+    private static readonly string[] ShapeConstraintVocabulary =
+    {
+        "shape", "dimension", "rank", "axis", "axes", "length", "size",
+        "height", "width", "channel", "batch", "divisible", "expected",
+        "must be", "must have", "does not match", "mismatch",
+    };
+
+    private static bool NamesAShapeConstraint(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+
+        foreach (var word in ShapeConstraintVocabulary)
+        {
+            if (message!.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        }
+        return false;
+    }
 
     /// <summary>Best-effort symbolic summary of what the layer did to the shapes it accepted.</summary>
     private static string DescribeDiscoveredRelation(List<(int[] Input, int[] Output)> observations)

@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
@@ -47,15 +48,21 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
     /// <summary>
     /// NER override of <see cref="NeuralNetworkModelTestBase{T}.ScaledInput_ShouldChangeOutput"/>.
     /// Sequence-labeling models (e.g. BiLSTM-CRF) emit a DISCRETE label sequence via an argmax / CRF
-    /// Viterbi decode. Multiplying the input by a positive constant does not flip that argmax path — the
-    /// decode is scale-robust by construction — so the base invariant "output must change when the input
-    /// is scaled 10x" does not apply here: it is a property of continuous-output models, not of an
-    /// argmax-decoded discrete labeler. (Concretely, BiLSTMCRF passes
-    /// DifferentInputs_ShouldProduceDifferentOutputs — the forward pass DOES respond to input — but
-    /// scaling alone leaves the decoded labels unchanged.) Input-sensitivity for this family is therefore
-    /// covered by DifferentInputs; here we assert only that the scaled input still yields a valid, finite
-    /// label sequence of positive length. This is an output-type adaptation, not an assertion weakening —
-    /// the same rationale as the CreateRandomTargetTensor override above.
+    /// Viterbi decode, so the base invariant "output must change when the input is scaled 10x" does not
+    /// apply: it is a property of continuous-output models, not of an argmax-decoded discrete labeler.
+    ///
+    /// NEITHER DOES THE OPPOSITE. An earlier revision asserted the labels must stay EQUAL under a
+    /// positive rescale, on the reasoning that argmax is scale-invariant. Argmax is invariant to
+    /// scaling the SCORES; this test scales the INPUT, and the map from input to scores is not a
+    /// positive scalar multiple. Embeddings, biases, nonlinear layers and CRF transition scores all
+    /// break it, so a perfectly correct NER model can decode different labels for 10x input — and the
+    /// assertion would have failed it for being correct.
+    ///
+    /// What holds under a rescale is that the decode remains WELL-FORMED: same sequence length as the
+    /// unscaled decode, every label a finite non-negative id. That is asserted here. The claim that the
+    /// model responds to its input at all is a different claim, and it is tested where it is true — by
+    /// DifferentInputs_ShouldProduceDifferentOutputs, which this file also overrides — so this test
+    /// exercises it directly rather than asserting a property of scaling that does not hold.
     /// </summary>
     [Fact(Timeout = 120000)]
     public override async Task ScaledInput_ShouldChangeOutput()
@@ -82,27 +89,36 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
                 "NER model produced a non-finite label for scaled input.");
         }
 
-        // ASSERT THE PROPERTY THE DOC CLAIMS, not merely that nothing exploded. The override
-        // previously checked non-null, non-empty and finite -- all three already covered by
-        // EmptyInput_ShouldNotCrash and LabelValues_ShouldBeNonNegative in this same file -- so
-        // it carried a name promising the output CHANGES while asserting nothing about change
-        // at all, in either direction.
-        //
-        // The remark above states the real invariant for an argmax/Viterbi decoder: scaling by
-        // a positive constant is decode-invariant. That is a genuine, falsifiable property of
-        // this family, and it FAILS if the decode ever becomes scale-sensitive -- which is the
-        // defect worth catching here. A model whose labels shift under pure rescaling is not
-        // the scale-robust labeler this override assumes.
+        // WELL-FORMED, NOT UNCHANGED. Requiring equality here would fail a correct model: scaling
+        // the input is not scaling the scores, and embeddings, biases, nonlinearities and CRF
+        // transitions all break the positive-multiple relation argmax invariance depends on.
         Assert.Equal(baseline.Length, output.Length);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(
-                ConvertToDouble(baseline[i]) == ConvertToDouble(output[i]),
-                $"Decoded label[{i}] changed under a positive rescale " +
-                $"({ConvertToDouble(baseline[i])} -> {ConvertToDouble(output[i])}). " +
-                "An argmax/Viterbi decode is expected to be scale-invariant; if this model is " +
-                "genuinely scale-sensitive, it should not override ScaledInput_ShouldChangeOutput.");
+            double label = ConvertToDouble(output[i]);
+            Assert.True(label >= 0.0 && Math.Floor(label) == label,
+                $"Decoded label[{i}] is {label}, which is not a valid label id. A rescaled input " +
+                "must still decode to a well-formed label sequence.");
         }
+
+        // AND THE MODEL MUST ACTUALLY RESPOND TO ITS INPUT. Without this the test would assert only
+        // that nothing exploded -- the state the previous revision was written to escape. Input
+        // sensitivity is a real property of this family, so it is exercised here on a genuinely
+        // DIFFERENT input rather than on a rescaled one, which is the distinction the whole
+        // override turns on.
+        var different = CreateRandomTensor(InputShape, ModelTestHelpers.CreateSeededRandom(4242));
+        var differentOutput = network.Predict(different);
+
+        bool anyDifference = differentOutput.Length != baseline.Length;
+        for (int i = 0; !anyDifference && i < baseline.Length; i++)
+        {
+            anyDifference = ConvertToDouble(baseline[i]) != ConvertToDouble(differentOutput[i]);
+        }
+
+        Assert.True(anyDifference,
+            "The model decoded an identical label sequence for two unrelated random inputs, so its " +
+            "forward pass is not responding to its input at all. (Rescaling the input is deliberately " +
+            "NOT used for this check: a correct model may decode the same labels for a rescaled input.)");
     }
 
     /// <summary>

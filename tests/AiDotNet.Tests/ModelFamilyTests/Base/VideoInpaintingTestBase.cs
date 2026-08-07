@@ -73,8 +73,13 @@ public abstract class VideoInpaintingTestBase<T> : VideoNNModelTestBase<T>
         // path in a refactor -- silently received NO mask validation at all. This is the only
         // guard that the mask channel is not a dead input, and it was the one that quietly
         // stepped aside exactly when the fixture was broken.
+        // NULL-SAFE MESSAGE. C# evaluates the message argument BEFORE calling Assert.True, so
+        // network.GetType() threw NullReferenceException when CreateNetwork() returned null -- and a
+        // null return is precisely the broken-fixture case this assertion was written to diagnose.
+        // The fixture saw a NullReferenceException instead of the explanation.
         Assert.True(network is VideoInpaintingBase<T>,
-            $"{network.GetType().Name} does not expose VideoInpaintingBase<T>.Inpaint, so mask " +
+            $"{network?.GetType().Name ?? "A null network"} does not expose " +
+            "VideoInpaintingBase<T>.Inpaint, so mask " +
             "conditioning cannot be verified. An inpainting fixture must expose the " +
             "mask-conditioned path; fix the fixture rather than skipping the invariant.");
         var inpainter = (VideoInpaintingBase<T>)network;
