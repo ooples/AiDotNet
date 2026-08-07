@@ -170,7 +170,9 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
     private IReadOnlyList<TLoRAAttentionAdapter<T>> InjectAdapters(int? seed)
     {
         var adapters = new List<TLoRAAttentionAdapter<T>>();
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         int horizon = Math.Max(1, Scheduler.TrainTimesteps);
 
         _predictor.DecorateAttentionBlocks((block, channels, isCrossAttention) =>

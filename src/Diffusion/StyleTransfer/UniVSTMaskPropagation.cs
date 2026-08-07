@@ -75,7 +75,9 @@ public class UniVSTMaskPropagation<T>
         _neighbors = neighbors;
         _anchorHistory = anchorHistory;
         _downsampleRate = downsampleRate;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
