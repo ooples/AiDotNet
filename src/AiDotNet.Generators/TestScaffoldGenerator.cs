@@ -309,6 +309,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             // The trainable model, not the ONNX-inference wrapper in VisionLanguage.Document.
             { "LayoutLMv3", "AiDotNet.Document.LayoutAware." },
+            // Two Donut models share the simple name. The document-understanding one under
+            // PixelToSequence is the trainable model these fixtures target; the VisionLanguage.Document
+            // namesake is the inference wrapper. Without an owner the generator refuses to guess, since
+            // the winner would otherwise depend on discovery order.
+            { "Donut", "AiDotNet.Document.PixelToSequence." },
             // The grounding VLM every GLaMM entry in this file was written for.
             { "GLaMM", "AiDotNet.VisionLanguage.Grounding." },
             // The pin's own comment named this one explicitly, then relied on ordering to get it.
