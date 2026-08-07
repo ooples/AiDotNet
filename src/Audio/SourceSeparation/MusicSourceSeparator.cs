@@ -590,7 +590,11 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
 
         // LSTM bottleneck over the time axis: [1, C, T] -> [1, T, C] -> LSTM -> [1, T, C] -> [1, C, T].
         var overTime = eng.TensorPermute(x, new[] { 0, 2, 1 });
-        overTime = _demucsBottleneck!.Forward(overTime);
+        // Non-null whenever the Demucs stack is bound, which is the only path that reaches here;
+        // assert the invariant rather than suppress it, so a binding regression names itself.
+        if (_demucsBottleneck is null)
+            throw new InvalidOperationException("The Demucs LSTM bottleneck has not been bound.");
+        overTime = _demucsBottleneck.Forward(overTime);
         x = eng.TensorPermute(overTime, new[] { 0, 2, 1 });
 
         for (int i = 0; i < _demucsDepth; i++)
@@ -652,7 +656,11 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         }
 
         var overTime = eng.TensorPermute(x, new[] { 0, 2, 1 });
-        overTime = _demucsBottleneck!.Forward(overTime);
+        // Non-null whenever the Demucs stack is bound, which is the only path that reaches here;
+        // assert the invariant rather than suppress it, so a binding regression names itself.
+        if (_demucsBottleneck is null)
+            throw new InvalidOperationException("The Demucs LSTM bottleneck has not been bound.");
+        overTime = _demucsBottleneck.Forward(overTime);
         x = eng.TensorPermute(overTime, new[] { 0, 2, 1 });
         activations["Bottleneck"] = x.Clone();
 
