@@ -504,7 +504,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputDimension", Layers[0].GetInputShape()[0] },
-                { "OutputDimension", Layers[Layers.Count - 1].GetOutputShape()[0] },
+                { "OutputDimension", Layers[Layers.Count - 1].GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0] },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },

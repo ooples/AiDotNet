@@ -39,6 +39,17 @@ namespace AiDotNet.Models.Options;
 public class TabPFNOptions<T> : RiskModelOptions<T>
 {
     /// <summary>
+    /// Gets or sets the Adam learning rate.
+    /// </summary>
+    /// <value>The learning rate, defaulting to the paper's 1e-4 (Hollmann et al., ICLR 2023).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. The default is
+    /// the value the TabPFN authors used. Lower it if the loss stops improving and starts drifting
+    /// back up over long training runs.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>
     /// Gets or sets the embedding dimension.
     /// </summary>
     /// <value>The embedding dimension, defaulting to 128.</value>

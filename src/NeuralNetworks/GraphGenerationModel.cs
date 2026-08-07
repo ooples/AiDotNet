@@ -56,10 +56,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GraphGenerationModelOptions { NodeFeatureSize = 9, MaxNodes = 50, HiddenSize = 128 };
-/// var model = new GraphGenerationModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
-/// var graph = model.Predict(noise);
+/// var model = new GraphGenerationModel&lt;float&gt;(
+///     inputFeatures: 9,
+///     hiddenDim: 128,
+///     maxNodes: 50,
+///     learningRate: 0.005);
+/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 20, 9 });
+/// var graph = model.Predict(nodeFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]
@@ -69,7 +72,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("GraphRNN: Generating Realistic Graphs with an Auto-Regressive Model", "https://arxiv.org/abs/1802.08773")]
+[ResearchPaper("Variational Graph Auto-Encoders", "https://arxiv.org/abs/1611.07308")]
 public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 {
     private readonly GraphGenerationModelOptions _options;
@@ -185,6 +188,10 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// <param name="optimizer">Optional optimizer for training (default: AdamOptimizer).</param>
     /// <param name="lossFunction">Optional loss function for training (default: BinaryCrossEntropyLoss).</param>
     /// <param name="maxGradNorm">Maximum gradient norm for clipping (default: 1.0).</param>
+    /// <param name="learningRateScheduler">Optional learning-rate scheduler. The paper-faithful default keeps the rate constant.</param>
+    /// <param name="options">Optional common neural-network options.</param>
+    /// <param name="learningRate">Adam learning rate. Defaults to the paper's 0.01 and remains fully customizable.</param>
+    /// <param name="useAMSGrad">Whether to use the AMSGrad Adam variant. Defaults to false, matching the paper's Adam optimizer.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creating a graph generation model:
     ///
@@ -221,7 +228,9 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0,
         ILearningRateScheduler? learningRateScheduler = null,
-        GraphGenerationModelOptions? options = null)
+        GraphGenerationModelOptions? options = null,
+        double learningRate = 0.01,
+        bool useAMSGrad = false)
         : base(CreateArchitecture(inputFeatures, hiddenDim, latentDim, numEncoderLayers),
                lossFunction ?? new BinaryCrossEntropyLoss<T>(),
                maxGradNorm)
@@ -251,14 +260,10 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         }
         var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
-            InitialLearningRate = 0.001,
-            LearningRateScheduler = learningRateScheduler ?? new ExponentialLRScheduler(
-                baseLearningRate: 0.001, gamma: 0.99),
+            InitialLearningRate = learningRate,
+            LearningRateScheduler = learningRateScheduler ?? new ConstantLRScheduler(learningRate),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-            // AMSGrad keeps the model from drifting away from converged
-            // graph-generation parameters during the long training runs the
-            // MoreData / Training-loss invariants probe (#1332 cluster 6).
-            UseAMSGrad = true,
+            UseAMSGrad = useAMSGrad,
         };
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
         _random = RandomHelper.CreateSeededRandom(42);
@@ -847,6 +852,20 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Counts the layer parameters PLUS the variational weights, matching
+    /// <see cref="GetParameters"/> exactly.
+    /// </summary>
+    /// <remarks>
+    /// <c>GetParameters</c> appends <c>_meanWeights</c> and <c>_logVarWeights</c> after the layer
+    /// walk, but the count was left to the base, which knows only about <c>Layers</c>. The two
+    /// therefore disagreed by the full size of the variational head -- 1,600 declared against
+    /// 2,624 returned -- so a round-trip through <c>SetParameters</c> silently dropped the mean
+    /// and log-variance projections that make this a VAE rather than a plain autoencoder.
+    /// </remarks>
+    public override long ParameterCount =>
+        base.ParameterCount + _meanWeights.Length + _logVarWeights.Length;
+
+    /// <summary>
     /// Gets all parameters as a vector.
     /// </summary>
     public override Vector<T> GetParameters()
@@ -884,10 +903,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         // Ensure 2D input [numNodes, features]
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
@@ -898,6 +913,25 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         // Set to inference mode
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
+
+        // The generic GPU path only evaluates Layers, which is the VGAE encoder;
+        // returning that tensor directly skips the mean projection and decoder and
+        // therefore has the wrong [nodes, hiddenDim] contract. Keep the encoder on
+        // the GPU, then finish this model-specific pipeline with Engine operations.
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+        }
+
+        if (TryForwardGpuOptimized(input, out var gpuEncoderOutput))
+        {
+            using (gpuEncoderOutput)
+            {
+                using var gpuMean = Engine.TensorMatMul(gpuEncoderOutput, _meanWeights);
+                return Decode(gpuMean);
+            }
+        }
 
         // Encode → use mean (deterministic) → decode
         var (mean, _) = Encode(input, adjacencyMatrix);
@@ -911,10 +945,17 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         if (_autoAdjacencyMatrix != null && _autoAdjacencyMatrix.Shape[0] == numNodes)
             return _autoAdjacencyMatrix;
 
+        // Predict(Tensor) has no adjacency argument. Use self-loops only as the
+        // neutral fallback, so the Kipf-Welling propagation A*X*W degenerates to
+        // a per-node transform and remains sensitive to the supplied features.
+        // A complete all-ones graph is not neutral here: the GCN layers apply
+        // unnormalized adjacency multiplication, so two encoder layers amplify
+        // activations by numNodes^2 and saturate sigmoid(Z*Z^T) to a constant.
+        // Call Forward(nodeFeatures, adjacencyMatrix) when graph structure is
+        // available; that explicit matrix continues to drive the encoder.
         var adj = new Tensor<T>([numNodes, numNodes]);
         for (int i = 0; i < numNodes; i++)
-            for (int j = 0; j < numNodes; j++)
-                adj[i, j] = NumOps.One;
+            adj[i, i] = NumOps.One;
 
         _autoAdjacencyMatrix = adj;
         return adj;

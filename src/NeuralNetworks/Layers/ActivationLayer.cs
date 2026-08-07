@@ -25,8 +25,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>()")]
-public class ActivationLayer<T> : LayerBase<T>
+public partial class ActivationLayer<T> : LayerBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>An activation is elementwise, so the shape is carried through unchanged.</remarks>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Identity;
+
     /// <summary>
     /// Stores the input from the most recent forward pass for use in the backward pass.
     /// </summary>
@@ -81,6 +85,10 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => false;
+
+    /// <inheritdoc/>
+    /// <remarks>An activation is applied elementwise, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
 
     /// <summary>
     /// Creates a new activation layer that applies a scalar activation function to each value individually.
@@ -226,7 +234,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// for learning complex patterns in the data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

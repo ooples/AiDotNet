@@ -1,5 +1,7 @@
 using AiDotNet.Tensors.Engines.Gpu;
 
+using AiDotNet.NeuralNetworks.Layers;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -36,6 +38,25 @@ public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
     /// For example, a pooling layer might reduce the dimensions from [3, 28, 28] to [3, 14, 14].
     /// </remarks>
     int[] GetOutputShape();
+
+    /// <summary>
+    /// This layer's output shape, in which individual axes may be dynamic and may be named.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Prefer this over <see cref="GetOutputShape"/> anywhere the result is used to size
+    /// something. The <c>int[]</c> form cannot distinguish "this axis is 64" from "this axis is
+    /// not known yet", so a caller that needs real numbers has no way to tell it is being handed
+    /// a placeholder -- and several layers legitimately have an axis they cannot fix, such as a
+    /// decoder whose output length is the target length.
+    /// </para>
+    /// <para>
+    /// <see cref="LayerShape.TryGetConcrete"/> and <see cref="LayerShape.RequireConcrete"/> make
+    /// that choice explicit, so consuming a dynamic axis by accident stops being possible.
+    /// </para>
+    /// </remarks>
+    /// <returns>The output shape, possibly with dynamic axes.</returns>
+    LayerShape GetOutputLayerShape();
 
     /// <summary>
     /// Indicates whether this layer's input/output shapes are concrete or still deferred.

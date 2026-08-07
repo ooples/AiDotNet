@@ -41,8 +41,10 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
     private readonly GriffinOptions _options;
     private readonly int _vocabSize;
     private readonly int _modelDimension;
+    private readonly int _recurrenceDimension;
     private readonly int _numLayers;
     private readonly int _maxSeqLength;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -64,20 +66,25 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
     public GriffinLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512,
+        int modelDimension = 2048,
+        int numLayers = 24,
+        int maxSeqLength = 2048,
         ILossFunction<T>? lossFunction = null,
-        GriffinOptions? options = null)
+        GriffinOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GriffinOptions();
         Options = _options;
         _vocabSize = vocabSize;
         _modelDimension = modelDimension;
+        _recurrenceDimension = _options.RecurrenceDimension;
         _numLayers = numLayers;
         _maxSeqLength = maxSeqLength;
+        if (_recurrenceDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "RecurrenceDimension must be positive.");
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
 
@@ -94,13 +101,43 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
         else
         {
             Layers.AddRange(LayerHelper<T>.CreateGriffinLayers(
-                _vocabSize, _modelDimension, _numLayers, _maxSeqLength));
+                _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
+                _recurrenceDimension));
         }
     }
 
     #endregion
 
     #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Griffin's RG-LRU carries a data-dependent hidden state through a timestep
+    /// recurrence. That stateful loop cannot be captured once and safely replayed
+    /// by the static fused-training plan; use the eager tape so every step records
+    /// the current recurrence and AdamW receives the true finite gradients.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <summary>
+    /// Uses the constructor-selected optimizer. Griffin's paper trains with
+    /// AdamW; callers can supply any gradient optimizer through the constructor.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                Epsilon = _options.Epsilon,
+                EnableGradientClipping = _options.EnableGradientClipping,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
@@ -116,19 +153,25 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        if (gradients.Length != ParameterCount)
+        if (parameters.Length != ParameterCount)
         {
             throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}",
+                nameof(parameters));
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
+        // The optimizer supplies post-update parameter values. Treating this vector as raw
+        // gradients applied a second hard-coded SGD step and materialized full-model copies,
+        // causing the generated memorization trajectory to explode.
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -140,6 +183,7 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
                 { "Architecture", "Griffin" },
                 { "VocabSize", _vocabSize },
                 { "ModelDimension", _modelDimension },
+                { "RecurrenceDimension", _recurrenceDimension },
                 { "NumLayers", _numLayers },
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
@@ -168,7 +212,7 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new GriffinLanguageModel<T>(
             Architecture, _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
-            LossFunction, _options);
+            LossFunction, new GriffinOptions(_options), optimizer: null);
     }
 
     #endregion

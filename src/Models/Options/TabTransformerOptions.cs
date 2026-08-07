@@ -185,6 +185,24 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     /// <value>The initialization scale, defaulting to 0.01.</value>
     public double EmbeddingInitScale { get; set; } = 0.01;
 
+    /// <summary>
+    /// Gets or sets the AdamW learning rate used when no optimizer is supplied.
+    /// </summary>
+    /// <remarks>
+    /// The TabTransformer paper tunes a constant AdamW learning rate between
+    /// 1e-6 and 1e-3. The default 1e-4 is a stable midpoint for training from scratch.
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets the decoupled AdamW weight-decay coefficient used when no optimizer is supplied.
+    /// </summary>
+    /// <remarks>
+    /// The paper tunes weight decay between 1e-6 and 1e-1. A conservative 1e-5 default
+    /// regularizes the transformer without dominating small regression objectives.
+    /// </remarks>
+    public double WeightDecay { get; set; } = 1e-5;
+
     // Backing field for NumCategoricalFeatures
     private int? _numCategoricalFeatures;
 

@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1")]
-public class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// The expansion factor for BasicBlock. BasicBlock does not expand channels.
@@ -286,7 +286,7 @@ public class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <returns>The output tensor after the residual connection.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor leaves _hasDownsample / _inChannels unresolved until
         // OnFirstForward observes input.Shape.
