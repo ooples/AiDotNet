@@ -370,7 +370,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         // the generated factory is deterministic.
         var byType = models
             .Where(m => m.IsValid)
-            .GroupBy(m => m.BaseFqn)
+            .GroupBy(TypeKey, System.StringComparer.Ordinal)
             // DETERMINISTIC. `g.First()` took whatever order Collect() yielded, and Roslyn
             // does not document that collected results keep source order -- for a type split
             // across partial files the per-file order is undefined, so a layer annotating two
@@ -380,7 +380,7 @@ public class LayerStateGenerator : IIncrementalGenerator
                 .OrderBy(m => m.Location.FilePath, System.StringComparer.Ordinal)
                 .ThenBy(m => m.Location.Start)
                 .First())
-            .OrderBy(m => m.BaseFqn, System.StringComparer.Ordinal)
+            .OrderBy(TypeKey, System.StringComparer.Ordinal)
             .ToList();
 
         foreach (var model in byType)
@@ -651,16 +651,31 @@ public class LayerStateGenerator : IIncrementalGenerator
         return chain;
     }
 
-    /// <summary>A file-name-safe, collision-free stem derived from the type's full name.</summary>
+    /// <summary>A file-name-safe, collision-free stem for the type.</summary>
+    /// <remarks>
+    /// FULL NAME PLUS ARITY. AddSource throws on a duplicate hint name, so this must be unique
+    /// across every emitted model. The simple name is not: two layers with the same name in
+    /// different namespaces collide, and ISymbol.Name also excludes arity, so a non-generic type
+    /// and a generic one of the same name collide too. BaseFqn carries the namespace and the
+    /// containing types; the arity suffix carries the rest. It is the same key the models are
+    /// grouped by, so one group can never produce two hint names or two groups one.
+    /// </remarks>
     private static string HintName(LayerModel model)
     {
-        var sb = new StringBuilder(model.BaseFqn.Length);
-        foreach (var ch in model.BaseFqn)
+        var stem = TypeKey(model);
+        var sb = new StringBuilder(stem.Length);
+        foreach (var ch in stem)
         {
             sb.Append(char.IsLetterOrDigit(ch) || ch == '_' ? ch : '_');
         }
         return sb.ToString();
     }
+
+    /// <summary>Identity of the emitted type: full name plus arity.</summary>
+    private static string TypeKey(LayerModel model)
+        => model.TypeParameters.Count == 0
+            ? model.BaseFqn
+            : model.BaseFqn + "`" + model.TypeParameters.Count;
 
     /// <summary>Renders an optional parameter's declared default as a C# expression.</summary>
     /// <remarks>
