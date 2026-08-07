@@ -189,7 +189,7 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
     {
         // Xavier/Glorot scale; deterministic so repeated construction is reproducible.
         double scale = Math.Sqrt(6.0 / (fanIn + _numCategories));
-        var rng = new Random(_inputDim * 31 + _spanDim * 17 + _numCategories);
+        var rng = RandomHelper.CreateSeededRandom(_inputDim * 31 + _spanDim * 17 + _numCategories);
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = NumOps.FromDouble(((rng.NextDouble() * 2.0) - 1.0) * scale);
     }
