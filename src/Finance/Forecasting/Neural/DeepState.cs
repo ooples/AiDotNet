@@ -81,7 +81,13 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Deep State Space Models for Time Series Forecasting", "https://arxiv.org/abs/1803.01271", Year = 2018, Authors = "Syama Sundar Rangapuram, Matthias Seeger, Jan Gasthaus, Lorenzo Stella, Yuyang Wang, Tim Januschowski")]
+// Citation URL corrected. arXiv 1803.01271 is "An Empirical Evaluation of Generic Convolutional and
+// Recurrent Networks for Sequence Modeling" (the TCN paper) — a real paper, but a different one. This
+// work appeared at NeurIPS 2018 and is not on arXiv, so the canonical proceedings URL replaces it.
+[ResearchPaper("Deep State Space Models for Time Series Forecasting",
+    "https://proceedings.neurips.cc/paper/2018/hash/5cf68969fb67aa6082363a6d4e6468e2-Abstract.html",
+    Year = 2018,
+    Authors = "Syama Sundar Rangapuram, Matthias Seeger, Jan Gasthaus, Lorenzo Stella, Yuyang Wang, Tim Januschowski")]
 public class DeepState<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

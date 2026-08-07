@@ -163,8 +163,15 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinBERTToneLayers(
-                Architecture, MaxSequenceLength, VocabularySize, NumSentimentClasses, 
-                HiddenDimension, 12, 12, _dropout));
+                Architecture,
+                vocabularySize: _options.VocabularySize,
+                maxSequenceLength: _options.MaxSequenceLength,
+                hiddenDimension: _options.HiddenDimension,
+                numAttentionHeads: _options.NumAttentionHeads,
+                intermediateDimension: _options.IntermediateDimension,
+                numLayers: _options.NumLayers,
+                numToneClasses: _options.NumToneClasses,
+                dropoutRate: _dropout));
 
             ExtractLayerReferences();
         }
