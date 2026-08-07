@@ -235,13 +235,56 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         return null;
     }
 
+    /// <summary>
+    /// Flags a catch that discards the exception with no indication that doing so was intended.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Deliberately narrow, because "empty catch" alone is not evidence of a bug. Two signals mark
+    /// a discard as considered rather than accidental, and either one exempts it:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>a FILTERED catch (<c>catch (ArgumentException)</c>) - the author named
+    /// the one failure they expect, so anything else still propagates;</description></item>
+    /// <item><description>an explanatory comment in the body - someone wrote down why the failure
+    /// is acceptable here.</description></item>
+    /// </list>
+    /// <para>
+    /// What is left is a bare <c>catch { }</c> with nothing in it, which swallows every exception
+    /// and says nothing about why. That is the case that hides bugs. The prevailing legitimate use
+    /// in this codebase is a best-effort warm-up probe whose real failure surfaces later on the
+    /// actual Train/Predict call - flagging those trains people to ignore the rule.
+    /// </para>
+    /// </remarks>
     private static Finding? AnalyzeCatch(CatchClauseSyntax catchClause)
     {
         var statements = catchClause.Block?.Statements;
         if (statements is null || statements.Value.Count > 0)
             return null;
 
+        // A filtered catch states which failure was expected.
+        if (catchClause.Declaration is not null)
+            return null;
+
+        // A comment states why the failure is acceptable.
+        if (catchClause.Block is not null && HasComment(catchClause.Block))
+            return null;
+
         return new Finding(SwallowedException, catchClause.CatchKeyword.GetLocation());
+    }
+
+    private static bool HasComment(SyntaxNode node)
+    {
+        foreach (var trivia in node.DescendantTrivia(descendIntoTrivia: true))
+        {
+            if (trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
+                trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool HasTimeSpanArgument(GeneratorSyntaxContext ctx, BaseArgumentListSyntax? arguments)
