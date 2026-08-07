@@ -49,6 +49,19 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
     private const string LayoutAttributeName = "AiDotNet.Attributes.TensorLayoutAttribute";
     private const string ShapeContractName = "AiDotNet.Interfaces.IShapeContract";
 
+    // THE TENSOR TYPE LIVES IN AiDotNet.Tensors.LinearAlgebra, NOT AiDotNet.LinearAlgebra.
+    // ADNSHAPE004 previously compared against the latter, which matches nothing in this
+    // repository, so every Forward(Tensor<T>) override fell through the guard and the gate
+    // reported success on exactly the layers it exists to catch. Kept as a constant, and
+    // matched with generics OMITTED so the open and constructed forms need only one string;
+    // TrainableParameterGenerator.TensorTypeName holds the same value for the same reason.
+    private const string TensorTypeName = "AiDotNet.Tensors.LinearAlgebra.Tensor";
+
+    private static readonly SymbolDisplayFormat NamespaceQualifiedNoGenerics =
+        new SymbolDisplayFormat(
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+            genericsOptions: SymbolDisplayGenericsOptions.None);
+
     private static readonly DiagnosticDescriptor AmbiguousRankDescriptor = new(
         id: "ADNSHAPE001",
         title: "Two tensor layouts accept the same rank with different axis names",
@@ -175,10 +188,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                 // comment above already explains that this scoping is load-bearing rather
                 // than tidiness.
                 if (member.Parameters[0].Type is not INamedTypeSymbol tensorParam) continue;
-                if (tensorParam.ConstructedFrom.ToDisplayString() != "AiDotNet.LinearAlgebra.Tensor<T>"
-                    && tensorParam.ConstructedFrom.ToDisplayString(new SymbolDisplayFormat(
-                        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces))
-                       != "AiDotNet.LinearAlgebra.Tensor")
+                if (tensorParam.ConstructedFrom.ToDisplayString(NamespaceQualifiedNoGenerics) != TensorTypeName)
                 {
                     continue;
                 }

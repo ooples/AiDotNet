@@ -29,10 +29,25 @@ if [ -f "$script" ] && command -v python3 >/dev/null 2>&1; then
     # STDERR IS KEPT, NOT DISCARDED. Sending it to /dev/null meant a broken fixer
     # produced no signal at all: the developer saw a normal commit and never
     # learned the hook had stopped working.
-    fixed="$(python3 "$script" < "$msg_file" 2>/tmp/commit-msg-autofix.err)"
-    status=$?
-    err="$(cat /tmp/commit-msg-autofix.err 2>/dev/null || true)"
-    rm -f /tmp/commit-msg-autofix.err
+    # A PRIVATE TEMP FILE, NOT A FIXED PATH. /tmp/commit-msg-autofix.err is
+    # predictable and world-writable: two worktrees committing at once clobber each
+    # other's stderr so the warning below reports the wrong error, and on a shared
+    # host another user can pre-create the path as a symlink and have the
+    # redirection write through it. mktemp gives a fresh 0600 file per invocation,
+    # and the trap removes it on every exit path including the failure ones.
+    err_file="$(mktemp "${TMPDIR:-/tmp}/commit-msg-autofix.XXXXXX")"
+    trap 'rm -f "$err_file"' EXIT
+
+    # ERREXIT MUST NOT FIRE HERE. `set -e` is on, and a bare assignment from a
+    # command substitution takes the substitution's exit status, so a fixer that
+    # exits nonzero terminated the hook right here -- the pass-through branch below
+    # never ran and git aborted the commit. A broken fixer blocked EVERY commit,
+    # which is the opposite of the no-op-on-failure contract in the header. The
+    # `|| status=$?` puts the assignment in a compound list, where errexit is
+    # suppressed, so the status reaches the check below instead of killing the shell.
+    status=0
+    fixed="$(python3 "$script" < "$msg_file" 2>"$err_file")" || status=$?
+    err="$(cat "$err_file" 2>/dev/null || true)"
 
     # EMPTY OUTPUT MUST NOT OVERWRITE THE MESSAGE. Accepting any exit-0 result
     # included an empty stdout, which wrote a lone newline into the message file.
