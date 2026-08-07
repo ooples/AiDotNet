@@ -201,7 +201,8 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -225,13 +226,17 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
             SetTrainingMode(false);
         }
     }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     public override void UpdateParameters(Vector<T> parameters)
     {
@@ -312,8 +317,8 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GLM4Voice<T>(Architecture, mp, _options);
-        return new GLM4Voice<T>(Architecture, _options);
+            return new GLM4Voice<T>(Architecture, mp, new GLM4VoiceOptions(_options));
+        return new GLM4Voice<T>(Architecture, new GLM4VoiceOptions(_options));
     }
 
     private void ThrowIfDisposed()

@@ -207,7 +207,8 @@ public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -236,7 +237,7 @@ public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -328,9 +329,10 @@ public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new ParlerTTSOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ParlerTTS<T>(Architecture, mp, _options);
-        return new ParlerTTS<T>(Architecture, _options);
+            return new ParlerTTS<T>(Architecture, mp, options);
+        return new ParlerTTS<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()
