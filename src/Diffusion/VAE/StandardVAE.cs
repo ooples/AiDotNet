@@ -200,7 +200,30 @@ public class StandardVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived from EnumerateAllLayers -- the same layers GetParameters walks, in the same
+    /// order -- so the count cannot drift from the vector it describes. It previously called a
+    /// hand-written arithmetic estimate over channel multipliers; VideoUNetPredictor had the
+    /// same construction and was nine times out (32,385,924 against a real 295,840,220), and a
+    /// flat parameter vector is paired by LENGTH on restore. Lazy shapes are resolved first for
+    /// the same reason GetParameters resolves them: an unresolved layer contributes 0 and the
+    /// two surfaces would disagree only until the first forward.
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            EnsureLayersInitialized();
+            TriggerLazyShapeResolution();
+            long total = 0;
+            foreach (var layer in EnumerateAllLayers())
+            {
+                if (layer is not null) total += layer.ParameterCount;
+            }
+            return total;
+        }
+    }
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -550,29 +573,6 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes so the count matches GetParameters().Length even
-        // pre-forward (lazy layers otherwise report their architectural count here
-        // but an empty GetParameters() vector — the count-equality failure source).
-        TriggerLazyShapeResolution();
-
-        // Walk the same layers GetParameters walks and sum their actual ParameterCount.
-        // Must match GetParameters().Length exactly — earlier "approximate" formulas
-        // diverged from the real per-layer count and broke contract tests asserting
-        // ParameterCount == GetParameters().Length.
-        long count = 0;
-        AddLayerCount(ref count, _inputConv);
-        for (int i = 0; i < _encoderLayers.Count; i++) AddLayerCount(ref count, _encoderLayers[i]);
-        AddLayerCount(ref count, _meanConv);
-        AddLayerCount(ref count, _logVarConv);
-        AddLayerCount(ref count, _quantConv);
-        AddLayerCount(ref count, _postQuantConv);
-        for (int i = 0; i < _decoderLayers.Count; i++) AddLayerCount(ref count, _decoderLayers[i]);
-        AddLayerCount(ref count, _outputConv);
-        return (int)Math.Min(count, int.MaxValue);
-    }
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {

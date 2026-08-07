@@ -187,7 +187,27 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override int TimeEmbeddingDim => _timeEmbeddingDim;
 
     /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived from EnumerateAllLayers, which yields exactly the layers GetParameters
+    /// collects and in the same order (input conv, time-embed MLPs, encoder/middle/decoder
+    /// blocks, output conv). It previously called a hand-written arithmetic estimate;
+    /// VideoUNetPredictor had the same construction and was nine times out.
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            EnsureLayersInitialized();
+            ResolveShapesViaForward();
+            long total = 0;
+            foreach (var layer in EnumerateAllLayers())
+            {
+                if (layer is not null) total += layer.ParameterCount;
+            }
+            return total;
+        }
+    }
 
     /// <inheritdoc />
     public override bool SupportsCFG => true;
@@ -1200,30 +1220,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
-    {
-        EnsureLayersInitialized();
-        // Resolve every lazy layer's TRUE shape via a shape-only forward (single source
-        // of truth) — NO weight materialisation, so this stays cheap on a foundation-scale
-        // U-Net (the Unit-03b construction OOM was the old materialising dummy forward).
-        // Using the forward topology (not a per-construction estimate) guarantees this
-        // count equals GetParameters().Length and the real forward's resolution, including
-        // decoder skip concatenation.
-        ResolveShapesViaForward();
-
-        // Walk the same layers GetParameters walks and sum their actual ParameterCount.
-        // Must match GetParameters().Length exactly — the previous "approximate" formula
-        // diverged from the real count and broke contract tests asserting equality.
-        long count = 0;
-        AddLayerCount(ref count, _inputConv);
-        AddLayerCount(ref count, _timeEmbedMlp1);
-        AddLayerCount(ref count, _timeEmbedMlp2);
-        for (int i = 0; i < _encoderBlocks.Count; i++) AddBlockCount(ref count, _encoderBlocks[i]);
-        for (int i = 0; i < _middleBlocks.Count; i++) AddBlockCount(ref count, _middleBlocks[i]);
-        for (int i = 0; i < _decoderBlocks.Count; i++) AddBlockCount(ref count, _decoderBlocks[i]);
-        AddLayerCount(ref count, _outputConv);
-        return (int)Math.Min(count, int.MaxValue);
-    }
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {

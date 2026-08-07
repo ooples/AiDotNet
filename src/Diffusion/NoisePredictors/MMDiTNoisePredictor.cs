@@ -165,7 +165,26 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     public int PatchSize => _patchSize;
 
     /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived from EnumerateLayers, the same sequence GetParameters and
+    /// GetParameterChunks walk. This one mattered more than most: GetParameters SIZES its
+    /// output buffer from this property, so a wrong formula produced a wrong-sized vector
+    /// that then "agreed" with the count by construction -- the contract test could never
+    /// catch the drift, and the tail of the buffer would simply stay zero.
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var layer in EnumerateLayers())
+            {
+                if (layer is not null) total += layer.ParameterCount;
+            }
+            return total;
+        }
+    }
 
     #endregion
 
@@ -1011,48 +1030,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Parameter Management
 
-    private long CalculateParameterCount()
-    {
-        // #1237: long accumulator. SD3.5 Large (HiddenDim 4096 × 38 layers
-        // joint + single blocks) sums to ~7.6 B parameters, overflowing
-        // int.MaxValue. Per-layer ParameterCount stays int (single-tensor
-        // < 2.1 B); the cross-layer sum is long.
-        long count = 0;
-
-        count += _patchEmbed.ParameterCount;
-        count += _timeEmbed1.ParameterCount;
-        count += _timeEmbed2.ParameterCount;
-        count += _contextProj.ParameterCount;
-
-        foreach (var block in _jointBlocks)
-        {
-            count += block.ImageNorm1.ParameterCount + block.ImageNorm2.ParameterCount;
-            count += block.ImageMLP1.ParameterCount + block.ImageMLP2.ParameterCount;
-            count += block.ImageAdaLN.ParameterCount;
-            count += block.ImageQProj.ParameterCount + block.ImageKProj.ParameterCount;
-            count += block.ImageVProj.ParameterCount + block.ImageOutProj.ParameterCount;
-            count += block.TextNorm1.ParameterCount + block.TextNorm2.ParameterCount;
-            count += block.TextMLP1.ParameterCount + block.TextMLP2.ParameterCount;
-            count += block.TextAdaLN.ParameterCount;
-            count += block.TextQProj.ParameterCount + block.TextKProj.ParameterCount;
-            count += block.TextVProj.ParameterCount + block.TextOutProj.ParameterCount;
-        }
-
-        foreach (var block in _singleBlocks)
-        {
-            count += block.Norm.ParameterCount;
-            count += block.QProj.ParameterCount + block.KProj.ParameterCount;
-            count += block.VProj.ParameterCount + block.OutProj.ParameterCount;
-            count += block.MLP1.ParameterCount + block.MLP2.ParameterCount;
-            count += block.AdaLN.ParameterCount;
-        }
-
-        count += _finalNorm.ParameterCount;
-        count += _adalnModulation.ParameterCount;
-        count += _outputProj.ParameterCount;
-
-        return count;
-    }
 
     /// <inheritdoc />
     public override Vector<T> GetParameters()
