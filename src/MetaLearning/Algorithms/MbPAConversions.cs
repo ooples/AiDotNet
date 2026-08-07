@@ -20,10 +20,24 @@ internal static class MbPAConversions<T>
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
     /// <summary>Number of examples in a batch.</summary>
+    /// <remarks>
+    /// RANK 2 IS THE BATCHED CASE, NOT RANK 1. This returned <c>Shape[0]</c> for any rank &gt;= 1, so
+    /// a rank-1 tensor of length N reported N examples -- while <see cref="SliceExample"/> has no
+    /// rank-1 branch and returns the WHOLE tensor for every index. MbPAAlgorithm.EmbedBatch then
+    /// embedded the same tensor N times and wrote N IDENTICAL keys into the episodic memory, so
+    /// k-nearest-neighbour retrieval returned k copies of one neighbour and the local adaptation was
+    /// computed from a single example presented k times.
+    /// </remarks>
+    /// <remarks>
+    /// The two are aligned on rank 1 meaning ONE example, which is what SliceExample already assumed
+    /// and what <see cref="Vector{T}"/> maps to. The alternative -- N scalar examples -- would feed
+    /// the embedding network single scalars where it expects a feature vector.
+    /// </remarks>
     internal static int GetBatchSize(object? input) => input switch
     {
         Matrix<T> matrix => matrix.Rows,
-        Tensor<T> tensor when tensor.Rank >= 1 => tensor.Shape[0],
+        Tensor<T> tensor when tensor.Rank >= 2 => tensor.Shape[0],
+        Tensor<T> => 1,
         Vector<T> => 1,
         _ => 1,
     };
