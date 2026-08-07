@@ -52,6 +52,7 @@ public class DiffusionModelOptions<T> : ModelOptions
         DefaultInferenceSteps = other.DefaultInferenceSteps;
         LossFunction = other.LossFunction;
         UseGpuExecutionGraph = other.UseGpuExecutionGraph;
+        LatentChannels = other.LatentChannels;
     }
 
     /// <summary>

@@ -90,6 +90,7 @@ public class ChronosFinanceOptions<T> : TimeSeriesRegressionOptions<T>
         GroupAttentionGroups = other.GroupAttentionGroups;
         UseMultivariate = other.UseMultivariate;
         UsePatchInput = other.UsePatchInput;
+        QuantizationBound = other.QuantizationBound;
     }
 
     /// <summary>

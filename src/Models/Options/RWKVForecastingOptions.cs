@@ -59,6 +59,8 @@ public class RWKVForecastingOptions<T> : TimeSeriesRegressionOptions<T>
         AdamBeta1 = other.AdamBeta1;
         AdamBeta2 = other.AdamBeta2;
         AdamEpsilon = other.AdamEpsilon;
+        UseReversibleNormalization = other.UseReversibleNormalization;
+        RevInEpsilon = other.RevInEpsilon;
     }
 
     /// <summary>
