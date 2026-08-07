@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
+public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
 {
     private readonly int _numFeatures;
     private readonly int _numBins;
@@ -89,7 +89,7 @@ public class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input features with shape [batchSize, numFeatures].</param>
     /// <returns>Encoded features with shape [batchSize, numFeatures * numBins].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _inputCache = input;
 

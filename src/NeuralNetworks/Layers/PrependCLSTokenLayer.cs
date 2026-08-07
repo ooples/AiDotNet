@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// during training teaches the CLS token to aggregate task-relevant
 /// information from the rest of the sequence.</para>
 /// </remarks>
-public class PrependCLSTokenLayer<T> : LayerBase<T>
+public partial class PrependCLSTokenLayer<T> : LayerBase<T>
 {
     private readonly int _embedDim;
 
@@ -83,7 +83,7 @@ public class PrependCLSTokenLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (input.Shape.Length != 3)

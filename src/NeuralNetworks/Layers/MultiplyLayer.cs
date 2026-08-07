@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class MultiplyLayer<T> : LayerBase<T>
+public partial class MultiplyLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The input tensors from the most recent forward pass.
@@ -247,7 +247,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// Always use Forward(params Tensor<T>[] inputs) instead of Forward(input) with this layer.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         throw new NotSupportedException("MultiplyLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
     }

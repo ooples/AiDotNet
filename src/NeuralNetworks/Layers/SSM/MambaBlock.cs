@@ -232,8 +232,16 @@ internal partial class MambaBlock<T> : LayerBase<T>
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(
-            [sequenceLength, modelDimension],
-            [sequenceLength, modelDimension],
+            // Sequence is a FREE axis: -1, not the configured maximum. sequenceLength is
+            // documented as a MAXIMUM and is used here for nothing but validation -- no weight and
+            // no buffer is sized against it, because the recurrence runs over whatever length it
+            // is handed. Publishing it as a concrete contract made the layer claim an output it
+            // does not produce for any other length, which VerifyReportedOutputShape reports as
+            // "[maxLen, D] declared but [B, actualLen, D] produced" and which anything sizing
+            // itself from the declaration -- parameter slicing, chain resolution, ONNX export --
+            // reads as fact. modelDimension IS structural and stays concrete.
+            [-1, modelDimension],
+            [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
@@ -373,7 +381,7 @@ internal partial class MambaBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -828,6 +836,12 @@ internal partial class MambaBlock<T> : LayerBase<T>
         metadata["InnerDimension"] = _innerDimension.ToString();
         metadata["ConvKernelSize"] = _convKernelSize.ToString();
         metadata["DtRank"] = _dtRank.ToString();
+        // Publish the CONSTRUCTOR argument, not just the derived width. Reconstruction calls the
+        // ctor, whose parameter is expandFactor; it cannot use InnerDimension. Without this key the
+        // rebuilt block silently fell back to the ctor default of 2, so any model configured with a
+        // different factor came back double-width and rejected its own saved parameters
+        // ("Expected 40920 parameters, got 20472" restoring a TimeMachine, whose factor is 1).
+        metadata["ExpandFactor"] = (_modelDimension > 0 ? _innerDimension / _modelDimension : 1).ToString();
         return metadata;
     }
 

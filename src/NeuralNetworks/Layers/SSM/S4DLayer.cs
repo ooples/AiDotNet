@@ -360,7 +360,7 @@ public partial class S4DLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -647,7 +647,12 @@ public partial class S4DLayer<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, innerDim]
+            // RECORDED slice. A bare tensor.GetSliceAlongDimension is a non-owning VIEW and not a
+            // recorded graph op, so the fused compiled-training plan freezes it as a trace-time graph
+            // LEAF; on replay the parent is recomputed into the plan's own pre-allocated buffer while
+            // the frozen view still references abandoned storage, and the slice never joins the
+            // gradient tape. Same defect and fix as RealGatedLinearRecurrenceLayer / RWKVLayer (#1789).
+            var x_t = Engine.TensorSqueeze(Engine.TensorNarrow(x, 1, t, 1), axis: 1);  // [batch, innerDim]
             var x_t_3D = Engine.TensorExpandDims(x_t, 2);  // [batch, innerDim, 1]
 
             // State update: h = A_bar * h_prev + B_bar * x

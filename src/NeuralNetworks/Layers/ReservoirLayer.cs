@@ -208,12 +208,12 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public ReservoirLayer(
-        int inputSize,
-        int reservoirSize,
-        double connectionProbability = 0.1,
-        double spectralRadius = 0.9,
-        double inputScaling = 1.0,
-        double leakingRate = 1.0,
+        [LayerState] int inputSize,
+        [LayerState] int reservoirSize,
+        [LayerState] double connectionProbability = 0.1,
+        [LayerState] double spectralRadius = 0.9,
+        [LayerState] double inputScaling = 1.0,
+        [LayerState] double leakingRate = 1.0,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [reservoirSize], new TanhActivation<T>() as IActivationFunction<T>)
     {
@@ -262,7 +262,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     /// The reservoir state is both the output of this layer and serves as memory for processing the next input.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length < 1)
             throw new ArgumentException("Input must have at least one dimension.", nameof(input));

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
-public class RepParameterizationLayer<T> : LayerBase<T>
+public partial class RepParameterizationLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Stores the mean values extracted from the input tensor during the forward pass.
@@ -194,7 +194,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// The layer saves all intermediate values for later use during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support

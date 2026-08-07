@@ -101,6 +101,14 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
+    // RoPE / ALiBi hyper-parameters captured at ConfigurePositionalEncoding time so a
+    // deserialized layer (which rebuilds via the (headCount, headDimension) ctor and then
+    // re-applies ConfigurePositionalEncoding) can restore the SAME rotation frequencies —
+    // otherwise a cloned/loaded model with non-default theta or max length would compute a
+    // different attention output than the original. Defaults mirror ConfigurePositionalEncoding.
+    private double _ropeTheta = 10000.0;
+    private int _positionalMaxSequenceLength = 2048;
+
     /// <summary>
     /// Gets or sets whether causal masking is applied during attention computation.
     /// When true, positions can only attend to earlier positions (autoregressive behavior).
@@ -113,10 +121,31 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
 
+    /// <summary>Per-head embedding dimension (headCount × headDimension = embeddingDimension).</summary>
+    public int HeadDimension => _headDimension;
+
+    /// <summary>RoPE base frequency (theta) last passed to <see cref="ConfigurePositionalEncoding"/>.</summary>
+    public double RopeTheta => _ropeTheta;
+
+    /// <summary>Maximum sequence length last passed to <see cref="ConfigurePositionalEncoding"/>.</summary>
+    public int PositionalMaxSequenceLength => _positionalMaxSequenceLength;
+
     /// <summary>
     /// Gets the RoPE theta parameter if RoPE is configured, or the default 10000.0.
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
+
+    /// <summary>
+    /// Optional hook that rewrites the projected queries, keys and values before they are split into
+    /// heads. Null by default, in which case the forward pass is unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Set by techniques that steer a FROZEN attention block by editing Q/K/V rather than its output
+    /// — UniVST's query blending and key/value AdaIN, for instance. Not part of the layer's
+    /// parameters or serialized state: it is a caller-owned strategy, so cloning or reloading a layer
+    /// does not carry it along.
+    /// </remarks>
+    public IQkvTransform<T>? QkvTransform { get; set; }
 
     // Cached projected Q, K, V for backward pass (4D: [batch, heads, seq, head_dim])
     private Tensor<T>? _lastProjectedQueries = null;
@@ -348,8 +377,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     public MultiHeadAttentionLayer(
-        int headCount,
-        int headDimension,
+        [LayerState] int headCount,
+        [LayerState] int headDimension,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1, headCount * headDimension }, new[] { -1, headCount * headDimension },
@@ -438,8 +467,15 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 $"(headCount={_headCount} * headDimension={_headDimension}), but input.Shape[^1]={actualEmbed}.",
                 nameof(input));
 
+        // Self-attention preserves the sequence axis rather than fixing it, and the shape reaching
+        // this layer during chain resolution can carry a guessed length (seq=1). Adopting that as a
+        // concrete commitment made the layer report [1, 128] and then produce [4, 128] per sample.
+        // Only the embedding width is fixed at construction.
         var shape = input.Shape.ToArray();
-        ResolveShapes(shape, shape);
+        var declaredOutput = new int[shape.Length];
+        for (int i = 0; i < shape.Length; i++) declaredOutput[i] = LayerShape.Dynamic;
+        declaredOutput[shape.Length - 1] = _embeddingDimension;
+        ResolveShapes(shape, declaredOutput);
 
         // ResolveShapesOnly (used by InferenceOptimizer.ResolveLazyLayers
         // and similar shape-walker callers) sets IsResolvingShapesOnly so
@@ -467,6 +503,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         int maxSequenceLength = 2048)
     {
         PositionalEncoding = encodingType;
+        _ropeTheta = ropeTheta;
+        _positionalMaxSequenceLength = maxSequenceLength;
+
+        // Keep the recursive layer graph synchronized when positional encoding
+        // is configured more than once or after generated sub-layer discovery.
+        if (_ropeLayer is not null) UnregisterSubLayer(_ropeLayer);
+        if (_alibiLayer is not null) UnregisterSubLayer(_alibiLayer);
         _ropeLayer = null;
         _alibiLayer = null;
 
@@ -475,9 +518,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             case PositionalEncodingType.Rotary:
                 _ropeLayer = new RotaryPositionalEncodingLayer<T>(
                     maxSequenceLength, _headDimension, ropeTheta);
+                RegisterSubLayer(_ropeLayer);
                 break;
             case PositionalEncodingType.ALiBi:
                 _alibiLayer = new ALiBiPositionalBiasLayer<T>(_headCount, maxSequenceLength);
+                RegisterSubLayer(_alibiLayer);
                 break;
             case PositionalEncodingType.None:
                 break;
@@ -727,6 +772,10 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // "embeddingDimension 1 is not divisible by headCount N".
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
         metadata["PositionalEncoding"] = PositionalEncoding.ToString();
+        metadata["UseCausalMask"] = UseCausalMask.ToString();
+        metadata["RopeTheta"] = _ropeTheta.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["PositionalMaxSequenceLength"] =
+            _positionalMaxSequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
     }
 
@@ -972,7 +1021,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// like characters, plot, and setting all at once. Each "head" is like focusing on one of these aspects.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return ForwardInternal(input, input, input);
     }
@@ -1190,9 +1239,37 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var k2D = Engine.Reshape(key, [batchSize * seqLengthKV, embeddingDimension]);
         var v2D = Engine.Reshape(value, [batchSize * seqLengthKV, embeddingDimension]);
 
+        static Tensor<T> ApplyQkvTransform(Tensor<T>? produced, Tensor<T> original, string method)
+        {
+            if (produced is null)
+                throw new InvalidOperationException(
+                    $"IQkvTransform.{method} returned null; it must return a tensor.");
+
+            // A transform that changes the element count would break the head reshape a few lines
+            // below with a confusing message about Q_flat. Failing here names the real culprit.
+            if (produced.Length != original.Length)
+                throw new InvalidOperationException(
+                    $"IQkvTransform.{method} must preserve shape: got [{string.Join(", ", produced._shape)}] " +
+                    $"({produced.Length} elements) from [{string.Join(", ", original._shape)}] " +
+                    $"({original.Length} elements).");
+
+            return produced;
+        }
+
         var Q_flat = Engine.TensorMatMul(q2D, _queryWeights);
         var K_flat = Engine.TensorMatMul(k2D, _keyWeights);
         var V_flat = Engine.TensorMatMul(v2D, _valueWeights);
+
+        // Q/K/V steering hook (see IQkvTransform). Applied HERE — after projection, before the head
+        // split — because methods that rewrite Q/K/V need the projected tensors, and the only other
+        // wrapping point available (IAttentionBlockDecorator.PostProcess) sees the post-softmax
+        // OUTPUT instead. Null unless a caller attaches one, so the default path is unchanged.
+        if (QkvTransform is not null)
+        {
+            Q_flat = ApplyQkvTransform(QkvTransform.TransformQuery(Q_flat), Q_flat, "TransformQuery");
+            K_flat = ApplyQkvTransform(QkvTransform.TransformKey(K_flat), K_flat, "TransformKey");
+            V_flat = ApplyQkvTransform(QkvTransform.TransformValue(V_flat), V_flat, "TransformValue");
+        }
 
         // Reshape and Transpose to [Batch, HeadCount, Seq, HeadDim]
         int targetQElems = batchSize * seqLengthQ * _headCount * _headDimension;

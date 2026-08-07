@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Residual)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.ILayer<double>?)null, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ResidualLayer<T> : LayerBase<T>
+public partial class ResidualLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The inner layer that transforms the input before being added back to the original input.
@@ -457,7 +457,7 @@ public class ResidualLayer<T> : LayerBase<T>
     /// flow directly from the input to the output, making it easier to train deep networks.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // #1668: gate backward caches; forward uses the local innerOutput (chained).
@@ -577,7 +577,14 @@ public class ResidualLayer<T> : LayerBase<T>
             // DenseLayer still deserialize via the fallback path below.
             metadata["InnerLayerType"] = _innerLayer.GetType().AssemblyQualifiedName ?? _innerLayer.GetType().FullName ?? string.Empty;
             metadata["InnerInputSize"] = _innerLayer.GetInputShape()[0].ToString();
-            metadata["InnerOutputSize"] = _innerLayer.GetOutputShape()[0].ToString();
+            var innerOutputShape = _innerLayer.GetOutputLayerShape();
+            if (innerOutputShape.Rank > 0 && innerOutputShape[0] > 0)
+            {
+                // This legacy field represents only axis 0. Requiring every trailing axis
+                // to be concrete rejects valid lazy spatial layers such as [64, ?, ?], even
+                // though the scalar value needed by the old Dense-only fallback is known.
+                metadata["InnerOutputSize"] = innerOutputShape[0].ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
         return metadata;
     }

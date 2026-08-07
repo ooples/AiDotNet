@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
-public class ParallelStreamsLayer<T> : LayerBase<T>
+public partial class ParallelStreamsLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The layers that process the first half of the input features.
@@ -189,7 +189,7 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
     /// backpropagation will correctly compute gradients for both streams.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
