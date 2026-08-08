@@ -1013,11 +1013,18 @@ public static class DeserializationHelper
         else if (genericDef == typeof(GraphAttentionLayer<>))
         {
             // GraphAttentionLayer(int inputFeatures, int outputFeatures, int numHeads = 1, double alpha = 0.2, double dropoutRate = 0.0, IActivationFunction<T>? = null)
-            int inputFeatures = inputShape[0];
+            //
+            // THE LAST AXIS, NOT THE FIRST -- the same rule the three sibling graph branches state:
+            // "Graph tensors may include leading batch/node axes, so the feature width is always the
+            // final axis." Reading axis 0 meant a rank-2 [numNodes, features] record reconstructed
+            // inputFeatures = numNodes, so the layer was rebuilt at the wrong width and SetParameters
+            // then rejected the saved vector -- or worse, accepted a coincidentally-matching one.
+            int inputFeatures = inputShape[inputShape.Length - 1];
             int numHeads = TryGetInt(additionalParams, "NumHeads") ?? 1;
             bool concatenateHeads = TryGetBool(additionalParams, "ConcatenateHeads") ?? false;
+            int outputWidth = outputShape[outputShape.Length - 1];
             int outputFeatures = TryGetInt(additionalParams, "HeadOutputFeatures")
-                ?? (concatenateHeads ? outputShape[0] / Math.Max(numHeads, 1) : outputShape[0]);
+                ?? (concatenateHeads ? outputWidth / Math.Max(numHeads, 1) : outputWidth);
             double alpha = TryGetDouble(additionalParams, "Alpha") ?? 0.2;
             double dropout = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
 
@@ -1334,7 +1341,11 @@ public static class DeserializationHelper
             double dropoutRate = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             bool useResidual = TryGetBool(additionalParams, "UseResidual") ?? true;
-            int seed = TryGetInt(additionalParams, "Seed") ?? 2027;
+            // 0, NOT AN INVENTED 2027. A seed is consumed at construction and the RNG state has
+            // already advanced past it by the time a trained layer is serialized, so a persisted or
+            // invented seed describes nothing about the restored layer -- it only looks meaningful.
+            // The NHiTSStackTensor branch reasons this way for the same concept; this now matches it.
+            int seed = TryGetInt(additionalParams, "Seed") ?? 0;
             instance = new ContextNetBlockLayer<T>(
                 inputChannels, outputChannels, kernelSize, numConvolutions,
                 seReductionRatio, dropoutRate, stride, useResidual, seed);
@@ -3903,7 +3914,12 @@ public static class DeserializationHelper
         if (additionalParams != null && additionalParams.TryGetValue("InputMode", out var modeObj))
         {
             var modeStr = modeObj?.ToString();
-            if (!Enum.TryParse<EmbeddingInputMode>(modeStr, out var mode))
+            // ignoreCase to match RestoreMultiHeadAttentionConfiguration below, and IsDefined because
+            // Enum.TryParse succeeds for ANY numeric string: "999" parsed into an EmbeddingInputMode
+            // with no matching member and sailed through the very check meant to reject malformed
+            // values, leaving the layer interpreting its input in a mode that does not exist.
+            if (!Enum.TryParse<EmbeddingInputMode>(modeStr, ignoreCase: true, out var mode)
+                || !Enum.IsDefined(typeof(EmbeddingInputMode), mode))
                 throw new InvalidOperationException(
                     $"EmbeddingLayer metadata 'InputMode' has an unparseable value '{modeStr}'. " +
                     $"Expected one of: {string.Join(", ", Enum.GetNames(typeof(EmbeddingInputMode)))}.");
@@ -3925,7 +3941,17 @@ public static class DeserializationHelper
         MultiHeadAttentionLayer<T> attention,
         Dictionary<string, object>? additionalParams)
     {
-        attention.UseCausalMask = TryGetBool(additionalParams, "UseCausalMask") ?? false;
+        // ONLY WHEN THE KEY IS PRESENT. This wrote false whenever the key was absent, which is the
+        // opposite of every other restore in this file -- RestoreEmbeddingConfiguration directly above
+        // leaves the constructor default alone. It matters most on the generated-factory path, where
+        // [LayerState] may already have supplied useCausalMask as a constructor argument: that value
+        // was then overwritten with false and a causal attention layer silently reloaded as
+        // bidirectional, which changes what the model attends to without failing anywhere.
+        bool? causalMask = TryGetBool(additionalParams, "UseCausalMask");
+        if (causalMask.HasValue)
+        {
+            attention.UseCausalMask = causalMask.Value;
+        }
 
         string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
         if (string.IsNullOrWhiteSpace(positionalEncoding)
