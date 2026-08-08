@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Graph;
 /// exist, rather than silently replacing it.
 /// </para>
 /// </remarks>
-public sealed class LayerForwardObserver<T> : IDisposable
+internal sealed class LayerForwardObserver<T> : IDisposable
 {
     private static readonly AsyncLocal<LayerForwardObserver<T>?> s_current = new();
 
