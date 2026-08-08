@@ -187,7 +187,15 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                 }
             }
 
-            bool hasContract = type.AllInterfaces.Any(i => i.ToDisplayString() == ShapeContractName);
+            // An INTERFACE that extends IShapeContract is not a contract implementation - it is part of
+            // the contract vocabulary. IBatchAwareShapeContract / IMultiPortShapeContract /
+            // IMultiOutputShapeContract exist so a layer can opt into an extra form, and demanding a
+            // [TensorLayout] from them is meaningless: an interface has no axes of its own and nothing
+            // ever resolves against it. Third time this analyzer family has reported a type the resolver
+            // never asks about; the rule is that ADNSHAPE003 constrains what IMPLEMENTS a contract, not
+            // what DECLARES one.
+            bool hasContract = type.TypeKind != TypeKind.Interface
+                && type.AllInterfaces.Any(i => i.ToDisplayString() == ShapeContractName);
 
             // [ElementWiseShape] declares "any rank, every axis carried through", which is a COMPLETE
             // contract expressed without naming axes - a dropout layer has no Height. Demanding an

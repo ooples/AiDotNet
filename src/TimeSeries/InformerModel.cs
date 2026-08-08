@@ -1406,7 +1406,7 @@ internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
+internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IMultiPortShapeContract
 {
     /// <inheritdoc />
     /// <remarks>

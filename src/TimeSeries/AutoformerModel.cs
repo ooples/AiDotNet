@@ -1113,7 +1113,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
+internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>, IMultiOutputShapeContract
 {
     /// <inheritdoc />
     /// <remarks>
@@ -1320,7 +1320,7 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
+internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>, IMultiOutputShapeContract
 {
     /// <inheritdoc />
     /// <remarks>
