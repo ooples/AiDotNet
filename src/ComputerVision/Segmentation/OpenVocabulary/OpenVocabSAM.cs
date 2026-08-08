@@ -66,6 +66,7 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     #region Fields
     private readonly int _height, _width, _channels, _numClasses;
     private readonly int[] _channelDims;
+    private readonly int _neckEmbeddingDim;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
@@ -119,10 +120,12 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
+        ValidateOptions(_options);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _neckEmbeddingDim = _options.NeckEmbeddingDimension;
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
 
@@ -156,9 +159,11 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
+        ValidateOptions(_options);
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _neckEmbeddingDim = _options.NeckEmbeddingDimension;
+        _decoderDim = _options.DecoderDimension;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load OpenVocabSAM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -199,7 +204,7 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -256,13 +261,22 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     {
         if (!_useNativeMode) { ClearLayers(); return; }
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
+        {
+            int encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
+            if (encoderLayerEnd < 0 || encoderLayerEnd > Architecture.Layers.Count)
+                throw new ArgumentOutOfRangeException(
+                    nameof(_options.EncoderLayerCount),
+                    $"EncoderLayerCount must be between 0 and {Architecture.Layers.Count}.");
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = encoderLayerEnd;
+        }
         else
         {
             var encoderLayers = LayerHelper<T>.CreateOpenVocabSAMEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
             int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateOpenVocabSAMDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
+            var decoderLayers = LayerHelper<T>.CreateOpenVocabSAMDecoderLayers(
+                _channelDims[^1], _neckEmbeddingDim, _decoderDim, _numClasses, fH, fW);
             Layers.AddRange(decoderLayers);
         }
     }
@@ -304,7 +318,16 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
+    {
+        writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses);
+        writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode);
+        writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd);
+        writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d);
+        writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d);
+        writer.Write(_neckEmbeddingDim);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.WeightDecay);
+    }
 
     /// <summary>
     /// Reads configuration from a binary stream.
@@ -316,7 +339,19 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
+    {
+        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
+        _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString();
+        _ = reader.ReadInt32();
+        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
+        int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _options.NeckEmbeddingDimension = reader.ReadInt32();
+            _options.LearningRate = reader.ReadDouble();
+            _options.WeightDecay = reader.ReadDouble();
+        }
+    }
 
     /// <summary>
     /// Creates a new instance with the same configuration but fresh weights.
@@ -328,8 +363,36 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new OpenVocabSAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
+        ? new OpenVocabSAM<T>(Architecture, lossFunction: LossFunction, numClasses: _numClasses,
+            dropRate: _dropRate, options: _options)
         : new OpenVocabSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            }
+        );
+
+    private static void ValidateOptions(OpenVocabSAMOptions options)
+    {
+        if (options.ChannelDimensions is null || options.ChannelDimensions.Length == 0)
+            throw new ArgumentException("At least one encoder channel dimension is required.", nameof(options));
+        if (options.StageDepths is null || options.StageDepths.Length != options.ChannelDimensions.Length)
+            throw new ArgumentException("StageDepths must contain one value per ChannelDimensions entry.", nameof(options));
+        if (options.ChannelDimensions.Any(d => d <= 0) || options.StageDepths.Any(d => d <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "Encoder channel dimensions and stage depths must be positive.");
+        if (options.NeckEmbeddingDimension <= 0 || options.DecoderDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "Neck and decoder dimensions must be positive.");
+        if (options.LearningRate <= 0 || double.IsNaN(options.LearningRate) || double.IsInfinity(options.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be finite and positive.");
+        if (options.WeightDecay < 0 || double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay must be finite and non-negative.");
+    }
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

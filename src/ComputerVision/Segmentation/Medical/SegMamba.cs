@@ -86,6 +86,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     private readonly List<Conv3DLayer<T>> _decConvs = new();
     private readonly List<InstanceNormalizationLayer<T>> _decNorms = new();
     private Conv3DLayer<T>? _outConv;
+    private bool _nativeShapesResolved;
     #endregion
 
     private sealed class GscModule
@@ -138,11 +139,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        // Paper-faithful encoder widths/depths (Xing et al. 2024, §4): feature dims
-        // [48, 96, 192, 384] with two TSMamba blocks per stage.
-        _channelDims = [48, 96, 192, 384];
-        _depths = [2, 2, 2, 2];
-        _stateDim = 16;
+        (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         // SegMamba trains with AdamW at a small LR (paper §4.2 uses 1e-4 with
         // warmup/poly decay); the framework default 1e-3 is too aggressive for the
         // hybrid conv-Mamba encoder.
@@ -165,14 +162,29 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
         _numClasses = numClasses; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [48, 96, 192, 384];
-        _depths = [2, 2, 2, 2];
-        _stateDim = 16;
+        (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load SegMamba ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
+
+    private static (int[] ChannelDimensions, int[] StageDepths, int StateDimension)
+        ValidateAndCopyArchitectureOptions(SegMambaOptions options)
+    {
+        if (options.ChannelDimensions is null || options.ChannelDimensions.Length == 0)
+            throw new ArgumentException("At least one channel dimension is required.", nameof(options));
+        if (options.StageDepths is null || options.StageDepths.Length != options.ChannelDimensions.Length)
+            throw new ArgumentException("StageDepths must contain one entry per channel dimension.", nameof(options));
+        if (options.ChannelDimensions.Any(dimension => dimension <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "Channel dimensions must be positive.");
+        if (options.StageDepths.Any(depth => depth <= 0))
+            throw new ArgumentOutOfRangeException(nameof(options), "Stage depths must be positive.");
+        if (options.StateDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "StateDimension must be positive.");
+
+        return (options.ChannelDimensions.ToArray(), options.StageDepths.ToArray(), options.StateDimension);
+    }
 
     #region Public Methods
     /// <summary>Runs a forward pass to produce segmentation logits.</summary>
@@ -486,6 +498,76 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 
         _outConv = new Conv3DLayer<T>(_numClasses, 1, 1, 0, identity);
         Layers.Add(_outConv);
+    }
+
+    /// <summary>
+    /// Resolves lazy convolution weights through SegMamba's real U-shaped topology.
+    /// </summary>
+    /// <remarks>
+    /// The base resolver treats <see cref="NeuralNetworkBase{T}.Layers"/> as a flat chain. That is
+    /// incorrect for SegMamba: each decoder stage concatenates the upsampled feature with an encoder
+    /// skip (Xing et al. 2024, section 2), so its convolution consumes the sum of both channel counts.
+    /// Resolving the decoder as a flat chain pins, for example, the finest fusion kernel to 64 input
+    /// channels although the real graph supplies 64 + 32 = 96. Resolve the convolution shapes here in
+    /// the same encoder/skip/decoder order as <see cref="Forward(Tensor{T})"/>.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_nativeShapesResolved || !_useNativeMode || Layers.Count == 0 || _stem is null || _outConv is null)
+            return;
+
+        int depth = Architecture.InputHeight;
+        int height = Architecture.InputHeight;
+        int width = Architecture.InputWidth;
+        if (depth <= 0 || height <= 0 || width <= 0)
+            return; // Dynamic volumes resolve from their first real forward.
+
+        static int ConvOutput(int size, int kernel, int stride, int padding)
+            => (size + 2 * padding - kernel) / stride + 1;
+
+        _stem.ResolveFromShape([_inChannels, depth, height, width]);
+        depth = ConvOutput(depth, _stem.KernelSize, _stem.Stride, _stem.Padding);
+        height = ConvOutput(height, _stem.KernelSize, _stem.Stride, _stem.Padding);
+        width = ConvOutput(width, _stem.KernelSize, _stem.Stride, _stem.Padding);
+
+        var skipSpatial = new (int Depth, int Height, int Width)[_channelDims.Length];
+        for (int stage = 0; stage < _channelDims.Length; stage++)
+        {
+            if (stage > 0)
+            {
+                var down = _downConvs[stage - 1];
+                down.ResolveFromShape([_channelDims[stage - 1], depth, height, width]);
+                depth = ConvOutput(depth, down.KernelSize, down.Stride, down.Padding);
+                height = ConvOutput(height, down.KernelSize, down.Stride, down.Padding);
+                width = ConvOutput(width, down.KernelSize, down.Stride, down.Padding);
+            }
+
+            int channels = _channelDims[stage];
+            var gsc = _gsc[stage];
+            gsc.Proj.ResolveFromShape([channels, depth, height, width]);
+            gsc.Proj2.ResolveFromShape([channels, depth, height, width]);
+            gsc.Proj3.ResolveFromShape([channels, depth, height, width]);
+            skipSpatial[stage] = (depth, height, width);
+        }
+
+        int currentChannels = _channelDims[^1];
+        int convIdx = 0;
+        for (int stage = _channelDims.Length - 2; stage >= 0; stage--)
+        {
+            (depth, height, width) = skipSpatial[stage];
+            int concatChannels = currentChannels + _channelDims[stage];
+            _decConvs[convIdx].ResolveFromShape([concatChannels, depth, height, width]);
+            currentChannels = _channelDims[stage];
+            convIdx++;
+        }
+
+        // The final upsample returns to the input volume without another skip concat.
+        depth = Architecture.InputHeight;
+        height = Architecture.InputHeight;
+        width = Architecture.InputWidth;
+        _decConvs[convIdx].ResolveFromShape([currentChannels, depth, height, width]);
+        _outConv.ResolveFromShape([_channelDims[0], depth, height, width]);
+        _nativeShapesResolved = true;
     }
 
     /// <summary>

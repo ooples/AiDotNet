@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Encoder-only Mask Transformer", "https://arxiv.org/abs/2501.03884", Year = 2025, Authors = "Antoine Saporta, Alexandre Music, Sotirios Diamantas, Yassine Marrakchi, Thomas Brox")]
+[ResearchPaper("Your ViT is Secretly an Image Segmentation Model", "https://arxiv.org/abs/2503.19108", Year = 2025, Authors = "Tommie Kerssies, Niccolò Cavagnero, Alexander Hermans, Narges Norouzi, Giuseppe Averta, Bastian Leibe, Gijs Dubbelman, Daan de Geus")]
 public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly EoMTOptions _options;
@@ -255,7 +255,7 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

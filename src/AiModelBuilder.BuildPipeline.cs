@@ -966,6 +966,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             double robustAtBase = cleanAccuracy;
             double successAtBase = 0;
             double perturbSum = 0; int perturbCount = 0;
+            // Empirical robust accuracy is a worst-case measure: a sample must be
+            // correct on the clean input and remain correct for every attack tried
+            // up to the current budget. Counting adversarial correctness alone can
+            // incorrectly reward an attack that happens to repair a clean mistake.
+            var robustThroughBudget = cleanCorrect.ToArray();
 
             foreach (double mult in multipliers)
             {
@@ -978,10 +983,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 for (int i = 0; i < n; i++)
                 {
                     var advInput = adversarial[i];
-                    if (advInput is null) continue;
+                    if (advInput is null)
+                    {
+                        robustThroughBudget[i] = false;
+                        continue;
+                    }
                     var adv = (AiDotNet.Tensors.LinearAlgebra.Matrix<T>)(object)advInput;
                     bool advCorrect = Math.Abs(PredictScalar(adv) - numOps.ToDouble(labelVector[i])) <= tolerance;
-                    if (advCorrect) correct++;
+                    robustThroughBudget[i] = robustThroughBudget[i] && advCorrect;
+                    if (robustThroughBudget[i]) correct++;
                     if (Math.Abs(mult - 1.0) < 1e-9)
                     {
                         if (cleanCorrect[i] && !advCorrect)
@@ -1266,6 +1276,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 return; // strategy could not compress this model's weights.
             }
+
+            // Include the uncompressed operating point. If every compressed point falls below the
+            // retention tolerance, this is the only truthful knee: ratio 1 with full retention.
+            // Adding it only after at least one strategy point succeeds preserves the "unavailable"
+            // behavior for strategies that cannot compress this model at all.
+            frontier.Insert(0, new AiDotNet.ModelCompression.CompressionFrontierPoint<T>
+            {
+                Fraction = 0.0,
+                CompressionRatio = 1.0,
+                CompressedSizeBytes = originalBytes,
+                AccuracyRetained = 1.0,
+                ReconstructionError = 0.0,
+            });
 
             // Full-compression headline: prefer the p=1.0 point, else the most-compressed point measured.
             var headline = fullPoint ?? new CompressionOperatingPoint

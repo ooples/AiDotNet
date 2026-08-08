@@ -33,7 +33,38 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// - Serialized point processing with space-filling curves
 /// </para>
 /// <para>
-/// <b>Reference:</b> Wu et al., "Sonata and Concerto: Mamba for 3D Point Clouds", arXiv 2024.
+/// <b>Reference:</b> "Concerto: Joint 2D-3D Self-Supervised Learning Emerges Spatial
+/// Representations" (arXiv:2510.23607).
+/// </para>
+/// <para>
+/// <b>Migration in progress — this class does not yet implement that paper.</b> Its attribution
+/// was previously wrong in three separate ways: a fabricated reference ("Sonata and Concerto:
+/// Mamba for 3D Point Clouds", which does not exist), a <c>[ResearchPaper]</c> attribute pointing
+/// at Mamba3D (arXiv:2404.14966 — a real but unrelated model by different authors), and an
+/// implementation matching neither. The citation now names the real Concerto, and
+/// <see cref="ConcertoOptions"/> carries that paper's hyperparameters.
+/// </para>
+/// <para>
+/// What the published method actually is, and what still has to be built here:
+/// </para>
+/// <list type="bullet">
+/// <item><b>3D intra-modal self-distillation.</b> A Point Transformer V3 student is trained to
+/// match a momentum-updated (EMA) teacher under a DINOv2-style online-clustering cross-entropy
+/// objective at decoder upcast level 2. Neither the teacher/student pair nor the clustering loss
+/// exists here yet.</item>
+/// <item><b>2D-3D cross-modal joint embedding.</b> A frozen DINOv2-L encoder at 518x518 supplies
+/// image patch features; 3D points are projected into the image and depth-checked for visibility
+/// (|d_c - d_proj| &lt; 0.01 m), point features falling in a patch are mean-pooled, and the result
+/// is matched to the image patch embedding by cosine similarity at upcast level 3. This requires
+/// paired imagery plus camera intrinsics and extrinsics, which this type's current API does not
+/// accept.</item>
+/// <item><b>Objective.</b> The two terms are combined at the paper's 2:2 weight ratio.</item>
+/// </list>
+/// <para>
+/// Because Concerto is a PRETRAINING method, segmentation is a downstream probe on the learned
+/// representation rather than the training objective. <see cref="ISemanticSegmentation{T}"/> is
+/// retained so existing consumers keep working, but the current backbone is the previous
+/// unattributed hybrid Mamba/Transformer stack, not PTv3, and no self-supervised objective runs.
 /// </para>
 /// </remarks>
 /// <example>
@@ -53,7 +84,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Mamba3D: Enhancing Local Features for 3D Point Cloud Analysis via State Space Model", "https://arxiv.org/abs/2404.14966", Year = 2024, Authors = "Xu Han, Yuan Tang, Zhaoxuan Wang, Xianzhi Li")]
+[ResearchPaper("Concerto: Joint 2D-3D Self-Supervised Learning Emerges Spatial Representations", "https://arxiv.org/abs/2510.23607", Year = 2025)]
 public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly ConcertoOptions _options;
@@ -191,7 +222,7 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
