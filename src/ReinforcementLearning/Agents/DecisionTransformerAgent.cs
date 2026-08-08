@@ -63,6 +63,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
     Authors = "Chen, L., Lu, K., Rajeswaran, A., Lee, K., Grover, A., Laskin, M., Abbeel, P., Srinivas, A., & Mordatch, I.")]
 public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_transformerNetwork);
+    }
     private DecisionTransformerOptions<T> _options;
 
     /// <inheritdoc/>
@@ -418,16 +426,6 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         var networkLength = reader.ReadInt32();
         var networkBytes = reader.ReadBytes(networkLength);
         _transformerNetwork.Deserialize(networkBytes);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        return _transformerNetwork.GetParameters();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _transformerNetwork.UpdateParameters(parameters);
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

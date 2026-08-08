@@ -62,6 +62,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
     Authors = "Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., & Silver, D.")]
 public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_onlineNetwork);
+        RegisterParameterComponent(_targetNetwork);
+    }
     private RainbowDQNOptions<T> _options;
 
     /// <inheritdoc/>
@@ -682,43 +691,6 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
         var targetNetworkLength = reader.ReadInt32();
         var targetNetworkBytes = reader.ReadBytes(targetNetworkLength);
         _targetNetwork.Deserialize(targetNetworkBytes);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var onlineParams = _onlineNetwork.GetParameters();
-        var targetParams = _targetNetwork.GetParameters();
-
-        var combinedParams = new Vector<T>(onlineParams.Length + targetParams.Length);
-        for (int i = 0; i < onlineParams.Length; i++)
-        {
-            combinedParams[i] = onlineParams[i];
-        }
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            combinedParams[onlineParams.Length + i] = targetParams[i];
-        }
-
-        return combinedParams;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int onlineParamCount = checked((int)_onlineNetwork.ParameterCount);
-        var onlineParams = new Vector<T>(onlineParamCount);
-        var targetParams = new Vector<T>(parameters.Length - onlineParamCount);
-
-        for (int i = 0; i < onlineParamCount; i++)
-        {
-            onlineParams[i] = parameters[i];
-        }
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            targetParams[i] = parameters[onlineParamCount + i];
-        }
-
-        _onlineNetwork.UpdateParameters(onlineParams);
-        _targetNetwork.UpdateParameters(targetParams);
     }
 
     public override int FeatureCount => _options.StateSize;

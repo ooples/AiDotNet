@@ -65,6 +65,25 @@ namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
     Authors = "Lillicrap, T. P., Hunt, J. J., Pritzel, A., Heess, N., Erez, T., Tassa, Y., Silver, D., & Wierstra, D.")]
 public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_actorNetwork);
+        RegisterParameterComponent(_criticNetwork);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Refreshes what derives from the parameters. This ran at the end of the
+    /// hand-written SetParameters; losing it would not fail a test, it would just leave
+    /// the agent training against a stale target.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_actorNetwork, _actorTargetNetwork);
+        CopyNetworkWeights(_criticNetwork, _criticTargetNetwork);
+    }
     private DDPGOptions<T> _options;
 
     /// <inheritdoc/>
@@ -502,42 +521,6 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         ReadNetwork(_actorTargetNetwork);
         ReadNetwork(_criticNetwork);
         ReadNetwork(_criticTargetNetwork);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var actorParams = _actorNetwork.GetParameters();
-        var criticParams = _criticNetwork.GetParameters();
-
-        var total = actorParams.Length + criticParams.Length;
-        var vector = new Vector<T>(total);
-
-        int idx = 0;
-        foreach (var p in actorParams) vector[idx++] = p;
-        foreach (var p in criticParams) vector[idx++] = p;
-
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var actorParams = _actorNetwork.GetParameters();
-        var criticParams = _criticNetwork.GetParameters();
-
-        int idx = 0;
-        var actorVec = new Vector<T>(actorParams.Length);
-        var criticVec = new Vector<T>(criticParams.Length);
-
-        for (int i = 0; i < actorParams.Length; i++) actorVec[i] = parameters[idx++];
-        for (int i = 0; i < criticParams.Length; i++) criticVec[i] = parameters[idx++];
-
-        _actorNetwork.UpdateParameters(actorVec);
-        _criticNetwork.UpdateParameters(criticVec);
-
-        CopyNetworkWeights(_actorNetwork, _actorTargetNetwork);
-        CopyNetworkWeights(_criticNetwork, _criticTargetNetwork);
     }
 
     /// <inheritdoc/>
