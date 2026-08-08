@@ -656,6 +656,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             perLayerParameters.Add(layerParameters);
             totalParameterCountLong += layerParameters.Length;
         }
+
+        // Then the network-level extras, in the same order ParameterCount sums them.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            var extraParameters = extra.GetParameters();
+            perLayerParameters.Add(extraParameters);
+            totalParameterCountLong += extraParameters.Length;
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null) continue;
+            var flat = new Vector<T>(tensor.Length);
+            tensor.AsSpan().CopyTo(flat.AsWritableSpan());
+            perLayerParameters.Add(flat);
+            totalParameterCountLong += flat.Length;
+        }
         int totalParameterCount = ParameterCountHelper.ToFlatVectorSize(totalParameterCountLong);
 
         var parameters = new Vector<T>(totalParameterCount);
@@ -690,19 +707,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         ResolveLazyLayerShapes();
 
-        // SCOPE CONTRACT: chunks must match exactly the parameter set
-        // that ParameterCount / GetParameters / SetParameters operate on.
-        // Those flat APIs walk only `Layers`; widening this enumeration
-        // to include GetExtraTrainableLayers / GetExtraTrainableTensors
-        // would make `sum(chunk.Length) > ParameterCount` for models
-        // with network-level extras (ViT cls/pos, Conformer subsamplers),
-        // causing callers that mix the flat and chunked APIs to mis-size
-        // buffers or skip parameters on round-trip.
+        // SCOPE CONTRACT: chunks must match exactly the parameter set that
+        // ParameterCount / GetParameters / SetParameters operate on, or a caller mixing the flat
+        // and chunked APIs mis-sizes buffers or skips parameters on round-trip.
         //
-        // Extras still flow through TrainWithTape via the separate extra-
-        // trainable handling path — they're just not surfaced in the
-        // chunked enumeration here. If a future PR widens the flat APIs
-        // to include extras, this enumeration can match in lockstep.
+        // Those flat APIs used to walk only `Layers`, so this enumeration did too, and the
+        // network-level extras (ViT cls/pos, Conformer subsamplers, PaLM-E's patch embed) were
+        // absent from both — trained through the separate extra-trainable path while the flat
+        // surface reported a count that excluded them. The flat APIs now include extras, so this
+        // matches in lockstep, which is what the note here always said should happen.
         //
         // The recursive CollectTrainableLayers walk DOES descend into
         // composite-layer sublayers (DenseBlock BN/Conv, MoE experts) —
@@ -717,6 +730,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (t is null || t.Length == 0) continue;
                 yield return t;
             }
+        }
+
+        // Same order the flat APIs use: layers, then extra layers, then extra tensors.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            foreach (var t in extra.GetTrainableParameters())
+            {
+                if (t is null || t.Length == 0) continue;
+                yield return t;
+            }
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            yield return tensor;
         }
     }
 
@@ -2006,6 +2035,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 total += Layers[i].ParameterCount;
             }
+
+            // Network-level weights that live OUTSIDE Layers -- a ViT's class and position
+            // embeddings, a Conformer's subsampler, PaLM-E's patch-embed conv. They were trained
+            // and serialized through a separate path while the flat surface pretended they did not
+            // exist, so a model holding them reported a count that its own GetParameters
+            // contradicted. Walked here, in GetParameters, in SetParameters and in
+            // GetParameterChunks in the SAME order, so all four describe one parameter set.
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null) total += extra.ParameterCount;
+            }
+            foreach (var tensor in GetExtraTrainableTensors())
+            {
+                if (tensor is not null) total += tensor.Length;
+            }
+
             return total;
         }
     }
@@ -12293,6 +12338,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 .CopyTo(layerParameters.AsWritableSpan());
             layer.SetParameters(layerParameters);
             currentIndex += layerParameterCount;
+        }
+
+        // Restore the network-level extras from the tail of the vector, in the order
+        // ParameterCount summed and GetParameters wrote them.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null || extra.ParameterCount <= 0) continue;
+            int extraCount = checked((int)extra.ParameterCount);
+            var extraParameters = new Vector<T>(extraCount);
+            srcSpan.Slice(currentIndex, extraCount).CopyTo(extraParameters.AsWritableSpan());
+            extra.SetParameters(extraParameters);
+            currentIndex += extraCount;
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
+            currentIndex += tensor.Length;
         }
 
         // Some ITrainableLayer implementations swap their parameter tensors
