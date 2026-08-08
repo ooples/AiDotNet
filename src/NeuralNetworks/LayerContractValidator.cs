@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks;
 /// shaped differently from what the next one expects, the model fails somewhere deep inside with a
 /// confusing message. This checks the hand-off up front and says exactly which two layers disagree.</para>
 /// </remarks>
-public static class LayerContractValidator
+internal static class LayerContractValidator
 {
     /// <summary>One layer-to-layer disagreement.</summary>
     /// <param name="ProducerIndex">Index of the layer producing the tensor.</param>

@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.LossFunctions;
@@ -467,8 +467,10 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     /// the autodiff graph, so using it here would silently sever the gradient. This is the standard
     /// range-reduced minimax evaluation instead: fold the argument into <c>[0, 1]</c> using
     /// <c>atan(x) = pi/2 - atan(1/x)</c> for <c>|x| &gt; 1</c>, apply a degree-9 odd polynomial, and
-    /// restore the sign. Maximum error is about 1e-7, the same approach a libm implementation uses,
-    /// and every step is an <c>IEngine</c> op so the tape records the whole thing.
+    /// restore the sign. This is the classic Hastings degree-9 polynomial, whose maximum absolute
+    /// error on the reduced range is about 1.15e-5 -- NOT the 1e-7 previously claimed here. Raise the
+    /// degree if a run needs tighter phase precision than that. Every step is an <c>IEngine</c> op,
+    /// so the tape records the whole thing.
     /// </para>
     /// </remarks>
     private Tensor<T> Atan(Tensor<T> x)

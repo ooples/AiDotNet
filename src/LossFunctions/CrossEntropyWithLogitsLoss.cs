@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -277,7 +277,7 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             if (explicitAxis < 0 || explicitAxis >= rank)
             {
                 throw new ArgumentOutOfRangeException(
-                    nameof(_classAxis),
+                    "classAxis",
                     _classAxis.Value,
                     $"Class axis {_classAxis.Value} is outside logits rank {rank}.");
             }

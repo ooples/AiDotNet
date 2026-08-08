@@ -1,4 +1,4 @@
-namespace AiDotNet.Interfaces;
+﻿namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// A layer that WRAPS an attention block, adding something to its output without replacing how the
@@ -21,7 +21,7 @@ namespace AiDotNet.Interfaces;
 /// decorator, so new adapters need no changes at the call site.
 /// </para>
 /// </remarks>
-public interface IAttentionBlockDecorator<T> : ILayer<T>
+internal interface IAttentionBlockDecorator<T> : ILayer<T>
 {
     /// <summary>
     /// Gets the wrapped block, which should be invoked using whatever dispatch the caller would have

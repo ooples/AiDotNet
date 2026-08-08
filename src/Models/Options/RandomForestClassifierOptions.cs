@@ -1,4 +1,4 @@
-namespace AiDotNet.Models.Options;
+﻿namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for Random Forest classifiers.
@@ -97,8 +97,8 @@ public class RandomForestClassifierOptions<T> : ClassifierOptions<T>
     /// Gets or sets the number of features to consider when looking for the best split.
     /// </summary>
     /// <value>
-    /// The number of features, a string specifier, or null for auto.
-    /// Default is "sqrt" (square root of total features).
+    /// One of the <see cref="MaxFeatureSelection"/> values. Default is
+    /// <see cref="MaxFeatureSelection.Sqrt"/> (square root of the total feature count).
     /// </value>
     /// <remarks>
     /// <para>
