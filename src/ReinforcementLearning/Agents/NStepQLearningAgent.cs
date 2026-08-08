@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.NStepQLearning;
 
 /// <summary>
@@ -41,6 +43,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.NStepQLearning;
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The Q-table, padded to ActionSize per state and clamped to one row -- the same
+    /// flattening this agent used to write by hand.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableParameterSource<T>(_qTable, _options.ActionSize));
+    }
     private NStepQLearningOptions<T> _options;
 
     /// <inheritdoc/>
@@ -221,7 +231,6 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     }
 
-    public override long ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -254,39 +263,6 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
     }
 
-    public override Vector<T> GetParameters()
-    {
-        // Flatten Q-table into vector using linear indexing.
-        int stateCount = Math.Max(_qTable.Count, 1);
-        var parameters = new Vector<T>(stateCount * _options.ActionSize);
-
-        int idx = 0;
-        foreach (var stateQValues in _qTable.Values)
-        {
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                parameters[idx++] = stateQValues[action];
-            }
-        }
-
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Tabular RL methods cannot restore Q-values from parameters alone
-        // because the parameter vector contains only Q-values, not state keys.
-        //
-        // For a fresh agent (empty Q-table), state keys are unknown, so restoration fails.
-        // For proper save/load, use Serialize()/Deserialize() which preserves state mappings.
-        //
-        // This is a fundamental limitation of tabular methods - unlike neural networks,
-        // the "parameters" (Q-values) are meaningless without their state associations.
-
-        throw new NotSupportedException(
-            "Tabular N-Step Q-Learning agents do not support parameter restoration without state information. " +
-            "Use Serialize()/Deserialize() methods instead, which preserve state-to-Q-value mappings.");
-    }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new NStepQLearningAgent<T>(_options);

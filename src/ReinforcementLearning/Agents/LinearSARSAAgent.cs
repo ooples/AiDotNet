@@ -6,6 +6,8 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Validation;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
 /// <summary>
@@ -41,6 +43,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The linear weight matrix, row-major, which is what the hand-written loop over
+    /// [action, feature] produced. Registered through an accessor because this agent can
+    /// REPLACE the matrix rather than mutate it.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new MatrixParameterSource<T>(() => _weights));
+    }
     private LinearSARSAOptions<T> _options;
 
     /// <inheritdoc/>
@@ -222,7 +233,6 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
     public override byte[] Serialize()
     {
@@ -277,28 +287,6 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         {
             _lastAction = Convert.ToInt32(state.LastAction);
         }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        int paramCount = _options.ActionSize * _options.FeatureSize;
-        var vector = new Vector<T>(paramCount);
-        int idx = 0;
-
-        for (int a = 0; a < _options.ActionSize; a++)
-            for (int f = 0; f < _options.FeatureSize; f++)
-                vector[idx++] = _weights[a, f];
-
-        return vector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        for (int a = 0; a < _options.ActionSize; a++)
-            for (int f = 0; f < _options.FeatureSize; f++)
-                if (idx < parameters.Length)
-                    _weights[a, f] = parameters[idx++];
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LinearSARSAAgent<T>(_options);

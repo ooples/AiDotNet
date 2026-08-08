@@ -7,6 +7,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 
 /// <summary>
@@ -63,6 +65,13 @@ public class TransitionData<T>
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The state-value table, in dictionary order, as the hand-written flatten used.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new ValueTableParameterSource<T>(_valueTable));
+    }
     private ModifiedPolicyIterationOptions<T> _options;
 
     /// <inheritdoc/>
@@ -301,8 +310,6 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override long ParameterCount => _valueTable.Count;
-
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -373,39 +380,6 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
                 actionDict[actionEntry.Key] = transitionList;
             }
             _model[stateEntry.Key] = actionDict;
-        }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        // Flatten value table into vector
-        var paramsList = new List<T>();
-        foreach (var value in _valueTable.Values)
-        {
-            paramsList.Add(value);
-        }
-
-
-        var paramsVector = new Vector<T>(paramsList.Count);
-        for (int i = 0; i < paramsList.Count; i++)
-        {
-            paramsVector[i] = paramsList[i];
-        }
-
-        return paramsVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Reconstruct value table from vector
-        int index = 0;
-        foreach (var stateKey in _valueTable.Keys.ToList())
-        {
-            if (index < parameters.Length)
-            {
-                _valueTable[stateKey] = parameters[index];
-                index++;
-            }
         }
     }
 
