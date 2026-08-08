@@ -243,6 +243,10 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         writer.Write(_modelDimension);
         writer.Write(_numLayers);
         writer.Write(_maxSeqLength);
+        // RecurrenceDimension is configurable and sizes the whole RG-LRU stack, but it was not
+        // in the payload -- so a checkpoint saved with a non-default width reloaded at the
+        // default and mismatched its own weights.
+        writer.Write(_recurrenceDimension);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -251,6 +255,20 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
+
+        // VALIDATED, NOT APPLIED. The layer stack was already built from the options this
+        // instance was constructed with, so a differing saved width cannot be adopted here --
+        // the weights about to be loaded would not fit. Reporting the mismatch names the cause;
+        // staying silent would load a checkpoint into a wrong-width model, which fails later as
+        // an opaque parameter-count error or, worse, does not fail at all.
+        int savedRecurrenceDimension = reader.ReadInt32();
+        if (savedRecurrenceDimension != _recurrenceDimension)
+        {
+            throw new InvalidOperationException(
+                $"Checkpoint was saved with RecurrenceDimension {savedRecurrenceDimension} but this "
+                + $"instance was built with {_recurrenceDimension}. Set RecurrenceDimension on the "
+                + "options before loading this checkpoint.");
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
