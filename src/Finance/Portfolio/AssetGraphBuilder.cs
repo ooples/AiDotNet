@@ -133,10 +133,22 @@ public class AssetGraphBuilder<T>
                 $"Series must have equal length; got {first.Length} and {second.Length}.", nameof(second));
         if (first.Length < 2)
             throw new ArgumentException("At least 2 observations are required.", nameof(first));
-
         int n = first.Length;
-        var a = DoubleCentredDistances(first, n);
-        var b = DoubleCentredDistances(second, n);
+        return DistanceCorrelationFromCentred(
+            DoubleCentredDistances(first, n), DoubleCentredDistances(second, n), n);
+    }
+
+    /// <summary>
+    /// The distance correlation of two series whose double-centred distance matrices are already in
+    /// hand.
+    /// </summary>
+    /// <remarks>
+    /// Split out so a pairwise sweep can centre each column ONCE instead of once per partner. The
+    /// centring is the expensive half -- it is O(n^2) per call and allocates an n x n array -- so
+    /// doing it inside the pair loop repeated each column's work (assets - 1) times.
+    /// </remarks>
+    private static double DistanceCorrelationFromCentred(double[] a, double[] b, int n)
+    {
 
         double dcov2 = 0.0, dvarX2 = 0.0, dvarY2 = 0.0;
         for (int i = 0; i < n * n; i++)
@@ -220,6 +232,12 @@ public class AssetGraphBuilder<T>
             for (int s = 0; s < steps; s++) column[s] = panel[(s * assets) + a];
             columns[a] = column;
         }
+        // Each column is double-centred ONCE, up front, instead of once per partner inside the pair
+        // loop. That loop called DistanceCorrelation for every pair, and each of those calls centred
+        // BOTH of its arguments, so every column paid the O(steps^2) centring and its n x n
+        // allocation (assets - 1) times over.
+        var centred = new double[assets][];
+        for (int a = 0; a < assets; a++) centred[a] = DoubleCentredDistances(columns[a], steps);
 
         var result = new Tensor<T>(new[] { assets, assets });
         for (int i = 0; i < assets; i++)
@@ -227,7 +245,7 @@ public class AssetGraphBuilder<T>
             result[(i * assets) + i] = NumOps.One;   // a series is perfectly dependent on itself
             for (int j = i + 1; j < assets; j++)
             {
-                double dcor = DistanceCorrelation(columns[i], columns[j]);
+                double dcor = DistanceCorrelationFromCentred(centred[i], centred[j], steps);
                 result[(i * assets) + j] = NumOps.FromDouble(dcor);
                 result[(j * assets) + i] = NumOps.FromDouble(dcor);
             }
