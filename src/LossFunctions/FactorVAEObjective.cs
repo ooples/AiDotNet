@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.LinearAlgebra;
+﻿using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.LossFunctions;
 
@@ -64,7 +64,13 @@ public class FactorVAEObjective<T> : LossFunctionBase<T>
         var kl = _klProvider();
         if (kl is null || _klWeight == 0.0)
         {
-            return recon;
+            // REDUCED ON THIS PATH TOO, so the returned rank does not depend on runtime state. The
+            // branch is chosen by _klProvider(), which returns null during inference and on any step
+            // with no posterior pass, so an unnormalized return here made the loss rank flip between
+            // steps of one run: a backward seed built for a scalar met whatever rank the
+            // reconstruction loss happened to produce, and a fused compiled path that traces the
+            // graph once and replays it had its traced plan invalidated.
+            return ToRank0(recon);
         }
 
         var weighted = Engine.TensorMultiplyScalar(ToRank0(kl), NumOps.FromDouble(_klWeight));
@@ -88,11 +94,35 @@ public class FactorVAEObjective<T> : LossFunctionBase<T>
         return Engine.ReduceSum(value, axes, keepDims: false);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported. FactorVAE's objective cannot be computed on the flat-vector surface.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always.</exception>
+    /// <remarks>
+    /// DELEGATING TO THE RECONSTRUCTION LOSS WOULD DROP THE KL TERM AND THE gamma WEIGHT, silently.
+    /// That is precisely the failure this class's own remarks warn about: a detached KL value
+    /// "would leave the prior untrained and silently reduce this to plain reconstruction". A caller
+    /// on this surface would receive a plausible loss number while the objective they configured was
+    /// not the objective being computed, with no exception and no diagnostic.
+    ///
+    /// FlowLoss and AdversarialLoss handle their own unsupported paths this way. If the
+    /// reconstruction-only value is genuinely wanted, call the reconstruction loss directly, where
+    /// the omission is visible at the call site.
+    /// </remarks>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
-        => _reconstruction.CalculateLoss(predicted, actual);
+        => throw new NotSupportedException(
+            $"{nameof(FactorVAEObjective<T>)} cannot be evaluated on the flat-vector surface: the KL "
+            + "divergence needs the posterior tensors, which a vector does not carry. Train through "
+            + "ComputeTapeLoss (TrainWithTape), or call the reconstruction loss directly if only that "
+            + "term is wanted.");
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported, for the same reason as <see cref="CalculateLoss"/>.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always.</exception>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-        => _reconstruction.CalculateDerivative(predicted, actual);
+        => throw new NotSupportedException(
+            $"{nameof(FactorVAEObjective<T>)} cannot produce a derivative on the flat-vector surface: "
+            + "the KL term's gradient reaches the encoder through the tape. Train through "
+            + "ComputeTapeLoss (TrainWithTape).");
 }
