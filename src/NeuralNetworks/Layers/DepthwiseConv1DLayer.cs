@@ -32,6 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = false, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 3")]
+[AutoParameters]
 public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
 {
     private readonly int _channels;

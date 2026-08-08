@@ -51,6 +51,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     BatchOptional = true, Direction = TensorLayoutDirection.Output,
     Note = "Channel count becomes OutputDepth; H and W follow stride/padding.")]
+[AutoParameters]
 public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
@@ -1752,13 +1753,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// to infer it from a count of zero.
     /// </remarks>
     public override bool HasUninitializedParameters => !_isInitialized && InputDepth <= 0;
-
- but a 11x11 conv at
-        // OutputDepth=1024, InputDepth=2048 overflows: 1024*2048*121=253M,
-        // and a 7x7 at OutputDepth=4096, InputDepth=4096 is 4096*4096*49 =
-        // 821M which already exceeds int.MaxValue/4) so the arithmetic must be long-promoted up
-        // front.
-        : (long)OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth;
 
     /// <summary>
     /// Gets all parameter gradients of the layer as a single vector.
