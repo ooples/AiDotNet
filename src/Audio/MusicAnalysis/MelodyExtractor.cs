@@ -264,7 +264,7 @@ public class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

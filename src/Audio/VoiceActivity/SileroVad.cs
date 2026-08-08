@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -637,7 +637,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         // detach the tape and leave the convs/LSTM untrained).
         if (output.Rank == 3)
         {
-            output = Engine.TensorPermute(output, [0, 2, 1]);
+            output = Engine.TensorPermute(output, [0, 2, 1]).Contiguous();
         }
 
         // Pass through LSTM layers
@@ -678,30 +678,6 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         return Forward(PreprocessAudio(input));
     }
 
-    /// <summary>
-    /// Extracts the last timestep from a sequence tensor.
-    /// </summary>
-    private Tensor<T> ExtractLastTimestep(Tensor<T> sequenceOutput)
-    {
-        var shape = sequenceOutput._shape;
-        if (shape.Length < 2) return sequenceOutput;
-
-        // Assuming shape [batch, seq, hidden] or [batch, hidden]
-        var data = sequenceOutput.ToVector().ToArray();
-        int lastDim = shape[^1];
-        int resultSize = shape[0] * lastDim;
-
-        // Extract last timestep values
-        var result = new Tensor<T>([shape[0], lastDim]);
-        var resultVector = result.ToVector();
-        int offset = data.Length - resultSize;
-        for (int i = 0; i < resultSize && offset + i < data.Length; i++)
-        {
-            resultVector[i] = data[offset + i];
-        }
-
-        return result;
-    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -730,7 +706,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 
         if (current.Rank == 3)
         {
-            current = Engine.TensorPermute(current, [0, 2, 1]);
+            current = Engine.TensorPermute(current, [0, 2, 1]).Contiguous();
         }
 
         foreach (var layer in _lstmLayers)

@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -151,7 +151,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private IOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -440,7 +440,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int[]? upsampleRates = null,
         int fftSize = 1024,
         int hopLength = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VITSModelOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
@@ -524,23 +524,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                 upsampleRates: _upsampleRates).ToList();
 
         Layers.Clear();
-        _textEncoderLayers.Clear();
-        _durationPredictorLayers.Clear();
-        _flowLayers.Clear();
-        _decoderLayers.Clear();
         Layers.AddRange(layers);
-
-        // Distribute to internal sub-lists for forward pass
-        int idx = 0;
-        int textEncoderCount = 1 + _numEncoderLayers * 3;
-        for (int i = 0; i < textEncoderCount && idx < layers.Count; i++)
-            _textEncoderLayers.Add(layers[idx++]);
-        for (int i = 0; i < 3 && idx < layers.Count; i++)
-            _durationPredictorLayers.Add(layers[idx++]);
-        for (int i = 0; i < _numFlowLayers && idx < layers.Count; i++)
-            _flowLayers.Add(layers[idx++]);
-        while (idx < layers.Count)
-            _decoderLayers.Add(layers[idx++]);
 
         // Speaker embedding (if multi-speaker) - separate from LayerHelper
         if (_numSpeakers > 1)
@@ -548,6 +532,54 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             _speakerEmbedding = new EmbeddingLayer<T>(_numSpeakers, _speakerEmbeddingDim);
             Layers.Add(_speakerEmbedding);
         }
+
+        RelinkNativeLayerViews();
+    }
+
+    private void RelinkNativeLayerViews()
+    {
+        _textEncoderLayers.Clear();
+        _durationPredictorLayers.Clear();
+        _flowLayers.Clear();
+        _decoderLayers.Clear();
+        _speakerEmbedding = null;
+
+        // The base deserializer replaces Layers with newly reconstructed instances. ForwardNative
+        // must point at those exact instances; retaining the constructor-created lists makes the
+        // public parameter APIs report restored weights while inference still uses fresh weights.
+        int layerCount = Layers.Count;
+        if (_numSpeakers > 1 && layerCount > 0 && Layers[layerCount - 1] is EmbeddingLayer<T>)
+        {
+            _speakerEmbedding = Layers[layerCount - 1];
+            layerCount--;
+        }
+
+        int idx = 0;
+        int textEncoderCount = 1 + _numEncoderLayers * 3;
+
+        // VALIDATED BEFORE PARTITIONING. Each loop below is bounded by `idx < layerCount`, so with too
+        // few layers the earlier groups fill and the later ones simply come up empty -- and the final
+        // `while` sweeps whatever remains into _decoderLayers regardless of how much that is. A stack
+        // with the wrong count therefore binds without complaint: the flow and decoder groups end up
+        // holding each other's layers, and the model synthesizes audio from a misassembled graph. The
+        // decoder is open-ended by design, so the bound is a minimum rather than an equality.
+        int minimumLayerCount = textEncoderCount + 3 + _numFlowLayers + 1;
+        if (layerCount < minimumLayerCount)
+        {
+            throw new InvalidOperationException(
+                $"VITS native mode needs at least {minimumLayerCount} layers ({textEncoderCount} text " +
+                $"encoder + 3 duration predictor + {_numFlowLayers} flow + at least 1 decoder) but found " +
+                $"{layerCount}. Partitioning fewer would assign layers to the wrong components silently.");
+        }
+
+        for (int i = 0; i < textEncoderCount && idx < layerCount; i++)
+            _textEncoderLayers.Add(Layers[idx++]);
+        for (int i = 0; i < 3 && idx < layerCount; i++)
+            _durationPredictorLayers.Add(Layers[idx++]);
+        for (int i = 0; i < _numFlowLayers && idx < layerCount; i++)
+            _flowLayers.Add(Layers[idx++]);
+        while (idx < layerCount)
+            _decoderLayers.Add(Layers[idx++]);
     }
 
     private IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
@@ -775,19 +807,20 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         // Use the configured optimizer for parameter updates
         var currentParams = GetParameters();
 
-        // Cast to gradient-based optimizer to access UpdateParameters
-        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
+        // A NULL CHECK, NOT A TYPE TEST. _optimizer is declared
+        // IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?, so `is IGradientBasedOptimizer<...>`
+        // succeeded for every non-null value and the manual-SGD else branch was unreachable. Leaving it
+        // there was worse than dead code: it read as a supported fallback, so the 2e-4 rate written into
+        // it looked like a live tuning knob when nothing could ever execute it.
+        if (_optimizer is null)
         {
-            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
-            SetParameters(updatedParams);
+            throw new InvalidOperationException(
+                "VITSModel has no optimizer, so UpdateParameters cannot apply gradients. Construct the " +
+                "model through the native constructor, which supplies one, or inject your own.");
         }
-        else
-        {
-            // Fallback: manual SGD with VITS's smaller learning rate
-            T learningRate = NumOps.FromDouble(0.0002);
-            currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-            SetParameters(currentParams);
-        }
+
+        var updatedParams = _optimizer.UpdateParameters(currentParams, gradients);
+        SetParameters(updatedParams);
     }
 
     /// <summary>
@@ -803,7 +836,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -902,6 +935,9 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             _phonemeVocabSize = 128;
             _upsampleRates = [8, 8, 2, 2];
         }
+
+        if (_useNativeMode)
+            RelinkNativeLayerViews();
     }
 
     /// <summary>

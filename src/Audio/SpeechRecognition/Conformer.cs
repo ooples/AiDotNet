@@ -173,7 +173,10 @@ public class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        // The native Conformer is the sequential Layers graph. Use the
+        // canonical executor for eval-mode determinism, streaming weight
+        // lifetimes, and per-layer inference scratch recycling.
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -182,7 +185,9 @@ public class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Honor the optimizer selected by the public constructor instead
+            // of falling back to NeuralNetworkBase's generic optimizer.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -240,7 +245,8 @@ public class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new Conformer<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new Conformer<T>(Architecture, new ConformerOptions(_options));
 
     #endregion
 
