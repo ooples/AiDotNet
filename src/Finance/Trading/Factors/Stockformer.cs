@@ -453,8 +453,17 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     {
         get
         {
+            // InitializeLayers returns immediately when Layers.Count > 0, so calling it does NOT
+            // guarantee _encoder gets built. Deserialization and clone flows restore Layers through
+            // the base class without going through the encoder construction, and the previous
+            // `return _encoder!` then dereferenced null and surfaced as a NullReferenceException
+            // from whichever forward path happened to touch it first.
             if (_encoder is null) InitializeLayers();
-            return _encoder!;
+
+            return _encoder ?? throw new InvalidOperationException(
+                $"{nameof(Stockformer<T>)}: the dual encoder is not built. Layers were restored "
+                + "without it, which happens when a model is deserialized or cloned through the base "
+                + "class; rebuild the model from its options before predicting.");
         }
     }
 

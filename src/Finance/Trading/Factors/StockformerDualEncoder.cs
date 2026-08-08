@@ -178,6 +178,11 @@ public sealed class StockformerDualEncoder<T>
 
         if (low.Shape.Length != 3)
             throw new ArgumentException($"Expected [assets, time, features]; got rank {low.Shape.Length}.", nameof(low));
+        // high's rank is checked BEFORE its dimensions are read. The loop below indexes
+        // high.Shape[d] up to d = 2, so a rank-1 or rank-2 high threw IndexOutOfRangeException from
+        // the shape access -- a message that tells the caller nothing -- instead of this one.
+        if (high.Shape.Length != 3)
+            throw new ArgumentException($"Expected [assets, time, features]; got rank {high.Shape.Length}.", nameof(high));
         for (int d = 0; d < 3; d++)
         {
             if (high.Shape[d] != low.Shape[d])

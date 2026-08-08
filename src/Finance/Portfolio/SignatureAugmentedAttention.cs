@@ -55,7 +55,13 @@ public class SignatureAugmentedAttention<T>
         get => _gammaLogit;
         set
         {
-            if (double.IsNaN(value)) throw new ArgumentOutOfRangeException(nameof(value), value, "gammaHat cannot be NaN.");
+            // Non-finite, not just NaN. Softplus(PositiveInfinity) takes the x > 30 branch and
+            // returns infinity, so ApplyBias then computes gamma * bias -- infinity for a non-zero
+            // bias, NaN for a zero one. The gate is documented as strictly positive and finite in
+            // effect, and infinity satisfies neither.
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(nameof(value), value,
+                    "gammaHat must be a finite value.");
             _gammaLogit = value;
         }
     }
@@ -204,6 +210,13 @@ public class SignatureAugmentedAttention<T>
         int nq = queries.Shape[0];
         int nk = keys.Shape[0];
         int dk = queries.Shape[1];
+
+        // A zero key dimension passes the checks above -- both ranks are 2 and the dimensions match --
+        // but then 1 / sqrt(0) is infinity and every logit becomes 0 * infinity = NaN.
+        if (dk <= 0)
+            throw new ArgumentException(
+                $"Key dimension must be positive; got {dk}.", nameof(queries));
+
         double scale = 1.0 / Math.Sqrt(dk);
 
         var logits = new Tensor<T>(new[] { nq, nk });

@@ -67,7 +67,12 @@ public static class StockformerMultiTaskLoss<T>
 
             double prediction = Ops.ToDouble(predictions[i]);
             double error = Math.Abs(prediction - label);
-            if (double.IsNaN(error)) continue;
+
+            // A NaN error is NOT skipped. The mask exists to drop missing LABELS, and this entry has
+            // a label. NaN here means the PREDICTION diverged, and skipping it removed the only
+            // evidence of that: with every prediction NaN, valid stayed 0 and the method returned
+            // 0.0 -- a perfect regression term for a completely broken model. Letting the NaN through
+            // makes the loss NaN, which is what a diverged model should report.
 
             sumAbsolute += error;
             valid++;

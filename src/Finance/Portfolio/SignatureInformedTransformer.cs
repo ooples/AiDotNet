@@ -125,7 +125,9 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         SignatureInformedTransformerOptions<T> options)
     {
         Guard.NotNull(options);
-        options.Validate();
+
+        // Validate() is NOT repeated here. ResolveArchitecture, the only caller, has already run it,
+        // and GraphAttentionPortfolio validates once at the same point. One convention across both.
 
         // The network reads a [lookback, assets] price window and scores each asset, so the input is
         // two-dimensional and the output is one score per asset. The softmax in Objective.Weights then
