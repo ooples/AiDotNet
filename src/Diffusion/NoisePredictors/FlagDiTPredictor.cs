@@ -92,34 +92,6 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     public override bool SupportsCrossAttention => true;
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
-    /// <inheritdoc />
-    /// <inheritdoc />
-    /// <remarks>
-    /// Summed from FlagDiTLayerSequence -- the same canonical order GetParameters,
-    /// SetParameters and GetParameterChunks all walk -- so the count cannot describe anything
-    /// other than the vector.
-    /// <para>
-    /// This was an auto-property assigned once in the constructor from a hand-written estimate,
-    /// which is strictly worse than a formula evaluated on demand: a snapshot taken before any
-    /// lazy layer materializes can never correct itself. No second cache is layered on top,
-    /// because each layer already caches its own count and nothing notifies a predictor when a
-    /// layer materializes late -- that missing signal is what made the previous layer-level
-    /// cache report 16,900 parameters against 17,972 real values.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in FlagDiTLayerSequence())
-            {
-                if (layer is not null) total += layer.ParameterCount;
-            }
-            return total;
-        }
-    }
-
     /// <summary>
     /// Initializes a new Flag-DiT predictor.
     /// </summary>
@@ -351,57 +323,6 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         var unsplit = Engine.Reshape(patches, new[] { batch, nh, nw, _inputChannels, PatchSize, PatchSize });
         var permuted = Engine.TensorPermute(unsplit, new[] { 0, 3, 1, 4, 2, 5 }); // [B, C, nh, p, nw, p]
         return Engine.Reshape(permuted, new[] { batch, _inputChannels, height, width });
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var all = new List<T>();
-        foreach (var layer in FlagDiTLayerSequence()) Append(all, layer);
-        return new Vector<T>(all.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in FlagDiTLayerSequence()) offset = Load(layer, parameters, offset);
-    }
-
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        // #1624: one chunk per layer in the SAME canonical order as GetParameters/SetParameters, so
-        // the flat concatenation of chunks is index-identical to GetParameters() (the per-index
-        // correspondence contract) WITHOUT ever materializing the full multi-billion-parameter
-        // aggregate that overflows/OOMs at Flag-DiT / Lumina scale.
-        foreach (var layer in FlagDiTLayerSequence())
-        {
-            var p = layer.GetParameters();
-            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
-        }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        // Consume one chunk per parameterized layer in the same canonical order — one chunk in flight
-        // at a time, never a flat aggregate. Skips zero-parameter layers symmetrically with
-        // GetParameterChunks above.
-        using var e = chunks.GetEnumerator();
-        foreach (var layer in FlagDiTLayerSequence())
-        {
-            if (layer.ParameterCount == 0) continue;
-            if (!e.MoveNext())
-                throw new ArgumentException(
-                    "SetParameterChunks received fewer chunks than Flag-DiT has parameterized layers.",
-                    nameof(chunks));
-            layer.SetParameters(e.Current.ToVector());
-        }
-        if (e.MoveNext())
-            throw new ArgumentException(
-                "SetParameterChunks received more chunks than Flag-DiT has parameterized layers.",
-                nameof(chunks));
     }
 
     protected override Vector<T> GetParameterGradients()
