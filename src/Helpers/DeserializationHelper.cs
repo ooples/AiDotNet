@@ -3404,6 +3404,73 @@ public static class DeserializationHelper
         return result;
     }
 
+    /// <summary>Reads a <c>double[]</c> constructor argument, parsing the serialized string form.</summary>
+    /// <remarks>
+    /// Mirrors <see cref="TryGetIntArray"/>, which is what lets a layer round-trip an array through
+    /// string metadata. Without a double[] reader the reflective matcher had no arm for that type at
+    /// all, so any constructor taking one (SetAbstractionLayer's multi-scale radii) could never be
+    /// satisfied from metadata no matter how the keys were named.
+    /// InvariantCulture, matching TryGetDouble: a model saved under a comma-decimal locale must load
+    /// under a period-decimal one.
+    /// </remarks>
+    private static double[]? TryGetDoubleArray(Dictionary<string, object>? parameters, string key)
+    {
+        if (parameters is null || !parameters.TryGetValue(key, out var value) || value is null)
+            return null;
+
+        if (value is double[] arr)
+            return arr;
+
+        string str = value.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(str))
+            return null;
+
+        var parts = str.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        var result = new double[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (!double.TryParse(parts[i], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out result[i]))
+                return null;
+        }
+        return result;
+    }
+
+    /// <summary>Reads an <c>int[][]</c> argument: groups separated by ';', values within a group by ','.</summary>
+    /// <remarks>
+    /// The int[][] arm previously accepted only a value that was ALREADY int[][], so a jagged array
+    /// serialized into string metadata could never be read back and fell through to a shape-derived
+    /// placeholder.
+    /// </remarks>
+    private static int[][]? TryGetIntJagged(Dictionary<string, object>? parameters, string key)
+    {
+        if (parameters is null || !parameters.TryGetValue(key, out var value) || value is null)
+            return null;
+
+        if (value is int[][] jagged)
+            return jagged;
+
+        string str = value.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(str))
+            return null;
+
+        var groups = str.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+        var result = new int[groups.Length][];
+        for (int g = 0; g < groups.Length; g++)
+        {
+            var parts = groups[g].Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return null;
+            result[g] = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!int.TryParse(parts[i], System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out result[g][i]))
+                    return null;
+            }
+        }
+        return result;
+    }
+
     private static double? TryGetDouble(Dictionary<string, object>? parameters, string key)
     {
         if (parameters != null && parameters.TryGetValue(key, out var value) && value != null)
@@ -4216,6 +4283,18 @@ public static class DeserializationHelper
                     continue;
                 }
 
+                // 1b. double[] parameters — e.g. SetAbstractionLayer's multi-scale radii. Without
+                // this arm the matcher had no case for the type and fell through to the generic
+                // fallback, so the constructor could never be satisfied from metadata.
+                if (pType == typeof(double[]))
+                {
+                    var darr = TryGetDoubleArray(additionalParams, capName);
+                    if (darr is not null) { args[pi] = darr; metadataMatches++; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    args[pi] = new double[] { 1.0 };
+                    continue;
+                }
+
                 // 2. int parameters
                 if (pType == typeof(int))
                 {
@@ -4346,9 +4425,11 @@ public static class DeserializationHelper
                 //    composite layers expect at least two input shapes).
                 if (pType == typeof(int[][]))
                 {
-                    if (additionalParams != null
-                        && additionalParams.TryGetValue(capName, out var jv)
-                        && jv is int[][] jarr)
+                    // Parses the serialized "1,2;3,4" form as well as an already-typed int[][], so a
+                    // jagged argument survives a string-metadata round-trip instead of falling
+                    // through to the shape-derived placeholder below.
+                    var jarr = TryGetIntJagged(additionalParams, capName);
+                    if (jarr is not null)
                     {
                         args[pi] = jarr;
                         metadataMatches++;

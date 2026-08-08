@@ -1198,6 +1198,25 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
         // Branches separated by ';', the widths within a branch by ','.
         metadata["SA_Mlp"] = string.Join(";",
             _branches.Select(b => string.Join(",", b.MlpDimensions.Select(d => d.ToString(ci)))));
+
+        // ALSO UNDER THE NAMES THE DESERIALIZER ACTUALLY LOOKS FOR. DeserializationHelper does not
+        // dispatch per layer type: it reflects over the constructor and looks each parameter up by
+        // its CAPITALISED PARAMETER NAME. None of the SA_ keys above matched, so every argument fell
+        // to a default -- mlpDimensions to literally new int[] { 1 } -- and Clone/DeepCopy rebuilt a
+        // layer with the wrong parameter count. The SA_ keys are kept because they are the readable
+        // form and other tooling may consume them; these are the ones reconstruction needs.
+        //
+        // Written for the MULTI-SCALE constructor (numPoints, radii, inputChannels, mlpDimensions,
+        // neighborSamples), because a single-scale layer is stored as a one-branch multi-scale layer
+        // and rebuilds identically through it -- one path instead of two. Separators match what the
+        // helper parses: "," within a group, ";" between groups.
+        metadata["NumPoints"] = _numPoints.ToString(ci);
+        metadata["InputChannels"] = _inputChannels.ToString(ci);
+        metadata["Radii"] = string.Join(",", _branches.Select(b => b.Radius.ToString(ci)));
+        metadata["NeighborSamples"] = string.Join(",", _branches.Select(b => b.NeighborSamples.ToString(ci)));
+        metadata["MlpDimensions"] = string.Join(";",
+            _branches.Select(b => string.Join(",", b.MlpDimensions.Select(d => d.ToString(ci)))));
+
         return metadata;
     }
 
