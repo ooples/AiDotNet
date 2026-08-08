@@ -5,6 +5,8 @@ using AiDotNet.Models;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.AnomalyDetection;
 
 /// <summary>
@@ -28,6 +30,22 @@ namespace AiDotNet.AnomalyDetection;
 /// </remarks>
 public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>>, IAnomalyDetector<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The decision threshold, which is the one value fitting learns. It is reported unconditionally rather than only once fitted -- the hand-written pair was asymmetric, returning an EMPTY vector before fitting while still accepting one value, so a threshold saved from a fitted detector could not be restored into a fresh instance. Count and vector now agree in both states and a checkpoint round-trips.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new ScalarParameterSource<T>(
+            () => _threshold,
+            value =>
+            {
+                _threshold = value;
+                // Restoring a threshold puts the detector in a fitted state: Predict can run
+                // without re-fitting on the original training data. The hand-written
+                // SetParameters did the same.
+                _isFitted = true;
+            }));
+    }
 
     /// <summary>
     /// Provides hardware-accelerated tensor/vector operations (SIMD, GPU when available).
@@ -210,40 +228,6 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     /// <inheritdoc/>
     public override ILossFunction<T> DefaultLossFunction =>
         new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Once fitted, every anomaly detector in this hierarchy has at least the
-    /// learned anomaly-score threshold (<see cref="_threshold"/>) as a
-    /// parameter. Subclasses that learn additional state (covariance matrices,
-    /// isolation tree splits, etc.) should override this to append their own
-    /// learned tensors after the threshold. Without this scalar default the
-    /// generic `Parameters_ShouldBeNonEmpty` invariant misfired against every
-    /// detector even after Fit, because the base implementation unconditionally
-    /// returned an empty vector.
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        if (!_isFitted) return new Vector<T>(0);
-        var result = new Vector<T>(1);
-        result[0] = _threshold;
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new ArgumentNullException(nameof(parameters));
-        if (parameters.Length < 1)
-            throw new ArgumentException("At least one parameter (threshold) is required.", nameof(parameters));
-
-        _threshold = parameters[0];
-        // After parameters are restored, the detector is in a fitted
-        // state — Predict can run without re-fitting on the original
-        // training data.
-        _isFitted = true;
-    }
 
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()

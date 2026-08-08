@@ -781,6 +781,14 @@ namespace AiDotNet.AutoML
     [ResearchPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
     internal class DiffusionAutoMLModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
+
+        /// <inheritdoc />
+        /// <remarks>The noise predictor then the VAE, the order the hand-written concatenation used and therefore the serialization order.</remarks>
+        protected override void RegisterComponents()
+        {
+            RegisterParameterComponent(_noisePredictor);
+            RegisterParameterComponent(_vae);
+        }
         private readonly UNetNoisePredictor<T> _noisePredictor;
         private readonly StandardVAE<T> _vae;
         private readonly INoiseScheduler<T> _scheduler;
@@ -790,8 +798,6 @@ namespace AiDotNet.AutoML
         private Random _random;
         private T _lastTrainingLoss;
 
-
-        public override long ParameterCount => _noisePredictor.ParameterCount + _vae.ParameterCount;
 
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
 
@@ -923,39 +929,6 @@ namespace AiDotNet.AutoML
             // Update parameters via SPSA gradient estimation and apply
             var gradients = ComputeGradients(input, expectedOutput);
             ApplyGradients(gradients, NumOps.FromDouble(1e-4));
-        }
-
-        public override Vector<T> GetParameters()
-        {
-            var noisePredParams = _noisePredictor.GetParameters();
-            var vaeParams = _vae.GetParameters();
-
-            int totalLen = noisePredParams.Length + vaeParams.Length;
-            var combined = new T[totalLen];
-
-            for (int i = 0; i < noisePredParams.Length; i++)
-                combined[i] = noisePredParams[i];
-
-            for (int i = 0; i < vaeParams.Length; i++)
-                combined[noisePredParams.Length + i] = vaeParams[i];
-
-            return new Vector<T>(combined);
-        }
-
-        public override void SetParameters(Vector<T> parameters)
-        {
-            int noisePredLen = checked((int)_noisePredictor.ParameterCount);
-            var noisePredParams = new T[noisePredLen];
-            var vaeParams = new T[_vae.ParameterCount];
-
-            for (int i = 0; i < noisePredLen; i++)
-                noisePredParams[i] = parameters[i];
-
-            for (int i = 0; i < vaeParams.Length; i++)
-                vaeParams[i] = parameters[noisePredLen + i];
-
-            _noisePredictor.SetParameters(new Vector<T>(noisePredParams));
-            _vae.SetParameters(new Vector<T>(vaeParams));
         }
 
         public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)

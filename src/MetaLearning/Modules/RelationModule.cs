@@ -8,6 +8,8 @@ using AiDotNet.Models;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.MetaLearning.Modules;
 
 /// <summary>
@@ -40,6 +42,18 @@ namespace AiDotNet.MetaLearning.Modules;
 [PipelineStage(PipelineStage.Training)]
 public class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The relation network weights. Restore writes into the existing vector rather than replacing it, matching the hand-written surface.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _weights,
+            value =>
+            {
+                for (int i = 0; i < _weights.Length; i++) _weights[i] = value[i];
+            }));
+    }
     // NumOps inherited from ModelBase
 
     private readonly int _hiddenDimension;
@@ -104,44 +118,6 @@ public class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         output[0] = NumOps.FromDouble(sigmoidScore);
 
         return output;
-    }
-
-    /// <summary>
-    /// Gets the learnable parameters of the relation module.
-    /// </summary>
-    /// <returns>Vector of learnable weights.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return _weights;
-    }
-
-    /// <summary>
-    /// Sets the learnable parameters of the relation module.
-    /// </summary>
-    /// <param name="parameters">New parameter values to apply.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This replaces the module's internal weights
-    /// with new values, typically after gradient-based updates during training.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-        {
-            throw new ArgumentNullException(nameof(parameters));
-        }
-
-        if (parameters.Length != _weights.Length)
-        {
-            throw new ArgumentException(
-                $"Parameter vector length ({parameters.Length}) must match internal weights length ({_weights.Length}).",
-                nameof(parameters));
-        }
-
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            _weights[i] = parameters[i];
-        }
     }
 
     /// <summary>
