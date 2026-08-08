@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     BatchOptional = true, Direction = TensorLayoutDirection.Output,
     Note = "Batch is preserved and everything after it is collapsed into a single feature axis.")]
 [AutoParameters]
-public partial class FlattenLayer<T> : LayerBase<T>, IShapeContract
+public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
 {
     /// <inheritdoc />
     /// <remarks>

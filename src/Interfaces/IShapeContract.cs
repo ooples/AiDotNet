@@ -591,9 +591,62 @@ public interface IShapeContract
     /// so the caller has to.
     /// </para>
     /// </remarks>
-    IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank, bool isBatched)
-        => OutputAxesFor(inputRank);
+    // Declared on IBatchAwareShapeContract below, NOT as a default interface method here: this
+    // assembly targets net471, where the runtime cannot express one (CS8701). See the remarks on
+    // IBatchAwareShapeContract for how a caller reaches it uniformly on every target.
+}
 
+/// <summary>
+/// Opt-in for a contract whose answer depends on whether the incoming rank INCLUDES a batch axis.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Almost no layer needs this, so it is a separate interface rather than a member every contract has
+/// to think about. Call it through <see cref="ShapeContractExtensions.OutputAxesFor(IShapeContract,int,bool)"/>,
+/// which falls back to the rank-only form for the contracts that do not implement this - so a caller
+/// never has to test for it.
+/// </para>
+/// </remarks>
+public interface IBatchAwareShapeContract : IShapeContract
+{
+    /// <summary>
+    /// One entry per output axis, for an input of the given rank, saying whether that rank INCLUDES a
+    /// batch axis.
+    /// </summary>
+    /// <param name="inputRank">Rank of the incoming shape.</param>
+    /// <param name="isBatched">
+    /// <c>true</c> when the leading axis is a batch - a real tensor handed to <c>Forward</c>;
+    /// <c>false</c> for a PER-SAMPLE shape, which is what chain resolution propagates.
+    /// </param>
+    /// <returns>The output axes and their relations, or <c>null</c> if this case is not accepted.</returns>
+    /// <remarks>
+    /// <para>
+    /// WHY RANK ALONE IS NOT ENOUGH. The same rank means different things to different callers.
+    /// <c>Forward</c> receives a batched tensor, so a rank-3 <c>[3,8,9]</c> is one batch axis and two
+    /// feature axes. Chain resolution propagates PER-SAMPLE shapes, so a rank-3 <c>[32,7,7]</c> is
+    /// <c>[Channels, Height, Width]</c> with no batch at all. FlattenLayer collapses everything after
+    /// the batch, so it answers <c>[3,72]</c> for the first and <c>[1568]</c> for the second - both
+    /// correct, and unreachable through a signature that cannot tell them apart. Whichever reading such
+    /// a contract picked, the other caller saw a wrong shape.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> a "batch" is a stack of samples processed together. Some shapes include
+    /// that stacking axis and some describe a single sample, and the numbers alone do not say which -
+    /// so the caller has to.
+    /// </para>
+    /// </remarks>
+    IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank, bool isBatched);
+}
+
+/// <summary>
+/// Opt-in for a contract whose output depends on MORE THAN ONE input port.
+/// </summary>
+/// <remarks>
+/// Reach it through <see cref="ShapeContractExtensions.OutputAxesForPorts"/>, which falls back to the
+/// single-input form when exactly one port is fed, so the ~290 single-input contracts need no change.
+/// </remarks>
+public interface IMultiPortShapeContract : IShapeContract
+{
     /// <summary>
     /// One entry per output axis, for a layer fed SEVERAL inputs of the given ranks.
     /// </summary>
@@ -614,9 +667,18 @@ public interface IShapeContract
     /// <see cref="AxisRelation.SumOf"/> to add them.
     /// </para>
     /// </remarks>
-    IReadOnlyList<OutputAxisContract>? OutputAxesForPorts(IReadOnlyList<int> inputRanks)
-        => inputRanks is { Count: 1 } ? OutputAxesFor(inputRanks[0]) : null;
+    IReadOnlyList<OutputAxisContract>? OutputAxesForPorts(IReadOnlyList<int> inputRanks);
+}
 
+/// <summary>
+/// Opt-in for a contract describing a layer that returns MORE THAN ONE tensor.
+/// </summary>
+/// <remarks>
+/// Reach it through <see cref="ShapeContractExtensions.OutputsFor"/>, which falls back to wrapping the
+/// single-output answer, so every existing contract keeps answering exactly as before.
+/// </remarks>
+public interface IMultiOutputShapeContract : IShapeContract
+{
     /// <summary>
     /// One axis list per OUTPUT tensor, for a layer that returns more than one.
     /// </summary>
@@ -642,9 +704,44 @@ public interface IShapeContract
     /// single wider tensor.
     /// </para>
     /// </remarks>
-    IReadOnlyList<IReadOnlyList<OutputAxisContract>>? OutputsFor(IReadOnlyList<int> inputRanks)
+    IReadOnlyList<IReadOnlyList<OutputAxisContract>>? OutputsFor(IReadOnlyList<int> inputRanks);
+}
+
+/// <summary>
+/// Uniform access to the optional contract forms, whichever of them a contract actually implements.
+/// </summary>
+/// <remarks>
+/// <para>
+/// These were default interface methods until this assembly's net471 target rejected them (CS8701 -
+/// the .NET Framework runtime has no such concept). Extension methods give the same "every contract
+/// answers, only the ones that care override" behaviour on EVERY target framework, and they keep the
+/// fallbacks in exactly one place rather than duplicating them at each call site.
+/// </para>
+/// </remarks>
+public static class ShapeContractExtensions
+{
+    /// <summary>Batch-aware form, falling back to the rank-only form.</summary>
+    public static IReadOnlyList<OutputAxisContract>? OutputAxesFor(
+        this IShapeContract contract, int inputRank, bool isBatched)
+        => contract is IBatchAwareShapeContract aware
+            ? aware.OutputAxesFor(inputRank, isBatched)
+            : contract.OutputAxesFor(inputRank);
+
+    /// <summary>Multi-port form, falling back to the single-input form when exactly one port is fed.</summary>
+    public static IReadOnlyList<OutputAxisContract>? OutputAxesForPorts(
+        this IShapeContract contract, IReadOnlyList<int> inputRanks)
     {
-        var single = OutputAxesForPorts(inputRanks);
+        if (contract is IMultiPortShapeContract multi) return multi.OutputAxesForPorts(inputRanks);
+        return inputRanks is { Count: 1 } ? contract.OutputAxesFor(inputRanks[0]) : null;
+    }
+
+    /// <summary>Multi-output form, falling back to wrapping the single-output answer.</summary>
+    public static IReadOnlyList<IReadOnlyList<OutputAxisContract>>? OutputsFor(
+        this IShapeContract contract, IReadOnlyList<int> inputRanks)
+    {
+        if (contract is IMultiOutputShapeContract multi) return multi.OutputsFor(inputRanks);
+
+        var single = contract.OutputAxesForPorts(inputRanks);
         return single is null ? null : new[] { single };
     }
 }

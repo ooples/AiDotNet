@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ConcatenateLayer<T> : LayerBase<T>, IShapeContract
+public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
 {
     /// <inheritdoc />
     /// <remarks>
