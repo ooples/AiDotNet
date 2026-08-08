@@ -288,35 +288,56 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
                     T varI = cov[i, i];
                     if (!NumOps.GreaterThan(varI, eps)) continue;
                     T weight = NumOps.Divide(cov[i, j], varI);
-                    if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
+                    if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(EdgeThreshold)))
                         result[i, j] = weight;
                 }
-
             // The covariance fallback is deliberately conservative about whether an
             // edge exists, but covariance is symmetric and can produce reciprocal or
             // cyclic directions. Project its candidates onto a DAG by retaining the
             // strongest weights first and rejecting an edge that would close a path.
+            //
+            // ORIENTATION IS DECIDED BEFORE RANKING, not by the sort. The strength below is a
+            // correlation, and correlation is symmetric: cov[i,j] == cov[j,i] and the denominator
+            // uses both variances, so (i, j) and (j, i) always scored identically. List<T>.Sort is
+            // introsort, which is not stable, so which of the two tied entries survived depended on
+            // the internal partitioning -- DECI picked edge direction by an implementation detail
+            // that varies with list length and runtime version, not by evidence. Each unordered pair
+            // is now considered once and oriented from the higher-variance variable to the
+            // lower-variance one: the additive-noise attenuation direction, the same rule
+            // CausalVAEAlgorithm's fallback uses. Equal variances fall back to index order purely so
+            // the result is total and repeatable.
             var candidates = new List<(int From, int To, double Strength)>();
             for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
+                for (int j = i + 1; j < d; j++)
                 {
-                    if (i == j) continue;
-                    T w = result[i, j];
-                    if (NumOps.GreaterThan(NumOps.Abs(w), NumOps.FromDouble(0.1)))
-                    {
-                        // Rank candidates by symmetric correlation rather than the
-                        // directional OLS coefficient. The latter can exaggerate a
-                        // transitive edge when the source variance is small (e.g.
-                        // X0->X1->X2), causing the projection to retain X0->X2.
-                        T varI = cov[i, i];
-                        T varJ = cov[j, j];
-                        double denom = Math.Sqrt(Math.Abs(NumOps.ToDouble(varI) * NumOps.ToDouble(varJ)));
-                        double correlation = denom > 1e-12
-                            ? Math.Abs(NumOps.ToDouble(cov[i, j])) / denom
-                            : 0.0;
-                        candidates.Add((i, j, correlation));
-                    }
+                    double varI = NumOps.ToDouble(cov[i, i]);
+                    double varJ = NumOps.ToDouble(cov[j, j]);
+
+                    int from = varI > varJ || (Math.Abs(varI - varJ) < 1e-12 && i < j) ? i : j;
+                    int to = from == i ? j : i;
+
+                    T w = result[from, to];
+                    if (!NumOps.GreaterThan(NumOps.Abs(w), NumOps.FromDouble(EdgeThreshold))) continue;
+
+                    // Rank candidates by symmetric correlation rather than the
+                    // directional OLS coefficient. The latter can exaggerate a
+                    // transitive edge when the source variance is small (e.g.
+                    // X0->X1->X2), causing the projection to retain X0->X2.
+                    double denom = Math.Sqrt(Math.Abs(varI * varJ));
+                    double correlation = denom > 1e-12
+                        ? Math.Abs(NumOps.ToDouble(cov[i, j])) / denom
+                        : 0.0;
+                    candidates.Add((from, to, correlation));
                 }
+            // Descending strength, then (From, To) so equal-strength candidates have a total order
+            // and the projection cannot depend on introsort's partitioning.
+            candidates.Sort((a, b) =>
+            {
+                int byStrength = b.Strength.CompareTo(a.Strength);
+                if (byStrength != 0) return byStrength;
+                int byFrom = a.From.CompareTo(b.From);
+                return byFrom != 0 ? byFrom : a.To.CompareTo(b.To);
+            });
             candidates.Sort((a, b) => b.Strength.CompareTo(a.Strength));
             var projected = new Matrix<T>(d, d);
 
@@ -332,7 +353,7 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
                     if (seen[node]) continue;
                     seen[node] = true;
                     for (int next = 0; next < d; next++)
-                        if (next != node && NumOps.GreaterThan(NumOps.Abs(projected[node, next]), NumOps.FromDouble(0.1)))
+                        if (next != node && NumOps.GreaterThan(NumOps.Abs(projected[node, next]), NumOps.FromDouble(EdgeThreshold)))
                             pending.Push(next);
                 }
                 return false;

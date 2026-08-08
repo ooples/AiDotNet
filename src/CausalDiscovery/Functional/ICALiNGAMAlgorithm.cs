@@ -79,6 +79,14 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
+
+        // n is a divisor in CenterData, WhitenData and FastICA, so n == 0 fills the returned
+        // adjacency with NaN instead of returning an empty graph, and d < 2 puts the eigen
+        // decomposition and the row-assignment step on degenerate matrices. PNLAlgorithm returns an
+        // empty matrix for the same condition and RCDAlgorithm throws on it; match the siblings
+        // rather than producing a graph whose entries are arbitrary.
+        if (n == 0 || d < 2) return new Matrix<T>(d, d);
+
         var centered = CenterData(data, n, d);
         var (whitened, whiteningMatrix) = WhitenData(centered, n, d);
 

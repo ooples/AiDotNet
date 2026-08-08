@@ -266,4 +266,22 @@ public class CausalDiscoveryOptions
     /// <see cref="MaxKlWeight"/> over the first 25% of epochs. When false, uses a fixed weight.</para>
     /// </remarks>
     public bool? UseKlWarmUp { get; set; }
+
+    /// <summary>
+    /// How much stronger one cross-map direction must be than the other before Convergent Cross
+    /// Mapping will orient an edge between two series. Default: null (0.2).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CCM tests both directions and compares their cross-map skill. The two skills are almost never
+    /// exactly equal, so without a margin every pair produces an edge in whichever direction happened
+    /// to score marginally higher, including pairs that are only mutually driven by a third series.
+    /// This is that margin: a pair whose two skills differ by less than it is left unoriented.
+    /// </para>
+    /// <para>
+    /// Valid range is 0 to 1, since the compared skills are correlations. Raise it to report only
+    /// pairs with a decisive asymmetry; lower it to admit weaker directional evidence.
+    /// </para>
+    /// </remarks>
+    public double? DirectionalityAsymmetryThreshold { get; set; }
 }
