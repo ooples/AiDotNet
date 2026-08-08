@@ -205,6 +205,16 @@ public class GraphAttentionLayerCore<T>
         if (headOutputs.Count == 0)
             throw new ArgumentException("At least one head is required.", nameof(headOutputs));
 
+        // Head 0 is rank-checked before its shape is read. The validation loop below starts at h = 1,
+        // so a rank-1 first head used to throw IndexOutOfRangeException out of Shape[1] rather than
+        // the ArgumentException every other malformed head gets.
+        if (headOutputs[0].Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"Head 0 has shape [{string.Join(",", headOutputs[0].Shape.ToArray())}]; "
+                + "expected a rank-2 [nodes, features] tensor.", nameof(headOutputs));
+        }
+
         int nodes = headOutputs[0].Shape[0];
         int features = headOutputs[0].Shape[1];
         for (int h = 1; h < headOutputs.Count; h++)

@@ -254,9 +254,13 @@ public class CVaRPortfolioObjective<T>
     /// </summary>
     public double TransactionCost(Vector<T> previousWeights, Vector<T> newWeights, double basisPoints)
     {
-        if (basisPoints < 0.0 || double.IsNaN(basisPoints))
+        // Non-finite is rejected, not just NaN (net471-safe: no double.IsFinite). PositiveInfinity
+        // passed the old guard and propagated infinity into the cost for any non-zero turnover, and
+        // produced NaN (infinity times zero) when turnover was zero -- a cost of NaN reported as if
+        // it were a real number.
+        if (double.IsNaN(basisPoints) || double.IsInfinity(basisPoints) || basisPoints < 0.0)
             throw new ArgumentOutOfRangeException(nameof(basisPoints), basisPoints,
-                "basisPoints cannot be negative.");
+                "basisPoints must be a finite, non-negative value.");
 
         return Turnover(previousWeights, newWeights) * (basisPoints / 10000.0);
     }

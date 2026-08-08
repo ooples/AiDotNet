@@ -288,7 +288,12 @@ public class AssetGraphBuilder<T>
 
         var order = new int[n];
         for (int i = 0; i < n; i++) order[i] = i;
-        Array.Sort(strength.Clone() as double[] ?? strength, order);
+        // Sort a copy: Array.Sort reorders its key array too, and `strength` is the caller's
+        // computed result. The previous `strength.Clone() as double[] ?? strength` documented the
+        // opposite intent -- the cast cannot fail for a double[], so the fallback was dead code that
+        // read as permission to sort the original in place.
+        var sortKeys = (double[])strength.Clone();
+        Array.Sort(sortKeys, order);
         Array.Reverse(order);
 
         int seedCount = Math.Min(4, n);
@@ -337,6 +342,19 @@ public class AssetGraphBuilder<T>
                         bestFace = f;
                     }
                 }
+            }
+
+            // bestFace stays -1 when every gain comparison is false, which is what a NaN weight
+            // produces: NaN > bestGain is false for every face. faces[-1] then threw
+            // ArgumentOutOfRangeException from deep inside the loop with nothing to act on.
+            // FilterTmfg is public and takes a caller-supplied matrix, so this is reachable input,
+            // not an internal invariant.
+            if (bestFace < 0 || bestNode < 0)
+            {
+                throw new ArgumentException(
+                    "No triangular face could be selected. The dependency matrix contains no finite "
+                    + "gain for any remaining asset, which happens when it holds NaN entries.",
+                    nameof(dependencies));
             }
 
             var (a, b, c) = faces[bestFace];
