@@ -900,6 +900,39 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             writer.Write(holiday.Ticks);
         }
         writer.Write(_prophetOptions.RegressorCount);
+
+        // Every remaining scalar option, plus the residual statistics.
+        //
+        // These were not written, so DeserializeCore rebuilt a DEFAULT options object and the fit
+        // survived the round trip while the behaviour around it did not: a model trained with
+        // ApplyTransformation returned untransformed predictions after loading, DetectAnomalies and
+        // GetAnomalyThreshold threw because EnableAnomalyDetection reverted to false (telling the
+        // user to retrain a model that had been trained correctly), and PredictWithIntervals threw
+        // because _residualStdDev reverted to zero.
+        //
+        // Optimizer and TransformPrediction are an interface reference and a delegate. Neither can
+        // be written to a binary stream, so a caller who set them must re-supply them after loading;
+        // that is stated on the deserializing side as well.
+        writer.Write(_prophetOptions.InitialTrendValue);
+        writer.Write(_prophetOptions.InitialChangepointValue);
+        writer.Write(_prophetOptions.ForecastHorizon);
+        writer.Write(_prophetOptions.ChangePointPriorScale);
+        writer.Write(_prophetOptions.SeasonalityPriorScale);
+        writer.Write(_prophetOptions.HolidayPriorScale);
+        writer.Write(_prophetOptions.YearlySeasonality);
+        writer.Write(_prophetOptions.WeeklySeasonality);
+        writer.Write(_prophetOptions.DailySeasonality);
+        writer.Write(_prophetOptions.OptimizeParameters);
+        writer.Write(_prophetOptions.ApplyTransformation);
+        writer.Write(_prophetOptions.EnableAnomalyDetection);
+        writer.Write(_prophetOptions.AnomalyThresholdSigma);
+        writer.Write(_prophetOptions.ComputePredictionIntervals);
+        writer.Write(_prophetOptions.PredictionIntervalWidth);
+
+        writer.Write(Convert.ToDouble(_residualMean));
+        writer.Write(Convert.ToDouble(_residualStdDev));
+        writer.Write(Convert.ToDouble(_anomalyThreshold));
+        writer.Write(_prophetOptions.RegressorCount);
     }
 
     /// <summary>
@@ -981,6 +1014,33 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             _prophetOptions.Holidays.Add(new DateTime(reader.ReadInt64()));
         }
         _prophetOptions.RegressorCount = reader.ReadInt32();
+
+        // Read back in exactly the order SerializeCore wrote them.
+        //
+        // NOT RESTORED, because they cannot be: Optimizer is an interface reference and
+        // TransformPrediction is a delegate, so both revert to their defaults (null, and identity).
+        // A caller who supplied either must re-supply it on the loaded model; ApplyTransformation is
+        // restored faithfully, so a model saved with a custom transform will apply the IDENTITY
+        // transform until its TransformPrediction is set again.
+        _prophetOptions.InitialTrendValue = reader.ReadDouble();
+        _prophetOptions.InitialChangepointValue = reader.ReadDouble();
+        _prophetOptions.ForecastHorizon = reader.ReadInt32();
+        _prophetOptions.ChangePointPriorScale = reader.ReadDouble();
+        _prophetOptions.SeasonalityPriorScale = reader.ReadDouble();
+        _prophetOptions.HolidayPriorScale = reader.ReadDouble();
+        _prophetOptions.YearlySeasonality = reader.ReadBoolean();
+        _prophetOptions.WeeklySeasonality = reader.ReadBoolean();
+        _prophetOptions.DailySeasonality = reader.ReadBoolean();
+        _prophetOptions.OptimizeParameters = reader.ReadBoolean();
+        _prophetOptions.ApplyTransformation = reader.ReadBoolean();
+        _prophetOptions.EnableAnomalyDetection = reader.ReadBoolean();
+        _prophetOptions.AnomalyThresholdSigma = reader.ReadDouble();
+        _prophetOptions.ComputePredictionIntervals = reader.ReadBoolean();
+        _prophetOptions.PredictionIntervalWidth = reader.ReadDouble();
+
+        _residualMean = NumOps.FromDouble(reader.ReadDouble());
+        _residualStdDev = NumOps.FromDouble(reader.ReadDouble());
+        _anomalyThreshold = NumOps.FromDouble(reader.ReadDouble());
     }
 
     /// <summary>
