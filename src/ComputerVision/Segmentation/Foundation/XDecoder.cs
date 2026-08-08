@@ -62,7 +62,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generalized Decoding for Pixel, Image, and Language", "https://arxiv.org/abs/2212.11270", Year = 2023, Authors = "Zou et al.")]
-public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
+public class XDecoder<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly XDecoderOptions _options;
 
@@ -79,23 +79,20 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     #region Fields
 
-    private int _height;
-    private int _width;
-    private int _channels;
-    private int _numClasses;
+    // Only X-Decoder's OWN configuration. _height, _width, _channels, _numClasses, _useNativeMode,
+    // _onnxModelPath, _onnxSession, _optimizer, _disposed, _encoderLayerEnd and _numStuffClasses all
+    // come from PanopticSegmentationBase -> SegmentationModelBase.
+    //
+    // _numStuffClasses is the reason this model could not adopt the base until now: it is REASSIGNED in
+    // DeserializeNetworkSpecificData, and the base declared it `private readonly`, so a re-parented
+    // XDecoder would have reported the constructor-time count through IPanopticSegmentation while its
+    // own SegmentPanoptic used the deserialized one. The base field is now protected and mutable.
     private int _numQueries;
     private XDecoderModelSize _modelSize;
     private int[] _channelDims;
     private int _decoderDim;
     private int[] _depths;
     private double _dropRate;
-    private bool _useNativeMode;
-    private string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
-    private int _numStuffClasses;
 
     #endregion
 
@@ -109,10 +106,20 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining and NumClasses are inherited from SegmentationModelBase and say the same thing.
     internal bool UseNativeMode => _useNativeMode;
     internal XDecoderModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
+
+    /// <summary>
+    /// The stuff-class split, computed before construction so it can be handed to the base initializer.
+    /// </summary>
+    /// <remarks>
+    /// Static because a base-constructor argument cannot touch <c>this</c> or any instance field. The
+    /// thing-count is the remainder, so <c>stuff + thing == numClasses</c> holds by construction and the
+    /// base's cross-check can never fail here.
+    /// </remarks>
+    private static int StuffClassCount(int numClasses, XDecoderOptions? options)
+        => options?.NumStuffClasses ?? Math.Max(1, numClasses / 3);
 
     #endregion
 
@@ -145,27 +152,22 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         XDecoderModelSize modelSize = XDecoderModelSize.Tiny,
         double dropRate = 0.1,
         XDecoderOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // The base resolves geometry, class count, native mode and the stuff/thing split. `optimizer`
+        // passes through even when null - the base defaults it lazily via CreateDefaultOptimizer(),
+        // which is what the old `optimizer ?? new AdamWOptimizer<...>(this)` could never express here
+        // because `this` is unavailable in a base-constructor argument.
+        : base(architecture, optimizer, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), numClasses,
+               StuffClassCount(numClasses, options), numClasses - StuffClassCount(numClasses, options))
     {
-        if (numClasses <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
         if (numQueries <= 0)
             throw new ArgumentOutOfRangeException(nameof(numQueries), "numQueries must be > 0.");
         _options = options ?? new XDecoderOptions();
         Options = _options;
         if (_options.NumStuffClasses is int stuff && (stuff <= 0 || stuff >= numClasses))
             throw new ArgumentOutOfRangeException(nameof(options), "NumStuffClasses must be between 1 and numClasses-1.");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = dropRate;
-        _numStuffClasses = _options.NumStuffClasses ?? Math.Max(1, _numClasses / 3);
-        _useNativeMode = true;
-        _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
@@ -195,10 +197,10 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 100,
         XDecoderModelSize modelSize = XDecoderModelSize.Tiny,
         XDecoderOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base validates the path, sets ONNX mode, resolves geometry and opens the InferenceSession.
+        : base(architecture, onnxModelPath, numClasses,
+               StuffClassCount(numClasses, options), numClasses - StuffClassCount(numClasses, options))
     {
-        if (numClasses <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
         if (numQueries <= 0)
             throw new ArgumentOutOfRangeException(nameof(numQueries), "numQueries must be > 0.");
         _options = options ?? new XDecoderOptions();
@@ -206,27 +208,11 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         if (_options.NumStuffClasses is int stuff && (stuff <= 0 || stuff >= numClasses))
             throw new ArgumentOutOfRangeException(nameof(options), "NumStuffClasses must be between 1 and numClasses-1.");
 
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"X-Decoder ONNX model not found: {onnxModelPath}");
-
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
-        _numStuffClasses = _options.NumStuffClasses ?? Math.Max(1, _numClasses / 3);
         _dropRate = 0.0;
-        _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _optimizer = null;
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load X-Decoder ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -293,7 +279,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         };
     }
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         if (input.Rank != 3 && input.Rank != 4)
             throw new ArgumentException("Input must be rank 3 [C,H,W] or rank 4 [N,C,H,W].", nameof(input));
@@ -307,7 +293,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         if (input.Rank != 3 && input.Rank != 4)
@@ -328,21 +314,10 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] newShape = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
+    // AddBatchDimension / RemoveBatchDimension come from SegmentationModelBase. The copies deleted here
+    // were allocate-and-copy, byte-for-byte what the base does, so nothing is lost - unlike ViTCoMer,
+    // DiffCutSegmentation and four others whose versions use Engine.Reshape to stay on the autodiff
+    // tape and therefore have to keep shadowing the base.
 
     #endregion
 
@@ -531,15 +506,13 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     #region IPanopticSegmentation Implementation
 
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IPanopticSegmentation<T>.NumStuffClasses => _numStuffClasses;
-    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - _numStuffClasses;
+    // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment come from SegmentationModelBase, and
+    // NumStuffClasses / NumThingClasses from PanopticSegmentationBase - all with identical bodies. They
+    // became CS0540 errors the moment the interfaces arrived through the base, which is the compiler
+    // pointing at seven verbatim-duplicated members rather than a problem to work around.
 
-    PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
+    /// <inheritdoc />
+    public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);

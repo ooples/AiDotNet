@@ -56,27 +56,31 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", "https://arxiv.org/abs/2303.04803", Year = 2023, Authors = "Xu et al.")]
-public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
+public class ODISE<T> : Common.PanopticSegmentationBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Does NOT downsample: measured [1,3,64,64] -> [1,C,64,64]. Its U-Net skip topology restores full
+    /// resolution, so the inherited /32 law would be wrong by a factor of 32 on both spatial axes.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => SpatialStrideContract(inputRank, 1);
+
     private readonly ODISEOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only ODISE's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from PanopticSegmentationBase -> SegmentationModelBase.
     private readonly ODISEModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     // True when the constructor caller supplied an explicit optimizer, so tape
     // training honors it instead of the built-in LR-warmup Adam default.
     private readonly bool _hasUserSuppliedOptimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
 
     // Per-encoder-stage layer counts, used by Forward to tap each stage's output for
@@ -92,18 +96,10 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this ODISE instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode, NumStuffClasses and
+    // NumThingClasses are all inherited and say exactly the same thing.
     internal bool UseNativeMode => _useNativeMode;
     internal ODISEModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -127,16 +123,16 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 133,
         ODISEModelSize modelSize = ODISEModelSize.Base, double dropRate = 0.1,
         ODISEOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // The base resolves height/width/channels/numClasses/native-mode from the architecture and
+        // stores `optimizer` verbatim (including null) - ODISE reads _optimizer directly in
+        // GetOrCreateBaseOptimizer and deliberately does NOT want the AdamW default.
+        // The stuff/thing split is the same one/two-thirds rule the explicit interface members used.
+        : base(architecture, optimizer, lossFunction, numClasses,
+            Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
     {
         _options = options ?? new ODISEOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
+        _modelSize = modelSize; _dropRate = dropRate;
         _hasUserSuppliedOptimizer = optimizer is not null;
-        _optimizer = optimizer;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -160,21 +156,14 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     public ODISE(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 133, ODISEModelSize modelSize = ODISEModelSize.Base,
         ODISEOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
+        // InferenceSession.
+        : base(architecture, onnxModelPath, numClasses,
+            Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
     {
         _options = options ?? new ODISEOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"ODISE ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.1;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        _modelSize = modelSize; _dropRate = 0.1;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load ODISE ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -302,7 +291,7 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// downsample collapses a small input to a 1x1 bottleneck and the output is
     /// spatially uniform.
     /// </summary>
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
 
@@ -352,7 +341,7 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -368,12 +357,6 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
-
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -507,29 +490,14 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new ODISE<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new ODISE<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IPanopticSegmentation Implementation
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IPanopticSegmentation<T>.NumStuffClasses => Math.Max(1, _numClasses / 3);
-    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
-    PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
+    // NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, NumStuffClasses and NumThingClasses
+    // all come from the base; only the model-specific override remains.
+
+    /// <inheritdoc/>
+    public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
     {
         // Predict() returns per-pixel softmax probabilities (paper-faithful
         // inference output per Xu et al. 2023 §3), so the probability map and
