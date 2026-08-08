@@ -45,6 +45,16 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ResearchPaper("Joint Beat and Downbeat Tracking with Recurrent Neural Networks", "https://doi.org/10.5281/zenodo.1160264", Year = 2016, Authors = "Sebastian Böck, Florian Krebs, Gerhard Widmer")]
 public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMadmomBeatTrackerLayers emits is the beat-activation output
+    /// <c>FullyConnectedLayer&lt;T&gt;(1)</c> - one activation value per frame. A constant 1, not an
+    /// options field: RnnHiddenSize (256) is the recurrent width one layer earlier, and NumBands (81)
+    /// is the input side.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly MadmomBeatTrackerOptions _options;

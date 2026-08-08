@@ -41,6 +41,15 @@ namespace AiDotNet.Audio.MusicAnalysis;
     [ResearchPaper("Tempogram Toolbox: MATLAB Implementations for Tempo and Pulse Analysis", "https://doi.org/10.5281/zenodo.1416010")]
 public class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultTempogramLayers emits is the tempo-bin classifier
+    /// <c>FullyConnectedLayer&lt;T&gt;(numTempoBins)</c>, wired from <c>_options.NumTempoBins</c>
+    /// (300). Not TempoWindowFrames (384) and not OnsetHiddenDim * 2, which is the layer before it.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumTempoBins;
+
     #region Fields
 
     private readonly TempogramOptions _options;

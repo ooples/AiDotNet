@@ -44,6 +44,16 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ResearchPaper("MT3: Multi-Task Multitrack Music Transcription", "https://arxiv.org/abs/2111.03017", Year = 2022, Authors = "Josh Gardner, Ian Simon, Ethan Manilow, Curtis Hawthorne, Jesse Engel")]
 public class MT3<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMT3Layers emits is the token-prediction head <c>DenseLayer&lt;T&gt;(vocabSize)</c>
+    /// over the MIDI-like event-token vocabulary, wired from <c>_options.VocabSize</c> (6000). Unlike
+    /// the audio-LLM models in this family, MT3 genuinely ties an unembedding head, so here the
+    /// vocabulary IS the width - DecoderDim (512) is one layer earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     #region Fields
 
     private readonly MT3Options _options;

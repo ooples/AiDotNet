@@ -43,8 +43,18 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("w2v-BERT: Combining Contrastive Learning and Masked Language Modeling for Self-Supervised Speech Pre-Training", "https://arxiv.org/abs/2108.06209", Year = 2021, Authors = "Chung et al.")]
-public class W2vBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class W2vBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head, NOT from the contrastive codebook w2v-BERT uses for
+    /// masked-language-modelling targets: <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultFoundationASRLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is the CTC fine-tuning head
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly W2vBERTOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

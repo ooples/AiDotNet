@@ -42,8 +42,18 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities", "https://arxiv.org/abs/2305.11000", Year = 2023, Authors = "Zhang et al.")]
-public class SpeechGPTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SpeechGPTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultLLMASRLayers(..., vocabSize: _options.VocabSize)</c>, which ends in
+    /// <c>vocabularyProjection = new DenseLayer&lt;T&gt;(vocabSize)</c> - emitted after BOTH decoder
+    /// branches (the Qwen2 and the default TransformerEncoderBlock path), so the width does not depend
+    /// on which one runs. PredictCore folds Layers and PostprocessOutput is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SpeechGPTASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

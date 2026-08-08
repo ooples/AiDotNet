@@ -43,6 +43,15 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("MP-SENet: A Speech Enhancement Model with Parallel Denoising of Magnitude and Phase Spectra", "https://doi.org/10.48550/arXiv.2305.13686", Year = 2023, Authors = "Ye-Xin Lu, Yang Ai, Zhen-Hua Ling")]
 public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured on <c>PredictCore</c>, a plain fold over <c>Layers</c> that does NOT call
+    /// <c>PostprocessOutput</c> (the inverse STFT runs only inside <c>Enhance</c>). The last layer of
+    /// <c>CreateDefaultMPSENetLayers</c> is the joint head <c>DenseLayer&lt;T&gt;(numFreqBins * 2)</c>
+    /// - magnitude mask plus phase correction - supplied from <c>_options.NumFreqBins</c>.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 2;
+
     #region Fields
 
     private readonly MPSENetOptions _options;

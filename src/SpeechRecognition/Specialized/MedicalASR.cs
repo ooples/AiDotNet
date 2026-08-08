@@ -78,8 +78,29 @@ namespace AiDotNet.SpeechRecognition.Specialized;
     Authors = "Chung-Cheng Chiu, Anshuman Tripathi, Katherine Chou, Chris Co, Navdeep Jaitly, " +
               "Diana Jaunzeikare, Anjuli Kannan, Patrick Nguyen, Hasim Sak, Ananth Sankar, " +
               "Justin Tansuwan, Nathan Wan, Yonghui Wu, Xuedong Zhang")]
-public class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output construction, and it had to be traced through BOTH arms
+    /// because this model does not walk <c>Layers</c> straight through: <c>PredictCore</c> calls
+    /// <c>RecognizeForward</c>, which is <c>ListenForward</c> then, if a speller exists,
+    /// <c>SpellForward(PyramidalReduce(...))</c>.
+    /// <list type="bullet">
+    ///   <item><description>CTC arm (<c>MedicalAsrDecoderType.Ctc</c>): <c>_spellerLayers</c> is empty, so
+    ///     the output is the listener's, built by <c>CreateDefaultConformerLayers(..., vocabSize:
+    ///     _options.VocabSize, ...)</c> whose last layer is <c>DenseLayer&lt;T&gt;(vocabSize, identity)</c>.</description></item>
+    ///   <item><description>LAS arm: the listener is built with <c>vocabSize: _options.EncoderDim</c> - a
+    ///     projection to encoder width, NOT to the alphabet - and the output instead comes from the
+    ///     speller's last layer, <c>new FullyConnectedLayer&lt;T&gt;(_options.DecoderDim,
+    ///     _options.VocabSize, identity)</c>.</description></item>
+    /// </list>
+    /// Both arms therefore end at the same width. <c>PyramidalReduce</c> averages adjacent frames, so it
+    /// halves the TIME axis and deliberately leaves the feature axis alone. <c>PostprocessOutput</c> is
+    /// the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly MedicalASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
 

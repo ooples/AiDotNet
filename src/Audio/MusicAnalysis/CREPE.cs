@@ -42,6 +42,15 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ResearchPaper("CREPE: A Convolutional Representation for Pitch Estimation", "https://arxiv.org/abs/1802.06182", Year = 2018, Authors = "Jong Wook Kim, Justin Salamon, Peter Li, Juan Pablo Bello")]
 public class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultCREPELayers emits is the pitch-bin head <c>DenseLayer&lt;T&gt;(numBins)</c>, wired
+    /// from <c>_options.NumBins</c> (360 - CREPE's 20-cent-spaced pitch bins). Not FrameSize (1024),
+    /// which is the input width the conv stack starts from.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumBins;
+
     #region Fields
 
     private readonly CREPEOptions _options;

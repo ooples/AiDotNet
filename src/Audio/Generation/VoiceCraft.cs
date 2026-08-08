@@ -45,6 +45,15 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("VoiceCraft: Zero-Shot Speech Editing and Text-to-Speech in the Wild", "https://arxiv.org/abs/2403.16973", Year = 2024, Authors = "Puyuan Peng, Po-Yao Huang, Daniel Li, Abdelrahman Mohamed, David Harwath")]
 public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultVoiceCraftLayers emits is the output projection to the codec codebook,
+    /// <c>FullyConnectedLayer&lt;T&gt;(codebookSize)</c>, wired from <c>_options.CodebookSize</c> (2048).
+    /// Not HiddenDim (2048 as well by default, but coincidentally so - the projection reads CodebookSize).
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.CodebookSize;
+
     #region Fields
 
     private readonly VoiceCraftOptions _options;

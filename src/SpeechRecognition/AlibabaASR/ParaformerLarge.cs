@@ -43,6 +43,17 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ResearchPaper("Paraformer: Fast and Accurate Parallel Transformer for Non-autoregressive End-to-End Speech Recognition", "https://arxiv.org/abs/2206.08317", Year = 2023, Authors = "Gao et al.")]
 public class ParaformerLarge<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultParaformerLayers</c> ends its non-autoregressive decoder with
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>, and <c>InitializeLayers</c> passes
+    /// <c>vocabSize: _options.VocabSize</c>. "Large" scales <c>EncoderDim</c>/<c>NumEncoderLayers</c>,
+    /// which are interior widths - the output width is unchanged by the variant.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly ParaformerLargeOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

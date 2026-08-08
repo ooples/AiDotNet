@@ -72,6 +72,30 @@ namespace AiDotNet.Audio.Whisper;
 [ResearchPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2022, Authors = "Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, Ilya Sutskever")]
 public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Declines: emits a TOKEN axis. Measured, [1,64] returns [1,1,51865] - next-token logits for a
+    /// single decode step - not the rank-2 [1,51865] the inherited contract would claim. The vocabulary
+    /// width is correct; the token axis is a decoding-loop position, not a function of input shape.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: native <c>PredictCore</c> calls <c>Forward</c>, which
+    /// encodes the audio and returns <c>ForwardDecoder(...)</c>; that walks <c>Layers</c> from
+    /// <c>_encoderLayerCount</c> to the end, so the width is the LAST layer's output dimension, and
+    /// <c>PostprocessOutput</c> is the identity. <c>LayerHelper.CreateDefaultWhisperLayers</c> ends
+    /// with the vocabulary projection <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>, and this
+    /// model's <c>InitializeLayers</c> passes the literal <c>vocabSize: 51865</c> - Whisper's
+    /// multilingual BPE vocabulary. It is a LITERAL rather than an option here, which is why it is
+    /// spelled out below; <c>CreateTeacherForcingTokens</c> carries the same
+    /// <c>const int vocabSize = 51865</c> and corroborates it independently of the layer stack.
+    /// The comment on <c>Forward</c> agrees: it feeds a single start-of-transcript token so the
+    /// returned tensor is "the next-token vocabulary logits".
+    /// </remarks>
+    protected override int OutputFeatureWidth => 51865;
+
     private readonly WhisperOptions _options;
 
     /// <inheritdoc/>

@@ -55,8 +55,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
     "https://arxiv.org/abs/2309.14758",
     Year = 2023,
     Authors = "Keyu An, Shiliang Zhang")]
-public class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head, which is worth reading rather than inferring from the
+    /// name: despite "Transducer", <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultBranchformerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. There is no joint
+    /// network in the emitted stack, and <c>TimeMixing</c> is a lazily built helper outside <c>Layers</c>
+    /// that <c>PredictCore</c> never applies. <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly RWKVTransducerOptions _options; public override ModelOptions GetOptions() => _options;
     private RwkvTimeMixing<T>? _timeMixing;
 

@@ -44,6 +44,18 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ResearchPaper("FunAudioLLM: Voice Understanding and Generation Foundation Models for Natural Interaction Between Humans and LLMs", "https://arxiv.org/abs/2407.04051", Year = 2024, Authors = "Du et al.")]
 public class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultParaformerLayers</c> ends with
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>, and <c>InitializeLayers</c> passes
+    /// <c>vocabSize: _options.VocabSize</c>. SenseVoice also carries a Classification task tag
+    /// (emotion / event), but those labels are decoded from special tokens inside this same
+    /// vocabulary - there is no separate class head in the graph, so the width stays the vocabulary.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SenseVoiceOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

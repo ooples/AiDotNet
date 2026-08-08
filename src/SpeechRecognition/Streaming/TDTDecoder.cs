@@ -41,8 +41,22 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Sequence Transduction by Jointly Predicting Tokens and Durations", "https://arxiv.org/abs/2304.06795", Year = 2023, Authors = "Xu et al.")]
-public class TDTDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class TDTDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output construction, not from the paper's name. <c>PredictCore</c>
+    /// folds every layer in <c>Layers</c>, and <c>InitializeLayers</c> fills <c>Layers</c> from
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerTransducerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is the joint network's output projection
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>; <c>PostprocessOutput</c> is the identity.
+    /// Stated because the name invites the wrong answer: the TDT paper's DURATION head would widen this
+    /// axis to <c>vocabSize + |durations|</c>, but this implementation builds no duration head - the
+    /// frame-skip prediction is described in the class remarks and is not part of the emitted graph. The
+    /// width is what the head actually projects to.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly TDTDecoderOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

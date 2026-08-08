@@ -41,8 +41,19 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Speaker Diarization: A Review of Recent Research", "https://doi.org/10.1109/TASLP.2012.2209910")]
-public class SpeakerDiarizedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SpeakerDiarizedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output construction, not from a name. <c>PredictCore</c> folds
+    /// every layer in <c>Layers</c>, and <c>InitializeLayers</c> fills <c>Layers</c> from
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is the CTC output head <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>.
+    /// <c>PostprocessOutput</c> is the identity. Note the speaker axis is NOT part of this width -
+    /// diarization is applied over the decoded transcript, not by a second output head.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SpeakerDiarizedASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

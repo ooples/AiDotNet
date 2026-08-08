@@ -43,8 +43,20 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Self-supervised Learning with Random-Projection Quantizer for Speech Recognition", "https://arxiv.org/abs/2202.01855", Year = 2022, Authors = "Chiu et al.")]
-public class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head, and deliberately NOT from the random-projection
+    /// quantizer's codebook that gives BEST-RQ its name: <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultFoundationASRLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is the CTC fine-tuning head
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. The codebook belongs to self-supervised
+    /// pre-training and appears nowhere in the emitted stack. <c>PredictCore</c> delegates to the base
+    /// fold and <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly BESTRQOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

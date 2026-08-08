@@ -63,6 +63,26 @@ namespace AiDotNet.Audio.Effects;
     Authors = "Christian J. Steinmetz, Vamsi Krishna Ithapu, Paul Calamia")]
 public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Declines: this model does not obey the family's rank-2 law. Measured, a [1,64] input returns a
+    /// RANK-1 [48000] - FiNSForwardSingle drops the batch axis for a single item - where the inherited
+    /// contract would claim [1,48000]. The width is right; the RANK is not, and the family contract
+    /// cannot say "rank 1 out from rank 2 in". The conformance sweep caught this.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured on the model's OWN forward, not the layer list: <c>PredictCore</c> calls
+    /// <c>FiNSForward</c>, whose batched path allocates <c>new Tensor&lt;T&gt;([batch,
+    /// _options.RIRLength])</c> and whose single-item path ends in
+    /// <c>Reshape(mixed, [_options.RIRLength])</c>. Either way the LAST axis is the synthesized
+    /// impulse-response length. A flat walk of <c>Layers</c> would have suggested the 1-channel mix
+    /// head instead; the length is set by the model, not by the final convolution.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.RIRLength;
+
     #region Fields
 
     private readonly RoomImpulseResponseOptions _options;

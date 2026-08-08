@@ -41,8 +41,18 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2023, Authors = "Radford et al.")]
-public class GroqWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class GroqWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name - and here the name actively misleads: despite
+    /// "Whisper" this model does NOT build the Whisper encoder-decoder stack. InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultProprietaryASRLayers(..., vocabSize: _options.VocabSize)</c>, whose
+    /// last emitted layer is <c>DenseLayer&lt;T&gt;(vocabSize)</c> - the CTC head. Both factories
+    /// happen to end at vocabSize, so the width agrees either way. PostprocessOutput is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly GroqWhisperOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

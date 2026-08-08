@@ -48,6 +48,17 @@ namespace AiDotNet.Audio.Foundations;
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, Michael Auli")]
 public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
+    /// <c>CreateDefaultFoundationModelLayers</c> ends with the last
+    /// <c>TransformerEncoderBlock&lt;T&gt;(hiddenDim, ...)</c> and adds no head, so Predict returns
+    /// contextual representations at <c>_options.HiddenDim</c>. <c>FeatureEncoderDim</c> is the CNN
+    /// front-end width, projected up to <c>HiddenDim</c> before the encoder; there is no CTC
+    /// vocabulary projection in this stack.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.HiddenDim;
+
     #region Fields
 
     private readonly Wav2Vec2Options _options;

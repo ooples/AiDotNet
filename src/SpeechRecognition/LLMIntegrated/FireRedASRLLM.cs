@@ -43,8 +43,19 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition Models from Encoder-Decoder to LLM Integration", "https://arxiv.org/abs/2501.14350", Year = 2025, Authors = "FireRed Team")]
-public class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultLLMASRLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is <c>vocabularyProjection = new DenseLayer&lt;T&gt;(vocabSize, identity)</c>,
+    /// explicitly resolved from <c>llmDim</c>. This model passes real <c>AdapterDim</c> / <c>LlmDim</c>
+    /// values, and neither is the output axis — both are consumed before the projection.
+    /// <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly FireRedASRLLMOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

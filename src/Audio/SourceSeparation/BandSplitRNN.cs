@@ -45,6 +45,16 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ResearchPaper("Music Source Separation with Band-Split RNN", "https://doi.org/10.48550/arXiv.2209.15174", Year = 2023, Authors = "Yi Luo, Jianwei Yu")]
 public class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultBandSplitRNNSeparationLayers emits is the mask-estimation head
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * numStems)</c> - one real-valued frequency mask per stem,
+    /// flattened onto the feature axis. 4100 (1025 x 4 at the defaults) appears nowhere in the
+    /// options; neither NumFreqBins nor NumStems alone is the width.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * _options.NumStems;
+
     #region Fields
 
     private readonly BandSplitRNNOptions _options;

@@ -41,8 +41,19 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CTC-Segmentation of Large Corpora for German End-to-End Speech Recognition", "https://arxiv.org/abs/2007.09127", Year = 2020, Authors = "Kurzinger et al.")]
-public class CTCSegmentation<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class CTCSegmentation<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. Segmentation is
+    /// performed by aligning those CTC posteriors afterwards, so Predict still returns per-frame
+    /// vocabulary logits; <c>PredictCore</c> delegates to the base fold and <c>PostprocessOutput</c> is
+    /// the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly CTCSegmentationOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

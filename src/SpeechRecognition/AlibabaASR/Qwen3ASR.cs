@@ -45,6 +45,17 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ResearchPaper("Qwen3-ASR Technical Report", "https://qwenlm.github.io/blog/qwen3/", Year = 2025, Authors = "Qwen Team")]
 public class Qwen3ASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultLLMASRLayers</c> ends by yielding <c>vocabularyProjection</c>, a
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c> resolved from <c>llmDim</c>, and
+    /// <c>InitializeLayers</c> passes <c>vocabSize: _options.VocabSize</c>. Not <c>llmDim</c>
+    /// (<c>_options.EncoderDim * 2</c>) - that is the projection's INPUT width.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly Qwen3ASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

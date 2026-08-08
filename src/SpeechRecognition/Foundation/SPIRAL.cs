@@ -43,8 +43,18 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SPIRAL: Self-supervised Perturbation-Invariant Representation Learning for Speech Pre-Training", "https://arxiv.org/abs/2201.10207", Year = 2022, Authors = "Huang et al.")]
-public class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultFoundationASRLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is the CTC fine-tuning head
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. The teacher/student perturbation-invariance
+    /// objective is pre-training only and adds no layer here. <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SPIRALOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

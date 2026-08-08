@@ -71,6 +71,19 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// contributes the same single scalar in the same position.</remarks>
     protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
         => new[] { _logTemperature };
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> delegates to <c>EncodeAudio</c>, which folds the AUDIO stack
+    /// (<c>Layers</c>) and L2-normalizes - a normalization that rescales, never reshapes.
+    /// <c>CreateDefaultCLAPAudioEncoderLayers</c> ends with global average pooling then
+    /// <c>DenseLayer&lt;T&gt;(outputSize: projectionDim)</c>, wired from <c>_options.ProjectionDim</c>
+    /// (512 in the paper). Not <c>AudioHiddenDim</c>, which the Swin blocks run at, and not
+    /// <c>VocabSize</c>, which belongs to the TEXT stack in <c>TextEncoderLayers</c> - Predict never
+    /// touches that stack.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.ProjectionDim;
+
     private readonly CLAPModelOptions _options;
     private readonly bool _useNativeMode;
     // Captured ONNX-mode constructor inputs. Preserved so CreateNewInstance

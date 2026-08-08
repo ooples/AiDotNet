@@ -41,8 +41,18 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SAMBA-ASR: State-of-the-Art Speech Recognition Leveraging Structured State-Space Models", "https://arxiv.org/abs/2501.02832", Year = 2025, Authors = "Yadav et al.")]
-public class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultSambaASRLayers(..., vocabSize: _options.VocabSize)</c>, whose last
+    /// emitted layer is <c>DenseLayer&lt;T&gt;(vocabSize)</c> - the token-emission head after the final
+    /// LayerNorm. PredictCore folds Layers in order and PostprocessOutput is the identity, so that
+    /// head's width is the last axis Predict returns.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SambaASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

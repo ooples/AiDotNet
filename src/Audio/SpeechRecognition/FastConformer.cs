@@ -52,6 +52,16 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ResearchPaper("Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition", "https://doi.org/10.48550/arXiv.2305.05084", Year = 2023, Authors = "Dima Rekesh, Nithin Rao Koluguri, Samuel Kriman, Somshubra Majumdar, Vahid Noroozi, He Huang, Oleksii Hrinchuk, Krishna Puvvada, Ankur Kumar, Jagadeesh Balam, Boris Ginsburg")]
 public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultFastConformerLayers</c> ends with the CTC projection
+    /// <c>new FullyConnectedLayer&lt;T&gt;(vocabSize, null)</c>, and <c>InitializeLayers</c> passes
+    /// <c>vocabSize: _options.VocabSize</c>. <c>DownsampleFactor</c> shortens the time axis, not this one.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     #region Fields
 
     private readonly FastConformerOptions _options;

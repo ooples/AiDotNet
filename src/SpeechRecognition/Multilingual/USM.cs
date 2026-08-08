@@ -43,8 +43,19 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
-public class USM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class USM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultFoundationASRLayers(..., vocabSize: _options.VocabSize)</c>, whose
+    /// last emitted layer is the CTC fine-tuning head <c>DenseLayer&lt;T&gt;(vocabSize)</c>. This
+    /// model's PredictCore additionally pads or truncates its INPUT to <c>_options.NumMels</c> before
+    /// folding Layers - that reshapes what enters the stack, not what leaves it; the trailing head
+    /// still sets the last axis. PostprocessOutput is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly USMOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

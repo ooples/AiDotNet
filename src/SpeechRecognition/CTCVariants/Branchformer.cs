@@ -41,8 +41,17 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Branchformer: Parallel MLP-Attention Architectures to Capture Local and Global Context for Speech Recognition and Understanding", "https://arxiv.org/abs/2207.02971", Year = 2022, Authors = "Peng et al.")]
-public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>
+    /// (this CTC variant reuses the Conformer factory), whose LAST emitted layer is the CTC head
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly CTCBranchformerOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

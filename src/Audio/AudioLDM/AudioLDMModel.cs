@@ -69,6 +69,16 @@ namespace AiDotNet.Audio.AudioLDM;
 [ResearchPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://doi.org/10.48550/arXiv.2301.12503", Year = 2023, Authors = "Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, Mark D. Plumbley")]
 public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: native <c>PredictCore</c> is <c>Forward(input)</c>, a plain fold over <c>Layers</c>.
+    /// The stack from <c>LayerHelper&lt;T&gt;.CreateDefaultAudioLDMLayers</c> ends with the VAE
+    /// decoder's mel projection, <c>DenseLayer&lt;T&gt;(numMels)</c>, and
+    /// <see cref="InitializeLayers"/> supplies <c>numMels: _options.NumMelBins</c>. So the last axis
+    /// is a MEL-BIN COUNT (64 by default), not the latent dimension the U-Net projects to mid-stack.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumMelBins;
+
     #region Fields
 
     private readonly AudioLDMOptions _options;

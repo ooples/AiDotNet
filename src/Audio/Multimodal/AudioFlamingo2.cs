@@ -47,6 +47,17 @@ namespace AiDotNet.Audio.Multimodal;
 [ResearchPaper("Audio Flamingo: A Novel Audio Language Model with Few-Shot Learning and Dialogue Abilities", "https://doi.org/10.48550/arXiv.2402.01831", Year = 2024, Authors = "Zhifeng Kong, Arushi Goel, Rohan Badlani, Wei Ping, Rafael Valle, Bryan Catanzaro")]
 public class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore delegates to the canonical Layers executor, and
+    /// the last layer CreateDefaultAudioFlamingo2Layers emits is the LLM output projection
+    /// <c>DenseLayer&lt;T&gt;(llmHiddenDim)</c>, wired from <c>_options.LLMHiddenDim</c> (2048). The
+    /// perceiver resampler stays in LLM embedding space - it never projects to a token vocabulary -
+    /// so the width is the hidden dim, not AudioEncoderDim (the input side) nor NumPerceiverTokens
+    /// (a sequence-length quantity, not the last axis).
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.LLMHiddenDim;
+
     #region Fields
 
     private readonly AudioFlamingo2Options _options;

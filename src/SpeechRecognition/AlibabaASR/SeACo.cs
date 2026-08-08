@@ -45,6 +45,21 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ResearchPaper("SeACo-Paraformer: A Non-Autoregressive ASR System with Flexible and Effective Hot-Word Customization Ability", "https://arxiv.org/abs/2308.03266", Year = 2023, Authors = "An et al.")]
 public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction, which is a CUSTOM branching forward, not a layer-walk:
+    /// <c>PredictCore</c> runs the Paraformer backbone and returns EITHER <c>pAsr</c> - the output of
+    /// the backbone's final vocabulary projection, <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>
+    /// from <c>LayerHelper.CreateDefaultParaformerLayers</c>, built with
+    /// <c>vocabSize: _options.VocabSize</c> - or, when hotwords are active,
+    /// <c>MergeBiasedProbabilities(pAsr, pBias)</c>, documented and implemented as returning merged
+    /// logits of shape <c>[.., V]</c>. Both branches are therefore <c>VocabSize</c> wide, so the width
+    /// does not depend on whether biasing fires. Notably NOT <c>V + 1</c>: the bias branch's extra
+    /// &lt;no-bias&gt; slot exists only inside <c>pBias</c> and is consumed by the merge.
+    /// <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SeACoOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

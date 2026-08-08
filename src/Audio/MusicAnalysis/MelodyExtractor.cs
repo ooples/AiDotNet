@@ -42,6 +42,16 @@ namespace AiDotNet.Audio.MusicAnalysis;
     [ResearchPaper("Melody Extraction from Polyphonic Music Signals Using Pitch Contour Characteristics", "https://doi.org/10.1109/TASLP.2012.2188515")]
 public class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMelodyExtractorLayers emits is the pitch-bin classification head
+    /// <c>FullyConnectedLayer&lt;T&gt;(numPitchBins)</c>, wired from <c>_options.NumPitchBins</c>
+    /// (360). The layer immediately before it is a HiddenDim projection, so the width is the bin
+    /// count, not HiddenDim.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumPitchBins;
+
     #region Fields
 
     private readonly MelodyExtractorOptions _options;

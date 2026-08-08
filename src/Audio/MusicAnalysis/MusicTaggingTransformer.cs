@@ -44,6 +44,15 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ResearchPaper("Transformer-based Tag Prediction for Music Auto-tagging", "https://doi.org/10.48550/arXiv.2106.02072", Year = 2021, Authors = "Minz Won, Keunwoo Choi, Xavier Serra")]
 public class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMusicTaggingTransformerLayers emits is the multi-label classification head
+    /// <c>DenseLayer&lt;T&gt;(numTags)</c>, wired from <c>_options.NumTags</c> (50). A tag count -
+    /// not FeedForwardDim (1024) or HiddenDim (256), both of which are interior widths.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumTags;
+
     #region Fields
 
     private readonly MusicTaggingTransformerOptions _options;

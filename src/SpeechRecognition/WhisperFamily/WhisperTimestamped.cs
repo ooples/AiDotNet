@@ -47,8 +47,20 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2023, Authors = "Radford et al.")]
-public class WhisperTimestamped<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class WhisperTimestamped<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output construction, not from a name. <c>PredictCore</c> folds
+    /// every layer in <c>Layers</c>, and <c>InitializeLayers</c> fills <c>Layers</c> from
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultWhisperEncoderDecoderLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is the vocabulary projection
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. Word timestamps are recovered from the
+    /// decoded attention path, not by extra output units, so they do not widen this axis.
+    /// <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly WhisperTimestampedOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

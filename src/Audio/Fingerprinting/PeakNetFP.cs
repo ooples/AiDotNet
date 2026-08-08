@@ -45,6 +45,15 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ResearchPaper("An Industrial-Strength Audio Search Algorithm", "https://www.ee.columbia.edu/~dpwe/papers/Wang03-shazam.pdf", Year = 2003, Authors = "Avery Li-Chun Wang")]
 public class PeakNetFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
+    /// <c>CreateDefaultPeakNetFPLayers</c> ends with the embedding projection
+    /// <c>FullyConnectedLayer&lt;T&gt;(embeddingDim)</c>, supplied from <c>_options.EmbeddingDim</c>.
+    /// The encoder's filter progression (<c>BaseFilters</c>, doubling and clamped at 512) is interior.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.EmbeddingDim;
+
     #region Fields
 
     private readonly PeakNetFPOptions _options;

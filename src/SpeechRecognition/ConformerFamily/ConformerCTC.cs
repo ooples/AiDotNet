@@ -43,8 +43,18 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Gulati et al.")]
-public class ConformerCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ConformerCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head, not from a name. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is <c>new DenseLayer&lt;T&gt;(vocabSize, identityActivation)</c> (the CTC
+    /// head); <c>PredictCore</c> folds the layer stack and <c>PostprocessOutput</c> is the identity, so
+    /// the last axis Predict returns is the CTC vocabulary.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly ConformerCTCOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

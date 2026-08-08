@@ -41,8 +41,18 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SpeechBrain: A General-Purpose Speech Toolkit", "https://arxiv.org/abs/2106.04624", Year = 2021, Authors = "Ravanelli et al.")]
-public class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output construction, not from a name. <c>PredictCore</c> folds
+    /// every layer in <c>Layers</c>, and <c>InitializeLayers</c> fills <c>Layers</c> from
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is the CTC output head <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>.
+    /// <c>PostprocessOutput</c> is the identity, so the trailing axis is the CTC vocabulary.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SpeechBrainOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

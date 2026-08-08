@@ -41,8 +41,20 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FastEmit: Low-latency Streaming ASR with Sequence-level Emission Regularization", "https://arxiv.org/abs/2010.11148", Year = 2021, Authors = "Yu et al.")]
-public class FastEmit<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FastEmit<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output construction, not from a name. <c>PredictCore</c> folds
+    /// every layer in <c>Layers</c>, and <c>InitializeLayers</c> fills <c>Layers</c> from
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerTransducerLayers(..., vocabSize: _options.VocabSize, ...)</c>.
+    /// Its LAST emitted layer is the transducer JOINT network's output projection
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c> - note the joint's own <c>jointDim</c> and the
+    /// prediction network's <c>predictionDim</c> are interior widths, not the final one.
+    /// <c>PostprocessOutput</c> is the identity, so the trailing axis is the transducer vocabulary.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly FastEmitOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

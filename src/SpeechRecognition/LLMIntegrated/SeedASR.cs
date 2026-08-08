@@ -43,8 +43,18 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Seed-ASR: Understanding Diverse Speech and Contexts with LLM-based Speech Recognition", "https://arxiv.org/abs/2407.04675", Year = 2024, Authors = "Bai et al.")]
-public class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultLLMASRLayers(..., vocabSize: _options.VocabSize)</c>, which ends in
+    /// <c>vocabularyProjection = new DenseLayer&lt;T&gt;(vocabSize)</c> - emitted after BOTH decoder
+    /// branches (the Qwen2 and the default TransformerEncoderBlock path), so the width does not depend
+    /// on which one runs. PredictCore folds Layers and PostprocessOutput is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SeedASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

@@ -6569,6 +6569,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
         => System.Linq.Enumerable.Empty<LayerBase<T>?>();
 
+    // NOTE for whoever converges the model-side parameter mechanisms (there are currently three:
+    // [AutoParameters] on LayerBase, RegisterComponents duplicated in DiffusionModelBase and
+    // VAEModelBase, and the GetExtraTrainable* hooks here).
+    //
+    // Hoisting RegisterComponents to this class LOOKS like the convergence, and it is not sufficient.
+    // IParameterSource<T> is flat-vector only - ParameterCount / GetParameters / SetParameters - so a
+    // registered component can be counted, saved and loaded, but CANNOT flow through the six sites
+    // that need Tensor<T> to register gradients and streaming handles. A component would be persisted
+    // and never trained, silently. That is why the diffusion bases fold components separately rather
+    // than through these hooks, and the same gap presumably applies to what they register today.
+    //
+    // The convergence therefore needs a decision first: either IParameterSource gains a tensor-level
+    // view so components can train, or components are explicitly save/load-only and the training paths
+    // keep using GetExtraTrainable*. Until that is settled, adding the registry here would be a
+    // mechanism nothing consumes.
+
     /// <summary>
     /// Returns the registered module roots used by copy-on-write cloning.
     /// </summary>

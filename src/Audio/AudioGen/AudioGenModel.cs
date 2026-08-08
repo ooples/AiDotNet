@@ -90,6 +90,17 @@ namespace AiDotNet.Audio.AudioGen;
 [ResearchPaper("AudioGen: Textually Guided Audio Generation", "https://doi.org/10.48550/arXiv.2209.15352", Year = 2022, Authors = "Felix Kreuk, Gabriel Synnaeve, Adam Polyak, Uriel Singer, Alexandre Défossez, Jade Copet, Devi Parikh, Yaniv Taigman, Yossi Adi")]
 public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: native <c>PredictCore</c> is <c>Forward(input)</c>, a plain fold over <c>Layers</c>,
+    /// and the last layer emitted by <c>LayerHelper&lt;T&gt;.CreateDefaultAudioGenLayers</c> is
+    /// <c>DenseLayer&lt;T&gt;(codebookSize * numCodebooks)</c> - the flattened per-codebook logits.
+    /// <see cref="InitializeLayers"/> passes <c>_codebookSize</c> and <c>_numCodebooks</c> into those
+    /// two arguments, so the width is their PRODUCT (4 x 1024 = 4096 by default) and is stored nowhere
+    /// as a single field.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _codebookSize * _numCodebooks;
+
     private readonly AudioGenOptions _options;
 
     /// <inheritdoc/>

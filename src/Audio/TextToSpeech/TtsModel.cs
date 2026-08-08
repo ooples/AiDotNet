@@ -65,6 +65,30 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ResearchPaper("FastSpeech 2: Fast and High-Quality End-to-End Text to Speech", "https://arxiv.org/abs/2006.04558", Year = 2021, Authors = "Yi Ren, Chenxu Hu, Xu Tan, Tao Qin, Sheng Zhao, Zhou Zhao, Tie-Yan Liu")]
 public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Declines: emits a TIME axis. Measured, [1,64] returns [1,64,1], not the rank-2 [1,1] the
+    /// inherited contract would claim. The width of 1 is itself worth a second look - the layer chain
+    /// terminates at a stop-token head rather than the mel projection, which reads as unintended - so
+    /// declaring a relation here would encode an apparent architecture defect as a contract.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction, and this one is COUNTER-INTUITIVE, so it is traced
+    /// rather than assumed. Native <c>PredictCore</c> folds over EVERY entry of <c>Layers</c>
+    /// (<c>foreach (var layer in Layers) output = layer.Forward(output);</c>) and
+    /// <c>PostprocessOutput</c> is the identity, so the width is whatever the LAST emitted layer
+    /// produces. <c>LayerHelper.CreateDefaultTtsLayers</c> emits, in order: the mel projection
+    /// <c>DenseLayer&lt;T&gt;(numMels, identity)</c>, then five post-net layers ending in another
+    /// <c>DenseLayer&lt;T&gt;(numMels, identity)</c>, and FINALLY the stop-token head
+    /// <c>DenseLayer&lt;T&gt;(1, sigmoid)</c>. Because the fold is sequential and does not branch, the
+    /// stop-token head is what the chain terminates on - so the width is 1, NOT <c>NumMels</c>.
+    /// Naming would have said mels here; the emission order says otherwise.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     private readonly TtsOptions _options;
 
     /// <inheritdoc/>

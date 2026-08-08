@@ -47,6 +47,16 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ResearchPaper("NVIDIA Canary: An Open Multilingual Large ASR Model", "https://doi.org/10.48550/arXiv.2404.02592", Year = 2024, Authors = "Ankur Rekesh, Taejin Park, Subhankar Ghosh, Kolya Malkin, Samuel Kriman, Somshubra Majumdar, Boris Ginsburg")]
 public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultCanaryLayers</c> ends with the vocabulary projection
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, null)</c>, and <c>InitializeLayers</c> passes
+    /// <c>vocabSize: _options.VocabSize</c>. A token-vocabulary width, not a mel or bin count.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     #region Fields
 
     private readonly CanaryOptions _options;

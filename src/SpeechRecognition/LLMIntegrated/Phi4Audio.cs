@@ -45,8 +45,18 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Phi-4-mini Technical Report: Compact yet Powerful Multimodal Language Models via Mixture-of-LoRAs", "https://arxiv.org/abs/2503.01743", Year = 2025, Authors = "Abdin et al.")]
-public class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultLLMASRLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is <c>vocabularyProjection = new DenseLayer&lt;T&gt;(vocabSize, identity)</c>
+    /// (resolved from <c>llmDim</c>, passed here as <c>_options.EncoderDim * 2</c>). The mixture-of-LoRAs
+    /// adapters modulate interior weights and add no output layer. <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly Phi4AudioOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
