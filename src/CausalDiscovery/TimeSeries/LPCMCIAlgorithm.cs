@@ -104,16 +104,47 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
             {
                 var toRemove = new List<(int var, int lag)>();
                 var current = new List<(int var, int lag)>(parents[j]);
+
+                // Candidates are ranked by the STRENGTH of their own unconditional association with
+                // the target, strongest first, and the conditioning set is drawn from the strongest
+                // remaining parents. That is PC1 as Runge et al. 2019 define it, and it is what makes
+                // the removal rule mean anything: conditioning on the strongest competitors is the
+                // test a spurious link should fail.
+                //
+                // The previous code took `others.Take(condSize)` off a list built from HashSet
+                // enumeration, whose order is an implementation detail. Two things followed: the
+                // discovered graph depended on hash ordering, so identical input could produce
+                // different output across runtime versions, and only ONE arbitrary subset of each
+                // size was ever tested -- a weaker, order-dependent shortcut wearing PC1's name.
+                var strength = new Dictionary<(int var, int lag), double>(current.Count);
+                foreach (var p in current)
+                {
+                    strength[p] = Math.Abs(ComputeLaggedPartialCorrelation(
+                        data, j, p.var, p.lag, new HashSet<(int var, int lag)>(), effectiveN));
+                }
+
+                // Descending strength, then (var, lag) so equal strengths still give a total order
+                // and the result cannot vary with dictionary or sort internals.
+                current.Sort((a, b) =>
+                {
+                    int byStrength = strength[b].CompareTo(strength[a]);
+                    if (byStrength != 0) return byStrength;
+                    int byVar = a.var.CompareTo(b.var);
+                    return byVar != 0 ? byVar : a.lag.CompareTo(b.lag);
+                });
+
                 foreach (var (pVar, pLag) in current)
                 {
                     var others = current.Where(p => p != (pVar, pLag)).ToList();
                     if (others.Count < condSize) continue;
 
+                    // `others` inherits the strength ordering, so this takes the strongest remaining
+                    // parents rather than whichever ones enumeration happened to yield first.
                     var condSet = new HashSet<(int var, int lag)>(others.Take(condSize));
                     double partCorr = ComputeLaggedPartialCorrelation(data, j, pVar, pLag, condSet, effectiveN);
                     double pValue = FisherZPValue(Math.Abs(partCorr), effectiveN, condSet.Count);
 
-                    if (pValue > _alpha) // conditionally independent → not a parent
+                    if (pValue > _alpha) // conditionally independent -> not a parent
                         toRemove.Add((pVar, pLag));
                 }
 
