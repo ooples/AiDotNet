@@ -7,6 +7,8 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
 /// <summary>
@@ -42,6 +44,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
     Authors = "Sutton, R. S.")]
 public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The Q-table entries that exist, walked in sorted state order and ascending action index. This agent sorted its keys before flattening where its siblings did not, so its serialization order is stable across runs regardless of visit order, and that has to be preserved or existing checkpoints renumber.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableEntriesParameterSource<T>(_qTable, sortStateKeys: true, ascendingActions: true));
+    }
     private DynaQPlusOptions<T> _options;
 
     /// <inheritdoc/>
@@ -216,7 +225,6 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -249,62 +257,6 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         _visitedStateActions = JsonConvert.DeserializeObject<List<(string, int)>>(state.VisitedStateActions.ToString()) ?? new List<(string, int)>();
         _epsilon = state.Epsilon;
         _totalSteps = state.TotalSteps;
-    }
-    public override Vector<T> GetParameters()
-    {
-        // Length 0 when nothing has been learned yet, matching ParameterCount. The previous
-        // `: 1` invented a parameter the agent does not have, purely to satisfy a test that
-        // asserted a freshly constructed agent has parameters. That premise was wrong for
-        // tabular RL and the padding is what desynchronised the two APIs.
-        int paramCount = checked((int)QTableEntryCount);
-        var v = new Vector<T>(paramCount);
-        int idx = 0;
-
-        // Sort state keys for deterministic ordering
-        var sortedStates = _qTable.Keys.OrderBy(k => k).ToList();
-        foreach (var stateKey in sortedStates)
-        {
-            var actionDict = _qTable[stateKey];
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                if (actionDict.ContainsKey(a))
-                {
-                    v[idx++] = actionDict[a];
-                }
-                else
-                {
-                    v[idx++] = NumOps.Zero;
-                }
-            }
-        }
-
-
-        return v;
-    }
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null || parameters.Length == 0)
-        {
-            return;
-        }
-
-        int idx = 0;
-        var sortedStates = _qTable.Keys.OrderBy(k => k).ToList();
-
-        foreach (var stateKey in sortedStates)
-        {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                if (idx < parameters.Length)
-                {
-                    if (!_qTable[stateKey].ContainsKey(a))
-                    {
-                        _qTable[stateKey][a] = NumOps.Zero;
-                    }
-                    _qTable[stateKey][a] = parameters[idx++];
-                }
-            }
-        }
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {

@@ -233,15 +233,47 @@ public sealed class QTableEntriesParameterSource<T> : IParameterSource<T>
 {
     private readonly Dictionary<string, Dictionary<int, T>> _table;
     private readonly bool _padEmptyToOne;
+    private readonly bool _sortStateKeys;
+    private readonly bool _ascendingActions;
     private readonly INumericOperations<T> _ops;
 
     /// <summary>Wraps <paramref name="table"/>, counting only the entries present.</summary>
-    public QTableEntriesParameterSource(Dictionary<string, Dictionary<int, T>> table, bool padEmptyToOne = false)
+    /// <param name="table">The Q-table, held by reference.</param>
+    /// <param name="padEmptyToOne">Report one parameter when the table is empty.</param>
+    /// <param name="sortStateKeys">Walk states in sorted key order rather than dictionary order.
+    /// DynaQPlusAgent and PrioritizedSweepingAgent sort, so their serialization order is stable
+    /// across runs regardless of the order states were first visited; the others do not, and
+    /// changing that for them would renumber every value in an existing checkpoint.</param>
+    /// <param name="ascendingActions">Walk each state's actions by ascending index rather than
+    /// dictionary order, which is what a <c>for (a = 0; a &lt; ActionSize; a++)</c> loop did.</param>
+    public QTableEntriesParameterSource(
+        Dictionary<string, Dictionary<int, T>> table,
+        bool padEmptyToOne = false,
+        bool sortStateKeys = false,
+        bool ascendingActions = false)
     {
         _table = table ?? throw new ArgumentNullException(nameof(table));
         _padEmptyToOne = padEmptyToOne;
+        _sortStateKeys = sortStateKeys;
+        _ascendingActions = ascendingActions;
         _ops = MathHelper.GetNumericOperations<T>();
     }
+
+    private IEnumerable<Dictionary<int, T>> Rows()
+    {
+        if (!_sortStateKeys)
+        {
+            foreach (var row in _table.Values) yield return row;
+            yield break;
+        }
+        foreach (var key in _table.Keys.OrderBy(k => k, StringComparer.Ordinal))
+        {
+            yield return _table[key];
+        }
+    }
+
+    private IEnumerable<int> Actions(Dictionary<int, T> row) =>
+        _ascendingActions ? row.Keys.OrderBy(a => a) : row.Keys.ToList();
 
     /// <inheritdoc />
     public long ParameterCount
@@ -259,12 +291,12 @@ public sealed class QTableEntriesParameterSource<T> : IParameterSource<T>
     {
         var result = new Vector<T>(checked((int)ParameterCount));
         int idx = 0;
-        foreach (var row in _table.Values)
+        foreach (var row in Rows())
         {
-            foreach (var value in row.Values)
+            foreach (var action in Actions(row))
             {
                 if (idx >= result.Length) break;
-                result[idx++] = value;
+                result[idx++] = row[action];
             }
         }
         while (idx < result.Length) result[idx++] = _ops.Zero;
@@ -276,9 +308,9 @@ public sealed class QTableEntriesParameterSource<T> : IParameterSource<T>
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         int idx = 0;
-        foreach (var row in _table.Values)
+        foreach (var row in Rows())
         {
-            foreach (var action in row.Keys.ToList())
+            foreach (var action in Actions(row).ToList())
             {
                 if (idx >= parameters.Length) return;
                 row[action] = parameters[idx++];

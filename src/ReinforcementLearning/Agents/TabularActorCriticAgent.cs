@@ -6,6 +6,8 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Validation;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
 /// <summary>
@@ -42,6 +44,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The critic value table then the actor policy, the order the hand-written flatten used. This also settles a disagreement inside the old code: its ParameterCount sized the policy as Count * ActionSize while its loop emitted only the entries that existed, so the two differed for any state that had not seen every action. The padded source makes the vector match the declared count.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new ValueTableParameterSource<T>(_valueTable));
+        RegisterParameterComponent(new QTableParameterSource<T>(_policy, _options.ActionSize));
+    }
     private TabularActorCriticOptions<T> _options;
 
     /// <inheritdoc/>
@@ -180,16 +190,6 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    /// <summary>
-    /// Folded from <see cref="GetParameters"/> so the count and the vector cannot disagree.
-    /// </summary>
-    /// <remarks>
-    /// The previous product formula described a DIFFERENT set of tensors than the getter builds,
-    /// and the two drifted apart the moment the tables became ragged. Deriving the count from the
-    /// vector is the same rule applied to DeepReinforcementLearningAgentBase: one source, the count
-    /// is a fold over it, never a second opinion about it.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -246,36 +246,6 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
                 _policy[stateKey][actionKey] = NumOps.FromDouble(actionValue);
             }
         }
-    }
-    public override Vector<T> GetParameters()
-    {
-        int paramCount = _valueTable.Count + (_policy.Count * _options.ActionSize);
-        if (paramCount == 0) paramCount = 1;
-
-        var vector = new Vector<T>(paramCount);
-        int idx = 0;
-
-        foreach (var v in _valueTable.Values)
-            vector[idx++] = v;
-
-        foreach (var s in _policy)
-            foreach (var a in s.Value)
-                vector[idx++] = a.Value;
-
-
-        return vector;
-    }
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        foreach (var s in _valueTable.Keys.ToList())
-            if (idx < parameters.Length)
-                _valueTable[s] = parameters[idx++];
-
-        foreach (var s in _policy.ToList())
-            for (int a = 0; a < _options.ActionSize; a++)
-                if (idx < parameters.Length)
-                    _policy[s.Key][a] = parameters[idx++];
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
