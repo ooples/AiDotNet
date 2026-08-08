@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "2, 16")]
-public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -449,7 +449,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Embedding dimension (must be divisible by <paramref name="numHeads"/>),
     /// or <c>-1</c> to defer resolution to first forward.
     /// </param>
-    public TransformerEncoderLayer(int numHeads, int feedForwardDim, int embeddingSize)
+    public TransformerEncoderLayer(
+        [LayerState] int numHeads,
+        [LayerState] int feedForwardDim,
+        [LayerState] int embeddingSize)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
         if (numHeads <= 0)
@@ -542,16 +545,33 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (_embeddingSize < 0)
         {
-            _embeddingSize = input.Shape[input.Shape.Length - 1];
-            if (_embeddingSize % _numHeads != 0)
+            // Validate into a local and commit only on success. Assigning first and throwing after
+            // left the rejected value behind, and ResolveLazyLayerShapes swallows probe exceptions
+            // by design -- so a probe that was correctly refused still poisoned the layer. On the
+            // next, legitimate forward the `< 0` guard no longer held, the divisibility check was
+            // skipped entirely, and the bad size flowed into EnsureInitialized as
+            // _embeddingSize / _numHeads == 0. Nougat surfaced this as "headDimension must be
+            // positive, got 0" from deep inside MultiHeadAttentionLayer's constructor, six failures
+            // away from the readable message this method had already produced and discarded.
+            int probedEmbeddingSize = input.Shape[input.Shape.Length - 1];
+            if (probedEmbeddingSize % _numHeads != 0)
                 throw new ArgumentException(
-                    $"Resolved embeddingSize ({_embeddingSize}) must be evenly divisible by " +
-                    $"numHeads ({_numHeads}); got remainder {_embeddingSize % _numHeads}.");
+                    $"Resolved embeddingSize ({probedEmbeddingSize}) must be evenly divisible by " +
+                    $"numHeads ({_numHeads}); got remainder {probedEmbeddingSize % _numHeads}.");
+
+            _embeddingSize = probedEmbeddingSize;
         }
 
+        // The encoder preserves its input's sequence length instead of fixing one, so committing to
+        // whatever length happened to arrive first made it report [10, 16] and then produce
+        // [16, 16]. The model dimension is the only axis it actually fixes.
         var resolved = new int[input.Shape.Length];
         for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
-        ResolveShapes(resolved, resolved);
+
+        var declaredOutput = new int[resolved.Length];
+        for (int i = 0; i < resolved.Length; i++) declaredOutput[i] = LayerShape.Dynamic;
+        declaredOutput[resolved.Length - 1] = _embeddingSize;
+        ResolveShapes(resolved, declaredOutput);
     }
 
     /// <summary>
@@ -583,6 +603,35 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             RegisterSubLayer(_feedForward1);
             RegisterSubLayer(_feedForward2);
             RegisterSubLayer(_norm2);
+
+            // Propagate a deterministic per-sublayer init seed derived from THIS layer's
+            // wired RandomSeed. The sublayers are constructed HERE, at first-forward — long
+            // after the model-construction LayerInitializationSeedScope (a ThreadStatic set
+            // during the constructor chain) has moved on, and often on a DIFFERENT thread
+            // (the fused/compiled training path traces the forward off the construction
+            // thread). Their own AssignInitializationSeedFromScope therefore finds no active
+            // scope, so their weight init falls back to the process-shared, order-dependent
+            // RandomHelper.ThreadSafeRandom — making the SAME architecture at the SAME
+            // architecture.RandomSeed produce DIFFERENT sublayer weights depending on how much
+            // unrelated work advanced that shared RNG first (e.g. a preceding training test's
+            // dropout-mask draws on the same xUnit worker). That silently breaks weight-init
+            // reproducibility and flips tight training-trajectory invariants purely on
+            // execution order (GLaMM LossStrictlyDecreasesOnMemorizationTask: passes in
+            // isolation, fails after any training test ran first). Seeding each sublayer from
+            // this layer's RandomSeed makes the lazy init deterministic and order-independent
+            // for every TransformerEncoderLayer-based model (ViT / SAM / DINO / BERT / VLMs).
+            // When RandomSeed is null (production default — no seed requested) the sublayers
+            // stay unseeded, preserving the existing "reproducible iff a seed was requested"
+            // contract.
+            if (RandomSeed.HasValue)
+            {
+                var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value);
+                _selfAttention.RandomSeed = subSeedRng.Next();
+                _norm1.RandomSeed = subSeedRng.Next();
+                _feedForward1.RandomSeed = subSeedRng.Next();
+                _feedForward2.RandomSeed = subSeedRng.Next();
+                _norm2.RandomSeed = subSeedRng.Next();
+            }
 
             // Eagerly resolve sub-layers using the known embedding size so their
             // ParameterCount reflects real weights immediately. Without this,
@@ -636,7 +685,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// that capture both the content of each element and its relationships to other elements.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor path: resolve _embeddingSize from input.Shape[^1] and construct
         // the inner attention / FFN / norm sublayers on first call.

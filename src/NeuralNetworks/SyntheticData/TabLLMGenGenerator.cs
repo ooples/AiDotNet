@@ -125,11 +125,19 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public TabLLMGenGenerator()
+        // inputSize/outputSize declare the raw tabular feature width the NN-Predict path operates on.
+        // The FFN's first FullyConnectedLayer resolves its input dim from this at construction
+        // (ResolveLazyLayerShapes), so PredictCore — which feeds the input straight into that FFN —
+        // requires the fed width to equal inputSize. The prior default of 10 disagreed with the
+        // standard 16-wide synthetic-tabular sample the generators are exercised with, so the first
+        // FFN layer was sized [.,10] and threw "Matrix dimensions incompatible [1,16] x [10,256]" on
+        // Predict/Clone/BatchConsistency. 16 matches that canonical width; callers that pass their own
+        // architecture are unaffected.
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 10,
-            outputSize: 10))
+            inputSize: 16,
+            outputSize: 16))
     {
     }
 
@@ -143,7 +151,11 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     {
         _options = options ?? new TabLLMGenOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();

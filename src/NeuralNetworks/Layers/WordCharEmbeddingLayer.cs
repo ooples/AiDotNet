@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public class WordCharEmbeddingLayer<T> : LayerBase<T>
+public partial class WordCharEmbeddingLayer<T> : LayerBase<T>
 {
     private readonly DenseLayer<T> _wordEmbedding;
     private readonly DenseLayer<T> _charEmbedding;
@@ -146,7 +146,7 @@ public class WordCharEmbeddingLayer<T> : LayerBase<T>
     /// <param name="input">Packed integer tensor of shape <c>[sequenceLength, 1 + maxWordLength]</c>:
     /// column 0 is the word index, columns 1.. are the word's character indices (zero-padded).</param>
     /// <returns>Per-token representation of shape <c>[sequenceLength, wordEmbeddingDim + charHiddenDim]</c>.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2)
             throw new ArgumentException(

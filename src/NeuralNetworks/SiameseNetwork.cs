@@ -1,4 +1,4 @@
-global using AiDotNet.NeuralNetworks.Layers;
+﻿global using AiDotNet.NeuralNetworks.Layers;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -465,13 +465,14 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// - Determine if you have enough training data (typically you want many times more examples than parameters)
     /// </para>
     /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            return _subnetwork.ParameterCount + _outputLayer.ParameterCount;
-        }
-    }
+    /// <remarks>
+    /// Deliberately NOT overridden. Summing <c>_subnetwork.ParameterCount + _outputLayer</c>
+    /// reported 16,576 while <c>GetParameters()</c> -- which walks <c>Layers</c> -- returned
+    /// 16,641, a 65-parameter gap that would mis-slice every saved checkpoint. The layers in
+    /// <c>Layers</c> are individually self-consistent (their own counts and vectors agree), so
+    /// the second, hand-rolled sum over field references was simply the wrong source. The base
+    /// folds the count over exactly the list the getter walks.
+    /// </remarks>
 
     /// <summary>
     /// Makes a prediction using the Siamese network to compare the similarity between inputs.

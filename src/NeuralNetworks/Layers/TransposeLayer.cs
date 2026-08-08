@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     ChangesShape = true,
     TestInputShape = "1, 2, 3",
     TestConstructorArgs = "new[] { 1, 0 }")]
-public class TransposeLayer<T> : LayerBase<T>
+public partial class TransposeLayer<T> : LayerBase<T>
 {
     private int[] _logicalInputShape;
     private readonly int[] _permutation;
@@ -115,7 +115,7 @@ public class TransposeLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         return Engine.TensorPermute(input, _fullPermutation);

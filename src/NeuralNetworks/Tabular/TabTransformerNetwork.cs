@@ -151,7 +151,23 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new TabTransformerOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        if (_options.LearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be positive.");
+        if (_options.WeightDecay < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay cannot be negative.");
+
+        // Huang et al. train every deep baseline with AdamW and a constant learning rate.
+        // Keep the optimizer fully replaceable, but make the built-in path match that recipe
+        // instead of silently using plain Adam with no decoupled weight decay.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false
+            });
 
         // Validate configuration
         if (_options.EmbeddingDimension % _options.NumHeads != 0)
@@ -419,6 +435,8 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
                 { "NumHeads", _options.NumHeads },
                 { "NumLayers", _options.NumLayers },
                 { "DropoutRate", _options.DropoutRate },
+                { "LearningRate", _options.LearningRate },
+                { "WeightDecay", _options.WeightDecay },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
@@ -471,10 +489,47 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new TabTransformerNetwork<T>(
+        // Optimizers carry step counters and moment tensors keyed to the source model's
+        // parameters. Sharing one across a clone leaks training state and can also leave the
+        // optimizer bound to the source model. Recreate the same optimizer type from its
+        // configuration, then bind that fresh instance to the clone.
+        var freshOptimizer = CreateFreshOptimizer();
+        var clone = new TabTransformerNetwork<T>(
             Architecture,
             _options,
-            _optimizer,
+            freshOptimizer,
             _lossFunction);
+        freshOptimizer.SetModel(clone);
+        return clone;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateFreshOptimizer()
+    {
+        var optimizerType = _optimizer.GetType();
+        var optimizerOptions = _optimizer.GetOptions();
+
+        foreach (var constructor in optimizerType.GetConstructors())
+        {
+            var parameters = constructor.GetParameters();
+            if (parameters.Length == 2 &&
+                parameters[0].ParameterType.IsAssignableFrom(typeof(TabTransformerNetwork<T>)) &&
+                parameters[1].ParameterType.IsInstanceOfType(optimizerOptions) &&
+                constructor.Invoke([null, optimizerOptions]) is
+                    IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+            {
+                return optimizer;
+            }
+        }
+
+        // Custom optimizers without a configuration constructor cannot be safely shared.
+        // Fall back to the model's documented default with fresh state.
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            null,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false
+            });
     }
 }

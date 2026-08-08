@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4")]
-public class TemporalMemoryLayer<T> : LayerBase<T>
+public partial class TemporalMemoryLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The number of columns in the temporal memory layer.
@@ -176,7 +176,9 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// patterns, each in 4 different temporal contexts.
     /// </para>
     /// </remarks>
-    public TemporalMemoryLayer(int columnCount, int cellsPerColumn)
+    public TemporalMemoryLayer(
+        [LayerState] int columnCount,
+        [LayerState] int cellsPerColumn)
         : base([columnCount], [columnCount * cellsPerColumn])
     {
         ColumnCount = columnCount;
@@ -248,7 +250,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// will reflect which specific "a" contexts are currently active based on past inputs.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         // Reshape CellStates from [ColumnCount, CellsPerColumn] to [ColumnCount * CellsPerColumn]

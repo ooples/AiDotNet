@@ -188,20 +188,28 @@ public class RWKV4LanguageModel<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (gradients.Length != expectedCount)
+        if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
-                $"Expected {expectedCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
+                $"Expected {expectedCount} parameters, but got {parameters.Length}",
+                nameof(parameters));
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
+        // UpdateParameters receives post-optimizer parameter VALUES, not raw gradients.
+        // Applying another hard-coded SGD subtraction here both violated that contract and
+        // forced two full flat-model vectors through Get/SetParameters. Route each slice to
+        // its owning layer so optimizer/COW/streaming paths keep their bounded-memory update.
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = checked((int)layer.ParameterCount);
+            if (count == 0) continue;
+            layer.UpdateParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
     }
 
     /// <inheritdoc />

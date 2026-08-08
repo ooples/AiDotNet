@@ -69,7 +69,10 @@ public class RecurrentGemmaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         RecurrentGemmaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // The recurrent Gemma LM head emits raw logits. Use the paper-faithful
+            // fused log-softmax/NLL objective rather than categorical CE, which expects
+            // probabilities and can produce non-finite gradients when fed logits.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new RecurrentGemmaOptions();
         Options = _options;
@@ -115,19 +118,27 @@ public class RecurrentGemmaLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        if (gradients.Length != ParameterCount)
+        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
+        if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
+                $"Expected {expectedCount} parameters, but got {parameters.Length}",
+                nameof(parameters));
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
+        // UpdateParameters receives post-optimizer parameter VALUES. The previous
+        // hard-coded SGD subtraction double-applied updates and materialized full-model
+        // Get/Set vectors, defeating the base COW and streaming-friendly update paths.
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = checked((int)layer.ParameterCount);
+            if (count == 0) continue;
+            layer.UpdateParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

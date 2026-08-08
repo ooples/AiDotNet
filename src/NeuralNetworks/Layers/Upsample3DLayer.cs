@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2")]
-public class Upsample3DLayer<T> : LayerBase<T>
+public partial class Upsample3DLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -258,7 +258,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// Each voxel in the input is replicated to fill a block of size [scaleD × scaleH × scaleW] in the output.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

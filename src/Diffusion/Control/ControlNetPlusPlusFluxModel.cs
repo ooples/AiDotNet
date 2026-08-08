@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("ControlNet++: All-in-One ControlNet for Image Generations and Editing", "https://arxiv.org/abs/2404.07987")]
+    [ResearchPaper("ControlNet++: Improving Conditional Controls with Efficient Consistency Feedback", "https://arxiv.org/abs/2404.07987", Year = 2024, Authors = "Li et al.")]
 public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
 {
     private const int FLUX_LATENT_CHANNELS = 16;
