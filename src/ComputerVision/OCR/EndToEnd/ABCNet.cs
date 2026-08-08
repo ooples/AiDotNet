@@ -141,7 +141,18 @@ public class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
     {
         _options = options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // THE RATE IS NOW THE OPTIONS' RATHER THAN AdamOptimizer'S GENERIC DEFAULT. Constructed bare,
+        // this trained at InitialLearningRate = 0.001 with no way for a caller to change it short of
+        // building the whole optimizer. ABCNetOptions.LearningRate now supplies it, defaulting to the
+        // paper's 0.01 -- see the remark on that property: 0.01 is the paper's SGD+momentum rate and is
+        // well above the usual Adam scale, so reproducing the paper means injecting an SGD optimizer
+        // here, and staying on this default Adam optimizer means lowering the rate to around 1e-4.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
 
         InitializeLayers();
     }
