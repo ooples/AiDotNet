@@ -31,6 +31,24 @@ public class LinearAnomalyDetectionTests
 
         return new Matrix<double>(data);
     }
+    /// <summary>
+    /// The same series as <see cref="CreateTestData"/> WITHOUT its extreme final row, for detectors
+    /// whose scoring rule is only meaningful on points the fit has not already seen.
+    /// </summary>
+    private static Matrix<double> CreateInliersOnly()
+    {
+        int n = 29;
+        var data = new double[n, 3];
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = 1.0 + 0.1 * (i % 5);
+            data[i, 1] = 2.0 + 0.1 * (i % 7);
+            data[i, 2] = 0.5 + 0.05 * (i % 3);
+        }
+
+        return new Matrix<double>(data);
+    }
+
 
     private static void AssertOutlierScoresHighest(Vector<double> scores, int outlierIdx)
     {
@@ -174,11 +192,20 @@ public class LinearAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task KernelPCA_OutlierGetsHighestScore()
     {
+        // HELD OUT, not in-sample. KPCA's novelty score is Hoffmann's feature-space reconstruction
+        // error, and an in-sample fitted point is reconstructed with near-zero residual whenever its
+        // own direction is retained by the decomposition -- so fitting on data that CONTAINS the
+        // extreme row and then asserting that row scores highest expects the documented failure mode
+        // to behave as the success path. The detector is fitted on the inliers alone and scored on a
+        // matrix whose last row is a genuinely new, extreme point.
         var detector = new KernelPCADetector<double>();
-        var data = CreateTestData();
-        detector.Fit(data);
-        var scores = detector.ScoreAnomalies(data);
-        Assert.Equal(data.Rows, scores.Length);
+        var inliers = CreateInliersOnly();
+        detector.Fit(inliers);
+
+        var scored = CreateTestData();
+        var scores = detector.ScoreAnomalies(scored);
+
+        Assert.Equal(scored.Rows, scores.Length);
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 

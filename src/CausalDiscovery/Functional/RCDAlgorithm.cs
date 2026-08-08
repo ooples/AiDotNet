@@ -68,9 +68,16 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     /// </para>
     /// <para>
     /// Sourced from the dedicated <see cref="CausalDiscoveryOptions.ConfoundingEvidenceCutoff"/>
-    /// (default <c>0.05</c> = tolerate ≤ 5% wrong-way evidence before declaring confounding). See the
-    /// RCD calibration tests, which verify a clean LiNGAM DAG scores well under the cutoff while a
-    /// latent-confounder structure scores well over it.
+    /// (default <c>0.05</c> = tolerate up to 5% wrong-way evidence before declaring confounding).
+    /// </para>
+    /// <para>
+    /// COVERAGE, stated accurately: what is exercised today is an integration test asserting that
+    /// RCD returns a non-empty graph on linear data. The clean-versus-confounded separation this
+    /// cutoff is calibrated for -- a clean LiNGAM DAG scoring well under it while a latent-confounder
+    /// structure scores well over it, and the first-round stop firing when no clean root exists -- is
+    /// NOT covered. <see cref="ConfoundingRatio"/> is exposed <c>internal</c> so those cases can be
+    /// asserted directly without a full discovery run; until they are, treat the default as
+    /// reasoned rather than measured.
     /// </para>
     /// </summary>
     private readonly double _confoundingScoreCutoff;

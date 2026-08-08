@@ -244,12 +244,27 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     }
 
     /// <summary>
-    /// The paper's training objective for one cross-section.
+    /// The paper's training objective for one cross-section, computed as a DIAGNOSTIC.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NOT THE OBJECTIVE THE MODEL IS TRAINED ON, and the difference matters. This method returns
+    /// plain <c>double</c> values through <c>ToVector</c>, which severs the gradient tape, and
+    /// training runs through <c>PredictCore</c>, which returns the fused return head alone. The
+    /// direction head, the low-frequency heads and the classification term therefore receive NO
+    /// gradient: only the return head is trained.
+    /// </para>
+    /// <para>
+    /// The class documentation presents joint multi-task training as the paper's contribution, and
+    /// that part is not yet wired. Use this to MEASURE the multi-task objective -- to compare runs,
+    /// to check the classification term is moving -- but do not read a falling total here as evidence
+    /// that the direction head is learning, because nothing updates it.
+    /// </para>
+    /// </remarks>
     /// <param name="perStockReturns">Input window, rows are stocks.</param>
     /// <param name="returnTarget">Realized forward return per stock.</param>
     /// <param name="directionTarget">Realized direction class per stock.</param>
-    /// <returns>Regression term, classification term, and their unweighted sum.</returns>
+    /// <returns>Regression term, classification term, and their task-weighted sum.</returns>
     public (double Regression, double Classification, double Total) ComputeLoss(
         Matrix<T> perStockReturns, Vector<T> returnTarget, Vector<T> directionTarget)
     {
