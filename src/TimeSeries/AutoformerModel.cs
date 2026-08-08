@@ -1103,7 +1103,8 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
 /// tape forward (<c>AutoformerModel.EncoderLayerEngine</c>); the layer holds parameters
 /// and their (de)serialization only — it does not run its own forward pass.
 /// </summary>
-internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -1263,7 +1264,8 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 /// tape forward (<c>AutoformerModel.DecoderLayerEngine</c>); the layer holds parameters
 /// and their (de)serialization only — it does not run its own forward pass.
 /// </summary>
-internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;

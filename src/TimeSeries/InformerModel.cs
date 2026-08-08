@@ -1070,7 +1070,8 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 /// <summary>
 /// Tensor-based encoder layer for Informer with ProbSparse attention.
 /// </summary>
-internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
 
     private readonly int _embeddingDim;
@@ -1238,7 +1239,8 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 /// <summary>
 /// Tensor-based distilling convolution layer for sequence compression.
 /// </summary>
-internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
 
     private readonly int _embeddingDim;
@@ -1326,7 +1328,8 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 /// <summary>
 /// Tensor-based decoder layer for Informer with cross-attention.
 /// </summary>
-internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+[AutoParameters]
+internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
 
     private readonly int _embeddingDim;

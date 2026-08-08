@@ -79,6 +79,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
 public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
 
