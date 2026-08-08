@@ -43,7 +43,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
     private const string Category = "AiDotNet.ParameterAutomation";
 
     private static readonly DiagnosticDescriptor MissingAutoParameters = new(
-        id: "AIDN070",
+        id: "AIDN080",
         title: "Layer does not use automatic parameter discovery",
         messageFormat: "Layer '{0}' is not marked [AutoParameters]; its tensor fields must be registered by hand, which is how parameters get silently omitted from training",
         category: Category,
@@ -53,7 +53,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                      "Mark exceptions with [Buffer] (persistent, never trained) or [Scratch] (transient).");
 
     private static readonly DiagnosticDescriptor RedundantParameterSurface = new(
-        id: "AIDN071",
+        id: "AIDN081",
         title: "Parameter surface is derived and should not be overridden",
         messageFormat: "'{0}' overrides {1}; LayerBase derives it from the same registry, so this can only restate the fold or drift from it",
         category: Category,
@@ -63,7 +63,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                      "SetParameters fold one enumeration in one order, so they cannot disagree.");
 
     private static readonly DiagnosticDescriptor RedundantModelSurface = new(
-        id: "AIDN072",
+        id: "AIDN082",
         title: "Model parameter surface is derived and should not be overridden",
         messageFormat: "'{0}' overrides {1}; the model base derives it from the registered components, so this can only restate the fold or drift from it",
         category: Category,
@@ -75,7 +75,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                      "in one expression, and VideoUNetPredictor's estimate was nine times out.");
 
     private static readonly DiagnosticDescriptor UndiscoverableWeight = new(
-        id: "AIDN073",
+        id: "AIDN083",
         title: "Field holds weights the parameter generator cannot see",
         messageFormat: "'{0}.{1}' is {2}, so automatic discovery skips it; it contributes to no ParameterCount, no checkpoint and no optimizer",
         category: Category,
@@ -147,7 +147,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                 if (!auto && ownsTensors)
                     spc.ReportDiagnostic(Diagnostic.Create(MissingAutoParameters, location, type.Name));
 
-                // AIDN073: fields the generator's discovery predicate will silently skip. Only checked
+                // AIDN083: fields the generator's discovery predicate will silently skip. Only checked
                 // under [AutoParameters], where discovery is the ONLY way a weight reaches the surface;
                 // without the attribute the author is registering by hand and knows what they own.
                 if (auto)

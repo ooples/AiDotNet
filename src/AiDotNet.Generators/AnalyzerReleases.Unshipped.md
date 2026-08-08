@@ -44,3 +44,7 @@ AIDN070 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, 
 AIDN071 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Parameter surface is derived and should not be overridden
 AIDN072 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model parameter surface is derived and should not be overridden
 AIDN073 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Field holds weights the parameter generator cannot see
+AIDN080 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Layer does not use automatic parameter discovery
+AIDN081 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Parameter surface is derived and should not be overridden
+AIDN082 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model parameter surface is derived and should not be overridden
+AIDN083 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Field holds weights the parameter generator cannot see
