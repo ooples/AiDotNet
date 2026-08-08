@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
 
 /// <summary>
@@ -52,6 +54,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
     Authors = "van Hasselt, H.")]
 public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Both Q-tables, first then second, which is the order the hand-written flatten used. Double Q-learning trains two independent estimates, so both are genuinely parameters rather than one being a copy of the other.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableParameterSource<T>(_qTable1, _options.ActionSize));
+        RegisterParameterComponent(new QTableParameterSource<T>(_qTable2, _options.ActionSize));
+    }
     private DoubleQLearningOptions<T> _options;
 
     /// <inheritdoc/>
@@ -262,16 +272,6 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    /// <summary>
-    /// Folded from <see cref="GetParameters"/> so the count and the vector cannot disagree.
-    /// </summary>
-    /// <remarks>
-    /// The previous product formula described a DIFFERENT set of tensors than the getter builds,
-    /// and the two drifted apart the moment the tables became ragged. Deriving the count from the
-    /// vector is the same rule applied to DeepReinforcementLearningAgentBase: one source, the count
-    /// is a fold over it, never a second opinion about it.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -304,54 +304,6 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         _qTable1 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable1.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _qTable2 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable2.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _epsilon = state.Epsilon;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        // Flatten both Q-tables into vector using linear indexing
-        // Vector size: stateCount * 2 * actionSize
-        // No Math.Max(..., 1): an agent that has learned nothing has zero parameters, and
-        // inventing one only to avoid an empty vector is what desynchronised the two APIs.
-        int stateCount = _qTable1.Count;
-        int vectorSize = stateCount * 2 * _options.ActionSize;
-        var parameters = new Vector<T>(vectorSize);
-
-        // Fill _qTable1 values (indices 0 to stateCount*actionSize-1)
-        int idx = 0;
-        foreach (var stateQValues in _qTable1.Values)
-        {
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                parameters[idx++] = stateQValues[action];
-            }
-        }
-
-        // Fill _qTable2 values (indices stateCount*actionSize to stateCount*2*actionSize-1)
-        foreach (var stateQValues in _qTable2.Values)
-        {
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                parameters[idx++] = stateQValues[action];
-            }
-        }
-
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Tabular RL methods cannot restore Q-values from parameters alone
-        // because the parameter vector contains only Q-values, not state keys.
-        //
-        // For a fresh agent (empty Q-tables), state keys are unknown, so restoration fails.
-        // For proper save/load, use Serialize()/Deserialize() which preserves state mappings.
-        //
-        // This is a fundamental limitation of tabular methods - unlike neural networks,
-        // the "parameters" (Q-values) are meaningless without their state associations.
-
-        throw new NotSupportedException(
-            "Tabular Double Q-Learning agents do not support parameter restoration without state information. " +
-            "Use Serialize()/Deserialize() methods instead, which preserve state-to-Q-value mappings for both Q-tables.");
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
