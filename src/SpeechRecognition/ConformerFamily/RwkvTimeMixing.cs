@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
@@ -43,7 +43,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public sealed class RwkvTimeMixing<T>
+internal sealed class RwkvTimeMixing<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
