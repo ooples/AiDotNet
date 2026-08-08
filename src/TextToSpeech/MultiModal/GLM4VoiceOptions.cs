@@ -12,6 +12,7 @@ public class GLM4VoiceOptions : CodecTtsOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public GLM4VoiceOptions(GLM4VoiceOptions other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

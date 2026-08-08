@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -56,7 +57,7 @@ public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         string modelPath,
         UniAudioOptions? options = null
     )
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>(classAxis: -1))
     {
         _options = options ?? new UniAudioOptions();
         _useNativeMode = false;
@@ -78,11 +79,20 @@ public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         UniAudioOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>(classAxis: -1))
     {
         _options = options ?? new UniAudioOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                // UniAudio Appendix: peak pre-training LR 1e-4 with Noam decay.
+                // The optimizer consumes the configured peak; scheduling remains
+                // available through the framework's normal training surface.
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -195,7 +205,8 @@ public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
         ComputeEncoderDecoderBoundary();
@@ -227,8 +238,14 @@ public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -305,9 +322,10 @@ public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var optionsCopy = new UniAudioOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new UniAudio<T>(Architecture, mp, _options);
-        return new UniAudio<T>(Architecture, _options);
+            return new UniAudio<T>(Architecture, mp, optionsCopy);
+        return new UniAudio<T>(Architecture, optionsCopy);
     }
 
     private void ThrowIfDisposed()

@@ -38,7 +38,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     "Seed-TTS: A Family of High-Quality Versatile Speech Generation Models",
     "https://arxiv.org/abs/2406.02430",
     Year = 2024,
-    Authors = "Anastassiou et al."
+    Authors = "Seed Team, ByteDance"
 )]
 public class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
@@ -81,7 +81,13 @@ public class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new SeedTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -148,7 +154,8 @@ public class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -172,7 +179,7 @@ public class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -259,9 +266,10 @@ public class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new SeedTTSOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new SeedTTS<T>(Architecture, mp, _options);
-        return new SeedTTS<T>(Architecture, _options);
+            return new SeedTTS<T>(Architecture, mp, options);
+        return new SeedTTS<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()
