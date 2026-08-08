@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
@@ -19,6 +19,12 @@ public class ContextNetOptions : ModelOptions
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
+
+        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
+        // below; Seed is not declared here, so it was silently dropped and a copied configuration
+        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
+        // the most to diagnose, because the two configurations compare equal on everything visible.
+        Seed = other.Seed;
 
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
@@ -733,11 +733,20 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native training constructor.");
         }
 
+        // TRY/FINALLY, NOT TWO STATEMENTS. TrainWithTape can throw -- a shape mismatch, a diverged
+        // loss, an OOM part-way through the tape -- and the bare call left the model stuck in
+        // training mode when it did. The next Predict then runs with dropout live and stochastic
+        // batch-norm statistics, so it silently returns a different answer for the same input, and
+        // nothing about that failure points back at the exception that caused it.
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        // 7. Exit training mode
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
