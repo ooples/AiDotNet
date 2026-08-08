@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -830,8 +830,18 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         // The base deserializer has just replaced Layers with the restored instances.
         // Rebind the explicit Demucs forward to those instances so inference and
         // training consume the restored weights rather than constructor-fresh layers.
-        if (_useNativeMode)
-            TryBindDemucsTopologyFromLayers();
+        // THE RETURN VALUE DECIDES WHETHER THE MODEL IS USABLE, so discarding it defeated the point
+        // of returning it. On failure the method has already cleared every typed list and set
+        // _demucsDepth to 0, so HasBoundDemucsTopology goes false, PredictCore silently routes to
+        // base.PredictCore, and the caller gets separations from a generic forward pass rather than
+        // Demucs -- from a model they just deserialized and have every reason to believe is intact.
+        if (_useNativeMode && !TryBindDemucsTopologyFromLayers())
+        {
+            throw new InvalidOperationException(
+                "Deserialization restored the layer list, but it does not match the Demucs topology, so " +
+                "the explicit Demucs forward could not be rebound. Continuing would silently fall back " +
+                "to a generic forward pass and return separations that are not Demucs's.");
+        }
     }
 
     /// <summary>

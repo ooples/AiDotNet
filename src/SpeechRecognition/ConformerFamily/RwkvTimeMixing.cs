@@ -123,6 +123,19 @@ internal sealed class RwkvTimeMixing<T>
     /// </remarks>
     public Vector<T> Step(Vector<T> frame)
     {
+        // REJECTED, NOT PADDED. The loop below reads `c < frame.Length ? frame[c] : 0.0`, so a frame
+        // narrower than the recurrence was zero-filled and one wider was truncated -- either way the
+        // model kept running and returned a transcription computed from a feature vector that is not
+        // the one the caller passed. A width mismatch is a wiring error upstream, and it is far cheaper
+        // to see it here than to debug the recognition output it silently corrupts.
+        if (frame.Length != _channels)
+        {
+            throw new ArgumentException(
+                $"The recurrence is defined over {_channels} channels but received a frame of " +
+                $"{frame.Length}. Padding or truncating it would silently change the model's input.",
+                nameof(frame));
+        }
+
         var output = new Vector<T>(_channels);
         double decayFactor = Math.Exp(-_decay);
 
