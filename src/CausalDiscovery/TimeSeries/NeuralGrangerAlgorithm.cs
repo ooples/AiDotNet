@@ -123,6 +123,11 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
 
             T invN = NumOps.FromDouble(1.0 / effectiveN);
 
+            // The hidden buffer is allocated ONCE per target and overwritten, not once per sample.
+            // Allocating it inside the sample loop cost d * _maxEpochs * effectiveN allocations,
+            // which is exactly the temporary-allocation cost the comment below claims was removed.
+            var hidden = new T[h];
+
             for (int epoch = 0; epoch < _maxEpochs; epoch++)
             {
                 var gW1 = new Matrix<T>(inputDim, h);
@@ -133,8 +138,7 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
                 for (int s = 0; s < effectiveN; s++)
                 {
                     // Forward: hidden = sigmoid(x * W1 + b1). Use the raw matrix storage
-                    // directly instead of allocating two temporary vectors per hidden unit.
-                    var hidden = new T[h];
+                    // (hidden is reused across samples; every element is overwritten below.)
                     for (int k = 0; k < h; k++)
                     {
                         T sum = b1[k];

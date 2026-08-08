@@ -267,10 +267,32 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
     }
 
     /// <summary>
-    /// OLS residuals: y - Z (Z'Z)^{-1} Z'y via the (ridge-stabilized) normal equations.
+    /// OLS residuals: y - Z (Z'Z)^{-1} Z'y via the (ridge-stabilized) normal equations, computed on
+    /// MEAN-CENTRED columns so the fit carries an implicit intercept.
     /// </summary>
+    /// <remarks>
+    /// Centring is not cosmetic. Accumulating raw Z and y forces the regression through the origin,
+    /// and with non-zero means the omitted constant stays in the residuals -- in residTarget and
+    /// residSource alike. PearsonCorrelation's own centring cannot remove it, because the two
+    /// residual vectors remain correlated THROUGH that shared constant, so every partial correlation
+    /// is biased. Nothing else in this file centres the input, so this affected every PC1 and MCI
+    /// test run on data with non-zero means. Centring the columns is equivalent to fitting an
+    /// intercept and leaves the residuals unchanged for already-centred data.
+    /// </remarks>
     private Vector<T> OLSResiduals(Matrix<T> Z, Vector<T> y, int n, int p)
     {
+        var zMean = new T[p];
+        for (int i = 0; i < p; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int t = 0; t < n; t++) sum = NumOps.Add(sum, Z[t, i]);
+            zMean[i] = NumOps.Divide(sum, NumOps.FromDouble(n));
+        }
+
+        T ySum = NumOps.Zero;
+        for (int t = 0; t < n; t++) ySum = NumOps.Add(ySum, y[t]);
+        T yMean = NumOps.Divide(ySum, NumOps.FromDouble(n));
+
         var ZtZ = new Matrix<T>(p, p);
         var Zty = new Vector<T>(p);
 
@@ -280,14 +302,16 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
             {
                 T sum = NumOps.Zero;
                 for (int t = 0; t < n; t++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(Z[t, i], Z[t, j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(
+                        NumOps.Subtract(Z[t, i], zMean[i]), NumOps.Subtract(Z[t, j], zMean[j])));
                 ZtZ[i, j] = sum;
                 ZtZ[j, i] = sum;
             }
 
             T sumZy = NumOps.Zero;
             for (int t = 0; t < n; t++)
-                sumZy = NumOps.Add(sumZy, NumOps.Multiply(Z[t, i], y[t]));
+                sumZy = NumOps.Add(sumZy, NumOps.Multiply(
+                    NumOps.Subtract(Z[t, i], zMean[i]), NumOps.Subtract(y[t], yMean)));
             Zty[i] = sumZy;
         }
 
@@ -295,15 +319,21 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         for (int i = 0; i < p; i++)
             ZtZ[i, i] = NumOps.Add(ZtZ[i, i], ridge);
 
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ, Zty, MatrixDecompositionType.Lu);
+        // Cholesky rather than LU: the ridge-adjusted normal matrix is symmetric positive-definite by
+        // construction, which is the case Cholesky exists for and solves in half the work.
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ, Zty, MatrixDecompositionType.Cholesky);
 
+        // The residual of the CENTRED fit: (y - yMean) - sum_j beta_j * (Z_j - zMean_j). That is the
+        // residual of an intercept-carrying regression, since the fitted intercept is exactly
+        // yMean - sum_j beta_j * zMean_j and cancels here.
         var residuals = new Vector<T>(n);
         for (int t = 0; t < n; t++)
         {
             T pred = NumOps.Zero;
             for (int j = 0; j < p; j++)
-                pred = NumOps.Add(pred, NumOps.Multiply(Z[t, j], beta[j]));
-            residuals[t] = NumOps.Subtract(y[t], pred);
+                pred = NumOps.Add(pred,
+                    NumOps.Multiply(NumOps.Subtract(Z[t, j], zMean[j]), beta[j]));
+            residuals[t] = NumOps.Subtract(NumOps.Subtract(y[t], yMean), pred);
         }
 
         return residuals;
