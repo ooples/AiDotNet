@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -98,6 +98,19 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     private readonly int _embeddingDimension;
     private readonly int _maxSequenceLength;
     private readonly int _imageSize;
+
+    /// <summary>
+    /// The input channel count the native layers were built for.
+    /// </summary>
+    /// <remarks>
+    /// The constructor took this and forwarded it to InitializeNativeLayers without keeping it, so
+    /// two places in the clone path assumed 3. The shape probe built a 3-channel tensor, which
+    /// makes ResolveShapes throw for a 1- or 4-channel model and drops the copy into the fallback
+    /// -- copying from unresolved lazy projections, the exact failure that probe was added to
+    /// prevent -- and CreateNewInstance passed the literal 3, silently rebuilding the clone with an
+    /// RGB patch embedding whatever the original used.
+    /// </remarks>
+    private readonly int _channels;
     private readonly int _visionHiddenDim;
     private readonly int _lmHiddenDim;
     private readonly int _numVisionLayers;
@@ -187,6 +200,13 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         _vocabularySize = 32000;
         _languageModelBackbone = LanguageModelBackbone.Chinchilla;
         _numPerceiverLayers = 6;
+        // 1e-3 is the CODEBASE Adam default, chosen deliberately rather than taken from the paper.
+        // Alayrac et al. 2022 specify their schedule in section 3 and Appendix B, and it is not a
+        // single constant: a linear warm-up to 1e-4 over the first 5000 steps, then cosine decay,
+        // over an accelerator budget this implementation does not assume. Pinning a number lifted
+        // from the middle of that schedule would look like a citation while reproducing none of it,
+        // so the framework default is used and the deviation is stated here instead. Callers
+        // reproducing the paper should pass their own optimizer with the published schedule.
         _learningRate = 1e-3;
 
         InferenceSession? visionEncoder = null;
@@ -269,6 +289,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             });
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
+        _channels = channels;
         InitializeNativeLayers(channels);
     }
 
@@ -1199,7 +1220,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         {
             try
             {
-                ResolveShapes(new Tensor<T>(new[] { 3, _imageSize, _imageSize }));
+                ResolveShapes(new Tensor<T>(new[] { _channels, _imageSize, _imageSize }));
             }
             catch (ArgumentException ex)
             {
@@ -1355,7 +1376,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 _embeddingDimension,
                 _maxSequenceLength,
                 _imageSize,
-                3,
+                _channels,
                 _numPerceiverTokens,
                 _maxImagesInContext,
                 _visionHiddenDim,
@@ -1473,7 +1494,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             throw new ArgumentException("Image data cannot be null or empty.", nameof(imageData));
         }
 
-        int channels = 3;
+        int channels = _channels;
         if (imageData.Length % channels != 0)
         {
             throw new ArgumentException($"Image data length ({imageData.Length}) must be divisible by {channels} channels.", nameof(imageData));
