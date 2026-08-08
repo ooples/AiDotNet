@@ -42,6 +42,42 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TabTransformerOptions<T> : RiskModelOptions<T>
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public TabTransformerOptions() { }
+
+    /// <summary>Initializes a new instance by copying every property from another instance.</summary>
+    /// <param name="other">The instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// EVERY property is carried, including the inherited <c>ModelOptions.Seed</c> -- which is
+    /// declared on a base class rather than in this file, so a constructor written from the local
+    /// declarations alone would silently drop it and the clone would lose its configured seed.
+    /// </para>
+    /// <para>
+    /// Collection properties are CLONED, not assigned: a bare assignment leaves the clone and
+    /// the original writing through the same buffer, so mutating one silently reconfigures the
+    /// other. A null source stays null rather than becoming an empty collection.
+    /// </para>
+    /// </remarks>
+    public TabTransformerOptions(TabTransformerOptions<T> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        EmbeddingDimension = other.EmbeddingDimension;
+        HiddenDimension = other.HiddenDimension;
+        NumLayers = other.NumLayers;
+        DropoutRate = other.DropoutRate;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        UseLayerNorm = other.UseLayerNorm;
+        MLPHiddenDimensions = other.MLPHiddenDimensions is null ? null! : (int[])other.MLPHiddenDimensions.Clone();
+        UseColumnEmbedding = other.UseColumnEmbedding;
+        EmbeddingInitScale = other.EmbeddingInitScale;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+    }
+
     /// <summary>
     /// Gets or sets the cardinalities of categorical features.
     /// </summary>
