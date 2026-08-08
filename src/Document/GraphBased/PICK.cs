@@ -68,7 +68,7 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numGcnLayers;
     private readonly int _numHeads;
@@ -120,7 +120,7 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         int numGcnLayers = 2,
         int numHeads = 8,
         int vocabSize = 30522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PICKOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -175,7 +175,7 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         int numGcnLayers = 2,
         int numHeads = 8,
         int vocabSize = 30522,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PICKOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -586,7 +586,7 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

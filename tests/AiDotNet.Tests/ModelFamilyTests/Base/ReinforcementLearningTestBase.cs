@@ -317,12 +317,55 @@ public abstract class ReinforcementLearningTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
+    /// <summary>
+    /// An agent exposes its learned parameters once it has learned something, and its two parameter
+    /// APIs agree at every point in that lifecycle.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This used to assert <c>GetParameters().Length &gt; 0</c> on a freshly constructed agent. That
+    /// is not true of tabular reinforcement learning and never was: a Q-learning agent's parameters
+    /// ARE its Q-table, and an untrained agent's table is empty. Zero is the honest answer.
+    /// </para>
+    /// <para>
+    /// Asserting otherwise did real damage. Rather than the premise being questioned, at least five
+    /// agents were contorted to satisfy it — <c>_qTable.Count &gt; 0 ? _qTable.Count * ActionSize : 1</c>
+    /// fabricates one parameter that does not exist, purely so this line passes. That padding is
+    /// what put <c>GetParameters().Length</c> permanently out of step with <c>ParameterCount</c>,
+    /// and a length mismatch means a saved vector restores into the wrong tensors, because callers
+    /// pair the two by length.
+    /// </para>
+    /// <para>
+    /// So the test now asks the question it was reaching for: after the agent has learned, does it
+    /// expose parameters, and do both APIs describe the same ones? The count/length agreement is
+    /// checked on BOTH sides of training, because that invariant has no excuse to break in either
+    /// state — it is the empty case where it was actually broken.
+    /// </para>
+    /// </remarks>
     [Fact(Timeout = 60000)]
-    public async Task Parameters_ShouldBeNonEmpty()
+    public async Task Parameters_ShouldBeNonEmptyAfterTraining()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
-        Assert.True(((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters().Length > 0, "RL agent should have parameters.");
+        var parameterizable = (IParameterizable<double, Vector<double>, Vector<double>>)model;
+
+        // Untrained: whatever the agent reports, the two APIs must agree. Zero is a valid answer.
+        Assert.True(
+            parameterizable.GetParameters().Length == parameterizable.ParameterCount,
+            $"Before training, GetParameters().Length ({parameterizable.GetParameters().Length}) " +
+            $"disagrees with ParameterCount ({parameterizable.ParameterCount}). Callers pair these " +
+            "by length, so a mismatch means a saved parameter vector restores into the wrong slots.");
+
+        model.Train(CreateRandomState(rng), new Vector<double>(StateDim));
+
+        Assert.True(parameterizable.GetParameters().Length > 0,
+            "After training, the agent should expose the parameters it learned.");
+
+        Assert.True(
+            parameterizable.GetParameters().Length == parameterizable.ParameterCount,
+            $"After training, GetParameters().Length ({parameterizable.GetParameters().Length}) " +
+            $"disagrees with ParameterCount ({parameterizable.ParameterCount}).");
     }
 }

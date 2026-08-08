@@ -18,12 +18,12 @@ namespace AiDotNet.MetaLearning;
 /// <item><b>Hybrid/Advanced:</b> CNAP, SEAL, GNNMeta, MetaOptNet</item>
 /// <item><b>Neural Processes:</b> CNP, NP, ANP, ConvCNP, ConvNP, TNP, SwinTNP, TETNP, EquivCNP, SteerCNP, RCNP, LBANP</item>
 /// <item><b>Foundation Model Era:</b> MetaLoRA, LoRARecycle, ICMFusion, MetaLoRABank, AutoLoRA, MetaDiff, MetaDM, MetaDDPM</item>
-/// <item><b>Bayesian Extensions:</b> PACOH, MetaPACOH, BMAML, BayProNet, FlexPACBayes</item>
+/// <item><b>Bayesian Extensions:</b> PACOH, MetaPACOH, BMAML, BayProNet, SImPa</item>
 /// <item><b>Cross-Domain:</b> MetaFDMixup, FreqPrior, MetaCollaborative, SDCL, FreqPrompt, OpenMAMLPlus</item>
 /// <item><b>Meta-RL:</b> PEARL, DREAM, DiscoRL, InContextRL, HyperNetMetaRL, ContextMetaRL</item>
-/// <item><b>Continual/Online:</b> ACL, iTAML, MetaContinualAL, MePo, OML, MOCA</item>
+/// <item><b>Continual/Online:</b> ACL, iTAML, SparseMAML, MbPA, OML, MOCA</item>
 /// <item><b>Task Augmentation:</b> MetaTask, ATAML, MPTS, DynamicTaskSampling, UnsupervisedMetaLearn</item>
-/// <item><b>Transductive:</b> GCDPLNet, BayTransProto, JMP, ETPN, ActiveTransFSL</item>
+/// <item><b>Cross-domain / Transductive:</b> LFT, BayTransProto, JMP, ETPN, ActiveTransFSL</item>
 /// <item><b>Hypernetwork:</b> TaskCondHyperNet, HyperCLIP, RecurrentHyperNet, HyperNeRFMeta</item>
 /// </list>
 /// </para>
@@ -1046,15 +1046,21 @@ public enum MetaLearningAlgorithmType
     BayProNet,
 
     /// <summary>
-    /// Flex-PAC-Bayes - Flexible PAC-Bayes bounds for meta-learning (2024).
-    /// Provides tighter, more flexible PAC-Bayesian bounds for meta-learners.
+    /// SImPa - statistical implicit PAC-Bayes meta-learning (Nguyen, Do and Carneiro, arXiv:2003.02455).
     /// </summary>
     /// <remarks>
-    /// <b>Key Idea:</b> Use data-dependent priors and flexible divergence measures to derive
-    /// tighter PAC-Bayesian bounds that better reflect actual meta-learning performance.
-    /// <para><b>Use When:</b> You need the tightest available generalization guarantees for meta-learning.</para>
+    /// <b>Key Idea:</b> Represent the task-specific posterior IMPLICITLY, by generating parameters from
+    /// latent noise, instead of assuming a multivariate normal with diagonal covariance. Because such a
+    /// posterior has no density, the KL term in the PAC-Bayes bound is recovered from samples via the
+    /// compression lemma and a learned scalar network.
+    /// <para><b>Use When:</b> You need calibrated few-shot uncertainty together with a generalization
+    /// guarantee that covers unseen tasks as well as unseen samples.</para>
+    /// <para>
+    /// Renamed from <c>FlexPACBayes</c>, which was not a published method name and whose implementation
+    /// used exactly the diagonal-Gaussian point posterior this paper argues against.
+    /// </para>
     /// </remarks>
-    FlexPACBayes,
+    SImPa,
 
     // ===== Cross-Domain Few-Shot =====
 
@@ -1217,26 +1223,32 @@ public enum MetaLearningAlgorithmType
     iTAML,
 
     /// <summary>
-    /// MetaContinualAL - Meta-learning for Continual Active Learning (2024).
-    /// Combines active learning with continual meta-learning for efficient data selection.
+    /// SparseMAML - Learning where to learn: gradient sparsity in meta and continual learning
+    /// (von Oswald et al., NeurIPS 2021).
     /// </summary>
     /// <remarks>
-    /// <b>Key Idea:</b> Meta-learn an acquisition function that selects the most informative
-    /// examples for continual learning, maximizing learning efficiency over time.
-    /// <para><b>Use When:</b> You have a labeling budget and need to select examples wisely over time.</para>
+    /// <b>Key Idea:</b> Rather than adapting every weight in the inner loop, LEARN which weights to
+    /// change. A meta-learned gate per parameter decides where adaptation is allowed, and the paper
+    /// finds that "patterned sparsity emerges from this process", giving better generalization and
+    /// less interference between tasks.
+    /// <para><b>Use When:</b> Few-shot or continual learning where adapting everything overfits the
+    /// support set or lets new tasks trample old ones.</para>
     /// </remarks>
-    MetaContinualAL,
+    SparseMAML,
 
     /// <summary>
-    /// MePo - Meta-learning for Policy optimization in continual RL (2024).
-    /// Meta-learns policy optimization strategies for continual reinforcement learning.
+    /// MbPA - Memory-based Parameter Adaptation (Sprechmann et al., ICLR 2018).
     /// </summary>
     /// <remarks>
-    /// <b>Key Idea:</b> Learn update rules that enable a policy to adapt to new tasks while
-    /// maintaining performance on previously learned tasks, in an RL setting.
-    /// <para><b>Use When:</b> You need continual RL where new tasks arrive sequentially.</para>
+    /// <b>Key Idea:</b> Store (embedding, target) pairs in an episodic memory. At prediction time,
+    /// look up the K nearest neighbours of the query's embedding and take a few gradient steps that
+    /// fit the output network to those neighbours, regularized toward the trained parameters. The
+    /// adapted parameters are used for that one output and then DISCARDED.
+    /// <para><b>Use When:</b> The test distribution shifts away from the training distribution, or
+    /// classes are imbalanced, and you need the network to absorb new evidence immediately rather
+    /// than after many low-learning-rate passes.</para>
     /// </remarks>
-    MePo,
+    MbPA,
 
     /// <summary>
     /// OML - Online Meta-Learning (Javed &amp; White, 2019).
@@ -1320,15 +1332,19 @@ public enum MetaLearningAlgorithmType
     // ===== Transductive Few-Shot =====
 
     /// <summary>
-    /// GCDPLNet - Graph-based Class Distribution Propagation and Label Network (2024).
-    /// Uses graph neural networks with class distribution propagation for transductive FSL.
+    /// LFT - Learned Feature-Wise Transformation (Tseng et al., ICLR 2020).
     /// </summary>
     /// <remarks>
-    /// <b>Key Idea:</b> Build a graph over all examples and propagate both features and class
-    /// distribution information through message passing for joint classification.
-    /// <para><b>Use When:</b> You want graph-based transductive inference with distribution modeling.</para>
+    /// <b>Key Idea:</b> Metric-based few-shot learners generalize poorly across domains because the
+    /// feature distribution shifts. Insert affine feature-wise transformation layers after the
+    /// encoder's normalization during TRAINING ONLY, sampling their scale and bias from learned
+    /// hyper-parameters, so the metric function is exposed to many simulated feature distributions.
+    /// The hyper-parameters themselves are learned by a learning-to-learn split: update the model on
+    /// a pseudo-seen domain WITH the transformations, then update the transformation
+    /// hyper-parameters against the pseudo-unseen loss measured WITHOUT them.
+    /// <para><b>Use When:</b> Your few-shot task will be evaluated on a domain you did not train on.</para>
     /// </remarks>
-    GCDPLNet,
+    LFT,
 
     /// <summary>
     /// BayTransProto - Bayesian Transductive Prototypical Networks (2024).

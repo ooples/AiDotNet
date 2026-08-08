@@ -111,7 +111,10 @@ public class ModelCompressionTests
 
         // Heavy (coarse-grid) compression genuinely degrades the rebuilt model's fit — the retention is measured
         // by re-evaluation, not assumed, so it drops below 1.0 when the weights are perturbed enough.
-        Assert.True((report?.AccuracyRetained ?? 1.0) < 1.0);
+        Assert.True((report?.AccuracyRetained ?? 1.0) < 1.0,
+            $"Expected coarse-grid compression to reduce accuracy: " +
+            $"baseline={report?.BaselineLoss}, compressed={report?.CompressedLoss}, " +
+            $"retained={report?.AccuracyRetained}, reconstruction={report?.ReconstructionError}.");
 
         // The knee is a real frontier point that clears the retention tolerance.
         Assert.Contains(report?.Frontier ?? Enumerable.Empty<AiDotNet.ModelCompression.CompressionFrontierPoint<double>>(),
