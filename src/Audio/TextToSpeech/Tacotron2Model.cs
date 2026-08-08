@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -1297,8 +1297,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Assembles the decoder's per-step mel outputs into [1, steps * numMelsPerFrame, numMels] using
     /// recorded reshape/concatenate ops, so gradients flow back through every decoder step.
-    /// <see cref="CombineMelFrames"/> builds the same tensor by assigning elements one at a time,
-    /// which produces a value the tape cannot differentiate through.
+    /// <see cref="CombineMelFrames"/> is the fallback for a decoder that emits a different width; it
+    /// is ALSO tape-safe, building its result from <c>Engine.TensorNarrow</c> and
+    /// <c>Engine.TensorStack</c>. This comment used to say it assigned elements one at a time and so
+    /// could not be differentiated through -- that described an implementation removed when the
+    /// detached-tape bug was fixed, and left the fallback looking like a gradient-losing path when it
+    /// is not.
     /// </summary>
     private Tensor<T> CombineMelFramesTapeSafe(List<Tensor<T>> frames)
     {
@@ -1435,6 +1439,14 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                     melFrames.Add(Engine.TensorNarrow(groupedOutput, groupedOutput.Rank - 1, start, NumMels));
             }
         }
+        // A NON-EMPTY `frames` CAN STILL YIELD NO SLICES. The narrow above is conditional, so if every
+        // grouped output is narrower than NumMels the list stays empty and TensorStack is handed a
+        // zero-length array. The early return only covers `frames` being empty, which is a different
+        // condition. Return the same empty mel the caller already handles rather than failing inside
+        // the engine on a shape it cannot explain.
+        if (melFrames.Count == 0)
+            return new Tensor<T>([1, 0, NumMels]);
+
         return Engine.TensorStack(melFrames.ToArray(), axis: 1);
     }
 
