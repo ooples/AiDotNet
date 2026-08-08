@@ -181,6 +181,20 @@ internal sealed class RwkvTimeMixing<T>
         int frames = sequence.Rank >= 2 ? sequence.Shape[0] : 1;
         int width = frames > 0 ? sequence.Length / frames : sequence.Length;
 
+        // CHECKED HERE TOO, not only in Step. Step validates the frame it is handed, but Forward
+        // builds those frames itself from `width` and pads short rows with Ops.Zero before Step ever
+        // sees them -- so every frame arrives exactly _channels wide and Step's guard can never fire
+        // on this path. A mis-shaped sequence would sail straight through the batch route while the
+        // streaming route rejected it, which is the worse of the two outcomes: the two paths are
+        // supposed to compute the same function, and this made them disagree on what is even valid.
+        if (width != _channels)
+        {
+            throw new ArgumentException(
+                $"The recurrence is defined over {_channels} channels but the sequence has {width} per " +
+                $"frame ({frames} frames over {sequence.Length} values).",
+                nameof(sequence));
+        }
+
         var result = new Tensor<T>(sequence._shape);
         var frame = new Vector<T>(width);
 

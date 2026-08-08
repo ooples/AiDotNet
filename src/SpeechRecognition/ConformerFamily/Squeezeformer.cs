@@ -87,18 +87,20 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // negative WarmupSteps does not error -- it just misses the `> 0` test below, so warmup is
         // quietly switched off and the paper's 2e-3 peak is applied flat from step 0, which the remark
         // above this method identifies as precisely the unstable regime.
-        if (_options.PeakLearningRate <= 0.0 || double.IsNaN(_options.PeakLearningRate))
+        if (_options.PeakLearningRate <= 0.0 || !double.IsFinite(_options.PeakLearningRate))
         {
             throw new InvalidOperationException(
                 $"SqueezeformerOptions.PeakLearningRate must be positive; got {_options.PeakLearningRate}. " +
-                "A non-positive rate trains for the full run and changes nothing.");
+                "A non-positive rate trains for the full run and changes nothing, and an infinite one " +
+                "sends every parameter to NaN on the first step.");
         }
 
-        if (_options.WeightDecay < 0.0 || double.IsNaN(_options.WeightDecay))
+        if (_options.WeightDecay < 0.0 || !double.IsFinite(_options.WeightDecay))
         {
             throw new InvalidOperationException(
                 $"SqueezeformerOptions.WeightDecay must be non-negative; got {_options.WeightDecay}. " +
-                "A negative decay grows the weights every step instead of shrinking them.");
+                "A negative decay grows the weights every step instead of shrinking them, and an " +
+                "infinite one collapses them to zero.");
         }
 
         if (_options.WarmupSteps < 0)
