@@ -328,17 +328,6 @@ public class VideoSafetyConfig
     /// Higher values are more thorough but slower. A value of 1.0 means one frame
     /// per second is checked. For short clips, consider higher values.
     /// </remarks>
-    /// <remarks>
-    /// NO LONGER AFFECTS SAMPLING. MultimodalVideoModerator samples the taxonomy's FIXED budget
-    /// (<see cref="AiDotNet.Safety.Video.MultimodalVideoModerator{T}.TaxonomyFrameBudget"/> frames
-    /// plus a thumbnail) regardless of video length, which is the whole point of a budget rather
-    /// than a rate -- a 20x longer video is not 20x more work. Nothing reads this value, so leaving
-    /// it undeprecated would let a caller configure a rate and reasonably expect it to apply.
-    /// </remarks>
-    [Obsolete("Video sampling is a fixed per-video budget, not a rate; this value is ignored. "
-        + "See MultimodalVideoModerator<T>.TaxonomyFrameBudget.")]
-    public double? FrameSamplingRate { get; set; }
-
     // -- Internal defaults --
     internal bool EffectiveDeepfakeDetection => DeepfakeDetection ?? false;
     internal bool EffectiveContentModeration => ContentModeration ?? false;

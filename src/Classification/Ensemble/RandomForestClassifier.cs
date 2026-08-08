@@ -128,6 +128,16 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
             throw new ArgumentException("Number of samples in X must match length of y.");
         }
 
+        // A FEATURELESS MATRIX CANNOT TRAIN A TREE. With NumFeatures = 0 every rule in
+        // CalculateMaxFeatures returns 0 or 1 -- Sqrt and Log2 of 0, and All -- so the forest was
+        // built on a feature count no split can use, and the failure appeared far from its cause.
+        if (x.Columns == 0)
+        {
+            throw new ArgumentException(
+                "Training matrix has no feature columns; a decision tree cannot split on zero "
+                + "features.", nameof(x));
+        }
+
         NumFeatures = x.Columns;
         ClassLabels = ExtractClassLabels(y);
         NumClasses = ClassLabels.Length;

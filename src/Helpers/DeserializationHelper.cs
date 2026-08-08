@@ -3454,7 +3454,11 @@ public static class DeserializationHelper
         if (string.IsNullOrWhiteSpace(str))
             return null;
 
-        var groups = str.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+        // None, NOT RemoveEmptyEntries: the option stripped malformed groups before the
+        // parts.Length == 0 check below could reject them, so ";;" parsed to a non-null EMPTY
+        // jagged array and was then accepted downstream as valid metadata. Keeping the empty
+        // groups lets the existing validation see them and return null.
+        var groups = str.Split(new[] { ';' }, StringSplitOptions.None);
         var result = new int[groups.Length][];
         for (int g = 0; g < groups.Length; g++)
         {
@@ -4291,8 +4295,14 @@ public static class DeserializationHelper
                     var darr = TryGetDoubleArray(additionalParams, capName);
                     if (darr is not null) { args[pi] = darr; metadataMatches++; continue; }
                     if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
-                    args[pi] = new double[] { 1.0 };
-                    continue;
+                    // NO INVENTED VALUE. This used to substitute new double[] { 1.0 }, which for
+                    // SetAbstractionLayer is the multi-scale RADII -- they select neighbourhoods, so a
+                    // made-up value makes a restored model produce different results from the one that
+                    // was saved, silently and with a successful-looking load. With no metadata and no
+                    // constructor default there is nothing to restore from, so the constructor is left
+                    // unresolved and the matcher moves on to another one or reports the payload
+                    // incomplete -- the same signal every other unsatisfiable parameter raises.
+                    allResolved = false; break;
                 }
 
                 // 2. int parameters

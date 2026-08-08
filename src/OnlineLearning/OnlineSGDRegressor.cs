@@ -218,6 +218,18 @@ public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
         // and every early-stopping comparison against NaN is false -- so the loop ran all 1000
         // epochs, learned nothing, and reported no error. Returning early leaves the existing
         // row/length mismatch validation (performed by PartialFit) untouched for non-empty input.
+        // THE LENGTH CHECK HAS TO COME FIRST. PartialFit validates that the row count matches the
+        // target length, but the empty-batch return below fires whenever EITHER side is empty -- so
+        // (Rows = 0, Length = 1) and (Rows = 1, Length = 0) are mismatched inputs that returned
+        // silently without ever reaching that validation, leaving the model unchanged and reporting
+        // nothing. Checking here means a mismatch is rejected whether or not one side is empty.
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException(
+                $"Training matrix has {x.Rows} row(s) but the target vector has {y.Length} "
+                + "element(s); they must match.", nameof(y));
+        }
+
         if (x.Rows == 0 || y.Length == 0)
         {
             return;

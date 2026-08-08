@@ -179,14 +179,28 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
         // for a video longer than one frame, so the thumbnail stays distinct and all 14 content
         // frames are spent on content. A HashSet replaces List.Contains, which was O(budget^2) --
         // trivial at 14, but the loop no longer needs a scan at all.
-        int budget = Math.Min(TaxonomyFrameBudget, frames.Count);
+        // THE CONTENT FRAMES ARE DRAWN FROM [1, Count-1], NOT [0, Count-1]. Chunk centres over the
+        // whole range still landed on index 0 for short videos -- index 0 is already seeded as the
+        // thumbnail stand-in -- so the Add was rejected and the video was analysed on fewer frames
+        // than the budget allows. Excluding the thumbnail's index from the content range removes the
+        // collision by construction rather than by luck.
+        //
+        // Verified by exhaustive count over frames.Count = 1..20000: this yields exactly
+        // min(TaxonomyFrameBudget + 1, Count) distinct indices at every length -- the most that can
+        // be drawn. The previous form fell one short at every length from 15 to 27, and a plain
+        // round-up still fell short at 15 to 18.
         var seen = new HashSet<int> { 0 };
         var sampled = new List<int> { 0 };
-        for (int k = 0; k < budget; k++)
+        if (frames.Count > 1)
         {
-            int idx = (int)(((2L * k + 1) * frames.Count) / (2L * budget));
-            if (idx >= frames.Count) idx = frames.Count - 1;
-            if (seen.Add(idx)) sampled.Add(idx);
+            int span = frames.Count - 1;
+            int budget = Math.Min(TaxonomyFrameBudget, span);
+            for (int k = 0; k < budget; k++)
+            {
+                int idx = 1 + (int)(((2L * k + 1) * span) / (2L * budget));
+                if (idx >= frames.Count) idx = frames.Count - 1;
+                if (seen.Add(idx)) sampled.Add(idx);
+            }
         }
 
         foreach (int i in sampled)

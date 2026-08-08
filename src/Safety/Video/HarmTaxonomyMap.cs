@@ -39,9 +39,10 @@ internal static class HarmTaxonomyMap
     /// <remarks>
     /// <para>
     /// EXCLUDED BY DESIGN, NOT BY OMISSION. A signal that maps to <c>null</c> raises no video-level
-    /// finding, so an accidental omission is a silent safety regression. Thirteen
-    /// <see cref="SafetyCategory"/> members are deliberately unmapped, and they are all
-    /// model-integrity or provenance signals rather than harms a viewer suffers from the CONTENT:
+    /// finding, so an accidental omission is a silent safety regression. Fourteen
+    /// <see cref="SafetyCategory"/> members are deliberately unmapped: thirteen are model-integrity
+    /// or provenance signals rather than harms a viewer suffers from the CONTENT, and one is
+    /// deployment-defined rather than a fixed harm.
     /// </para>
     /// <list type="bullet">
     /// <item><description>Prompt/model integrity: <c>PromptInjection</c>, <c>JailbreakAttempt</c>,
@@ -51,6 +52,14 @@ internal static class HarmTaxonomyMap
     /// <item><description>Privacy/security of third parties: <c>PIIExposure</c>,
     /// <c>SurveillanceEnabling</c>, <c>Malware</c></description></item>
     /// <item><description>Process concerns: <c>Bias</c>, <c>TransparencyViolation</c></description></item>
+    /// <item><description>Deployment-defined: <c>PolicyViolation</c>. Its own definition is
+    /// "content that violates a topic restriction or CUSTOM policy rule", so what it means is set by
+    /// the operator rather than by this taxonomy. Every fixed harm category would therefore be a
+    /// guess: a custom policy may restrict cooking videos or share prices, neither of which is
+    /// hate, sexual, physical, addictive, information or clickbait harm. Mapping it to any of the
+    /// six would reproduce exactly the wrong-but-SPECIFIC label the removal of the catch-all arm
+    /// below was meant to prevent, so it raises no video-level finding here and is reported by
+    /// whichever module owns the custom policy.</description></item>
     /// </list>
     /// <para>
     /// The taxonomy explicitly scopes itself to harm "discernible from the content itself", which is
