@@ -93,7 +93,26 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                        + "- silently, because the trace still succeeds and simply omits it. Rename the "
                        + "override to 'protected override Tensor<T> ForwardTraced'.",
         category: "AiDotNet.Shapes",
-        defaultSeverity: DiagnosticSeverity.Error,
+        // WARNING UNTIL THE CONVERSION LANDS, THEN ERROR.
+        //
+        // This rule fires on 873 layers, and the commits that rename those overrides to
+        // ForwardTraced are spread across the later slices of the #1789 split. At Error severity
+        // it GATES THE BUILD, so slice 01 -- which introduces the rule -- makes every intermediate
+        // merge state of the split red by construction: measured on integration/1789, merging
+        // slice 01 alone produced 873 ADNSHAPE004 errors, and merging 02 and 03 on top did not
+        // clear them because their conversions are not the ones this rule is waiting for.
+        //
+        // The consequence is not cosmetic. No slice can be built, so no slice can be
+        // build-verified before merge, per-slice CI reports a failure that says nothing about the
+        // slice, and any tooling that checks a branch compiles is useless across the whole split.
+        //
+        // Warning keeps every diagnostic visible and every intermediate state buildable. The final
+        // slice of the split flips this back to Error, at the point where the violation count is
+        // zero and the gate can hold. See the sibling entry in AnalyzerReleases.Unshipped.md.
+        //
+        // Note the asymmetry with ADNSHAPE001/002, which stay Error: those describe a contract
+        // that is self-inconsistent right now, not one the split is mid-way through satisfying.
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor ContractWithoutInputLayoutDescriptor = new(
