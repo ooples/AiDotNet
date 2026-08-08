@@ -20,6 +20,18 @@ namespace AiDotNet.NeuralNetworks;
 /// giving strict O(n) complexity and O(1) memory per token during generation.</para>
 /// <para><b>Reference:</b> De et al., "Griffin: Mixing Gated Linear Recurrences with Local Attention", 2024.</para>
 /// </remarks>
+/// <remarks>
+/// <para>
+/// <b>Do not override <c>Train</c> to call <c>TrainWithTape</c> directly.</b> Besides the
+/// tape/optimizer step, the base entry point performs canonical batch promotion, first-step
+/// LSUV, optimizer persistence, OOM recovery, and fused-compiled training where eligible.
+/// Bypassing it skipped those contracts and made the unbatched recurrence numerically unstable
+/// on its second FP32 update. This model previously carried a <c>Train</c> override whose whole
+/// body was <c>base.Train(...)</c> to hold that note; the override added no behavior and is
+/// gone, but the reason it existed is recorded here. <see cref="GriffinLanguageModel{T}"/> has
+/// the same recurrence structure and no override, which is the shape both models want.
+/// </para>
+/// </remarks>
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
@@ -160,16 +172,6 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Keep Hawk on the shared training entry point. Besides the real tape/optimizer
-        // step, the base path performs canonical batch promotion, first-step LSUV,
-        // optimizer persistence, OOM recovery, and fused-compiled training when eligible.
-        // Calling TrainWithTape directly skipped those contracts and made the unbatched
-        // recurrence numerically unstable on its second FP32 update.
-        base.Train(input, expectedOutput);
-    }
-
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (parameters.Length != ParameterCount)
@@ -188,8 +190,32 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
         {
             int count = (int)layer.ParameterCount;
+
+            // Skip the parameterless layers -- activation, dropout, reshape. Handing them an empty
+            // slice is not merely wasted work: it is a real call into UpdateParameters on a layer
+            // that has nothing to update, and Autoencoder and the other implementations touched by
+            // this change already guard it. Keeping the guard uniform means the loop reads the same
+            // way everywhere it appears.
+            if (count <= 0)
+            {
+                continue;
+            }
+
             layer.UpdateParameters(parameters.Slice(offset, count));
             offset += count;
+        }
+
+        // THE ENTRY GUARD CHECKS THE TOTAL; THIS CHECKS THAT THE TOTAL WAS ACTUALLY CONSUMED. The
+        // loop trusts that sum(layer.ParameterCount) == ParameterCount. If that ever diverges -- a
+        // subclass contributing to ParameterCount, or a future extra-trainable-tensor hook -- the
+        // tail of the vector is dropped in silence: training appears to work while some weights are
+        // never written, which is far harder to find than a loud failure here.
+        if (offset != parameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Parameter distribution consumed {offset} of {parameters.Length} values; the layer "
+                + "parameter counts no longer sum to ParameterCount, so part of the vector would be "
+                + "silently discarded.");
         }
     }
 

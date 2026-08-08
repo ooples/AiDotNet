@@ -117,6 +117,16 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    /// <summary>
+    /// GLA carries a per-head state matrix through a timestep recurrence --
+    /// <c>S_t = G_t * S_{t-1} + K_t^T * V_t</c>, with the output read as <c>O_t = Q_t * S_t</c>.
+    /// That data-dependent loop is not a static op graph, so it cannot be captured once and
+    /// safely replayed by the fused compiled-training plan; the eager tape re-runs the true
+    /// recurrence every step, so AdamW receives the real gradients. Same reason as the sibling
+    /// recurrent models (<see cref="GriffinLanguageModel{T}"/>, <see cref="HawkLanguageModel{T}"/>)
+    /// and the same root cause documented on <c>NeuralNetworkBase.SupportsFusedCompiledTraining</c>
+    /// (#1643). This is a structural property of the architecture, not a temporary restriction.
+    /// </summary>
     protected override bool SupportsFusedCompiledTraining => false;
 
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
@@ -153,8 +163,32 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
         {
             int count = (int)layer.ParameterCount;
+
+            // Skip the parameterless layers -- activation, dropout, reshape. Handing them an empty
+            // slice is not merely wasted work: it is a real call into UpdateParameters on a layer
+            // that has nothing to update, and Autoencoder and the other implementations touched by
+            // this change already guard it. Keeping the guard uniform means the loop reads the same
+            // way everywhere it appears.
+            if (count <= 0)
+            {
+                continue;
+            }
+
             layer.UpdateParameters(parameters.Slice(offset, count));
             offset += count;
+        }
+
+        // THE ENTRY GUARD CHECKS THE TOTAL; THIS CHECKS THAT THE TOTAL WAS ACTUALLY CONSUMED. The
+        // loop trusts that sum(layer.ParameterCount) == ParameterCount. If that ever diverges -- a
+        // subclass contributing to ParameterCount, or a future extra-trainable-tensor hook -- the
+        // tail of the vector is dropped in silence: training appears to work while some weights are
+        // never written, which is far harder to find than a loud failure here.
+        if (offset != parameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Parameter distribution consumed {offset} of {parameters.Length} values; the layer "
+                + "parameter counts no longer sum to ParameterCount, so part of the vector would be "
+                + "silently discarded.");
         }
     }
 

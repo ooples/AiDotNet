@@ -169,8 +169,32 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
         {
             int count = (int)layer.ParameterCount;
+
+            // Skip the parameterless layers -- activation, dropout, reshape. Handing them an empty
+            // slice is not merely wasted work: it is a real call into UpdateParameters on a layer
+            // that has nothing to update, and Autoencoder and the other implementations touched by
+            // this change already guard it. Keeping the guard uniform means the loop reads the same
+            // way everywhere it appears.
+            if (count <= 0)
+            {
+                continue;
+            }
+
             layer.UpdateParameters(parameters.Slice(offset, count));
             offset += count;
+        }
+
+        // THE ENTRY GUARD CHECKS THE TOTAL; THIS CHECKS THAT THE TOTAL WAS ACTUALLY CONSUMED. The
+        // loop trusts that sum(layer.ParameterCount) == ParameterCount. If that ever diverges -- a
+        // subclass contributing to ParameterCount, or a future extra-trainable-tensor hook -- the
+        // tail of the vector is dropped in silence: training appears to work while some weights are
+        // never written, which is far harder to find than a loud failure here.
+        if (offset != parameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Parameter distribution consumed {offset} of {parameters.Length} values; the layer "
+                + "parameter counts no longer sum to ParameterCount, so part of the vector would be "
+                + "silently discarded.");
         }
     }
 
