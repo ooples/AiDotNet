@@ -53,7 +53,17 @@ public class CodeSwitchingASROptions : ModelOptions
         EnglishBpeVocabSize = other.EnglishBpeVocabSize;
         MandarinCharVocabSize = other.MandarinCharVocabSize;
         SharedLidAttention = other.SharedLidAttention;
-        VocabSize = other.VocabSize;
+
+        // VocabSize IS NOT ASSIGNED HERE, DELIBERATELY. _explicitVocabSize is copied above, which
+        // carries BOTH of this property's states exactly: explicitly set, or unset and therefore
+        // derived from MandarinCharVocabSize + EnglishBpeVocabSize + 1.
+        //
+        // Going through the public setter instead -- `VocabSize = other.VocabSize` -- read the
+        // GETTER, which materializes the derived value, and then stored it as an EXPLICIT one. A
+        // clone of a derived-size options object came back pinned: change MandarinCharVocabSize on
+        // both afterwards and the original recomputes while the clone does not. The remarks on
+        // VocabSize record that this explicit/derived distinction has already caused one real
+        // defect, so collapsing it in the copy constructor is the same failure a second time.
     }
 
     /// <summary>
