@@ -77,12 +77,25 @@ public sealed class StockformerBands<T>
     /// <param name="series">A single series over time.</param>
     /// <returns>
     /// The low-frequency approximation and the high-frequency detail. With <see cref="Levels"/> above
-    /// one, the low band is split repeatedly and the returned high band is the FINEST detail; the
-    /// coarser details are discarded because the two-branch encoder has nowhere to put them.
+    /// one, the low band is split repeatedly and the returned high band is the detail of the LAST,
+    /// coarsest level; the finer details produced along the way are discarded because the two-branch
+    /// encoder has nowhere to put them.
     /// </returns>
     /// <remarks>
+    /// <para>
+    /// The coarsest detail is the one returned because it is the only one whose length matches the
+    /// low band. Each level halves both, so the level-1 detail has <c>n / 2</c> samples while the low
+    /// band after <see cref="Levels"/> splits has <c>n / 2^Levels</c>; pairing those two would hand
+    /// the encoder's branches different sequence lengths.
+    /// </para>
+    /// <para>
+    /// At the paper's <c>Levels = 1</c> the coarsest detail IS the finest one, so the distinction only
+    /// appears once a caller raises Levels.
+    /// </para>
+    /// <para>
     /// Each level halves the length, so both bands are shorter than the input. Callers must size the
     /// encoder from <see cref="BandLength"/> rather than from the input window.
+    /// </para>
     /// </remarks>
     public (Vector<T> Low, Vector<T> High) Split(Vector<T> series)
     {

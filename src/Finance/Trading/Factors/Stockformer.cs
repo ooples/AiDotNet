@@ -688,8 +688,21 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < bands.Columns; c++) input[(r * bands.Columns) + c] = bands[r, c];
 
-        var restored = filter.Forward(input);   // [rows, time]
+        var restored = filter.Forward(input);   // [rows, restoredTime]
 
+        // The upsample filters are DenseLayer(_options.SequenceLength), so their output width is
+        // ALWAYS SequenceLength, whatever the input window length is. Reading with `time` as the row
+        // stride therefore ran past the end of `restored` when time > SequenceLength, and picked
+        // values out of the wrong row when time < SequenceLength. ReadShape accepts any time length,
+        // so PredictBands could reach both. Checked here, where the two widths are both in hand.
+        int restoredTime = restored.Shape.Length == 2 ? restored.Shape[1] : 0;
+        if (restoredTime != time)
+        {
+            throw new ArgumentException(
+                $"The input window has {time} timesteps but the learnable inverse filter restores to "
+                + $"{restoredTime}, which is the configured SequenceLength. Pass a window of "
+                + $"{restoredTime} steps, or build the model with SequenceLength = {time}.");
+        }
         // Back to [assets, time, features].
         var result = new Tensor<T>(new[] { assets, time, featureCount });
         for (int a = 0; a < assets; a++)

@@ -5,7 +5,7 @@ namespace AiDotNet.Finance.Trading.Factors;
 
 /// <summary>
 /// Stockformer's multi-task objective: a masked regression loss on returns plus a classification loss
-/// on direction, summed with EQUAL weight.
+/// on direction, summed with the paper's task weight (default 1.0, the reference's 1:1 sum).
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
@@ -20,10 +20,12 @@ namespace AiDotNet.Finance.Trading.Factors;
 /// equals the sentinel are excluded, and the mask is renormalized by its own mean
 /// (<c>mask /= mean(mask)</c>) so the result is a mean over VALID entries rather than a mean over all
 /// entries with zeros mixed in.</description></item>
-/// <item><description><b>The two tasks are summed 1:1, unweighted.</b> The train script has
+/// <item><description><b>The reference sums the two tasks 1:1.</b> The train script has
 /// <c>loss = loss_regress + loss_class</c>, with <c>loss = w1*loss_regress + w2*loss_class</c> present
-/// but COMMENTED OUT immediately above it. Weights were considered and rejected, so introducing any
-/// would be an invented deviation.</description></item>
+/// but COMMENTED OUT immediately above it. The paper's Eq. 12 does define a weight, so
+/// <c>taskLossWeight</c> exposes it with the reference's value as the DEFAULT: calling Compute without
+/// it reproduces the reference exactly, and a caller who wants Eq. 12's lambda can set it. What would
+/// be an invented deviation is choosing a different default, not offering the knob.</description></item>
 /// <item><description><b>Both heads are supervised on BOTH representations.</b> The model emits four
 /// tensors — class and regression outputs for the main representation and for the low-frequency one —
 /// and each loss term is the SUM of two calls. The classification target is shared by both class
@@ -145,7 +147,11 @@ public static class StockformerMultiTaskLoss<T>
     /// <param name="directionTarget">Direction target, SHARED by both classification terms.</param>
     /// <param name="numClasses">Number of direction classes.</param>
     /// <param name="missingSentinel">Label value treated as missing by the regression mask.</param>
-    /// <returns>The regression term, the classification term, and their unweighted sum.</returns>
+    /// <param name="taskLossWeight">
+    /// Lambda in the paper's <c>L = L_reg + lambda * L_cla</c> (Eq. 12). Defaults to 1.0, which is the
+    /// value the reference implementation uses.
+    /// </param>
+    /// <returns>The regression term, the classification term, and their weighted sum.</returns>
     public static (double Regression, double Classification, double Total) Compute(
         Vector<T> mainRegression, Vector<T> lowRegression,
         Vector<T> mainReturnTarget, Vector<T> lowReturnTarget,
