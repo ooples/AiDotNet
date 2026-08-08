@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -342,7 +342,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             sampleRate: sampleRate,
             nMels: numMels,
             nFft: 400,      // Whisper uses 25ms windows at 16kHz
-            hopLength: 160, // Whisper uses 10ms hop at 16kHz
+            hopLength: WhisperHopLength, // Whisper uses 10ms hop at 16kHz
             fMin: 0,
             fMax: 8000,     // Whisper limits to 8kHz
             logMel: true);
@@ -468,7 +468,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             sampleRate: sampleRate,
             nMels: numMels,
             nFft: 400,
-            hopLength: 160,
+            hopLength: WhisperHopLength,
             fMin: 0,
             fMax: 8000,
             logMel: true);
@@ -513,7 +513,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         else
         {
             // Calculate max frames from audio parameters
-            int maxFrames = (SampleRate * _maxAudioLengthSeconds) / 160;
+            int maxFrames = (SampleRate * _maxAudioLengthSeconds) / WhisperHopLength;
 
             // Use default Whisper architecture
             Layers.AddRange(LayerHelper<T>.CreateDefaultWhisperLayers(
@@ -738,7 +738,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // OpenAI Whisper computes a centered 400-point STFT and removes its
         // final time frame (`stft[..., :-1]`), leaving exactly 3000 frames for
         // a 30-second chunk (and proportionally fewer for shorter chunks).
-        int expectedFrames = targetLength / 160;
+        int expectedFrames = targetLength / WhisperHopLength;
         return TrimMelFrames(melSpec, expectedFrames);
     }
 
@@ -793,9 +793,17 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// Runs paper-correct teacher-forced native training: waveform to log-mel,
     /// audio encoder, shifted transcript tokens, decoder vocabulary logits.
     /// </summary>
+    /// <remarks>
+    /// <b>EnsureMelFeatures, not PreprocessAudio.</b> The tape reaches this method with a tensor that is
+    /// ALREADY log-mel: <c>Train</c> calls <c>TrainWithTape(EnsureMelFeatures(input), ...)</c>. Calling
+    /// <c>PreprocessAudio</c> here featurized it a second time -- <c>PadOrTruncate</c> accepts rank 2,
+    /// reads <c>Shape[^1]</c> as a sample count, and expands a <c>[frames, 80]</c> mel tensor into
+    /// <c>[frames, 480000]</c> before the STFT ever runs. That is the same double-featurization this PR
+    /// fixes elsewhere, reintroduced on the one path that only training takes.
+    /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        var melFeatures = PreprocessAudio(input);
+        var melFeatures = EnsureMelFeatures(input);
         var encoderOutput = EncodeAudio(melFeatures);
         var tokens = _teacherForcingTokens ?? CreateStartTokens(batchSize: 1, sequenceLength: 1);
         return ForwardDecoder(tokens, encoderOutput);
@@ -896,6 +904,18 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// mel-shaped. Shared by <see cref="PredictCore"/> and <see cref="Train"/> so the inference and
     /// training pipelines cannot drift apart again.
     /// </summary>
+    /// <summary>
+    /// Whisper's STFT hop: 10 ms at 16 kHz.
+    /// </summary>
+    /// <remarks>
+    /// One constant because this number was written out four times -- twice as a constructor argument to
+    /// the mel front-end and twice as a divisor deriving a frame count from a sample count. Those two
+    /// roles must agree exactly: if a copy of the divisor drifts from the hop the front-end actually
+    /// used, <c>TrimMelFrames</c> trims to the wrong length and the encoder is handed a silently
+    /// mis-sized tensor rather than an error.
+    /// </remarks>
+    private const int WhisperHopLength = 160;
+
     private Tensor<T> EnsureMelFeatures(Tensor<T> input)
     {
         // Whisper's layer stack consumes frame-major log-mel features [.., frames, NumMels], while
@@ -1040,14 +1060,27 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return batchedResult;
     }
 
+    /// <summary>
+    /// Resizes a mel spectrogram to exactly <paramref name="frameCount"/> frames, padding as well as
+    /// trimming.
+    /// </summary>
+    /// <remarks>
+    /// <b>It only trimmed.</b> Both branches sized the output with <c>Math.Min</c>, so a long
+    /// spectrogram was cut to length and a SHORT one passed through unchanged -- the one case with no
+    /// symptom. OpenAI Whisper pads the mel spectrogram to exactly the chunk's frame count; it does not
+    /// accept fewer. A short input shifts the encoder's positional encoding relative to the audio
+    /// content, which degrades the transcription with no error and no log line. The output tensor is now
+    /// allocated at <paramref name="frameCount"/> and the copy bound is the smaller of the two, so the
+    /// tail stays zero -- which is what padding a log-mel buffer means here.
+    /// </remarks>
     private Tensor<T> TrimMelFrames(Tensor<T> melSpec, int frameCount)
     {
         if (melSpec.Rank == 2)
         {
-            int frames = Math.Min(frameCount, melSpec.Shape[0]);
             int mels = melSpec.Shape[1];
-            var trimmed = new Tensor<T>([frames, mels]);
-            for (int frame = 0; frame < frames; frame++)
+            int copyFrames = Math.Min(frameCount, melSpec.Shape[0]);
+            var trimmed = new Tensor<T>([frameCount, mels]);
+            for (int frame = 0; frame < copyFrames; frame++)
                 for (int mel = 0; mel < mels; mel++)
                     trimmed[frame, mel] = melSpec[frame, mel];
             return trimmed;
@@ -1056,11 +1089,11 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (melSpec.Rank == 3)
         {
             int batchSize = melSpec.Shape[0];
-            int frames = Math.Min(frameCount, melSpec.Shape[1]);
             int mels = melSpec.Shape[2];
-            var trimmed = new Tensor<T>([batchSize, frames, mels]);
+            int copyFrames = Math.Min(frameCount, melSpec.Shape[1]);
+            var trimmed = new Tensor<T>([batchSize, frameCount, mels]);
             for (int batch = 0; batch < batchSize; batch++)
-                for (int frame = 0; frame < frames; frame++)
+                for (int frame = 0; frame < copyFrames; frame++)
                     for (int mel = 0; mel < mels; mel++)
                         trimmed[batch, frame, mel] = melSpec[batch, frame, mel];
             return trimmed;
