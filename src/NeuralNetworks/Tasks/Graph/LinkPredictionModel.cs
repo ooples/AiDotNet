@@ -649,23 +649,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         return totalPairs > 0 ? (double)correctRankings / totalPairs : 0.5;
     }
 
-    /// <summary>
-    /// Gets all parameters as a vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
     #region Abstract Method Implementations
 
     /// <summary>
