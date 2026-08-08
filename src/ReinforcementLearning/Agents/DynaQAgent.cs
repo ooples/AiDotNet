@@ -7,6 +7,8 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
 /// <summary>
@@ -42,6 +44,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
     Authors = "Sutton, R. S.")]
 public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The Q-table entries that actually exist, in dictionary order. This agent walked the entries rather than padding each state out to ActionSize, and for a sparsely visited table the two give different lengths.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableEntriesParameterSource<T>(_qTable));
+    }
     private DynaQOptions<T> _options;
 
     /// <inheritdoc/>
@@ -247,7 +256,6 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -281,26 +289,6 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, (string, T)>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, (string, T)>>();
         _visitedStateActions = JsonConvert.DeserializeObject<List<(string, int)>>(state.VisitedStateActions.ToString()) ?? new List<(string, int)>();
         _epsilon = state.Epsilon;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var s in _qTable)
-            foreach (var a in s.Value)
-                p.Add(a.Value);
-        var v = new Vector<T>(p.Count);
-        for (int i = 0; i < p.Count; i++) v[i] = p[i];
-        return v;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        foreach (var s in _qTable.ToList())
-            for (int a = 0; a < _options.ActionSize; a++)
-                if (idx < parameters.Length)
-                    _qTable[s.Key][a] = parameters[idx++];
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

@@ -6,6 +6,8 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 
 /// <summary>
@@ -43,6 +45,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The Q-table entries that actually exist, in dictionary order. This agent walked the entries rather than padding each state out to ActionSize, and for a sparsely visited table the two give different lengths.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableEntriesParameterSource<T>(_qTable));
+    }
     private MonteCarloExploringStartsOptions<T> _options;
 
     /// <inheritdoc/>
@@ -291,8 +300,6 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         }
     }
 
-    public override long ParameterCount => QTableEntryCount;
-
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -337,43 +344,6 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
             else if (bool.TryParse(state.IsFirstAction.ToString(), out bool parsedValue))
             {
                 _isFirstAction = parsedValue;
-            }
-        }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-        foreach (var stateEntry in _qTable)
-        {
-            foreach (var actionValue in stateEntry.Value)
-            {
-                paramsList.Add(actionValue.Value);
-            }
-        }
-
-
-        var paramsVector = new Vector<T>(paramsList.Count);
-        for (int i = 0; i < paramsList.Count; i++)
-        {
-            paramsVector[i] = paramsList[i];
-        }
-
-        return paramsVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var stateEntry in _qTable.ToList())
-        {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                if (index < parameters.Length)
-                {
-                    _qTable[stateEntry.Key][a] = parameters[index];
-                    index++;
-                }
             }
         }
     }
