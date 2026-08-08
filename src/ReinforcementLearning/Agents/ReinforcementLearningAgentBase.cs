@@ -365,8 +365,42 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         {
             if (!_componentsRegistered)
             {
-                _componentsRegistered = true;
                 RegisterComponents();
+
+                // Latch only once something was actually registered. An agent can be asked for
+                // its parameters BEFORE its networks exist -- a lazily built one, or a query
+                // during construction -- and RegisterParameterComponent tolerates null, so such
+                // a call would otherwise register nothing and still mark the job done, leaving
+                // the agent permanently reporting zero parameters.
+                _componentsRegistered = _parameterComponents.Count > 0;
+
+                // Bring lazily-shaped networks into existence, once, the first time anything asks
+                // this agent for its parameters.
+                //
+                // An agent's networks are built from an architecture that already carries a
+                // concrete inputSize, but their layers use the lazy DenseLayer(outputSize) form, so
+                // the weights are not allocated until something forwards through them.
+                // ResolveLazyLayerShapes pins the shapes; nothing then allocates. The layer-level
+                // parameter surface deliberately refuses to allocate on a read, so count and vector
+                // agree on a truthful zero -- consistent, and useless: a fully specified network
+                // reports that it has no parameters.
+                //
+                // For most agents a forward during Train hides this. QMIXAgent has no such forward:
+                // it is multi-agent, its Train() waits for BatchSize joint transitions that a
+                // single-agent Train(state, target) never produces, and its first SelectAction takes
+                // the epsilon-greedy RANDOM branch. Its networks resolved to [10]->[32]->[1] and
+                // still reported 0 parameters after training, so every checkpoint it wrote was
+                // empty. Measured, not inferred: the identical failure reproduces on the
+                // hand-written surfaces this registry replaced.
+                //
+                // Done here, on the base, so it holds for every agent without an override, and
+                // driven by an explicit caller asking for parameters rather than by a bare count
+                // inside the layer machinery.
+                for (int i = 0; i < _parameterComponents.Count; i++)
+                {
+                    if (_parameterComponents[i] is NeuralNetworkBase<T> network)
+                        network.MaterializeParameters();
+                }
             }
             return _parameterComponents;
         }

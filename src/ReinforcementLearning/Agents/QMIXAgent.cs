@@ -69,6 +69,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// GetParameters concatenated -- that order is the serialization order.</remarks>
     protected override void RegisterComponents()
     {
+        foreach (var network in _agentNetworks) RegisterParameterComponent(network);
         RegisterParameterComponent(_mixingNetwork);
     }
     private QMIXOptions<T> _options;
