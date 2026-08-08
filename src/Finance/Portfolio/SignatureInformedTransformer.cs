@@ -182,6 +182,17 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         if (scores.Length > _options.NumAssets)
             scores = scores.Slice(0, _options.NumAssets);
 
+        // A SHORT vector was previously passed through unchanged, producing weights for fewer assets
+        // than the universe holds. Callers index weights by asset, so every entry from the first
+        // missing one onward referred to the wrong asset.
+        if (scores.Length < _options.NumAssets)
+        {
+            throw new InvalidOperationException(
+                $"The network produced {scores.Length} scores for a universe of "
+                + $"{_options.NumAssets} assets. Weights cannot be built from fewer scores than "
+                + "assets; check that the architecture's output head matches NumAssets.");
+        }
+
         return Objective.Weights(scores, _options.Temperature);
     }
 
@@ -272,6 +283,9 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
             TransactionCostBasisPoints = _options.TransactionCostBasisPoints,
         };
 
-        return new SignatureInformedTransformer<T>(copy);
+        // Architecture and LossFunction are carried across. The single-argument constructor rebuilt
+        // DEFAULT layers and took the implicit default loss, so a model constructed with a custom
+        // architecture or loss cloned into a different model than the one it was copied from.
+        return new SignatureInformedTransformer<T>(copy, Architecture, LossFunction);
     }
 }
