@@ -64,7 +64,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _backboneChannels;
     private readonly int _featureChannels;
     private readonly string _geometryType;
@@ -115,7 +115,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int backboneChannels = 512,
         int featureChannels = 128,
         string geometryType = "RBOX",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         EASTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -159,7 +159,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int backboneChannels = 512,
         int featureChannels = 128,
         string geometryType = "RBOX",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         EASTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -706,7 +706,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
