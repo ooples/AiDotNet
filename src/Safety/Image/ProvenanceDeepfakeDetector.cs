@@ -32,7 +32,7 @@ namespace AiDotNet.Safety.Image;
 /// </para>
 /// <para>
 /// <b>References:</b>
-/// - C2P-CLIP: Content provenance detection (2024, arxiv:2404.09677)
+/// - C2P-CLIP: Content provenance detection (2024, arxiv:2408.09647)
 /// - SynthID-Image: Internet-scale watermarking for provenance (DeepMind, 2025, arxiv:2510.09263)
 /// - Only 38% of AI generators have adequate watermarking (2025, arxiv:2503.18156)
 /// - AI-generated media detection survey (2025, arxiv:2502.05240)
@@ -46,7 +46,7 @@ namespace AiDotNet.Safety.Image;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("C2P-CLIP: Injecting Category Common Prompt in CLIP to Enhance Generalization in Deepfake Detection",
-    "https://arxiv.org/abs/2404.09677",
+    "https://arxiv.org/abs/2408.09647",
     Year = 2024,
     Authors = "Chuangchuang Tan, Renshuai Tao, et al.")]
 public class ProvenanceDeepfakeDetector<T> : ImageSafetyModuleBase<T>

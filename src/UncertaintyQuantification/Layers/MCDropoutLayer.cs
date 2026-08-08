@@ -27,7 +27,7 @@ namespace AiDotNet.UncertaintyQuantification.Layers;
 /// - Safety-critical applications (knowing when to defer to a human expert)
 /// </para>
 /// </remarks>
-public class MCDropoutLayer<T> : LayerBase<T>
+public partial class MCDropoutLayer<T> : LayerBase<T>
 {
     private readonly double _dropoutRate;
     private readonly T _scale;
@@ -92,7 +92,7 @@ public class MCDropoutLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <returns>The output tensor with dropout applied if in training or MC mode.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput.Value = input;
 

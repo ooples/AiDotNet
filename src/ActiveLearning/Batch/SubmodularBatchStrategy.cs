@@ -42,7 +42,13 @@ namespace AiDotNet.ActiveLearning.Batch;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Submodularity in Data Subset Selection and Active Learning", "https://arxiv.org/abs/1505.05123", Year = 2015, Authors = "Kai Wei, Rishabh Iyer, Jeff Bilmes")]
+// Citation URL corrected. arXiv 1505.05123 is "Reed-Muller Codes Achieve Capacity on Erasure
+// Channels" — an unrelated coding-theory paper. This work appeared at ICML 2015 (PMLR v37) and is not
+// on arXiv, so the canonical proceedings URL replaces the invented preprint id.
+[ResearchPaper("Submodularity in Data Subset Selection and Active Learning",
+    "https://proceedings.mlr.press/v37/wei15.html",
+    Year = 2015,
+    Authors = "Kai Wei, Rishabh Iyer, Jeff Bilmes")]
 [ComponentType(ComponentType.ActiveLearner)]
 [PipelineStage(PipelineStage.Training)]
 public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrategy<T, TInput, TOutput>
