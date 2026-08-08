@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "Skywork R1V2: Multimodal Hybrid Reinforcement Learning for Reasoning",
-    "https://arxiv.org/abs/2503.12361",
+    "https://arxiv.org/abs/2504.16656",
     Year = 2025,
     Authors = "Skywork Team"
 )]
@@ -389,7 +389,7 @@ public class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

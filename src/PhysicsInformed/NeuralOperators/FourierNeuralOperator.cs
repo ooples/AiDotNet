@@ -983,7 +983,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             // tensors (and _pointwiseWeights / _pointwiseBias) directly.
         }
 
-        public override Tensor<T> Forward(Tensor<T> input)
+        protected override Tensor<T> ForwardTraced(Tensor<T> input)
         {
             int expectedRank = _spatialDimensions.Length + 2;
             if (input.Rank != expectedRank)

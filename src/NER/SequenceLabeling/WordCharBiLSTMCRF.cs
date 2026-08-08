@@ -200,10 +200,18 @@ public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
         Layers.Add(new DenseLayer<T>(_options.NumLabels, identity));
 
         if (_options.UseCRF)
-            Layers.Add(new ConditionalRandomFieldLayer<T>(
+        {
+            var crf = new ConditionalRandomFieldLayer<T>(
                 numClasses: _options.NumLabels,
                 sequenceLength: _options.MaxSequenceLength,
-                scalarActivation: identity));
+                scalarActivation: identity);
+            // The "no orphan I- tags" guarantee this model documents must NOT depend on the
+            // transition matrix having been trained: OOV tokens (every unseen word maps to the
+            // never-trained UNK embedding row) and padding positions decode from effectively
+            // random emissions. Derive the mask from the label set so BIO / BIOES both work.
+            crf.SetDecodeTagConstraints(_options.LabelNames);
+            Layers.Add(crf);
+        }
     }
 
     #region Input encoding (preprocessing — facade input prep, not a parallel train/predict path)

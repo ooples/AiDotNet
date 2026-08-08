@@ -358,7 +358,10 @@ public class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
         {
             Layers.AddRange(
                 LayerHelper<T>.CreateDefaultPointCloudVLMLayers(
-                    512,
+                    // Was hard-coded 512; drive the encoder's vision-token dim from the configured
+                    // VisionDim so the encoder, the declared option, and the post-embedding token
+                    // input all agree (mirrors the LEOVL fix; see AiDotNet.Tensors#775 context).
+                    _options.VisionDim,
                     _options.DecoderDim,
                     _options.NumVisionLayers,
                     _options.NumDecoderLayers,
@@ -404,7 +407,7 @@ public class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

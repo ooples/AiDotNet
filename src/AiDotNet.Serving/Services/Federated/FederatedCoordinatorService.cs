@@ -585,11 +585,13 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
             modelResult.LoadFromFile(artifactPath);
 
             // Apply new parameters via the inner model (which implements IParameterizable),
-            // then save via the AiModelResult wrapper to preserve the serialization format
+            // then serialize via the AiModelResult wrapper to preserve the serialization format.
+            // SaveModel is the licensed user-facing boundary and intentionally cannot be suppressed;
+            // this coordinator round-trip is server infrastructure already inside InternalOperation.
             var innerModel = modelResult.Model
                 ?? throw new InvalidOperationException("Loaded model has no inner model.");
             Helpers.InterfaceGuard.Parameterizable(innerModel).SetParameters(ToVector<T>(globalParameters));
-            modelResult.SaveModel(artifactPath);
+            File.WriteAllBytes(artifactPath, modelResult.Serialize());
         }
     }
 }

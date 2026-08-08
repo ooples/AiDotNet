@@ -121,7 +121,7 @@ public class SegGPT<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options);
         InitializeLayers();
     }
 
@@ -156,7 +156,7 @@ public class SegGPT<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.1;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options);
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load SegGPT ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -193,7 +193,7 @@ public class SegGPT<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -203,11 +203,21 @@ public class SegGPT<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     #endregion
 
     #region Private Methods
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(SegGPTModelSize modelSize) => modelSize switch
+    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(SegGPTOptions options)
     {
-        SegGPTModelSize.ViTLarge => ([64, 128, 320, 1024], [2, 2, 4, 24], 256),
-        _ => ([64, 128, 320, 1024], [2, 2, 4, 24], 256)
-    };
+        if (options.ChannelDimensions is null || options.ChannelDimensions.Length != 4)
+            throw new ArgumentException("ChannelDimensions must contain exactly four positive values.", nameof(options));
+        if (options.StageDepths is null || options.StageDepths.Length != 4)
+            throw new ArgumentException("StageDepths must contain exactly four positive values.", nameof(options));
+        if (options.ChannelDimensions.Any(value => value <= 0))
+            throw new ArgumentException("ChannelDimensions must contain only positive values.", nameof(options));
+        if (options.StageDepths.Any(value => value <= 0))
+            throw new ArgumentException("StageDepths must contain only positive values.", nameof(options));
+        if (options.DecoderDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "DecoderDimension must be positive.");
+
+        return (options.ChannelDimensions.ToArray(), options.StageDepths.ToArray(), options.DecoderDimension);
+    }
 
     private Tensor<T> Forward(Tensor<T> input)
     {
@@ -328,8 +338,10 @@ public class SegGPT<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SegGPT<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new SegGPT<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+        ? new SegGPT<T>(Architecture, optimizer: null, lossFunction: LossFunction,
+            numClasses: _numClasses, modelSize: _modelSize, dropRate: _dropRate,
+            options: new SegGPTOptions(_options))
+        : new SegGPT<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new SegGPTOptions(_options));
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

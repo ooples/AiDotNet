@@ -66,6 +66,17 @@ namespace AiDotNet.NER.TransformerBased;
 public class DistilBERTNER<T> : TransformerNERBase<T>
 {
     /// <summary>
+    /// DistilBERT's padded transformer stack currently uses the eager tape training path.
+    /// </summary>
+    /// <remarks>
+    /// The compiled fused optimizer can intermittently produce a non-finite loss for this
+    /// topology during full-assembly discovery, even with deterministic initialization and
+    /// the paper's AdamW fine-tuning rate. The eager tape path is numerically stable and uses
+    /// the same configured optimizer, learning rate, gradients, and model parameters.
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <summary>
     /// Creates a DistilBERT-NER model in ONNX inference mode.
     /// </summary>
     public DistilBERTNER(

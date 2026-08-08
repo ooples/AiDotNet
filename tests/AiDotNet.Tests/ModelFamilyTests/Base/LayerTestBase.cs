@@ -334,6 +334,216 @@ public abstract class LayerTestBase
     }
 
     // =========================================================================
+    // INVARIANT 1b: A layer either HANDLES a nearby input shape or REJECTS it
+    //               deliberately — it never crashes from the inside.
+    // =========================================================================
+
+    /// <summary>
+    /// Feeds the layer input shapes one step away from its declared one, and requires every outcome to be
+    /// either a real output or a deliberate rejection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE DISTINCTION IS THE WHOLE TEST. A layer is entitled to require a specific input shape — a patch
+    /// embedding needs its extent divisible by the patch size, and saying so is correct behaviour. What a
+    /// layer is not entitled to do is ASSUME a shape silently and then fail from inside a kernel with
+    /// <c>IndexOutOfRangeException</c> or <c>NullReferenceException</c>. Those name no constraint, point
+    /// at no caller mistake, and are indistinguishable from an engine defect; every one of them is a
+    /// hard-coded assumption that was never written down.
+    /// </para>
+    /// <para>
+    /// This is what makes shape support real rather than declared. A layer that works at 16x16 and
+    /// crashes at 17x16 passes every other invariant in this file, because they all run at exactly one
+    /// shape — which is precisely how such an assumption survives.
+    /// </para>
+    /// <para>
+    /// The recovered shape relation is reported alongside any failure, because "what did this layer
+    /// actually do to the shapes it accepted" is the first question after such a crash.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 60000)]
+    public async Task Forward_NearbyShapes_AreHandledOrDeliberatelyRejected()
+    {
+        await Task.Yield();
+
+        // NO OPT-OUT. There used to be a ShapeRobustnessApplicable hook, and an override to false
+        // returned from this test having asserted NOTHING -- so the layers most likely to need this
+        // invariant were the ones most likely to be excused from it, silently and permanently.
+        // Every layer can participate, because the invariant already accepts an explicit rejection:
+        // a layer whose input shape is genuinely fixed satisfies it by REFUSING nearby shapes with a
+        // validation exception that names the constraint, which is the correct behaviour anyway.
+        using var _arena = TensorArena.Create();
+
+        var probes = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.ProbeShapes(InputShape);
+        var observations = new List<(int[] Input, int[] Output)>();
+        var crashes = new List<string>();
+
+        foreach (var shape in probes)
+        {
+            try
+            {
+                var output = CreateLayer().Forward(CreateRandomTensor(shape));
+                var outShape = output.Shape.ToArray();
+
+                Assert.True(
+                    outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0),
+                    $"Input [{string.Join(",", shape)}] was accepted but produced the degenerate output "
+                    + $"shape [{string.Join(",", outShape)}]. Accepting a shape and then emitting nothing "
+                    + "is worse than rejecting it, because the caller gets no signal at all.");
+
+                observations.Add((shape, outShape));
+            }
+            catch (Xunit.Sdk.XunitException)
+            {
+                throw;
+            }
+            catch (System.Exception ex) when (IsResourceExhaustion(ex))
+            {
+                // NOT a shape assumption. Running out of memory says the probe was too big for this
+                // machine right now, which is a statement about the runner and not about the layer;
+                // recording it as a hard-coded-shape defect would send the reader hunting for an
+                // assumption that is not there. Rethrown so it surfaces as the resource failure it is.
+                throw;
+            }
+            catch (System.Exception ex) when (IsDeliberateShapeRejection(ex))
+            {
+                // A stated constraint. Correct behaviour, and the caller is told what is wrong.
+            }
+            catch (System.Exception ex)
+            {
+                crashes.Add(
+                    $"  input [{string.Join(",", shape)}] -> {ex.GetType().Name}: "
+                    + $"{ex.Message.Split('\n')[0]}");
+            }
+        }
+
+        if (crashes.Count > 0)
+        {
+            string relation = DescribeDiscoveredRelation(observations);
+            Assert.Fail(
+                $"{CreateLayer().GetType().Name} crashed from the INSIDE on input shapes one step away "
+                + $"from its declared [{string.Join(",", InputShape)}]:\n"
+                + string.Join("\n", crashes)
+                + "\n\nThese are not shape validations — they name no constraint and point at no caller "
+                + "mistake, so they read as engine defects. Either accept these shapes, or reject them "
+                + "with an ArgumentException that says what this layer requires.\n"
+                + $"Shape relation recovered from the shapes it DID accept: {relation}");
+        }
+    }
+
+    /// <summary>Environmental failure - the machine, not the layer.</summary>
+    private static bool IsResourceExhaustion(System.Exception ex)
+        => ex is System.OutOfMemoryException or System.InsufficientExecutionStackException
+            or System.OperationCanceledException;
+
+    /// <summary>An exception that STATES a shape constraint, as opposed to one that leaks an assumption.</summary>
+    /// <remarks>
+    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
+    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
+    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
+    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
+    /// <para>
+    /// THREE TYPES WERE REMOVED BECAUSE THEY SWALLOW THE DEFECT THIS INVARIANT HUNTS. The target is a
+    /// layer that ASSUMES a shape silently and then fails from inside a kernel; accepting the generic
+    /// failure modes as "deliberate rejection" meant exactly that failure counted as a pass:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>InvalidOperationException is what a kernel throws when its own state is wrong -- the
+    /// canonical shape of the bug, not of a rejection.</item>
+    /// <item>NotSupportedException and NotImplementedException say the layer does not do this at all.
+    /// That is a gap in the layer, and marking it as a well-stated shape constraint hides it.</item>
+    /// </list>
+    /// <para>
+    /// A layer that genuinely means to reject a shape has five precise types and ArgumentException
+    /// available, all of which state the constraint.
+    /// </para>
+    /// </remarks>
+    /// <summary>Whether an exception is the layer deliberately refusing a shape.</summary>
+    /// <remarks>
+    /// <para>
+    /// The dedicated exception types are self-evidently shape rejections and are accepted outright.
+    /// A bare <see cref="System.ArgumentException"/> is not: it is also what an internal argument
+    /// failure throws, so accepting every one of them let a defect that names no shape constraint
+    /// pass as correct behaviour -- which is the exact distinction this invariant exists to draw.
+    /// </para>
+    /// <para>
+    /// So a generic ArgumentException has to SAY something about shape. The vocabulary below is the
+    /// language layer validation actually uses; a message drawn from none of it is treated as a
+    /// crash and reported, which is the safe direction: a real rejection worded outside this
+    /// vocabulary shows up as a failure asking for a clearer message, whereas the old behaviour hid
+    /// real defects.
+    /// </para>
+    /// </remarks>
+    private static bool IsDeliberateShapeRejection(System.Exception ex)
+    {
+        if (ex is AiDotNet.Exceptions.TensorShapeMismatchException
+            or AiDotNet.Exceptions.TensorDimensionException
+            or AiDotNet.Exceptions.TensorRankException
+            or AiDotNet.Exceptions.InvalidInputDimensionException
+            or AiDotNet.Exceptions.VectorLengthMismatchException
+            or System.RankException)
+        {
+            return true;
+        }
+
+        if (ex is not System.ArgumentException) return false;
+
+        return NamesAShapeConstraint(ex.Message);
+    }
+
+    /// <summary>The words a shape validation message uses when it states a constraint.</summary>
+    /// <remarks>
+    /// SHAPE-SPECIFIC ONLY. An earlier list also carried "expected", "size", "must be", "must have"
+    /// and "mismatch" -- none of which is evidence of a SHAPE constraint. `ArgumentException("Expected
+    /// a non-null value.")` matched, so an internal argument failure was accepted as deliberate shape
+    /// validation, which is the exact conflation this invariant exists to prevent. Every term below
+    /// names a tensor axis or an extent and cannot appear in a generic argument message by accident.
+    /// </remarks>
+    private static readonly string[] ShapeConstraintVocabulary =
+    {
+        "shape", "dimension", "dimensions", "rank", "axis", "axes",
+        "height", "width", "channel", "channels", "batch", "divisible",
+    };
+
+    private static bool NamesAShapeConstraint(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+
+        foreach (var word in ShapeConstraintVocabulary)
+        {
+            if (message!.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Best-effort symbolic summary of what the layer did to the shapes it accepted.</summary>
+    private static string DescribeDiscoveredRelation(List<(int[] Input, int[] Output)> observations)
+    {
+        if (observations.Count < 2) return "(too few accepted shapes to recover one)";
+
+        int inRank = observations[0].Input.Length;
+        int outRank = observations[0].Output.Length;
+        if (observations.Any(o => o.Input.Length != inRank || o.Output.Length != outRank))
+            return "(the accepted shapes do not share a rank, so no single relation describes them)";
+
+        // Positional placeholders: this sweep runs on layers that mostly carry no axis-role annotation,
+        // and inventing roles for them would be a claim the layer never made.
+        var inAxes = Enumerable.Range(0, inRank).Select(i => (AiDotNet.Enums.TensorAxis)i).ToArray();
+        var outAxes = Enumerable.Range(0, outRank).Select(i => (AiDotNet.Enums.TensorAxis)i).ToArray();
+
+        try
+        {
+            var findings = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.Fit(inAxes, outAxes, observations);
+            return string.Join(
+                ", ", findings.Select((f, i) => $"out[{i}] = {f.Relation?.ToString() ?? "?"}"));
+        }
+        catch
+        {
+            return "(relation recovery failed)";
+        }
+    }
+
+    // =========================================================================
     // INVARIANT 2: Forward is deterministic (same input -> same output)
     // Unless the layer has stochastic behavior (dropout), two calls with the
     // same input must produce bit-identical output.
@@ -772,26 +982,92 @@ public abstract class LayerTestBase
 
         var rng = RandomHelper.CreateSeededRandom(7777);
 
+        // SPARSE parameters (SparseLinearLayer's SparseTensor<T> weights) mirror
+        // torch.autograd.gradcheck's "masked" semantics: it walks a sparse tensor's STORED (nnz)
+        // entries via indices()/values() and perturbs only those, never densifying. Two reasons
+        // this matters here rather than being a style choice:
+        //   1. Flat indexing a SparseTensor throws outright — "GetFlat is not supported on sparse
+        //      tensors. Use SparseTensor-specific APIs or call ToDense() first." — so the check
+        //      cannot even run against one.
+        //   2. Densifying would be WORSE than the crash: it would perturb STRUCTURAL ZEROS, which
+        //      are not trainable parameters and therefore have no analytical gradient, producing
+        //      false mismatches and an inflated parameter count. SparseLinearLayer's own
+        //      ParameterCount is NonZeroCount + OutputFeatures, confirming the stored values are
+        //      the trainable set.
+        // Dense parameters keep the exact previous behaviour (flat index over Length).
+        // Access the sparse payload through DataVector.AsSpan(), NOT through the Values property:
+        // `public T[] Values => DataVector.ToArray()` allocates a FRESH COPY on every access, so the
+        // earlier `sp.Values[i] = v` wrote into a throwaway array and never perturbed the parameter.
+        // Both finite-difference evaluations therefore saw identical weights, making the numerical
+        // gradient exactly 0 for every sparse entry while the analytical gradient was non-zero —
+        // which is what produced "disagrees ... on 5/12 sampled trainable scalars" (the entries that
+        // "agreed" were simply the ones whose analytical gradient was also ~0). Same copy-versus-view
+        // trap as Tensor<T>.ToVector(); AsSpan() is the documented zero-copy path.
+        static int TrainableScalarCount(Tensor<double> p) =>
+            p is SparseTensor<double> sp ? sp.NonZeroCount : p.Length;
+        static double ReadScalar(Tensor<double> p, int i) =>
+            p is SparseTensor<double> sp ? sp.DataVector[i] : p[i];
+        static void WriteScalar(Tensor<double> p, int i, double v)
+        {
+            if (p is SparseTensor<double> sp) sp.DataVector[i] = v;
+            else p[i] = v;
+        }
+        // The analytical gradient of a SPARSE parameter is not necessarily sparse. When it comes back
+        // DENSE, index i (a position in the sparse nnz payload) addresses a completely different
+        // matrix entry in a dense flat buffer, so comparing them positionally checks unrelated
+        // numbers. Map through the COO coordinates instead. A sparse gradient shares the parameter's
+        // payload layout, so it is read directly.
+        // THE PUBLIC SPARSE API, NOT THE INTERNAL PAYLOAD. This read the backing DataVector of
+        // the very type under test, so a change to that payload's layout would silently change
+        // what the gradient check compares -- the helper would keep returning a number and the
+        // number would mean something else. SparseTensor<double> exposes Values / RowIndices /
+        // ColumnIndices, which is what the SparseTensor suites themselves assert against.
+        //
+        // COO construction is rank-2, so the column stride is Shape[1]; a non-rank-2 sparse
+        // tensor has no COO reading and is refused rather than indexed on a guess.
+        static double ReadAnalyticalScalar(Tensor<double> grad, Tensor<double> param, int i)
+        {
+            if (grad is SparseTensor<double> gsp)
+            {
+                return i >= 0 && i < gsp.Values.Length ? gsp.Values[i] : 0.0;
+            }
+
+            if (param is SparseTensor<double> psp)
+            {
+                Assert.True(psp.Shape.Length == 2,
+                    $"SparseTensor COO indices are rank-2; got rank {psp.Shape.Length}, so " +
+                    "RowIndices/ColumnIndices cannot be mapped to a flat gradient index.");
+                if (i < 0 || i >= psp.RowIndices.Length) return 0.0;
+
+                int cols = psp.Shape[1];
+                int flat = (psp.RowIndices[i] * cols) + psp.ColumnIndices[i];
+                return flat >= 0 && flat < grad.Length ? grad[flat] : 0.0;
+            }
+
+            return grad[i];
+        }
+
         foreach (var param in trainableParams)
         {
-            if (param is null || param.Length == 0) continue;
+            if (param is null || TrainableScalarCount(param) == 0) continue;
             if (!analyticalGrads.TryGetValue(param, out var analyticalGrad) || analyticalGrad is null)
                 continue;
 
-            int sampleCount = Math.Min(MaxSampledPerParam, param.Length);
+            int trainableCount = TrainableScalarCount(param);
+            int sampleCount = Math.Min(MaxSampledPerParam, trainableCount);
             for (int s = 0; s < sampleCount; s++)
             {
-                int idx = rng.Next(0, param.Length);
+                int idx = rng.Next(0, trainableCount);
 
-                double original = param[idx];
-                param[idx] = original + Eps;
+                double original = ReadScalar(param, idx);
+                WriteScalar(param, idx, original + Eps);
                 var lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original - Eps;
+                WriteScalar(param, idx, original - Eps);
                 var lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original;
+                WriteScalar(param, idx, original);
 
                 double numerical = (lossPlus - lossMinus) / (2.0 * Eps);
-                double analytical = analyticalGrad[idx];
+                double analytical = ReadAnalyticalScalar(analyticalGrad, param, idx);
                 double absDiff = Math.Abs(numerical - analytical);
                 double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
 

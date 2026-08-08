@@ -199,7 +199,7 @@ public class YOLOv9Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

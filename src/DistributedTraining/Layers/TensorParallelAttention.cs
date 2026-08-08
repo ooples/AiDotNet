@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -25,7 +25,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public sealed class TensorParallelAttention<T> : LayerBase<T>
+public sealed partial class TensorParallelAttention<T> : LayerBase<T>
 {
     private readonly ColumnParallelLinear<T> _q;
     private readonly ColumnParallelLinear<T> _k;
@@ -96,7 +96,7 @@ public sealed class TensorParallelAttention<T> : LayerBase<T>
     /// Runs tensor-parallel self-attention. Input is <c>[batch, seq, embedDim]</c>; output is the same shape
     /// (identical across ranks after the output projection's all-reduce).
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 3 || input.Shape[2] != _embedDim)
             throw new ArgumentException($"TensorParallelAttention expects input [batch, seq, {_embedDim}]; got [{string.Join(",", input.Shape)}].", nameof(input));

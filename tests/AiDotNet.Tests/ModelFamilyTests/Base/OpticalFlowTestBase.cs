@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for optical flow estimation models. Inherits video NN invariants
 /// and adds flow-specific: zero motion for identical frames and bounded flow vectors.
 /// </summary>
-public abstract class OpticalFlowTestBase : VideoNNModelTestBase
+public abstract class OpticalFlowTestBase<T> : VideoNNModelTestBase<T>
 {
     // Optical-flow input contract (OpticalFlowBase.Predict): rank-4
     // [batch, 2*channels, height, width] — two consecutive frames stacked
@@ -35,7 +35,10 @@ public abstract class OpticalFlowTestBase : VideoNNModelTestBase
         // For identical input (no motion), flow should be near zero
         double magnitude = 0;
         for (int i = 0; i < output.Length; i++)
-            magnitude += output[i] * output[i];
+        {
+            double v = ConvertToDouble(output[i]);
+            magnitude += v * v;
+        }
         double rms = Math.Sqrt(magnitude / Math.Max(1, output.Length));
 
         Assert.True(rms < 10.0,
@@ -54,10 +57,14 @@ public abstract class OpticalFlowTestBase : VideoNNModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            double v = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(v),
                 $"Flow vector[{i}] is NaN - broken motion estimation.");
-            Assert.True(Math.Abs(output[i]) < 1e6,
-                $"Flow vector[{i}] = {output[i]:E4} is unbounded - unrealistic motion magnitude.");
+            Assert.True(Math.Abs(v) < 1e6,
+                $"Flow vector[{i}] = {v:E4} is unbounded - unrealistic motion magnitude.");
         }
     }
 }
+
+/// <summary>Non-generic &lt;double&gt; alias — the default for optical-flow models that are not floated.</summary>
+public abstract class OpticalFlowTestBase : OpticalFlowTestBase<double> { }
