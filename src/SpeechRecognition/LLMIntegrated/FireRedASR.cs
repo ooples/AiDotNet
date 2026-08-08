@@ -49,6 +49,16 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
     Authors = "Kai-Tuo Xu, Feng-Long Xie, Xu Tang, Yao Hu")]
 public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>
+    /// (the encoder-decoder AED variant reuses the Conformer factory), whose LAST emitted layer is
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. <c>PredictCore</c> folds the layer stack and
+    /// <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly FireRedASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;

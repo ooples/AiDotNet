@@ -49,12 +49,26 @@ public class ModelContractConformanceTests
     {
         await Task.Yield();
 
+        // MODELS only. Layers implement IShapeContract too - 317 of them - and none has an
+        // architecture constructor, so they all landed in "skipped" and buried the real skips under
+        // noise. Their conformance is already covered by the layer sweep; this one is about models.
         var models = typeof(NeuralNetworkBase<>).Assembly.GetTypes()
             .Where(t => t.IsClass && !t.IsAbstract && t.IsGenericTypeDefinition
                         && t.GetGenericArguments().Length == 1
-                        && t.GetInterfaces().Any(i => i.Name == "IShapeContract"))
+                        && t.GetInterfaces().Any(i => i.Name == "IShapeContract")
+                        && !DerivesFromLayerBase(t))
             .OrderBy(t => t.Name, StringComparer.Ordinal)
             .ToList();
+
+        // Optional window over the candidate list, for running this in passes. The DEFAULTS are the
+        // real configuration and are what CI runs; this only lets a developer split one long pass into
+        // several short ones on a machine that cannot hold a ten-minute run open. It never reduces
+        // what a default run covers.
+        int offset = EnvInt("ADNSHAPE_CONF_OFFSET", 0, 0);
+        int budget = EnvInt("ADNSHAPE_CONF_BUDGET", models.Count, 1);
+        if (offset > 0) models = models.Skip(offset).ToList();
+        if (budget < models.Count) models = models.Take(budget).ToList();
+        _out.WriteLine($"window: offset={offset} budget={budget} -> {models.Count} candidates");
 
         int declared = 0, agreed = 0, declined = 0;
         var disagreed = new List<string>();
@@ -66,26 +80,57 @@ public class ModelContractConformanceTests
             try { closed = open.MakeGenericType(typeof(double)); }
             catch { continue; }
 
+            // TRY EACH INPUT TYPE the families actually use, and keep the first that produces a real
+            // comparison. Building every model as a 3-D image made the entire audio family report
+            // "declined": its contract declares rank 2, the harness fed rank 4, and the contract
+            // correctly declined on RANK - which looks identical to declining for want of a width.
+            // A harness that cannot tell those apart reports a family as unverified when it is simply
+            // being asked the wrong question.
             object? model = null;
-            try { model = Construct(closed); }
-            catch (Exception ex) { skipped.Add($"{open.Name}: {Unwrap(ex).GetType().Name} constructing"); continue; }
-            if (model is null) { skipped.Add($"{open.Name}: no usable constructor"); continue; }
+            IShapeContract? contract = null;
+            int[]? shape = null;
+            string? lastNote = null;
 
-            try
+            foreach (var inputType in new[] { InputType.ThreeDimensional, InputType.OneDimensional })
             {
-                if (model is not IShapeContract contract) { skipped.Add($"{open.Name}: not IShapeContract"); continue; }
+                object? candidate = null;
+                try { candidate = Construct(closed, inputType); }
+                catch (Exception ex) { lastNote ??= $"{Unwrap(ex).GetType().Name} constructing"; continue; }
+                if (candidate is null) { lastNote ??= "no usable constructor"; continue; }
 
-                int[]? perSample = TryArchitectureInputShape(model);
-                if (perSample is null || perSample.Length == 0 || perSample.Any(d => d <= 0))
+                if (candidate is not IShapeContract c) { (candidate as IDisposable)?.Dispose(); lastNote ??= "not IShapeContract"; continue; }
+
+                int[]? per = TryArchitectureInputShape(candidate);
+                if (per is null || per.Length == 0 || per.Any(d => d <= 0))
                 {
-                    skipped.Add($"{open.Name}: no concrete declared input shape");
+                    (candidate as IDisposable)?.Dispose();
+                    lastNote ??= "no concrete declared input shape";
                     continue;
                 }
 
-                var shape = new int[perSample.Length + 1];
-                shape[0] = 1;
-                for (int i = 0; i < perSample.Length; i++) shape[i + 1] = Math.Min(perSample[i], Extent);
+                var candidateShape = new int[per.Length + 1];
+                candidateShape[0] = 1;
+                for (int i = 0; i < per.Length; i++) candidateShape[i + 1] = Math.Min(per[i], Extent);
 
+                // Prefer an input type whose rank the contract actually answers for.
+                bool answers = ShapeInference.InferOutputShape(c, candidateShape) is not null;
+                if (model is null || answers)
+                {
+                    (model as IDisposable)?.Dispose();
+                    model = candidate; contract = c; shape = candidateShape;
+                    if (answers) break;
+                }
+                else { (candidate as IDisposable)?.Dispose(); }
+            }
+
+            if (model is null || contract is null || shape is null)
+            {
+                skipped.Add($"{open.Name}: {lastNote ?? "no usable input type"}");
+                continue;
+            }
+
+            try
+            {
                 declared++;
 
                 // What the CONTRACT says, without running the model.
@@ -128,7 +173,7 @@ public class ModelContractConformanceTests
             + Environment.NewLine + string.Join(Environment.NewLine, disagreed));
     }
 
-    private static object? Construct(Type closed)
+    private static object? Construct(Type closed, InputType inputType)
     {
         var ctor = closed.GetConstructors().FirstOrDefault(c =>
         {
@@ -146,9 +191,13 @@ public class ModelContractConformanceTests
 
         var pars = ctor.GetParameters();
         var args = new object?[pars.Length];
-        args[0] = new NeuralNetworkArchitecture<double>(
-            InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
-            inputDepth: 3, inputHeight: Extent, inputWidth: Extent, outputSize: Classes);
+        args[0] = inputType == InputType.OneDimensional
+            ? new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+                inputSize: Extent, outputSize: Classes)
+            : new NeuralNetworkArchitecture<double>(
+                InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
+                inputDepth: 3, inputHeight: Extent, inputWidth: Extent, outputSize: Classes);
 
         for (int i = 1; i < pars.Length; i++)
         {
@@ -188,6 +237,19 @@ public class ModelContractConformanceTests
             var msg = root.Message.Split('\n')[0].Trim();
             return (null, $"{root.GetType().Name}: {(msg.Length > 80 ? msg.Substring(0, 80) + "..." : msg)}");
         }
+    }
+
+    private static int EnvInt(string name, int fallback, int minimum) =>
+        int.TryParse(Environment.GetEnvironmentVariable(name), out int v) && v >= minimum ? v : fallback;
+
+    private static bool DerivesFromLayerBase(Type type)
+    {
+        for (var a = type.BaseType; a is not null; a = a.BaseType)
+        {
+            var def = a.IsGenericType ? a.GetGenericTypeDefinition() : a;
+            if (def.Name == "LayerBase`1") return true;
+        }
+        return false;
     }
 
     private static Exception Unwrap(Exception ex) =>

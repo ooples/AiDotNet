@@ -43,6 +43,17 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ResearchPaper("MarbleNet: Deep 1D Time-Channel Separable Convolutional Neural Network for Voice Activity Detection", "https://arxiv.org/abs/2010.13886", Year = 2021, Authors = "Fei Jia, Somshubra Majumdar, Boris Ginsburg")]
 public class MarbleNet<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultMarbleNetLayers</c> ends its epilogue with
+    /// <c>new FullyConnectedLayer&lt;T&gt;(1, identity)</c>, commented "reduce to binary
+    /// classification". VAD emits ONE speech score per frame, so the width is a structural 1 - not
+    /// <c>NumMels</c> (the input width) and not <c>InitialFilters</c> (an interior channel count).
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly MarbleNetOptions _options;

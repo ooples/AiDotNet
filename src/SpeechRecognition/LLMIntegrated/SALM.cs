@@ -42,8 +42,18 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SALM: Speech-augmented Language Model with In-context Learning for Speech Recognition", "https://arxiv.org/abs/2310.09424", Year = 2024, Authors = "Chen et al.")]
-public class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultLLMASRLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is <c>vocabularyProjection = new DenseLayer&lt;T&gt;(vocabSize, identity)</c>
+    /// (resolved from <c>llmDim</c>, passed here as <c>_options.EncoderDim * 2</c>).
+    /// <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SALMOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

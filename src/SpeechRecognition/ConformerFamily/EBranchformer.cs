@@ -44,8 +44,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("E-Branchformer: Branchformer with Enhanced Merging for Speech Recognition", "https://arxiv.org/abs/2210.00077", Year = 2022, Authors = "Kim et al.")]
-public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultBranchformerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// which emits <c>BranchformerBlock</c>s and then the CTC head
+    /// <c>LayerNormalizationLayer</c> + <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c> as its LAST layer.
+    /// <c>CgmlpDim</c> and <c>EncoderDim</c> are interior widths, not the output axis.
+    /// <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly EBranchformerOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

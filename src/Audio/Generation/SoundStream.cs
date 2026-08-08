@@ -46,6 +46,16 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("SoundStream: An End-to-End Neural Audio Codec", "https://arxiv.org/abs/2107.03312", Year = 2021, Authors = "Neil Zeghidour, Alejandro Luebs, Ahmed Omran, Jan Skoglund, Marco Tagliasacchi")]
 public class SoundStream<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and CreateDefaultSoundStreamLayers
+    /// is a full encoder-decoder autoencoder whose final layer is <c>DenseLayer&lt;T&gt;(1, Tanh)</c> -
+    /// it reconstructs a mono waveform sample per step. A constant 1, not an options field: neither
+    /// CodebookSize (1024) nor EncoderDim is the width of what Predict returns; those describe the
+    /// bottleneck reached via Encode/EncodeEmbeddings, which are separate entry points.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly SoundStreamOptions _options;

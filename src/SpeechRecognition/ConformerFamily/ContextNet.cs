@@ -44,8 +44,20 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ContextNet: Improving Convolutional Neural Networks for Automatic Speech Recognition with Global Context", "https://arxiv.org/abs/2005.03191", Year = 2020, Authors = "Han et al.")]
-public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultContextNetLayers(..., vocabSize: _options.VocabSize, ...)</c>.
+    /// That factory's encoder is channels-first, so it emits a <c>TransposeLayer</c> and THEN
+    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c> — its own comment states the result is
+    /// <c>[B, T, vocab]</c>. <c>PostprocessOutput</c> is the identity, so the last axis is the vocabulary.
+    /// Note this is NOT a channel count: the block channels scale with <c>WidthScaling</c> and are
+    /// consumed by the transpose before the head.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly ContextNetOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;

@@ -74,6 +74,19 @@ namespace AiDotNet.Audio.VoiceActivity;
     [ResearchPaper("Silero VAD: Pre-Trained Enterprise-Grade Voice Activity Detector", "https://github.com/snakers4/silero-vad")]
 public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction, which is a CUSTOM forward (conv frontend, axis permute,
+    /// LSTM, last-timestep slice, dense) rather than a fold over the flat <c>Layers</c> list.
+    /// <c>PredictCore</c> ends at <c>_outputLayer.Forward(lastTimestep)</c> and
+    /// <c>PostprocessOutput</c> is the identity. <c>ExtractLayerReferences</c> binds
+    /// <c>_outputLayer = Layers[3 + _numLstmLayers]</c>, which
+    /// <c>LayerHelper.CreateSileroVadLayers</c> emits as <c>new DenseLayer&lt;T&gt;(1, sigmoid)</c> -
+    /// one speech probability. Width 1, not <c>_lstmHiddenDim</c>: the last-timestep slice removes the
+    /// time axis and the dense head then reduces the feature axis to a single score.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     private readonly SileroVadOptions _options;
 
     /// <inheritdoc/>

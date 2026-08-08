@@ -41,8 +41,18 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Relaxing the Conditional Independence Assumption of CTC-based ASR by Conditioning on Intermediate Predictions", "https://arxiv.org/abs/2104.02724", Year = 2021, Authors = "Nozaki and Komatsu")]
-public class SelfConditionedCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class SelfConditionedCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. The
+    /// self-conditioning feeds intermediate predictions back INSIDE the stack and does not alter the
+    /// final axis; <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly SelfConditionedCTCOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

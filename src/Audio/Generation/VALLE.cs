@@ -47,6 +47,15 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers", "https://arxiv.org/abs/2301.02111", Year = 2023, Authors = "Chengyi Wang, Sanyuan Chen, Yu Wu, Ziqiang Zhang, Long Zhou, Shujie Liu, Zhuo Chen, Yanqing Liu, Huaming Wang, Jinyu Li, Lei He, Sheng Zhao, Furu Wei")]
 public class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultVALLELayers emits is the projection to the first codebook,
+    /// <c>FullyConnectedLayer&lt;T&gt;(codebookSize)</c>, wired from <c>_options.CodebookSize</c> (1024).
+    /// Not PhonemeVocabSize (512) - phonemes are the input side of the AR stage.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.CodebookSize;
+
     #region Fields
 
     private readonly VALLEOptions _options;

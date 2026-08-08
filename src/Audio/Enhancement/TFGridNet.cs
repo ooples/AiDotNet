@@ -60,6 +60,17 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("TF-GridNet: Making Time-Frequency Domain Models Great Again for Monaural Speaker Separation", "https://arxiv.org/abs/2209.03952", Year = 2023, Authors = "Zhong-Qiu Wang, Samuele Cornell, Shukjae Choi, Younglo Lee, Byeong-Yeol Kim, Shinji Watanabe")]
 public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> RMS-normalizes, folds <c>Layers</c>, then rescales by the same
+    /// scalar - <c>TensorMultiplyScalar</c> leaves the shape untouched - and <c>PostprocessOutput</c>
+    /// is the identity. The last layer of <c>CreateDefaultTFGridNetLayers</c> is
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * 2)</c>, the reconstructed complex STFT (real + imaginary
+    /// per bin), wired from <c>_options.NumFreqBins</c>. The helper's local <c>outDim</c> (the clamped
+    /// <c>embeddingDim * 4</c> grid width) is computed and then NOT used by that layer.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 2;
+
     #region Fields
 
     private readonly TFGridNetOptions _options;

@@ -43,8 +43,18 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("XLS-R: Self-supervised Cross-lingual Speech Representation Learning at Scale", "https://arxiv.org/abs/2111.09296", Year = 2022, Authors = "Babu et al.")]
-public class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultFoundationASRLayers(..., vocabSize: _options.VocabSize)</c>, whose
+    /// last emitted layer is the CTC fine-tuning head <c>DenseLayer&lt;T&gt;(vocabSize)</c>. Note the
+    /// mel count is passed as <c>featureDim</c> and governs the INPUT side only; the output width is
+    /// the head. PredictCore folds Layers and PostprocessOutput is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly XLSROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

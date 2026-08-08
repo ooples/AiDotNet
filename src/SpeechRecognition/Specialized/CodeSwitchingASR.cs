@@ -85,6 +85,24 @@ namespace AiDotNet.SpeechRecognition.Specialized;
     Authors = "Zhiping Zeng, Yerbolat Khassanov, Van Tung Pham, Haihua Xu, Eng Siong Chng, Haizhou Li")]
 public class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output construction, which a sequential read of <c>Layers</c>
+    /// would get wrong. <c>Layers</c> holds FOUR disjoint sub-graphs (encoder, CTC head, attention
+    /// decoder, LID head) and <c>PredictCore</c> returns the CTC branch only:
+    /// <c>CtcForward(EncodeForward(input))</c>, i.e. <c>_ctcHead.Forward(...)</c>. <c>_ctcHead</c> is
+    /// <c>new FullyConnectedLayer&lt;T&gt;(_options.EncoderDim, _options.VocabSize, identity)</c>, so
+    /// the width is <c>VocabSize</c>. Note the encoder is deliberately built with
+    /// <c>vocabSize: _options.EncoderDim</c> - it projects to encoder width, not to the alphabet - so
+    /// the factory argument spelled "vocabSize" is NOT this axis here; nor is the LID head's
+    /// <c>SupportedLanguages.Count</c>, nor the attention decoder's <c>DecoderDim</c>.
+    /// The value is itself DERIVED rather than stored: <c>CodeSwitchingASROptions.VocabSize</c>
+    /// defaults to <c>MandarinCharVocabSize + EnglishBpeVocabSize + 1</c> - the two concatenated
+    /// inventories plus the CTC blank - so the number appears nowhere in the options.
+    /// <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly CodeSwitchingASROptions _options;
     public override ModelOptions GetOptions() => _options;
 

@@ -47,6 +47,15 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ResearchPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Anmol Gulati, James Qin, Chung-Cheng Chiu, Niki Parmar, Yu Zhang, Jiahui Yu, Wei Han, Shibo Wang, Zhengdong Zhang, Yonghui Wu, Ruoming Pang")]
 public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
+    /// <c>CreateDefaultConformerFPLayers</c> ends with the fingerprint projection
+    /// <c>DenseLayer&lt;T&gt;(embeddingDim)</c>, supplied from <c>_options.EmbeddingDim</c> - the
+    /// conformer blocks run at the wider <c>HiddenDim</c>, which is NOT the output axis.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.EmbeddingDim;
+
     #region Fields
 
     private readonly ConformerFPOptions _options;

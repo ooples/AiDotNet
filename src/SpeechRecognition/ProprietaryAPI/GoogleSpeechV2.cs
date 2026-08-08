@@ -41,8 +41,18 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
-public class GoogleSpeechV2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class GoogleSpeechV2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultProprietaryASRLayers(..., vocabSize: _options.VocabSize)</c>, whose
+    /// last emitted layer is <c>DenseLayer&lt;T&gt;(vocabSize)</c> - the CTC head. PredictCore folds
+    /// Layers in order and PostprocessOutput is the identity, so that head's width is the last axis
+    /// Predict returns.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly GoogleSpeechV2Options _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

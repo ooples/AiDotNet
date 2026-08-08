@@ -41,8 +41,18 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OWSM v3.1: Better and Faster Open Whisper-Style Speech Models based on E-Branchformer", "https://arxiv.org/abs/2401.16658", Year = 2024, Authors = "Peng et al.")]
-public class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize)</c>, whose last
+    /// emitted layer is the CTC output head <c>DenseLayer&lt;T&gt;(vocabSize)</c> (after the final
+    /// LayerNorm). PredictCore folds Layers in order and PostprocessOutput is the identity, so that
+    /// head's width is the last axis Predict returns.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly OWSMOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

@@ -66,6 +66,18 @@ namespace AiDotNet.Audio.MusicGen;
 [ResearchPaper("Simple and Controllable Music Generation", "https://doi.org/10.48550/arXiv.2306.05284", Year = 2023, Authors = "Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez")]
 public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore calls Forward, the sequential fold over Layers.
+    /// CreateDefaultMusicGenLayers ends with a <c>numCodebooks</c>-long run of
+    /// <c>DenseLayer&lt;T&gt;(codebookSize)</c> heads (the delay-pattern output projection) appended
+    /// flat to Layers, so the fold chains them and the LAST one sets the width -
+    /// <c>_options.CodebookSize</c> (2048). Note the heads are per-codebook, so the width is
+    /// CodebookSize alone, NOT CodebookSize * NumCodebooks; and LmHiddenDim is the width one layer
+    /// earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.CodebookSize;
+
     #region Fields
 
     private readonly MusicGenOptions _options;

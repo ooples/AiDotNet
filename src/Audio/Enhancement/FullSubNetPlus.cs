@@ -59,6 +59,15 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("FullSubNet+: Channel Attention FullSubNet with Complex Spectrograms for Speech Enhancement", "https://arxiv.org/abs/2203.12188", Year = 2022, Authors = "Jun Chen, Zilin Wang, Deyi Tuo, Zhiyong Wu, Shiyin Kang, Helen Meng")]
 public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c>, <c>PostprocessOutput</c> is the identity, and
+    /// <c>CreateDefaultFullSubNetPlusLayers</c> ends with the complex-mask head
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * 2, sigmoid)</c> - real and imaginary per frequency bin -
+    /// wired from <c>_options.NumFreqBins</c>. The full-band and sub-band hidden sizes are interior.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 2;
+
     #region Fields
 
     private readonly FullSubNetPlusOptions _options;

@@ -53,6 +53,17 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ResearchPaper("Matcha-TTS: A fast TTS architecture with conditional flow matching", "https://arxiv.org/abs/2309.03199", Year = 2024, Authors = "Shivam Mehta, Ruibo Tu, Jonas Beskow, Eva Szekely, Gustav Eje Henter")]
 public class MatchaTTS<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultMatchaTTSLayers</c> ends with the mel projection
+    /// <c>new FullyConnectedLayer&lt;T&gt;(numMels, null)</c>, and <c>InitializeLayers</c> passes
+    /// <c>numMels: _options.NumMels</c>. Note the duration predictor's width-1 layer sits mid-chain,
+    /// not at the end, so it is not the output width.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumMels;
+
     #region Fields
 
     private readonly MatchaTTSOptions _options;

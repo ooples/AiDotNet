@@ -46,8 +46,18 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition", "https://arxiv.org/abs/2305.05084", Year = 2023, Authors = "Rekesh et al.")]
-public class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultWhisperEncoderDecoderLayers(..., vocabSize: _options.VocabSize)</c>,
+    /// whose last emitted layer is the vocabulary projection <c>DenseLayer&lt;T&gt;(vocabSize)</c>.
+    /// The encoder/decoder widths (EncoderDim, DecoderDim) are interior only. PredictCore folds Layers
+    /// and PostprocessOutput is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly CanaryFlashOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

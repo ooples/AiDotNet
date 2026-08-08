@@ -41,8 +41,18 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Microsoft Azure Speech-to-Text", "https://azure.microsoft.com/en-us/products/ai-services/speech-to-text")]
-public class AzureSpeechSTT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class AzureSpeechSTT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultProprietaryASRLayers(..., vocabSize: _options.VocabSize)</c>, whose
+    /// last emitted layer is <c>DenseLayer&lt;T&gt;(vocabSize)</c> - the CTC head. PredictCore folds
+    /// Layers in order and PostprocessOutput is the identity, so that head's width is the last axis
+    /// Predict returns.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly AzureSpeechSTTOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

@@ -46,6 +46,17 @@ namespace AiDotNet.Audio.Multimodal;
 [ResearchPaper("Qwen2-Audio Technical Report", "https://doi.org/10.48550/arXiv.2407.10759", Year = 2024, Authors = "Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou")]
 public class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultQwen2AudioLayers emits is the output projection
+    /// <c>FullyConnectedLayer&lt;T&gt;(lmHiddenDim)</c>, wired from <c>_options.LMHiddenDim</c>
+    /// (3584). Explicitly NOT VocabSize (151936): the default stack stops at the LM embedding space
+    /// and never ties an unembedding head, so reading the vocabulary field would overstate the width
+    /// by ~42x.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.LMHiddenDim;
+
     #region Fields
 
     private readonly Qwen2AudioOptions _options;

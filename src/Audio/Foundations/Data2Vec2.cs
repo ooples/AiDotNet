@@ -45,6 +45,16 @@ namespace AiDotNet.Audio.Foundations;
 [ResearchPaper("data2vec 2.0: Highly Efficient Self-Supervised Learning for Vision, Speech and Text", "https://arxiv.org/abs/2212.07525", Year = 2023, Authors = "Alexei Baevski, Arun Babu, Wei-Ning Hsu, Michael Auli")]
 public class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
+    /// <c>CreateDefaultData2Vec2Layers</c> ends with a "final projection"
+    /// <c>FullyConnectedLayer&lt;T&gt;(hiddenDim)</c> - a self-supervised representation model has no
+    /// vocabulary or class head, so its output axis is the transformer width
+    /// <c>_options.HiddenDim</c>, not <c>FeedForwardDim</c> (the interior 4x FFN expansion).
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.HiddenDim;
+
     #region Fields
 
     private readonly Data2Vec2Options _options;

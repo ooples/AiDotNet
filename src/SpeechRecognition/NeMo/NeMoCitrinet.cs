@@ -46,7 +46,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Citrinet: Closing the Gap between Non-Autoregressive and Autoregressive End-to-End Models for Automatic Speech Recognition", "https://arxiv.org/abs/2104.01721", Year = 2021, Authors = "Majumdar et al.")]
-public class NeMoCitrinet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class NeMoCitrinet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly NeMoCitrinetOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

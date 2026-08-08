@@ -47,6 +47,16 @@ namespace AiDotNet.Audio.Fingerprinting;
     Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
 public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> then applies <c>PostprocessOutput</c>, which is
+    /// an ELEMENTWISE sigmoid built on <c>modelOutput._shape</c> - it converts CNN14's logits to
+    /// probabilities without reshaping. The last layer of <c>CreateDefaultPANNsLayers</c> is
+    /// <c>DenseLayer&lt;T&gt;(numClasses)</c>, passed <c>_options.NumClasses</c> (527 AudioSet tags).
+    /// The wider <c>EmbeddingDim</c> head one layer earlier is the fingerprint, not Predict's output.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumClasses;
+
     private readonly PANNsModelOptions _options;
     private readonly bool _useNativeMode;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

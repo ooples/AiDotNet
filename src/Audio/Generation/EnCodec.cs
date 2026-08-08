@@ -44,6 +44,15 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("High Fidelity Neural Audio Compression", "https://arxiv.org/abs/2210.13438", Year = 2022, Authors = "Alexandre Defossez, Jade Copet, Gabriel Synnaeve, Yossi Adi")]
 public class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
+    /// <c>CreateDefaultEnCodecLayers</c> is a full encode/decode round trip and ends with
+    /// <c>DenseLayer&lt;T&gt;(1, tanh)</c> - the reconstructed mono waveform sample. The codec's
+    /// <c>_options.EncoderDim</c> bottleneck is INTERIOR: the mirrored decoder runs after it.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly EnCodecOptions _options;

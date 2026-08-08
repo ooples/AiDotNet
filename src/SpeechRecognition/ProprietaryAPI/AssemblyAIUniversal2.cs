@@ -41,8 +41,18 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AssemblyAI Universal-2", "https://www.assemblyai.com/research/universal-2")]
-public class AssemblyAIUniversal2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class AssemblyAIUniversal2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced through the graph, not read off a name: InitializeLayers builds
+    /// <c>LayerHelper.CreateDefaultProprietaryASRLayers(..., vocabSize: _options.VocabSize)</c>, whose
+    /// last emitted layer is <c>DenseLayer&lt;T&gt;(vocabSize)</c> - the CTC head. This class's
+    /// PredictCore delegates to <c>base.PredictCore</c> (the plain fold over Layers) once the ONNX
+    /// path is ruled out, and PostprocessOutput is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly AssemblyAIUniversal2Options _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

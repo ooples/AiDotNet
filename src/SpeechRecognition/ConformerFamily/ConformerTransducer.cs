@@ -44,8 +44,18 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Gulati et al.")]
-public class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerTransducerLayers(...)</c>, whose joint network ends
+    /// <c>new DenseLayer&lt;T&gt;(jointDim, relu)</c> then <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>
+    /// — the LAST layer is the vocabulary projection, NOT <c>JointDim</c> or <c>PredictionDim</c>.
+    /// <c>PredictCore</c> folds the layer stack and <c>PostprocessOutput</c> is the identity.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly ConformerTransducerOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; private set; }

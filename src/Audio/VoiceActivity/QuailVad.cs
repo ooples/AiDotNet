@@ -44,6 +44,16 @@ namespace AiDotNet.Audio.VoiceActivity;
     [ResearchPaper("Quality-Aware Voice Activity Detection", "https://doi.org/10.1109/ICASSP40776.2020.9053535")]
 public class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultQuailVadLayers</c> ends with <c>new DenseLayer&lt;T&gt;(1, null)</c>,
+    /// commented "Output: single speech probability". A structural 1, not <c>HiddenDim</c> or
+    /// <c>RNNHiddenSize</c>, which are consumed earlier in the same chain.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly QuailVadOptions _options;

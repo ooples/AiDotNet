@@ -46,6 +46,15 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ResearchPaper("Onsets and Frames: Dual-Objective Piano Transcription", "https://arxiv.org/abs/1710.11153", Year = 2018, Authors = "Curtis Hawthorne, Erich Elsen, Jialin Song, Adam Roberts, Ian Simon, Colin Raffel, Jesse Engel, Sageev Oore, Douglas Eck")]
 public class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultOnsetsAndFramesLayers emits is <c>DenseLayer&lt;T&gt;(numMidiNotes * 2)</c> - the
+    /// onset head and the frame head concatenated, 88 + 88 = 176. Reading NumMidiNotes (88) alone
+    /// would halve the true width; 176 appears nowhere in the options.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumMidiNotes * 2;
+
     #region Fields
 
     private readonly OnsetsAndFramesOptions _options;

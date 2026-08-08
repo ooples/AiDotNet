@@ -70,6 +70,29 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ResearchPaper("Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions", "https://arxiv.org/abs/1712.05884", Year = 2018, Authors = "Jonathan Shen, Ruoming Pang, Ron J. Weiss, Mike Schuster, Navdeep Jaitly, Zongheng Yang, Zhifeng Chen, Yu Zhang, Yuxuan Wang, RJ Skerry-Ryan, Rif A. Saurous, Yannis Agiomyrgiannakis, Yonghui Wu")]
 public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Declines: emits a FRAME axis. Measured, [1,64] returns [1,2000,80] - 80 mels over up to 2000
+    /// autoregressive frames - not the rank-2 [1,80] the inherited contract would claim. The mel width
+    /// is correct; the frame count is a decode cap unrelated to input length, so no relation to an
+    /// input axis can be stated without measuring it separately.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction, which is a CUSTOM autoregressive forward, not a
+    /// layer-walk: <c>PredictCore</c> calls <c>ForwardNative</c>, which ends with
+    /// <c>Engine.TensorAdd(melSpectrogram, residual)</c>, and <c>PostprocessOutput</c> is the identity.
+    /// Both addends carry the same last axis: <c>CombineMelFrames</c> narrows each grouped decoder
+    /// frame into <c>NumMels</c>-wide slices (yielding <c>[1, frames * _numMelsPerFrame, NumMels]</c>),
+    /// and the post-net's last layer is <c>new DenseLayer&lt;T&gt;(numMels, identity)</c> in
+    /// <c>LayerHelper.CreateTacotron2Layers</c>. So the width is <c>NumMels</c>.
+    /// Deliberately NOT the decoder's mel head width, which is <c>numMels * numMelsPerFrame</c>: that
+    /// grouped frame is split back apart by <c>CombineMelFrames</c> before the output is formed.
+    /// </remarks>
+    protected override int OutputFeatureWidth => NumMels;
+
     private readonly Tacotron2ModelOptions _options;
 
     /// <inheritdoc/>
