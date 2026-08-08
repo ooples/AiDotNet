@@ -142,6 +142,14 @@ public static class DeserializationHelper
                 RestoreEmbeddingConfiguration(generatedEmbedding, additionalParams);
             else if (generatedLayer is MultiHeadAttentionLayer<T> generatedAttention)
                 RestoreMultiHeadAttentionConfiguration(generatedAttention, additionalParams);
+
+            // THE SAME LAZY PRE-RESOLVE THE OTHER PATHS GET. Returning straight from here bypassed
+            // the block at the end of this method, so a lazy layer rebuilt through
+            // GeneratedLayerFactories stayed unresolved: SetParameters then received a layer whose
+            // ParameterCount is 0 and rejected the saved vector. The generated path is now the
+            // majority path, which makes this the common case rather than an edge one.
+            PreResolveLazyShape((ILayer<T>)generatedLayer, inputShape);
+
             return (ILayer<T>)generatedLayer;
         }
 
@@ -3283,7 +3291,23 @@ public static class DeserializationHelper
         // FeedForwardLayer, LayerNormalizationLayer, BatchNormalizationLayer)
         // tolerate ResolveFromShape failures here since SetParameters will
         // recover; for others the layer's first Forward resolves it.
-        if (instance is NeuralNetworks.Layers.LayerBase<T> lb
+        PreResolveLazyShape((ILayer<T>)instance, inputShape);
+
+        return (ILayer<T>)instance;
+    }
+
+    /// <summary>
+    /// Resolves a still-lazy layer's shapes from the recorded input shape, before its parameters are
+    /// restored.
+    /// </summary>
+    /// <remarks>
+    /// Extracted so BOTH reconstruction paths run it. The generated-factory branch used to return
+    /// early and skip this, leaving a lazy layer unresolved with a ParameterCount of 0 -- and
+    /// SetParameters then rejected the saved vector outright.
+    /// </remarks>
+    private static void PreResolveLazyShape<T>(ILayer<T> layer, int[]? inputShape)
+    {
+        if (layer is NeuralNetworks.Layers.LayerBase<T> lb
             && !lb.IsShapeResolved
             && inputShape != null
             && inputShape.Length > 0
@@ -3298,7 +3322,7 @@ public static class DeserializationHelper
                 // Layer's OnFirstForward expects a different input rank.
                 // SetParameters now self-resolves from the parameter vector
                 // size for the lazy-migrated layer family, so the trained
-                // weights still land. Trace it for telemetry — silent swallow
+                // weights still land. Trace it for telemetry -- silent swallow
                 // hid #1221 for too long.
                 System.Diagnostics.Trace.TraceWarning(
                     $"DeserializationHelper: ResolveFromShape failed for {lb.GetType().Name} " +
@@ -3306,8 +3330,6 @@ public static class DeserializationHelper
                     "Layer will resolve via SetParameters or first Forward.");
             }
         }
-
-        return (ILayer<T>)instance;
     }
 
     private static object CreateDenseLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
@@ -3415,12 +3437,18 @@ public static class DeserializationHelper
     /// <summary>Reconstructs a paper-faithful Vocos generator from serialized layer metadata.</summary>
     private static object CreateVocosGeneratorLayer<T>(Dictionary<string, object>? additionalParams)
     {
-        int numMels = TryGetInt(additionalParams, "NumMels") ?? 100;
-        int hiddenDim = TryGetInt(additionalParams, "HiddenDim") ?? 512;
-        int numBackboneBlocks = TryGetInt(additionalParams, "NumBackboneBlocks") ?? 8;
-        int intermediateDim = TryGetInt(additionalParams, "IntermediateDim") ?? 1536;
-        int nFft = TryGetInt(additionalParams, "NFft") ?? 1024;
-        int hopLength = TryGetInt(additionalParams, "HopLength") ?? 256;
+        // STRUCTURAL VALUES ARE REQUIRED, not defaulted. Every one of these fixes the layer's
+        // parameter count, so substituting a literal when the key is absent rebuilds a
+        // differently-sized layer: SetParameters then either fails much later with an opaque count
+        // mismatch, or loads the saved weights into wrong-shaped buffers and produces a model that
+        // runs and is wrong. CreateSTCConnectorLayer sets the standard this follows.
+        int numMels = RequireInt(additionalParams, "NumMels", nameof(VocosGeneratorLayer<T>));
+        int hiddenDim = RequireInt(additionalParams, "HiddenDim", nameof(VocosGeneratorLayer<T>));
+        int numBackboneBlocks = RequireInt(additionalParams, "NumBackboneBlocks", nameof(VocosGeneratorLayer<T>));
+        int intermediateDim = RequireInt(additionalParams, "IntermediateDim", nameof(VocosGeneratorLayer<T>));
+        int nFft = RequireInt(additionalParams, "NFft", nameof(VocosGeneratorLayer<T>));
+        int hopLength = RequireInt(additionalParams, "HopLength", nameof(VocosGeneratorLayer<T>));
+
         return new VocosGeneratorLayer<T>(
             numMels,
             hiddenDim,
@@ -3433,9 +3461,21 @@ public static class DeserializationHelper
     /// <summary>Reconstructs the complete native ViT-CoMer graph from serialized metadata.</summary>
     private static object CreateViTCoMerSegmentationLayer<T>(Dictionary<string, object>? additionalParams)
     {
-        static int[] ParseList(string? value, int[] fallback)
+        string layerName = nameof(ViTCoMerSegmentationLayer<T>);
+
+        // THROWS on an unparseable element rather than falling back. Returning the default list for
+        // a malformed entry silently rebuilds a different network: the channel widths and stage
+        // depths determine every weight shape downstream.
+        int[] ParseRequiredList(string key)
         {
-            if (string.IsNullOrWhiteSpace(value)) return fallback;
+            string? value = TryGetString(additionalParams, key);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(
+                    $"{layerName} deserialization requires '{key}' metadata; it determines the "
+                    + "layer's weight shapes and cannot be defaulted.");
+            }
+
             // net471's nullable-flow analysis does not learn the non-null state from
             // string.IsNullOrWhiteSpace, even though the guard above has returned.
             var parts = value!.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
@@ -3447,9 +3487,12 @@ public static class DeserializationHelper
                 if (!int.TryParse(parts[i], System.Globalization.NumberStyles.Integer,
                     System.Globalization.CultureInfo.InvariantCulture, out result[i]))
                 {
-                    return fallback;
+                    throw new InvalidOperationException(
+                        $"{layerName} deserialization could not parse element {i} of '{key}' "
+                        + $"('{parts[i]}') as an integer.");
                 }
             }
+
             return result;
         }
 
@@ -3457,29 +3500,47 @@ public static class DeserializationHelper
             TryGetInt(additionalParams, "InputChannels") ?? 3,
             TryGetInt(additionalParams, "InputHeight") ?? 512,
             TryGetInt(additionalParams, "InputWidth") ?? 512,
-            TryGetInt(additionalParams, "EmbedDim") ?? 384,
-            ParseList(TryGetString(additionalParams, "CnnChannels"), [64, 128, 320, 512]),
-            ParseList(TryGetString(additionalParams, "Depths"), [2, 2, 6, 2]),
-            TryGetInt(additionalParams, "DecoderDim") ?? 256,
-            TryGetInt(additionalParams, "NumClasses") ?? 150,
+            RequireInt(additionalParams, "EmbedDim", layerName),
+            ParseRequiredList("CnnChannels"),
+            ParseRequiredList("Depths"),
+            RequireInt(additionalParams, "DecoderDim", layerName),
+            RequireInt(additionalParams, "NumClasses", layerName),
+            // DropRate is a true behavioural default: it changes nothing about tensor shapes.
             TryGetDouble(additionalParams, "DropRate") ?? 0.1);
     }
 
     /// <summary>Reconstructs the complete native VideoGigaGAN generator from layer metadata.</summary>
     private static object CreateVideoGigaGANGeneratorLayer<T>(Dictionary<string, object>? additionalParams)
     {
+        string layerName = nameof(VideoGigaGANGeneratorLayer<T>);
+
         return new VideoGigaGANGeneratorLayer<T>(
             TryGetInt(additionalParams, "InputChannels") ?? 3,
             TryGetInt(additionalParams, "InputHeight") ?? 64,
             TryGetInt(additionalParams, "InputWidth") ?? 64,
-            TryGetInt(additionalParams, "NumFeatures") ?? 128,
-            TryGetInt(additionalParams, "NumResBlocks") ?? 23,
-            TryGetInt(additionalParams, "NumStyleLayers") ?? 14,
-            TryGetInt(additionalParams, "ScaleFactor") ?? 4,
-            TryGetInt(additionalParams, "FlowPyramidLevels") ?? 5,
+            RequireInt(additionalParams, "NumFeatures", layerName),
+            RequireInt(additionalParams, "NumResBlocks", layerName),
+            RequireInt(additionalParams, "NumStyleLayers", layerName),
+            RequireInt(additionalParams, "ScaleFactor", layerName),
+            RequireInt(additionalParams, "FlowPyramidLevels", layerName),
+            // HFShuttleWeight is a true behavioural default: it changes nothing about tensor shapes.
             TryGetDouble(additionalParams, "HFShuttleWeight") ?? 0.5);
     }
 
+    /// <summary>
+    /// Reads a metadata value that fixes a layer's parameter count, failing when it is absent.
+    /// </summary>
+    /// <remarks>
+    /// The distinction that matters: a BEHAVIOURAL default such as a dropout rate can be substituted
+    /// safely, because the rebuilt layer still has the same weight shapes. A STRUCTURAL value cannot
+    /// -- defaulting it produces a layer of a different size, and the failure then arrives later as
+    /// an opaque parameter-count mismatch, or not at all if the counts happen to line up.
+    /// </remarks>
+    private static int RequireInt(Dictionary<string, object>? additionalParams, string key, string layerName)
+        => TryGetInt(additionalParams, key)
+            ?? throw new InvalidOperationException(
+                $"{layerName} deserialization requires '{key}' metadata; it determines the layer's "
+                + "parameter count and cannot be defaulted.");
     /// <summary>
     /// Reconstructs an <see cref="STCConnectorLayer{T}"/> from the metadata persisted by
     /// <c>STCConnectorLayer.GetMetadata</c>. All RegStage, Conv3D, and MLP weights travel in the
