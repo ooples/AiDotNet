@@ -211,3 +211,78 @@ public sealed class VectorParameterSource<T> : IParameterSource<T>
         for (int i = 0; i < v.Length && i < parameters.Length; i++) v[i] = parameters[i];
     }
 }
+
+/// <summary>
+/// Exposes a Q-table as the entries it ACTUALLY holds, rather than padding each state out to the
+/// full action count.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is a genuinely different contract from <see cref="QTableParameterSource{T}"/> and the two
+/// must not be swapped. Six agents pad every state to ActionSize and clamp the table to one row;
+/// another six walk only the action entries that exist. For a sparsely-visited table those give
+/// different lengths, so using the wrong one would resize the model.
+/// </para>
+/// <para>
+/// <paramref name="padEmptyToOne"/> reproduces the one variation among these agents: some append a
+/// single zero when the table is empty so the surface is never zero-length.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type of the table's values.</typeparam>
+public sealed class QTableEntriesParameterSource<T> : IParameterSource<T>
+{
+    private readonly Dictionary<string, Dictionary<int, T>> _table;
+    private readonly bool _padEmptyToOne;
+    private readonly INumericOperations<T> _ops;
+
+    /// <summary>Wraps <paramref name="table"/>, counting only the entries present.</summary>
+    public QTableEntriesParameterSource(Dictionary<string, Dictionary<int, T>> table, bool padEmptyToOne = false)
+    {
+        _table = table ?? throw new ArgumentNullException(nameof(table));
+        _padEmptyToOne = padEmptyToOne;
+        _ops = MathHelper.GetNumericOperations<T>();
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount
+    {
+        get
+        {
+            long n = 0;
+            foreach (var row in _table.Values) n += row.Count;
+            return n == 0 && _padEmptyToOne ? 1 : n;
+        }
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var result = new Vector<T>(checked((int)ParameterCount));
+        int idx = 0;
+        foreach (var row in _table.Values)
+        {
+            foreach (var value in row.Values)
+            {
+                if (idx >= result.Length) break;
+                result[idx++] = value;
+            }
+        }
+        while (idx < result.Length) result[idx++] = _ops.Zero;
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        int idx = 0;
+        foreach (var row in _table.Values)
+        {
+            foreach (var action in row.Keys.ToList())
+            {
+                if (idx >= parameters.Length) return;
+                row[action] = parameters[idx++];
+            }
+        }
+    }
+}
