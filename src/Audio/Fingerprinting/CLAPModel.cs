@@ -9,6 +9,8 @@ using AiDotNet.Onnx;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using System.Linq;
+
 namespace AiDotNet.Audio.Fingerprinting;
 
 /// <summary>
@@ -55,6 +57,20 @@ namespace AiDotNet.Audio.Fingerprinting;
     Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
 public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The text tower. CLAP is dual-encoder: the audio layers are this model's own
+    /// Layers and the text layers are a second stack, and both are trained.</remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => TextEncoderLayers.Cast<LayerBase<T>?>();
+
+    /// <inheritdoc />
+    /// <remarks>The learned logit scale (CLIP's temperature), a single value the contrastive
+    /// loss trains alongside the towers. The hand-written count added it as a bare "+ 1" and
+    /// the vector appended _logTemperature[0]; it is a one-element tensor, so the base fold
+    /// contributes the same single scalar in the same position.</remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+        => new[] { _logTemperature };
     private readonly CLAPModelOptions _options;
     private readonly bool _useNativeMode;
     // Captured ONNX-mode constructor inputs. Preserved so CreateNewInstance
@@ -694,37 +710,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         // AudioNeuralNetworkBase manages disposal; no extra state to gate.
     }
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        Layers.Sum(l => l.ParameterCount)
-        + TextEncoderLayers.Sum(l => l.ParameterCount)
-        + 1; // _logTemperature (learnable τ scalar)
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// CLAP holds parameters across both encoders + the temperature.
-    /// Override <see cref="NeuralNetworkBase{T}.GetParameters"/> so
-    /// optimizers / checkpointing see the full parameter vector and the
-    /// ordering matches <see cref="UpdateParameters"/> below.
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new List<T>((int)ParameterCount);
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
-        }
-        foreach (var layer in TextEncoderLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
-        }
-        parts.Add(_logTemperature[0]);
-        var result = new Vector<T>(parts.Count);
-        for (int i = 0; i < parts.Count; i++) result[i] = parts[i];
-        return result;
-    }
+ // _logTemperature (learnable τ scalar)
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
