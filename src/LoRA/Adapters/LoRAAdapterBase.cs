@@ -262,9 +262,13 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
         // parameter surface. ParameterCount, GetParameters and SetParameters then all fall out
         // of the one fold, so the adapter no longer maintains a shadow copy that has to be
         // re-packed after every update and can disagree with the count that describes it.
+        // Register unconditionally. Doing this only on the frozen path left an UNFROZEN adapter
+        // with no registered children at all, so its ParameterCount answered 0 instead of
+        // base + LoRA. The frozen case looked correct purely because freezing happened to force
+        // registration on the way past.
+        EnsureSubLayersRegistered();
         if (_freezeBaseLayer)
         {
-            EnsureSubLayersRegistered();
             FreezeSubLayerParameters(_baseLayer);
         }
     }
