@@ -59,6 +59,10 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     private Tensor<T>? _dftCos;
     private Tensor<T>? _dftSin;
     private Tensor<T>? _melTransposed;
+
+    /// <summary>Guards the paired publication of <see cref="_dftCos"/> and <see cref="_dftSin"/>.</summary>
+    private readonly object _dftBasisLock = new();
+
     private int _melTransposedBins = -1;
 
     /// <summary>Creates the generator objective.</summary>
@@ -322,9 +326,20 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>Builds the real and imaginary DFT bases once, shaped <c>[nFft, bins]</c>.</summary>
+    /// <remarks>
+    /// BOTH BASES ARE PUBLISHED TOGETHER, under a lock. The test read only <c>_dftCos</c> and the
+    /// assignments ran in order, so a second thread calling ComputeTapeLoss on the same instance
+    /// could observe <c>_dftCos</c> non-null with a matching bin count while <c>_dftSin</c> was
+    /// still null, and then dereference it. This is the only field pair here that can tear --
+    /// <c>_window</c> and <c>_melTransposed</c> share the unsynchronized-lazy pattern but each is a
+    /// single field, so a reader sees either the old value or the new one.
+    /// </remarks>
     private void EnsureDftBasis(int bins)
     {
-        if (_dftCos is not null && _dftCos.Shape[1] == bins) return;
+        lock (_dftBasisLock)
+        {
+            if (_dftCos is not null && _dftCos.Shape[1] == bins) return;
+        }
 
         var cos = new Tensor<T>(new[] { _fftSize, bins });
         var sin = new Tensor<T>(new[] { _fftSize, bins });
@@ -338,8 +353,13 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
             }
         }
 
-        _dftCos = cos;
-        _dftSin = sin;
+        lock (_dftBasisLock)
+        {
+            // Another thread may have finished the same size while this one was building. Either
+            // pair is equally valid; publishing both together is what matters.
+            _dftCos = cos;
+            _dftSin = sin;
+        }
     }
 
     /// <summary>

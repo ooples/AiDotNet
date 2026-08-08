@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Attributes;
@@ -138,6 +138,18 @@ public sealed class LayerGraph<T>
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
 
+        // An empty list would set OutputNodeId to -1, and Forward then evaluates values[-1] while
+        // ResolveShapes evaluates shapes[-1] -- a raw IndexOutOfRangeException with no context, from
+        // somewhere far from the call that caused it. LayerGraphBuilder.Build already rejects an
+        // empty graph; the same contract has to hold on this entry point. The input is reachable:
+        // models in this repository do carry empty Layers collections, HopfieldNetwork among them.
+        if (layers.Count == 0)
+        {
+            throw new ArgumentException(
+                "A linear graph needs at least one layer; an empty list has no output node.",
+                nameof(layers));
+        }
+
         var nodes = new List<LayerNode<T>>(layers.Count);
         for (int i = 0; i < layers.Count; i++)
             nodes.Add(new LayerNode<T>(i, layers[i], i == 0 ? Array.Empty<int>() : new[] { i - 1 }));
@@ -259,8 +271,14 @@ public sealed class LayerGraph<T>
                 {
                     fed = node.EdgeTransform(probes).Shape.ToArray();
                 }
-                catch
+                catch (Exception ex)
                 {
+                    // null is a valid "could not resolve" signal, so returning it is right -- but the
+                    // REASON must not disappear with it. A malformed EdgeTransform and a benign
+                    // lazy-shape decline produced the identical silent null, while the remarks above
+                    // promise loud, explanatory failure.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"[LayerGraph] Shape resolution stopped at node {i}: its edge transform threw. {ex}");
                     return null;
                 }
             }
@@ -292,8 +310,15 @@ public sealed class LayerGraph<T>
 
                 if (node.Layer is LayerBase<T> relaxable) relaxable.RelaxPropagatedSpatialAxes();
             }
-            catch
+            catch (Exception ex)
             {
+                // The WIDER of the two catches: it spans ResolveShapesOnly, GetOutputShape and
+                // RelaxPropagatedSpatialAxes, so a real defect in relaxation was being reported as
+                // "this layer is just lazy". Recording it costs nothing and is the difference
+                // between a diagnosable bug and an invisible one.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[LayerGraph] Shape resolution stopped at node {i} "
+                    + $"({node.Layer.GetType().Name}). {ex}");
                 return null;
             }
         }
