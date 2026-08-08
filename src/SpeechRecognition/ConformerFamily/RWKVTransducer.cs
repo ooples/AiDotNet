@@ -121,7 +121,28 @@ public class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         }
     }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <b>Native mode requires the mel front-end rather than falling through.</b> The default layers are
+    /// built against <c>_options.NumMels</c>, so the first layer expects feature frames. Returning the
+    /// raw waveform when <c>MelSpec</c> is null hands it audio samples instead -- a different rank and a
+    /// different meaning for the last dimension. ONNX mode keeps the passthrough: those graphs commonly
+    /// include their own front-end, so the raw waveform is what they are supposed to receive.
+    /// </remarks>
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (MelSpec is not null) return MelSpec.Forward(rawAudio);
+
+        if (_useNativeMode)
+        {
+            throw new InvalidOperationException(
+                "RWKVTransducer native mode has no log-mel front-end, but its encoder layers are built " +
+                $"for {_options.NumMels} mel bands. Passing the raw waveform through would feed audio " +
+                "samples to a layer expecting feature frames.");
+        }
+
+        return rawAudio;
+    }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "RWKVTransducer-Native" : "RWKVTransducer-ONNX", Description = "RWKVTransducer: RWKV-Enhanced E-Branchformer (Song et al., 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.CgmlpDim); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language); w.Write(_options.TimeDecay); w.Write(_options.CurrentTokenBonus); w.Write(_options.TokenShiftMix); w.Write(_options.BoundaryAware); w.Write(_options.LearningRate); }

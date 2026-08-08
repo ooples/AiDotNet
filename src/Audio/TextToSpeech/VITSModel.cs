@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -556,6 +556,22 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         int idx = 0;
         int textEncoderCount = 1 + _numEncoderLayers * 3;
+
+        // VALIDATED BEFORE PARTITIONING. Each loop below is bounded by `idx < layerCount`, so with too
+        // few layers the earlier groups fill and the later ones simply come up empty -- and the final
+        // `while` sweeps whatever remains into _decoderLayers regardless of how much that is. A stack
+        // with the wrong count therefore binds without complaint: the flow and decoder groups end up
+        // holding each other's layers, and the model synthesizes audio from a misassembled graph. The
+        // decoder is open-ended by design, so the bound is a minimum rather than an equality.
+        int minimumLayerCount = textEncoderCount + 3 + _numFlowLayers + 1;
+        if (layerCount < minimumLayerCount)
+        {
+            throw new InvalidOperationException(
+                $"VITS native mode needs at least {minimumLayerCount} layers ({textEncoderCount} text " +
+                $"encoder + 3 duration predictor + {_numFlowLayers} flow + at least 1 decoder) but found " +
+                $"{layerCount}. Partitioning fewer would assign layers to the wrong components silently.");
+        }
+
         for (int i = 0; i < textEncoderCount && idx < layerCount; i++)
             _textEncoderLayers.Add(Layers[idx++]);
         for (int i = 0; i < 3 && idx < layerCount; i++)
@@ -791,19 +807,20 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         // Use the configured optimizer for parameter updates
         var currentParams = GetParameters();
 
-        // Cast to gradient-based optimizer to access UpdateParameters
-        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
+        // A NULL CHECK, NOT A TYPE TEST. _optimizer is declared
+        // IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?, so `is IGradientBasedOptimizer<...>`
+        // succeeded for every non-null value and the manual-SGD else branch was unreachable. Leaving it
+        // there was worse than dead code: it read as a supported fallback, so the 2e-4 rate written into
+        // it looked like a live tuning knob when nothing could ever execute it.
+        if (_optimizer is null)
         {
-            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
-            SetParameters(updatedParams);
+            throw new InvalidOperationException(
+                "VITSModel has no optimizer, so UpdateParameters cannot apply gradients. Construct the " +
+                "model through the native constructor, which supplies one, or inject your own.");
         }
-        else
-        {
-            // Fallback: manual SGD with VITS's smaller learning rate
-            T learningRate = NumOps.FromDouble(0.0002);
-            currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-            SetParameters(currentParams);
-        }
+
+        var updatedParams = _optimizer.UpdateParameters(currentParams, gradients);
+        SetParameters(updatedParams);
     }
 
     /// <summary>
